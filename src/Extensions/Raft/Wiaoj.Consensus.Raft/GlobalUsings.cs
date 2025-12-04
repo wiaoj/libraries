@@ -1,0 +1,1 @@
+﻿global using Timeout = global::Wiaoj.Primitives.OperationTimeout;

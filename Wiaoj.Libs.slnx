@@ -1,0 +1,53 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Extensions/">
+    <Project Path="src/Extensions/Wiaoj.Abstractions/Wiaoj.Abstractions.csproj" />
+    <Project Path="src/Extensions/Wiaoj.Extensions.DependencyInjection/Wiaoj.Extensions.DependencyInjection.csproj" />
+    <Project Path="src/Extensions/Wiaoj.Extensions/Wiaoj.Extensions.csproj" />
+    <Project Path="src/Extensions/Wiaoj.Primitives/Wiaoj.Primitives.csproj" />
+    <Project Path="src/Extensions/Wiaoj.Results/Wiaoj.Results.csproj" />
+  </Folder>
+  <Folder Name="/src/Extensions/Ddd/">
+    <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.Abstractions/Wiaoj.Ddd.Abstractions.csproj" />
+    <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.Corvus/Wiaoj.Ddd.Corvus.csproj" />
+    <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.EntityFrameworkCore/Wiaoj.Ddd.EntityFrameworkCore.csproj" />
+    <Project Path="src/Extensions/Ddd/Wiaoj.Ddd/Wiaoj.Ddd.csproj" />
+  </Folder>
+  <Folder Name="/src/Extensions/ObjectPooling/">
+    <Project Path="src/Extensions/ObjectPooling/Wiaoj.ObjectPooling.Testing/Wiaoj.ObjectPooling.Testing.csproj" />
+  </Folder>
+  <Folder Name="/src/Extensions/ObjectPooling/Wiaoj.ObjectPooling/">
+    <Project Path="src/Extensions/ObjectPooling/Wiaoj.ObjectPooling/Wiaoj.ObjectPool.csproj" />
+  </Folder>
+  <Folder Name="/src/Extensions/Raft/">
+    <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft.Abstractions/Wiaoj.Consensus.Raft.Abstractions.csproj" />
+    <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft.Hosting/Wiaoj.Consensus.Raft.Hosting.csproj" />
+    <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft.Persistence.Faster/Wiaoj.Consensus.Raft.Persistence.Faster.csproj" />
+    <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft.Transport.Grpc/Wiaoj.Consensus.Raft.Transport.Grpc.csproj" />
+    <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft/Wiaoj.Consensus.Raft.csproj" />
+  </Folder>
+  <Folder Name="/src/Extensions/Wiaoj.Threading/">
+    <Project Path="src/Extensions/Wiaoj.Threading/Wiaoj.Concurrency.csproj" />
+  </Folder>
+  <Folder Name="/src/Preconditions/">
+    <File Path="src/Preconditions/README.md" />
+    <Project Path="src/Preconditions/Wiaoj.Preconditions/Wiaoj.Preconditions.csproj" />
+  </Folder>
+  <Folder Name="/src/Serialization/" />
+  <Folder Name="/src/Serialization/Core/">
+    <Project Path="src/Serialization/Core/Wiaoj.Serialization.Abstractions/Wiaoj.Serialization.Abstractions.csproj" />
+    <Project Path="src/Serialization/Core/Wiaoj.Serialization.Extensions.DependencyInjection/Wiaoj.Serialization.Extensions.DependencyInjection.csproj" />
+  </Folder>
+  <Folder Name="/src/Serialization/Features/">
+    <Project Path="src/Serialization/Features/Wiaoj.Serialization.Compression/Wiaoj.Serialization.Compression.csproj" />
+    <Project Path="src/Serialization/Features/Wiaoj.Serialization.OpenTelemetry/Wiaoj.Serialization.OpenTelemetry.csproj" />
+    <Project Path="src/Serialization/Features/Wiaoj.Serialization.Security/Wiaoj.Serialization.Security.csproj" />
+    <Project Path="src/Serialization/Features/Wiaoj.Serialization.Transcoding/Wiaoj.Serialization.Transcoding.csproj" />
+  </Folder>
+  <Folder Name="/src/Serialization/Implementations/">
+    <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Bson/Wiaoj.Serialization.Bson.csproj" />
+    <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.MessagePack/Wiaoj.Serialization.MessagePack.csproj" />
+    <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.SystemTextJson/Wiaoj.Serialization.SystemTextJson.csproj" />
+    <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.YamlDotNet/Wiaoj.Serialization.YamlDotNet.csproj" />
+  </Folder>
+</Solution>

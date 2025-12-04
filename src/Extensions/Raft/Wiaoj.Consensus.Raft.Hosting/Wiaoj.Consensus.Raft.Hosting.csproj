@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Wiaoj.Extensions.DependencyInjection\Wiaoj.Extensions.DependencyInjection.csproj" />
+    <ProjectReference Include="..\Wiaoj.Consensus.Raft.Persistence.Faster\Wiaoj.Consensus.Raft.Persistence.Faster.csproj" />
+    <ProjectReference Include="..\Wiaoj.Consensus.Raft.Transport.Grpc\Wiaoj.Consensus.Raft.Transport.Grpc.csproj" />
+    <ProjectReference Include="..\Wiaoj.Consensus.Raft\Wiaoj.Consensus.Raft.csproj" />
+  </ItemGroup>
+
+</Project>

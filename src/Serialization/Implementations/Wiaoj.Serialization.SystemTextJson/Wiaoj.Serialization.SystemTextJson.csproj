@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Package Identity -->
+    <PackageId>Wiaoj.Serialization.SystemTextJson</PackageId>
+    <Title>Wiaoj Serialization System.Text.Json</Title>
+    <Description>High-performance System.Text.Json implementation for Wiaoj Serialization with configurable options and telemetry support.</Description>
+    <PackageTags>serialization;json;systemtextjson;performance;wiaoj</PackageTags>
+ 
+    <!-- Make this packable -->
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />
+		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Extensions.DependencyInjection\Wiaoj.Serialization.Extensions.DependencyInjection.csproj" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Wiaoj.Serialization.SystemTextJson.Tests.Unit" /> 
+  </ItemGroup>
+
+</Project>

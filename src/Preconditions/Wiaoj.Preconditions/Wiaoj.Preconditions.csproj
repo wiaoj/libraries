@@ -1,0 +1,64 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>											 
+		<TargetFrameworks>net10.0</TargetFrameworks>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Wiaoj.Preconditions</RootNamespace>
+
+		<!-- Package Configuration -->
+		<PackageId>Wiaoj.Preconditions</PackageId>
+		<Title>Wiaoj Preconditions - High-Performance Guard Clauses</Title>
+		<Description>Zero-dependency, high-performance guard clauses for defensive programming in .NET. AOT-Compatible and highly optimized.</Description>
+		<PackageTags>guard;defensive-programming;preconditions;validation;performance;zero-dependency;dotnet;aot</PackageTags>
+		<PackageProjectUrl>https://github.com/wiaoj/libraries</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<RepositoryBranch>master</RepositoryBranch>
+
+		<!-- Build & Pack Configuration -->
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<IsPackable>true</IsPackable>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+		<!-- Performance & AOT Compatibility -->
+		<Optimize>true</Optimize>
+		<IsAotCompatible>true</IsAotCompatible>
+		<IsTrimmable>true</IsTrimmable>
+
+		<!-- Analyzer Settings -->
+		<EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+		<EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+		<EnableAotAnalyzer>true</EnableAotAnalyzer>
+
+		<!-- Documentation -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<!-- Debug/Release -->
+	<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+		<DebugType>full</DebugType>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
+		<DebugType>portable</DebugType>
+	</PropertyGroup>
+
+	<!-- Test Visibility -->
+	<ItemGroup>
+		<InternalsVisibleTo Include="Wiaoj.Preconditions.Tests.Unit" />
+		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+	</ItemGroup>
+
+	<!-- Files -->
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" Condition="Exists('README.md')" />
+		<None Include="CHANGELOG.md" Pack="true" PackagePath="\" Condition="Exists('CHANGELOG.md')" />
+		<None Include="icon.png" Pack="true" PackagePath="\" Condition="Exists('icon.png')" />  
+		<None Include="..\..\LICENSE" Pack="true" PackagePath="\" Condition="Exists('..\..\LICENSE')" />
+	</ItemGroup>
+
+</Project>

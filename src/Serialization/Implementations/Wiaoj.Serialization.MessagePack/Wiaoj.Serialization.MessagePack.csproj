@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Package Identity -->
+    <PackageId>Wiaoj.Serialization.MessagePack</PackageId>
+    <Title>Wiaoj Serialization MessagePack</Title>
+    <Description>Efficient binary MessagePack implementation for Wiaoj Serialization with compression support and telemetry integration.</Description>
+    <PackageTags>serialization;messagepack;binary;compression;performance;wiaoj</PackageTags>
+    
+    <!-- Make this packable -->
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MessagePack" Version="3.1.4" />
+  </ItemGroup>
+	
+	<ItemGroup>
+		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />
+		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Extensions.DependencyInjection\Wiaoj.Serialization.Extensions.DependencyInjection.csproj" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Wiaoj.Serialization.MessagePack.Tests.Unit" /> 
+  </ItemGroup>
+
+</Project>

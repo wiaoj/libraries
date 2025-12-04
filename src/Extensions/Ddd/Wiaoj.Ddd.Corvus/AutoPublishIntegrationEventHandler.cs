@@ -1,0 +1,17 @@
+﻿using Wiaoj.Corvus.Abstractions;
+using Wiaoj.Ddd.Abstractions;
+using Wiaoj.Ddd.Abstractions.DomainEvents;
+
+namespace Wiaoj.Ddd.Corvus; 
+internal sealed class AutoPublishIntegrationEventHandler<TDomainEvent, TIntegrationEvent>(
+    IBus bus,
+    IIntegrationEventMapper<TDomainEvent, TIntegrationEvent> mapper)
+    : IPostDomainEventHandler<TDomainEvent>
+    where TDomainEvent : IDomainEvent
+    where TIntegrationEvent : class, IEvent {
+    public ValueTask Handle(TDomainEvent @event, CancellationToken cancellationToken) {
+        TIntegrationEvent integrationMessage = mapper.Map(@event);
+
+        return bus.PublishAsync(integrationMessage, cancellationToken);
+    }
+}
