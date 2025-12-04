@@ -2,9 +2,11 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Wiaoj.Preconditions.Exceptions;
 using Wiaoj.Serialization.Abstractions;
 
-namespace Wiaoj.Serialization.Extensions.DependencyInjection;
+namespace Wiaoj.Serialization.DependencyInjection;
+
 public static class ServiceCollectionExtensions {
     /// <summary>
     /// Adds Wiaoj serializer support to the service collection.
@@ -17,8 +19,7 @@ public static class ServiceCollectionExtensions {
         Preca.ThrowIfNull(configurationBuilder);
         WiaojSerializationBuilder builder = new(services);
         configurationBuilder(builder);
-        builder.AddSerializerProvider();
-        builder.Services.AddRecyclableMemoryStreamManager();
+        builder.AddSerializerProvider();                     
         builder.Build();
 
         return services;
@@ -31,7 +32,9 @@ public static class ServiceCollectionExtensions {
 
 public static class WiaojserializationBuilderExtensions {
     public static IWiaojSerializationBuilder AddSerializerProvider(this IWiaojSerializationBuilder builder) {
-        builder.Services.TryAddSingleton<ISerializerProvider, SerializerProvider>();
+        builder.ConfigureServices(services => {
+            services.TryAddSingleton<ISerializerProvider, SerializerProvider>();
+        });
         return builder;
     }
 }
@@ -47,8 +50,7 @@ internal sealed class SerializerProvider(IServiceProvider sp) : ISerializerProvi
     }
 
     public ISerializer GetSerializer([NotNull] Type keyType) {
-
-        return _serializerTypes.GetOrAdd(keyType, type => {
+        return this._serializerTypes.GetOrAdd(keyType, type => {
             Preca.ThrowIfFalse(
                 typeof(ISerializerKey).IsAssignableFrom(type),
                 () => new PrecaArgumentException($"Type {type} must implement {nameof(ISerializerKey)}", nameof(type)));
@@ -56,5 +58,14 @@ internal sealed class SerializerProvider(IServiceProvider sp) : ISerializerProvi
             Type serializerType = typeof(ISerializer<>).MakeGenericType(type);
             return (ISerializer)sp.GetRequiredService(serializerType);
         });
+    }
+
+    public ISerializer GetRequiredSerializer([NotNull] Type keyType) {
+        Preca.ThrowIfNull(keyType);
+
+        ISerializer? serializer = GetSerializer(keyType);
+
+        Preca.ThrowIfNull(serializer, () => new InvalidOperationException($"Serializer for key '{keyType.Name}' not found."));
+        return serializer;
     }
 }

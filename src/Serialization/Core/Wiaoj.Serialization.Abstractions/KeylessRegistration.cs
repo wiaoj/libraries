@@ -1,6 +1,4 @@
-﻿using Wiaoj.Serialization.Abstractions;
-
-namespace Wiaoj.Serialization.Extensions.DependencyInjection;
+﻿namespace Wiaoj.Serialization.Abstractions;
 /// <summary>
 /// Marker type for registering a default (keyless) serializer.
 /// </summary>

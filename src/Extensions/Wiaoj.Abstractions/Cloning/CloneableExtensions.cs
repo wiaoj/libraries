@@ -32,17 +32,32 @@ public static class CloneableExtensions {
     }
 
     /// <summary>
-    /// Clones the object according to the specified <see cref="CloneKind"/>.
-    /// Works for types implementing <see cref="ICloneable{T}"/>.
+    /// Clones the object using the default <see cref="CloneKind.Deep"/> strategy.
+    /// This method works for types implementing <see cref="ICloneable{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The runtime type being cloned.</typeparam>
+    /// <param name="source">The instance to clone.</param>
+    /// <returns>A new cloned instance of type <typeparamref name="T"/>.</returns>
+    /// <exception cref="PrecaArgumentNullException">
+    /// Thrown if <paramref name="source"/> is <c>null</c>.
+    /// </exception>
+    public static T Clone<T>(this ICloneable<T> source) {
+        Preca.ThrowIfNull(source);
+        return source.Clone(CloneKind.Deep);
+    }
+
+    /// <summary>
+    /// Clones the object using the specified <see cref="CloneKind"/> strategy.
+    /// This method works for types implementing <see cref="ICloneable{T}"/>.
     /// </summary>
     /// <typeparam name="T">The runtime type being cloned.</typeparam>
     /// <param name="source">The instance to clone.</param>
     /// <param name="kind">The cloning strategy to use.</param>
-    /// <returns>A cloned instance of type <typeparamref name="T"/>.</returns>
+    /// <returns>A new cloned instance of type <typeparamref name="T"/>.</returns>
     /// <exception cref="PrecaArgumentNullException">
     /// Thrown if <paramref name="source"/> is <c>null</c>.
     /// </exception>
-    public static T Clone<T>(this ICloneable<T> source, CloneKind kind = CloneKind.Deep) {
+    public static T Clone<T>(this ICloneable<T> source, CloneKind kind) {
         Preca.ThrowIfNull(source);
         return source.Clone(kind);
     }

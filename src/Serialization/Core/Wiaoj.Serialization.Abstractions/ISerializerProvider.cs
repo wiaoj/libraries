@@ -37,16 +37,6 @@ public interface ISerializerProvider {
     /// Thrown when <paramref name="keyType"/> does not implement <see cref="ISerializerKey"/>.
     /// </exception>
     ISerializer? GetSerializer([NotNull] Type keyType);
-}
 
-public static class SerializerProviderExtensions {
-    public static ISerializer GetRequiredSerializer(this ISerializerProvider provider, [NotNull] Type keyType) {
-        Preca.ThrowIfNull(provider);
-        Preca.ThrowIfNull(keyType);
-
-        ISerializer? serializer = provider.GetSerializer(keyType);
-
-        Preca.ThrowIfNull(serializer, () => new InvalidOperationException($"Serializer for key '{keyType.Name}' not found."));
-        return serializer;
-    }
-}
+    ISerializer GetRequiredSerializer([NotNull] Type keyType);   
+} 

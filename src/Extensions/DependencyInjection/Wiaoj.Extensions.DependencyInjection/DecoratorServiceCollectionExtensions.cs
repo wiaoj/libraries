@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.Extensions.DependencyInjection;
 
@@ -13,7 +14,7 @@ public static class DecoratorServiceCollectionExtensions {
         /// <typeparam name="TService">The type of the service to decorate.</typeparam>
         /// <typeparam name="TDecorator">The type of the decorator.</typeparam> 
         /// <exception cref="InvalidOperationException">Thrown if TService is not registered.</exception>
-        public void Decorate<TService, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TDecorator>()
+        public IServiceCollection Decorate<TService, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TDecorator>()
             where TService : class
             where TDecorator : class, TService {
             ServiceDescriptor? originalDescriptor = services.LastOrDefault(d => d.ServiceType == typeof(TService));
@@ -29,9 +30,11 @@ public static class DecoratorServiceCollectionExtensions {
                 implementationFactory: provider => {
                     object originalService = GetOriginalServiceInstance(provider, originalDescriptor);
 
-                    return objectFactory(provider, [originalService]);
+                    return (TService)objectFactory(provider, [originalService]);
                 },
                 lifetime: originalDescriptor.Lifetime));
+
+            return services;
         }
 
         /// <summary>
@@ -41,7 +44,7 @@ public static class DecoratorServiceCollectionExtensions {
         /// <typeparam name="TService">The type of the service to decorate.</typeparam> 
         /// <param name="decoratorFactory">A factory function that takes the service to be decorated and the service provider, and returns the decorator instance.</param>
         /// <exception cref="InvalidOperationException">Thrown if TService is not registered.</exception>
-        public void Decorate<TService>(Func<TService, IServiceProvider, TService> decoratorFactory)
+        public IServiceCollection Decorate<TService>(Func<TService, IServiceProvider, TService> decoratorFactory)
            where TService : class {
             ServiceDescriptor? originalDescriptor = services.LastOrDefault(d => d.ServiceType == typeof(TService));
 
@@ -57,6 +60,8 @@ public static class DecoratorServiceCollectionExtensions {
                     return decoratorFactory(originalService, provider);
                 },
                 lifetime: originalDescriptor.Lifetime));
+
+            return services;
         }
     }
 
@@ -70,9 +75,6 @@ public static class DecoratorServiceCollectionExtensions {
         }
 
         if (descriptor.ImplementationType is not null) {
-            // Bu, en kritik kısım. Servisi, DI container'ın kendisinden değil,
-            // doğrudan ActivatorUtilities ile oluşturuyoruz. Bu, döngüsel bağımlılık
-            // tuzağına düşmemizi engeller.
             return ActivatorUtilities.CreateInstance(provider, descriptor.ImplementationType);
         }
 

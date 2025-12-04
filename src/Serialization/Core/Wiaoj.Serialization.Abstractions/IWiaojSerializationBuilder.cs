@@ -1,13 +1,8 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
-using Wiaoj.Serialization.Abstractions;
-
-namespace Wiaoj.Serialization.Extensions.DependencyInjection;
+﻿namespace Wiaoj.Serialization.Abstractions;
 /// <summary>
 /// Builder for configuring and registering serializers with the dependency injection container.
 /// </summary>
 public interface IWiaojSerializationBuilder {
-    IServiceCollection Services { get; }
     /// <summary>
     /// Registers a serializer for the specified key type.
     /// </summary>
@@ -24,5 +19,5 @@ public interface IWiaojSerializationBuilder {
     /// </summary>
     /// <param name="factory">Factory function to create the serializer instance.</param>
     /// <returns>The updated <see cref="IWiaojSerializationBuilder"/> for chaining.</returns>
-    ISerializerConfigurator<KeylessRegistration> AddSerializer(Func<IServiceProvider, ISerializer<KeylessRegistration>> factory); 
+    ISerializerConfigurator<KeylessRegistration> AddSerializer(Func<IServiceProvider, ISerializer<KeylessRegistration>> factory);
 }

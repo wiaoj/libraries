@@ -1,15 +1,13 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Serialization.Abstractions;
 
-namespace Wiaoj.Serialization.Extensions.DependencyInjection;
+namespace Wiaoj.Serialization.DependencyInjection;
 /// <inheritdoc /> 
-internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder {
-    private readonly IServiceCollection services;
-    public IServiceCollection Services => this.services;
+internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder, IServiceCollectionAccessor {
+    public IServiceCollection Services { get; }
 
     internal WiaojSerializationBuilder(IServiceCollection services) {
-        this.services = services;
+        this.Services = services;
     }
 
 
@@ -17,7 +15,7 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder {
     public ISerializerConfigurator<TKey> AddSerializer<TKey>(Func<IServiceProvider, ISerializer<TKey>> factory) where TKey : ISerializerKey {
         Preca.ThrowIfNull(factory);
         Type serviceType = typeof(ISerializer<TKey>);
-        if (this.services.Any(sd => sd.ServiceType == serviceType)) {
+        if (this.Services.Any(sd => sd.ServiceType == serviceType)) {
             Preca.ThrowIfTrue(
                 typeof(TKey) == typeof(KeylessRegistration),
                 () => new InvalidOperationException("A keyless (default) serializer has already been registered. Only one keyless registration is allowed."));
@@ -25,7 +23,7 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder {
             throw new InvalidOperationException($"A serializer with the key '{typeof(TKey).FullName}' has already been registered.");
         }
 
-        this.services.AddSingleton<ISerializer<TKey>>(factory);
+        this.Services.AddSingleton<ISerializer<TKey>>(factory);
         return new SerializerConfigurator<TKey>(this);
     }
 
@@ -42,15 +40,15 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder {
     /// </exception>
     internal void Build() {
         // Check for explicitly registered keyless (default) serializer
-        bool hasKeyless = this.services.Any(sd => sd.ServiceType == typeof(ISerializer<KeylessRegistration>));
+        bool hasKeyless = this.Services.Any(sd => sd.ServiceType == typeof(ISerializer<KeylessRegistration>));
 
         if (hasKeyless) {
-            this.services.AddSingleton<ISerializer>(sp => sp.GetRequiredService<ISerializer<KeylessRegistration>>());
+            this.Services.AddSingleton<ISerializer>(sp => sp.GetRequiredService<ISerializer<KeylessRegistration>>());
             return;
         }
 
         // Gather all ISerializer<T> registrations
-        List<ServiceDescriptor> serializerRegistrations = [.. this.services
+        List<ServiceDescriptor> serializerRegistrations = [.. this.Services
             .Where(sd =>
                 sd.ServiceType.IsGenericType &&
                 sd.ServiceType.GetGenericTypeDefinition() == typeof(ISerializer<>))];
@@ -65,7 +63,7 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder {
 
             Type serializerType = typeof(ISerializer<>).MakeGenericType(genericArg);
 
-            this.services.AddSingleton(typeof(ISerializer), sp => sp.GetRequiredService(serializerType));
+            this.Services.AddSingleton(typeof(ISerializer), sp => sp.GetRequiredService(serializerType));
             return;
         }
 
@@ -78,4 +76,4 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder {
         //    serializerRegistrations.Count == 0,
         //    () => new InvalidOperationException("No serializers have been registered. Please call AddSerializer(...) first.")); 
     }
-}
+}      

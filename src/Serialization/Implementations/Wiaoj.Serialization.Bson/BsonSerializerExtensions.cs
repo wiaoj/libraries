@@ -1,18 +1,20 @@
-﻿using System.Collections;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IO;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
 using Wiaoj.Serialization.Abstractions;
-using Wiaoj.Serialization.Extensions.DependencyInjection;
+using Wiaoj.Serialization.Bson;
 
-namespace Wiaoj.Serialization.Bson;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Serialization.DependencyInjection;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Extension methods to register BSON serializers in IWiaojSerializationBuilder.
 /// </summary>
-public static class BsonSerializerExtensions {  
-    static BsonSerializerExtensions() { 
+public static class BsonSerializerExtensions {
+    static BsonSerializerExtensions() {
         try {
 
             BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
@@ -25,7 +27,7 @@ public static class BsonSerializerExtensions {
     /// Registers BSON as the default (keyless) serializer with default settings.
     /// </summary>
     public static ISerializerConfigurator<KeylessRegistration> UseBson(this IWiaojSerializationBuilder builder) {
-        Preca.ThrowIfNull(builder); 
+        Preca.ThrowIfNull(builder);
         return builder.UseBson<KeylessRegistration>(_ => { }, _ => { });
     }
 
@@ -62,7 +64,7 @@ public static class BsonSerializerExtensions {
 
         Action<BsonSerializationContext.Builder> finalSerializationConfig = serializationConfigurator ?? (_ => { });
         Action<BsonDeserializationContext.Builder> finalDeserializationConfig = deserializationConfigurator ?? (_ => { });
-    
+        builder.ConfigureServices(services => services.TryAddSingleton<RecyclableMemoryStreamManager>());
         return builder.AddSerializer(sp =>
             new BsonSerializer<TKey>(
                 finalSerializationConfig,

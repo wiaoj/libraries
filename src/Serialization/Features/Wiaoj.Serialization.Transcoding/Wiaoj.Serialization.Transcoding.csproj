@@ -1,14 +1,30 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-	
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+							    
+		<PackageId>Wiaoj.Serialization.Transcoding</PackageId>
+		<Version>0.0.1-alpha.1</Version>
+		<Authors>wiaoj</Authors>
+		<Title>Wiaoj Serialization Transcoding</Title>
+		<Description>Transcoding capabilities for Wiaoj Serialization, allowing conversion between different formats (e.g., JSON to MessagePack).</Description>
+		<PackageTags>serialization;transcoding;conversion;format;wiaoj</PackageTags>
+									 
+		<IsPackable>true</IsPackable>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+		<Optimize>true</Optimize>
+		<IsAotCompatible>true</IsAotCompatible>
+		<IsTrimmable>true</IsTrimmable>
+	</PropertyGroup>
+
 	<ItemGroup>
-		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />
-		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Extensions.DependencyInjection\Wiaoj.Serialization.Extensions.DependencyInjection.csproj" />
+		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />  
+		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.DependencyInjection\Wiaoj.Serialization.DependencyInjection.csproj" />
 	</ItemGroup>
-	
+
 </Project>

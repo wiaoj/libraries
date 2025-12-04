@@ -1,9 +1,12 @@
 ﻿using Wiaoj.Serialization.Abstractions;
-using Wiaoj.Serialization.Extensions.DependencyInjection;
+using Wiaoj.Serialization.YamlDotNet;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace Wiaoj.Serialization.YamlDotNet;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Serialization.DependencyInjection;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
+/// <summary>
 public static class YamlDotNetSerializerExtensions {
     /// <summary>
     /// Registers YamlDotNet as a serializer for the given key type.
@@ -20,10 +23,10 @@ public static class YamlDotNetSerializerExtensions {
         Preca.ThrowIfNull(builder);
 
         return builder.AddSerializer(sp => {
-            var serializerBuilder = new SerializerBuilder()
+            SerializerBuilder serializerBuilder = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance);
 
-            var deserializerBuilder = new DeserializerBuilder()
+            DeserializerBuilder deserializerBuilder = new DeserializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance);
 
             configureSerializer?.Invoke(serializerBuilder);

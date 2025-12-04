@@ -1,18 +1,32 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-	
-  <ItemGroup>
-	<PackageReference Include="YamlDotNet" Version="16.3.0" />
-  </ItemGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+							    
+		<PackageId>Wiaoj.Serialization.YamlDotNet</PackageId>
+		<Version>0.0.1-alpha.1</Version>
+		<Authors>wiaoj</Authors>
+		<Title>Wiaoj Serialization YamlDotNet</Title>
+		<Description>YAML serialization implementation for Wiaoj Serialization using YamlDotNet.</Description>
+		<PackageTags>serialization;yaml;yamldotnet;wiaoj</PackageTags>
+									  
+		<IsPackable>true</IsPackable>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+																					  
+		<Optimize>true</Optimize>
+	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />
-		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Extensions.DependencyInjection\Wiaoj.Serialization.Extensions.DependencyInjection.csproj" />
+		<PackageReference Include="YamlDotNet" Version="16.3.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />	 
 	</ItemGroup>
 
 </Project>

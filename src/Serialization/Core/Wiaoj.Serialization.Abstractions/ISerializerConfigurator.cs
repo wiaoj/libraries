@@ -1,6 +1,4 @@
-﻿using Wiaoj.Serialization.Abstractions;
-
-namespace Wiaoj.Serialization.Extensions.DependencyInjection;
+﻿namespace Wiaoj.Serialization.Abstractions;
 /// <summary>
 /// Configures a serializer registration for a specific key and provides methods for chaining.
 /// </summary>
@@ -10,11 +8,4 @@ public interface ISerializerConfigurator<out TKey> where TKey : ISerializerKey {
     /// Gets the main builder to continue the registration chain.
     /// </summary>
     IWiaojSerializationBuilder Builder { get; }
-}
-
-/// <inheritdoc />
-internal sealed class SerializerConfigurator<TKey>(IWiaojSerializationBuilder builder)
-   : ISerializerConfigurator<TKey> where TKey : ISerializerKey {
-    /// <inheritdoc />
-    public IWiaojSerializationBuilder Builder => builder;
 }

@@ -1,22 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-
-    <!-- Package Identity -->
-    <PackageId>Wiaoj.Serialization.Abstractions</PackageId>
-    <Title>Wiaoj Serialization Abstractions</Title>
-    <Description>Core interfaces and abstractions for the Wiaoj Serialization library. Provides unified contracts for multiple serialization formats.</Description>
-    <PackageTags>serialization;abstractions;interfaces;json;messagepack;wiaoj</PackageTags>
-    
-    <!-- Make this packable -->
-    <IsPackable>true</IsPackable>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\Preca\Wiaoj.Preca\Wiaoj.Preca.csproj" />
-  </ItemGroup> 
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PackageId>Wiaoj.Serialization.Abstractions</PackageId>
+		<Version>0.0.1-alpha.1</Version>
+		<Authors>wiaoj</Authors>
+		<Title>Wiaoj Serialization Abstractions</Title>
+		<Description>Core interfaces and abstractions for the Wiaoj Serialization library.</Description>
+		<PackageTags>serialization;abstractions;interfaces;json;messagepack;wiaoj</PackageTags>
+		<IsPackable>true</IsPackable>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+	</PropertyGroup>
 </Project>

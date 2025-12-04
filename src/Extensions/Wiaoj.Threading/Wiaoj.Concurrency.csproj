@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Preca\Wiaoj.Preca\Wiaoj.Preca.csproj" />
+    <ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
     <ProjectReference Include="..\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
   </ItemGroup>
 

@@ -6,7 +6,8 @@
     <Nullable>enable</Nullable>
 
     <!-- Package Identity -->
-    <PackageId>Wiaoj.Serialization.MessagePack</PackageId>
+    <PackageId>Wiaoj.Serialization.MessagePack</PackageId>   
+	<Version>0.0.1-alpha.1</Version>
     <Title>Wiaoj Serialization MessagePack</Title>
     <Description>Efficient binary MessagePack implementation for Wiaoj Serialization with compression support and telemetry integration.</Description>
     <PackageTags>serialization;messagepack;binary;compression;performance;wiaoj</PackageTags>
@@ -21,8 +22,8 @@
   </ItemGroup>
 	
 	<ItemGroup>
+		<ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
 		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />
-		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Extensions.DependencyInjection\Wiaoj.Serialization.Extensions.DependencyInjection.csproj" />
 	</ItemGroup>
 
   <ItemGroup>

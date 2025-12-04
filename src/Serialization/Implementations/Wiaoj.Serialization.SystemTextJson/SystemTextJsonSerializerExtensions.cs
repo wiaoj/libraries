@@ -3,7 +3,7 @@ using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.SystemTextJson;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Wiaoj.Serialization.Extensions.DependencyInjection;
+namespace Wiaoj.Serialization.DependencyInjection;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Extension methods to register System.Text.Json serializers in IWiaojSerializationBuilder.
@@ -41,7 +41,7 @@ public static class SystemTextJsonSerializerExtensions {
     public static ISerializerConfigurator<KeylessRegistration> UseSystemTextJson(this IWiaojSerializationBuilder builder,
                                                               Action<JsonSerializerOptions> configure) {
         Preca.ThrowIfNull(builder);
-        Preca.ThrowIfNull(configure); 
+        Preca.ThrowIfNull(configure);
         JsonSerializerOptions options = new();
         configure(options);
         return builder.AddSerializer(sp => new SystemTextJsonSerializer<KeylessRegistration>(options));
@@ -70,7 +70,7 @@ public static class SystemTextJsonSerializerExtensions {
                                                                     JsonSerializerOptions jsonSerializerOptions)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
-        Preca.ThrowIfNull(jsonSerializerOptions); 
+        Preca.ThrowIfNull(jsonSerializerOptions);
         return builder.AddSerializer(sp => new SystemTextJsonSerializer<TKey>(jsonSerializerOptions));
     }
 
@@ -85,9 +85,9 @@ public static class SystemTextJsonSerializerExtensions {
                                                                     Action<JsonSerializerOptions> configure)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
-        Preca.ThrowIfNull(configure); 
+        Preca.ThrowIfNull(configure);
         JsonSerializerOptions options = new();
         configure(options);
-        return builder.AddSerializer(sp => new SystemTextJsonSerializer<TKey>(options));  
+        return builder.AddSerializer(sp => new SystemTextJsonSerializer<TKey>(options));
     }
-} 
+}

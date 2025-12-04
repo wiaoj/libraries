@@ -1,9 +1,11 @@
 ﻿using MessagePack;
 using MessagePack.Resolvers;
 using Wiaoj.Serialization.Abstractions;
-using Wiaoj.Serialization.Extensions.DependencyInjection;
+using Wiaoj.Serialization.MessagePack;
 
-namespace Wiaoj.Serialization.MessagePack;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Serialization.DependencyInjection;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Extension methods to register MessagePack serializers in IWiaojSerializationBuilder.
 /// </summary>

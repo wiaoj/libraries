@@ -2,9 +2,7 @@
   <Folder Name="/src/" />
   <Folder Name="/src/Extensions/">
     <Project Path="src/Extensions/Wiaoj.Abstractions/Wiaoj.Abstractions.csproj" />
-    <Project Path="src/Extensions/Wiaoj.Extensions.DependencyInjection/Wiaoj.Extensions.DependencyInjection.csproj" />
     <Project Path="src/Extensions/Wiaoj.Extensions/Wiaoj.Extensions.csproj" />
-    <Project Path="src/Extensions/Wiaoj.Primitives/Wiaoj.Primitives.csproj" />
     <Project Path="src/Extensions/Wiaoj.Results/Wiaoj.Results.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/Ddd/">
@@ -13,11 +11,18 @@
     <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.EntityFrameworkCore/Wiaoj.Ddd.EntityFrameworkCore.csproj" />
     <Project Path="src/Extensions/Ddd/Wiaoj.Ddd/Wiaoj.Ddd.csproj" />
   </Folder>
+  <Folder Name="/src/Extensions/DependencyInjection/">
+    <Project Path="src/Extensions/DependencyInjection/Wiaoj.Extensions.DependencyInjection/Wiaoj.Extensions.DependencyInjection.csproj" />
+  </Folder>
   <Folder Name="/src/Extensions/ObjectPooling/">
     <Project Path="src/Extensions/ObjectPooling/Wiaoj.ObjectPooling.Testing/Wiaoj.ObjectPooling.Testing.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/ObjectPooling/Wiaoj.ObjectPooling/">
     <Project Path="src/Extensions/ObjectPooling/Wiaoj.ObjectPooling/Wiaoj.ObjectPool.csproj" />
+  </Folder>
+  <Folder Name="/src/Extensions/Primitives/">
+    <File Path="src/Extensions/Primitives/README.md" />
+    <Project Path="src/Extensions/Primitives/Wiaoj.Primitives/Wiaoj.Primitives.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/Raft/">
     <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft.Abstractions/Wiaoj.Consensus.Raft.Abstractions.csproj" />
@@ -33,14 +38,15 @@
     <File Path="src/Preconditions/README.md" />
     <Project Path="src/Preconditions/Wiaoj.Preconditions/Wiaoj.Preconditions.csproj" />
   </Folder>
-  <Folder Name="/src/Serialization/" />
+  <Folder Name="/src/Serialization/">
+    <File Path="src/Serialization/README.md" />
+  </Folder>
   <Folder Name="/src/Serialization/Core/">
     <Project Path="src/Serialization/Core/Wiaoj.Serialization.Abstractions/Wiaoj.Serialization.Abstractions.csproj" />
-    <Project Path="src/Serialization/Core/Wiaoj.Serialization.Extensions.DependencyInjection/Wiaoj.Serialization.Extensions.DependencyInjection.csproj" />
+    <Project Path="src/Serialization/Core/Wiaoj.Serialization.DependencyInjection/Wiaoj.Serialization.DependencyInjection.csproj" />
   </Folder>
   <Folder Name="/src/Serialization/Features/">
     <Project Path="src/Serialization/Features/Wiaoj.Serialization.Compression/Wiaoj.Serialization.Compression.csproj" />
-    <Project Path="src/Serialization/Features/Wiaoj.Serialization.OpenTelemetry/Wiaoj.Serialization.OpenTelemetry.csproj" />
     <Project Path="src/Serialization/Features/Wiaoj.Serialization.Security/Wiaoj.Serialization.Security.csproj" />
     <Project Path="src/Serialization/Features/Wiaoj.Serialization.Transcoding/Wiaoj.Serialization.Transcoding.csproj" />
   </Folder>

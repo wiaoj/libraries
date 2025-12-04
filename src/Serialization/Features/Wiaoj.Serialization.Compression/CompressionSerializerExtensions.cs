@@ -2,12 +2,15 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IO;
+using Wiaoj.Extensions.DependencyInjection;
 using Wiaoj.Serialization.Abstractions;
+using Wiaoj.Serialization.Compression;
 using Wiaoj.Serialization.Compression.Abstractions;
 using Wiaoj.Serialization.Compression.Compressors;
-using Wiaoj.Serialization.Extensions.DependencyInjection;
 
-namespace Wiaoj.Serialization.Compression;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Serialization.DependencyInjection;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Provides extension methods to add compression capabilities to a serializer configuration.
 /// </summary> 
@@ -16,21 +19,18 @@ public static class CompressionSerializerExtensions {
         this ISerializerConfigurator<TKey> configurator,
         Func<IServiceProvider, ICompressor> compressorFactory) where TKey : ISerializerKey {
         Preca.ThrowIfNull(configurator);
+                                         
+        configurator.Builder.ConfigureServices(services => {
+            services.TryAddSingleton<RecyclableMemoryStreamManager>();
+            services.Decorate<ISerializer<TKey>>((innerSerializer, provider) => {     
+                return new CompressionSerializerDecorator<TKey>(
+                    innerSerializer: innerSerializer,
+                    compressor: compressorFactory(provider),
+                    streamManager: provider.GetRequiredService<RecyclableMemoryStreamManager>()
+                );
+            });
+        });
 
-        IServiceCollection services = configurator.Builder.Services;
-        ServiceDescriptor originalDescriptor = services.Last(d => d.ServiceType == typeof(ISerializer<TKey>));
-
-        Func<IServiceProvider, object> decoratedFactory = provider => {
-            Func<IServiceProvider, object> originalFactory = originalDescriptor.ImplementationFactory
-                ?? (sp => ActivatorUtilities.CreateInstance(sp, originalDescriptor.ImplementationType!)); 
-
-            return new CompressionSerializerDecorator<TKey>(
-                innerSerializer: (ISerializer<TKey>)originalFactory(provider), 
-                compressor: compressorFactory(provider), 
-                streamManager: provider.GetRequiredService<RecyclableMemoryStreamManager>());
-        };
-
-        services.Replace(ServiceDescriptor.Describe(originalDescriptor.ServiceType, decoratedFactory, originalDescriptor.Lifetime));
         return configurator;
     }
 
@@ -42,9 +42,9 @@ public static class CompressionSerializerExtensions {
        CompressionLevel compressionLevel = CompressionLevel.Optimal) where TKey : ISerializerKey {
         Preca.ThrowIfNull(configurator);
 
-        return configurator.AddCompression(provider => { 
+        return configurator.AddCompression(provider => {
             return new BrotliCompressor(
-                compressionLevel, 
+                compressionLevel,
                 streamManager: provider.GetRequiredService<RecyclableMemoryStreamManager>());
         });
     }
@@ -57,9 +57,9 @@ public static class CompressionSerializerExtensions {
        CompressionLevel compressionLevel = CompressionLevel.Optimal) where TKey : ISerializerKey {
         Preca.ThrowIfNull(configurator);
 
-        return configurator.AddCompression(provider => { 
+        return configurator.AddCompression(provider => {
             return new GzipCompressor(
-                compressionLevel, 
+                compressionLevel,
                 streamManager: provider.GetRequiredService<RecyclableMemoryStreamManager>());
         });
     }
