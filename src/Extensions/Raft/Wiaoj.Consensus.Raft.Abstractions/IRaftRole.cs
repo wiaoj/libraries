@@ -35,7 +35,7 @@ public interface IRaftRole {
     /// <summary>
     /// İstemciden gelen bir komut önerisini işler.
     /// </summary>
-    Task<ErrorOr<CommandPayload>> ProposeAsync(CommandPayload command);
+    Task<Result<CommandPayload>> ProposeAsync(CommandPayload command);
 
     Task<InstallSnapshotResult> HandleInstallSnapshotAsync(InstallSnapshotArgs args);
 } 

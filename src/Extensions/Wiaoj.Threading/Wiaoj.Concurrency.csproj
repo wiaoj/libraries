@@ -10,7 +10,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
-    <ProjectReference Include="..\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

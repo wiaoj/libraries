@@ -244,7 +244,7 @@ public sealed class RaftEngine : IRaftEngine, IAsyncDisposable {
     private readonly AsyncLock _transitionLock = new();
     private readonly DisposeState _disposeState = new();
 
-    private readonly ConcurrentDictionary<LogIndex, TaskCompletionSource<ErrorOr<CommandPayload>>> _pendingProposals = new();
+    private readonly ConcurrentDictionary<LogIndex, TaskCompletionSource<Result<CommandPayload>>> _pendingProposals = new();
 
     private Task? _executionTask;
     private IRaftRole _currentRole;
@@ -436,8 +436,8 @@ public sealed class RaftEngine : IRaftEngine, IAsyncDisposable {
         return tcs.Task;
     }
 
-    public Task<ErrorOr<CommandPayload>> ProposeAsync(CommandPayload command) {
-        var tcs = new TaskCompletionSource<ErrorOr<CommandPayload>>(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task<Result<CommandPayload>> ProposeAsync(CommandPayload command) {
+        var tcs = new TaskCompletionSource<Result<CommandPayload>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var proposal = new ProcessClientProposal(command, tcs);
         if (!_commandChannel.Writer.TryWrite(proposal)) {
             tcs.TrySetResult(Error.ServiceUnavailable("Raft.EngineShutdown", "Raft motoru kapanıyor."));
@@ -445,7 +445,7 @@ public sealed class RaftEngine : IRaftEngine, IAsyncDisposable {
         return tcs.Task;
     }
 
-    public void RegisterProposal(LogIndex index, TaskCompletionSource<ErrorOr<CommandPayload>> tcs) => _pendingProposals[index] = tcs;
+    public void RegisterProposal(LogIndex index, TaskCompletionSource<Result<CommandPayload>> tcs) => _pendingProposals[index] = tcs;
 
     public void SetCommitIndex(LogIndex index) {
         // Commit index asla geriye gitmez.

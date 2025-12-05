@@ -1,0 +1,69 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Wiaoj.Abstractions</RootNamespace>
+
+		<!-- Package Info -->
+		<PackageId>Wiaoj.Abstractions</PackageId>
+		<Version>0.0.1-alpha.1</Version>
+		<Authors>wiaoj</Authors>
+
+		<Title>Wiaoj Abstractions - Standard Interfaces &amp; Patterns</Title>
+		<Description>A foundational library providing standardized, type-safe interfaces for common architectural patterns in .NET. Includes generic support for Deep/Shallow Cloning, State Copying (CopyFrom/CopyTo), and Asynchronous Object Factories to promote loose coupling and clear contracts.</Description>
+		<PackageTags>abstractions;interfaces;cloneable;deep-clone;shallow-clone;copy;factory;async-factory;patterns;architecture;dependency-injection</PackageTags>
+
+		<PackageProjectUrl>https://github.com/wiaoj/libraries</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+
+		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<RepositoryBranch>master</RepositoryBranch>
+
+		<!-- Build & Pack Settings -->
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<IsPackable>true</IsPackable>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+		<!-- Optimization & AOT -->
+		<Optimize>true</Optimize>
+		<IsAotCompatible>true</IsAotCompatible>
+		<IsTrimmable>true</IsTrimmable>
+
+		<!-- Analysis -->
+		<EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+		<EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+		<EnableAotAnalyzer>true</EnableAotAnalyzer>
+
+		<!-- Documentation -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+		<DebugType>full</DebugType>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
+		<DebugType>portable</DebugType>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Dependencies -->
+		<ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Pack Files -->
+		<None Include="..\README.md" Pack="true" PackagePath="\" Condition="Exists('..\README.md')" />
+		<None Include="CHANGELOG.md" Pack="true" PackagePath="\" Condition="Exists('CHANGELOG.md')" />
+		<None Include="icon.png" Pack="true" PackagePath="\" Condition="Exists('icon.png')" />
+		<None Include="..\..\LICENSE" Pack="true" PackagePath="\" Condition="Exists('..\..\LICENSE')" />
+	</ItemGroup>
+
+</Project>

@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/" />
   <Folder Name="/src/Extensions/">
-    <Project Path="src/Extensions/Wiaoj.Abstractions/Wiaoj.Abstractions.csproj" />
     <Project Path="src/Extensions/Wiaoj.Extensions/Wiaoj.Extensions.csproj" />
-    <Project Path="src/Extensions/Wiaoj.Results/Wiaoj.Results.csproj" />
+  </Folder>
+  <Folder Name="/src/Extensions/Abstractions/">
+    <File Path="src/Extensions/Abstractions/README.md" />
+    <Project Path="src/Extensions/Abstractions/Wiaoj.Abstractions/Wiaoj.Abstractions.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/Ddd/">
     <File Path="src/Extensions/Ddd/README.md" />
@@ -31,6 +33,10 @@
     <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft.Persistence.Faster/Wiaoj.Consensus.Raft.Persistence.Faster.csproj" />
     <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft.Transport.Grpc/Wiaoj.Consensus.Raft.Transport.Grpc.csproj" />
     <Project Path="src/Extensions/Raft/Wiaoj.Consensus.Raft/Wiaoj.Consensus.Raft.csproj" />
+  </Folder>
+  <Folder Name="/src/Extensions/Results/">
+    <File Path="src/Extensions/Results/README.md" />
+    <Project Path="src/Extensions/Results/Wiaoj.Results/Wiaoj.Results.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/Wiaoj.Threading/">
     <Project Path="src/Extensions/Wiaoj.Threading/Wiaoj.Concurrency.csproj" />

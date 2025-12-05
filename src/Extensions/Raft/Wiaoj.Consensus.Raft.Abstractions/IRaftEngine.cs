@@ -25,7 +25,7 @@ public interface IRaftEngine {
     /// <summary>
     /// İstemciden gelen yeni bir komut önerisini işleme alır.
     /// </summary>
-    Task<ErrorOr<CommandPayload>> ProposeAsync(CommandPayload command);
+    Task<Result<CommandPayload>> ProposeAsync(CommandPayload command);
 
     Task<InstallSnapshotResult> HandleInstallSnapshotAsync(InstallSnapshotArgs args);
 } 

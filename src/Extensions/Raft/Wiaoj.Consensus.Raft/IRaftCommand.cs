@@ -19,7 +19,7 @@ public record ProcessInstallSnapshot(
 
 public record ProcessClientProposal(
     CommandPayload Command,
-    TaskCompletionSource<ErrorOr<CommandPayload>> Tcs) : IRaftCommand;
+    TaskCompletionSource<Result<CommandPayload>> Tcs) : IRaftCommand;
 
 public record InternalTimeoutElapsed(string TimerName) : IRaftCommand;
 

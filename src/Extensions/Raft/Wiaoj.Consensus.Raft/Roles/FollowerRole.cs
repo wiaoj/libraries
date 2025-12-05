@@ -236,11 +236,11 @@ public sealed class FollowerRole : IRaftRole {
         return new RequestVoteResult { Term = _stateManager.GetCurrentTerm(), VoteGranted = voteGranted };
     }
 
-    public Task<ErrorOr<CommandPayload>> ProposeAsync(CommandPayload command) {
+    public Task<Result<CommandPayload>> ProposeAsync(CommandPayload command) {
         var leaderHint = _currentLeader?.Value ?? "Bilinmiyor";
         Dictionary<string, object> metadata = new() { { "LeaderHint", leaderHint } };
         Error error = Error.Conflict.With("Raft.NotLeader", "İşlem sadece lider tarafından gerçekleştirilebilir.", metadata);
-        return Task.FromResult<ErrorOr<CommandPayload>>(error);
+        return Task.FromResult<Result<CommandPayload>>(error);
     }
 
     public async Task<InstallSnapshotResult> HandleInstallSnapshotAsync(InstallSnapshotArgs args) {

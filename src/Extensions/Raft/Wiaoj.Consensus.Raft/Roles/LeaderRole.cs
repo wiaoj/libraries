@@ -9,7 +9,7 @@ using Wiaoj.Results;
 
 namespace Wiaoj.Consensus.Raft.Roles;
 
-public record Proposal(LogEntry Entry, TaskCompletionSource<ErrorOr<CommandPayload>> Tcs);
+public record Proposal(LogEntry Entry, TaskCompletionSource<Result<CommandPayload>> Tcs);
 
 public sealed class LeaderRole : IRaftRole {
     private readonly RaftEngine _engine;
@@ -65,8 +65,8 @@ public sealed class LeaderRole : IRaftRole {
         return Task.CompletedTask;
     }
 
-    public Task<ErrorOr<CommandPayload>> ProposeAsync(CommandPayload command) {
-        var tcs = new TaskCompletionSource<ErrorOr<CommandPayload>>(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task<Result<CommandPayload>> ProposeAsync(CommandPayload command) {
+        var tcs = new TaskCompletionSource<Result<CommandPayload>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var entry = new LogEntry { Term = _stateManager.GetCurrentTerm().Value, Command = command.Value.ToArray() };
         if (!_proposalChannel.Writer.TryWrite(new Proposal(entry, tcs))) {
             tcs.TrySetResult(Error.ServiceUnavailable("Raft.QueueFull", "Öneri kuyruğu dolu."));

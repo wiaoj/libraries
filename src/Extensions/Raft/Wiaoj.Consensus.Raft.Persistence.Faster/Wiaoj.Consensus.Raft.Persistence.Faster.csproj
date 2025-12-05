@@ -11,7 +11,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
     <ProjectReference Include="..\Wiaoj.Consensus.Raft\Wiaoj.Consensus.Raft.csproj" />
   </ItemGroup>
 

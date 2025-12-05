@@ -354,9 +354,9 @@ public sealed class CandidateRole : IRaftRole {
         return new RequestVoteResult { Term = _stateManager.GetCurrentTerm(), VoteGranted = false };
     }
 
-    public Task<ErrorOr<CommandPayload>> ProposeAsync(CommandPayload command) {
+    public Task<Result<CommandPayload>> ProposeAsync(CommandPayload command) {
         Error error = Error.Conflict.With("Raft.NotLeader", "Düğüm adaydır ve önerileri işleyemez. Lider seçilmesi bekleniyor.");
-        return Task.FromResult<ErrorOr<CommandPayload>>(error);
+        return Task.FromResult<Result<CommandPayload>>(error);
     }
 
     public async Task<InstallSnapshotResult> HandleInstallSnapshotAsync(InstallSnapshotArgs args) {
