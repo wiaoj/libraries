@@ -1,4 +1,5 @@
-﻿using Wiaoj.Primitives;
+﻿using Wiaoj.Preconditions.Exceptions;
+using Wiaoj.Primitives;
 
 namespace Wiaoj.Extensions;
 

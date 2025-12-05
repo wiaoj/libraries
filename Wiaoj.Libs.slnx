@@ -6,6 +6,7 @@
     <Project Path="src/Extensions/Wiaoj.Results/Wiaoj.Results.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/Ddd/">
+    <File Path="src/Extensions/Ddd/README.md" />
     <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.Abstractions/Wiaoj.Ddd.Abstractions.csproj" />
     <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.Corvus/Wiaoj.Ddd.Corvus.csproj" />
     <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.EntityFrameworkCore/Wiaoj.Ddd.EntityFrameworkCore.csproj" />

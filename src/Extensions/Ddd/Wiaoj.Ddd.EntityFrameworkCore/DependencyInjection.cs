@@ -4,7 +4,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Ddd;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
-using Wiaoj.Serialization.Extensions.DependencyInjection;
+using Wiaoj.Serialization.Abstractions;
+using Wiaoj.Serialization.DependencyInjection;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Microsoft.EntityFrameworkCore;
@@ -20,20 +21,13 @@ public static class DependencyInjection {
         /// <param name="configureSerializer"></param>
         /// <returns>The DDD builder for chaining.</returns>
         public IDddBuilder AddEntityFrameworkCore<TContext>(
-            Action<OutboxOptions>? configureOutbox = null,
-            Action<JsonSerializerOptions>? configureSerializer = null) where TContext : DbContext {
+            Action<IWiaojSerializationBuilder> configureSerializer,
+            Action<OutboxOptions>? configureOutbox = null) where TContext : DbContext {
             builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);
             builder.Services.TryAddScoped<AuditInterceptor>();
             builder.Services.TryAddScoped<DomainEventDispatcherInterceptor>();
 
-            builder.Services.AddWiaojSerializer(builder => {
-                if (configureSerializer is not null) {
-                    builder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>(configureSerializer);
-                }
-                else {
-                    builder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>();
-                }
-            });
+            builder.Services.AddWiaojSerializer(configureSerializer);
 
             builder.Services.Configure<OutboxOptions>(options => {
                 configureOutbox?.Invoke(options);
@@ -42,6 +36,20 @@ public static class DependencyInjection {
             builder.Services.AddHostedService<OutboxProcessor<TContext>>();
              
             return builder;
+        }
+
+        public IDddBuilder AddEntityFrameworkCore<TContext>(
+            Action<OutboxOptions>? configureOutbox = null,
+            Action<JsonSerializerOptions>? configureJsonOptions = null) where TContext : DbContext {       
+            return builder.AddEntityFrameworkCore<TContext>(
+                configureSerializer: serializerBuilder => {   
+                    if (configureJsonOptions is not null)
+                        serializerBuilder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>(configureJsonOptions);
+                    else
+                        serializerBuilder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>();
+                },
+                configureOutbox: configureOutbox
+            );
         }
     }
 

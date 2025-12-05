@@ -1,13 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\Preca\Wiaoj.Preca\Wiaoj.Preca.csproj" />
-  </ItemGroup>
+		<PackageId>Wiaoj.Ddd.Abstractions</PackageId>
+		<Version>0.0.1-alpha.1</Version>
+		<Authors>wiaoj</Authors>
+		<Title>Wiaoj DDD Abstractions</Title>
+		<Description>Core abstractions for Domain-Driven Design (Entity, Aggregate Root, Domain Events) in the Wiaoj ecosystem.</Description>
+		<PackageTags>ddd;domain-driven-design;entity;aggregate;domain-events;wiaoj</PackageTags>
+
+		<IsPackable>true</IsPackable>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+	</ItemGroup>
 
 </Project>

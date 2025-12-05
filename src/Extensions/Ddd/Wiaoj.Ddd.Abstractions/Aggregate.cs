@@ -39,13 +39,16 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate
 
     public void RaiseDomainEvent(IDomainEvent @event) {
         Preca.ThrowIfNull(@event);
-        if(this.domainEvents.Exists(x => x == @event))
+        if (this.domainEvents.Exists(x => x == @event)) {
             return;
+        }
 
         this.domainEvents.Add(@event);
     }
 
-    public void ClearDomainEvents() => this.domainEvents.Clear();
+    public void ClearDomainEvents() {
+        this.domainEvents.Clear();
+    }
 }
 
 //public abstract class Entity<TId> where TId : class, IId {
@@ -73,8 +76,7 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate
 //}
 
 public abstract class Entity<TId> : IEquatable<Entity<TId>>
-    where TId : notnull  
-{
+    where TId : notnull {
     public TId Id { get; protected set; } // Set protected olabilir, constructor dışında değişmesin
 
 #pragma warning disable CS8618
@@ -83,21 +85,29 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>>
 
     protected Entity(TId id) {
         // ID'nin default (boş guid veya 0) olmadığından emin olmalısın
-        if (id.Equals(default(TId)))
+        if (id.Equals(default(TId))) {
             throw new ArgumentException("Id cannot be default", nameof(id));
+        }
 
-        Id = id;
+        this.Id = id;
     }
 
     // IEquatable implementation (Daha hızlıdır)
     public bool Equals(Entity<TId>? other) {
-        if (other is null) return false;
-        if (ReferenceEquals(this, other)) return true;
+        if (other is null) {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other)) {
+            return true;
+        }
 
         // Entity'lerin tipi tam uyuşmalı (proxy class sorunları için GetType() kontrolü)
-        if (this.GetType() != other.GetType()) return false;
+        if (GetType() != other.GetType()) {
+            return false;
+        }
 
-        return EqualityComparer<TId>.Default.Equals(Id, other.Id);
+        return EqualityComparer<TId>.Default.Equals(this.Id, other.Id);
     }
 
     public override bool Equals(object? obj) {
@@ -108,13 +118,19 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>>
         // Entity'nin HashCode'u, ID'sinin HashCode'udur.
         // Ancak EF Core henüz ID atamadıysa (Transient state) dikkatli olmak gerekir.
         // Ama senin tasarımında Constructor'da ID zorunlu olduğu için sorun yok.
-        return (GetType().ToString() + Id).GetHashCode();
+        return (GetType().ToString() + this.Id).GetHashCode();
     }
 
     // Operatörler
     public static bool operator ==(Entity<TId>? left, Entity<TId>? right) {
-        if (left is null && right is null) return true;
-        if (left is null || right is null) return false;
+        if (left is null && right is null) {
+            return true;
+        }
+
+        if (left is null || right is null) {
+            return false;
+        }
+
         return left.Equals(right);
     }
 
