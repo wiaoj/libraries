@@ -45,6 +45,16 @@ public readonly record struct Urn :
         _value = value;
     }
 
+    /// <summary>
+    /// Deconstructs the URN into its Namespace Identifier (NID) and Namespace Specific String (NSS).
+    /// </summary>
+    /// <param name="nid">The Namespace Identifier (NID) part of the URN.</param>
+    /// <param name="nss">The Namespace Specific String (NSS) part of the URN.</param>
+    public void Deconstruct(out ReadOnlySpan<char> nid, out ReadOnlySpan<char> nss) {
+        nid = this.Namespace;
+        nss = this.Identity;
+    }
+
     #region Factory Methods
 
     /// <summary>
@@ -64,8 +74,7 @@ public readonly record struct Urn :
     /// Creates a URN from a namespace and a SnowflakeId.
     /// </summary>
     /// <example>Urn.Create("order", id) -> "urn:order:123456789"</example>
-    public static Urn Create(string nid, SnowflakeId id) {
-        // Zero-allocation formatting thanks to ISpanFormattable on SnowflakeId
+    public static Urn Create(string nid, SnowflakeId id) {                       
         return Create(nid, id.ToString());
     }
 
