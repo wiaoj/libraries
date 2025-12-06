@@ -54,6 +54,30 @@ public readonly record struct OperationTimeout {
     #endregion
 
     /// <summary>
+    /// Gets a value indicating whether a time-based delay (TimeSpan) has been explicitly set 
+    /// and is not infinite.
+    /// </summary>
+    public bool IsTimeoutSet => this._delay != System.Threading.Timeout.InfiniteTimeSpan;
+
+    /// <summary>
+    /// Gets a value indicating whether an external CancellationToken is linked to this timeout.
+    /// </summary>
+    public bool IsCancellable => this._token.CanBeCanceled;
+
+    /// <summary>
+    /// Gets a value indicating whether this timeout represents an infinite wait (no delay and no cancellable token).
+    /// </summary>
+    public bool IsInfinite =>
+        this._delay == System.Threading.Timeout.InfiniteTimeSpan && !this._token.CanBeCanceled;
+
+    /// <summary>
+    /// Gets a value indicating whether this timeout is pre-cancelled (either the token is already 
+    /// cancelled or the delay is zero, representing an immediate check).
+    /// </summary>
+    public bool IsAlreadyCancelled =>
+        this._token.IsCancellationRequested || (this._delay == TimeSpan.Zero && this._token.CanBeCanceled);
+
+    /// <summary>
     /// Creates and returns a new <see cref="CancellationTokenSource"/> that represents the combined timeout logic.
     /// </summary>
     /// <remarks>
@@ -88,13 +112,31 @@ public readonly record struct OperationTimeout {
         return cts;
     }
 
+    /// <summary>
+    /// Creates and immediately checks the combined cancellation signal, throwing an 
+    /// <see cref="OperationCanceledException"/> if the timeout has elapsed or the token has been cancelled.
+    /// <para>NOTE: This method internally creates and disposes a CancellationTokenSource for immediate status check.</para>
+    /// </summary>
+    public void ThrowIfExpired() {
+        using CancellationTokenSource cts = CreateCancellationTokenSource();
+        cts.Token.ThrowIfCancellationRequested();
+    }
+
+    /// <inheritdoc/>
     public override string ToString() {
         bool hasDelay = this._delay != System.Threading.Timeout.InfiniteTimeSpan;
         bool hasToken = this._token.CanBeCanceled;
+        if (!hasDelay && !hasToken) {
+            return "Infinite";
+        }
 
-        if (!hasDelay && !hasToken) return "Infinite";
-        if (hasDelay && !hasToken) return $"{this._delay.TotalMilliseconds}ms";
-        if (!hasDelay && hasToken) return "Cancellable Token";
+        if (hasDelay && !hasToken) {
+            return $"{this._delay.TotalMilliseconds}ms";
+        }
+
+        if (!hasDelay && hasToken) {
+            return "Cancellable Token";
+        }
 
         return $"{this._delay.TotalMilliseconds}ms + Cancellable Token";
     }
