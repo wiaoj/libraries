@@ -58,6 +58,23 @@ public static partial class Preca {
     }
 
     /// <summary>
+    /// Validates that the specified <see cref="DateTimeOffset"/> is not equal to its default value, throwing a specified exception type on failure.
+    /// </summary>
+    /// <typeparam name="TException">The type of exception to throw. Must inherit from <see cref="Exception"/> and have a parameterless constructor.</typeparam>
+    /// <param name="argument">The <see cref="DateTimeOffset"/> to validate.</param>
+    /// <exception cref="Exception">Thrown when <paramref name="argument"/> equals <c>default(DateTimeOffset)</c>.</exception>
+    /// <remarks>
+    /// This method provides a simple way to throw a custom exception type for default <see cref="DateTimeOffset"/> values.
+    /// </remarks>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfDefault<TException>(DateTimeOffset argument) where TException : Exception, new() {
+        if (argument == default) {
+            Thrower.ThrowException<TException>();
+        }
+    }
+
+    /// <summary>
     /// Validates that the specified <see cref="TimeSpan"/> is not equal to its default value.
     /// Provides specific error messaging for TimeSpan validation.
     /// </summary>

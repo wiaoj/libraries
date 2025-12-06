@@ -54,6 +54,21 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     }
 
     /// <summary>
+    /// Creates a Sha256Hash instance from a Base64String.
+    /// </summary>
+    public static Sha256Hash From(Base64String base64) {
+        if (base64.GetDecodedLength() != 32) {
+            throw new FormatException("Source Base64String must represent exactly 32 bytes.");
+        }
+
+        Span<byte> buffer = stackalloc byte[32];
+        if (!base64.TryDecode(buffer, out int written) || written != 32) {
+            throw new FormatException("Failed to decode Base64 into Hash.");
+        }
+        return new Sha256Hash(buffer);
+    }
+
+    /// <summary>
     /// Tries to create a Sha256Hash instance from a hexadecimal string representation.
     /// </summary>
     public static bool TryParse(HexString hex, out Sha256Hash result) {
@@ -70,10 +85,19 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     #endregion
 
     #region High-Performance Computation
+    /// <summary>
+    /// Computes the SHA256 hash for the contents of a <see cref="Secret{Byte}"/>.
+    /// Since the secret is already binary, no encoding is needed.
+    /// </summary>
+    public static Sha256Hash Compute(Secret<byte> secret) {
+        Preca.ThrowIfNull(secret);                      
+        return secret.Expose(span => Compute(span));
+    }
 
     /// <summary>
     /// Computes the SHA256 hash of a span of bytes. This method is allocation-free.
     /// </summary>
+    [SkipLocalsInit]
     public static Sha256Hash Compute(ReadOnlySpan<byte> data) {
         Span<byte> hashBuffer = stackalloc byte[32];
         SHA256.HashData(data, hashBuffer);
@@ -177,6 +201,13 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     }
 
     /// <summary>
+    /// Returns the hash as a type-safe Base64String.
+    /// </summary>
+    public Base64String ToBase64String() {
+        return Base64String.FromBytes(AsSpan());
+    }
+
+    /// <summary>
     /// Returns the hash as a hexadecimal string.
     /// </summary>
     public override string ToString() {
@@ -219,6 +250,9 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     #endregion
 }
 
+/// <summary>
+/// Extension methods for <see cref="Sha256Hash"/>.
+/// </summary>
 public static partial class Sha256HashExtensions {
     extension(Sha256Hash) {
         /// <summary>

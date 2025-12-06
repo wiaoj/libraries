@@ -1,9 +1,13 @@
-﻿using System.Text.Json;
+﻿using System.Reflection;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Ddd;
+using Wiaoj.Ddd.Abstractions;
+using Wiaoj.Ddd.EntityFrameworkCore;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
+using Wiaoj.Preconditions;
 using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.DependencyInjection;
 
@@ -23,6 +27,7 @@ public static class DependencyInjection {
         public IDddBuilder AddEntityFrameworkCore<TContext>(
             Action<IWiaojSerializationBuilder> configureSerializer,
             Action<OutboxOptions>? configureOutbox = null) where TContext : DbContext {
+            builder.Services.TryAddSingleton<OutboxChannel>();
             builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);
             builder.Services.TryAddScoped<AuditInterceptor>();
             builder.Services.TryAddScoped<DomainEventDispatcherInterceptor>();
@@ -34,22 +39,180 @@ public static class DependencyInjection {
             });
 
             builder.Services.AddHostedService<OutboxProcessor<TContext>>();
-             
+
             return builder;
         }
 
         public IDddBuilder AddEntityFrameworkCore<TContext>(
             Action<OutboxOptions>? configureOutbox = null,
-            Action<JsonSerializerOptions>? configureJsonOptions = null) where TContext : DbContext {       
+            Action<JsonSerializerOptions>? configureJsonOptions = null) where TContext : DbContext {
             return builder.AddEntityFrameworkCore<TContext>(
-                configureSerializer: serializerBuilder => {   
-                    if (configureJsonOptions is not null)
-                        serializerBuilder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>(configureJsonOptions);
-                    else
+                configureSerializer: serializerBuilder => {
+                    if (configureJsonOptions is null) {
                         serializerBuilder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>();
+                    }
+                    else {
+                        serializerBuilder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>(configureJsonOptions);
+                    }
                 },
                 configureOutbox: configureOutbox
             );
+        }
+
+        /// <summary>
+        /// Registers the DbContext as the IUnitOfWork interface using a Scoped lifetime.
+        /// This allows the DbContext to serve as the transaction manager (UoW) for the scope.
+        /// </summary>
+        /// <typeparam name="TContext">The DbContext type which must implement IUnitOfWork.</typeparam>
+        /// <param name="builder">The IDddBuilder instance.</param>
+        /// <returns>The IDddBuilder instance for chaining.</returns>
+        public IDddBuilder AddUnitOfWork<TContext>() where TContext : DbContext, IUnitOfWork {
+            return AddUnitOfWork<TContext>(builder, ServiceLifetime.Scoped);
+        }
+
+        /// <summary>
+        /// Registers the DbContext as the IUnitOfWork interface with a specified service lifetime.
+        /// </summary>
+        /// <typeparam name="TContext">The DbContext type which must implement IUnitOfWork.</typeparam>
+        /// <param name="builder">The IDddBuilder instance.</param>
+        /// <param name="lifetime">The ServiceLifetime (Scoped, Transient, Singleton) to register the service with.</param>
+        /// <returns>The IDddBuilder instance for chaining.</returns>
+        public IDddBuilder AddUnitOfWork<TContext>(ServiceLifetime lifetime) where TContext : DbContext, IUnitOfWork {
+            ServiceDescriptor descriptor = new(
+                typeof(IUnitOfWork),
+                provider => provider.GetRequiredService<TContext>(),
+                lifetime
+            );
+            builder.Services.TryAdd(descriptor);
+            return builder;
+        }
+
+        // ----------------------------------------------------------------------------------
+        // 2. AddRepository (5 Generics - Explicit Registration) Metotları
+        // ----------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Registers a specific Repository interface and implementation pair using all explicit generic types (TAggregate, TId, TContext).
+        /// Defaults to Scoped lifetime.
+        /// </summary>
+        public IDddBuilder AddRepository<TRepository, TImplementation, TAggregate, TId, TContext>()
+            where TRepository : class, IRepository<TAggregate, TId>
+            where TImplementation : EfcoreRepository<TContext, TAggregate, TId>, TRepository
+            where TAggregate : class, IAggregate
+            where TId : notnull
+            where TContext : DbContext {
+            return AddRepository<TRepository, TImplementation, TAggregate, TId, TContext>(builder, ServiceLifetime.Scoped);
+        }
+
+        /// <summary>
+        /// Registers a specific Repository interface and implementation pair using all explicit generic types (TAggregate, TId, TContext)
+        /// with a specified service lifetime. This method enforces strong compile-time checks on the DDD structure.
+        /// </summary>
+        public IDddBuilder AddRepository<TRepository, TImplementation, TAggregate, TId, TContext>(ServiceLifetime lifetime)
+            where TRepository : class, IRepository<TAggregate, TId>
+            where TImplementation : EfcoreRepository<TContext, TAggregate, TId>, TRepository
+            where TAggregate : class, IAggregate
+            where TId : notnull
+            where TContext : DbContext {
+            builder.Services.TryAdd(ServiceDescriptor.Describe(typeof(TRepository), typeof(TImplementation), lifetime));
+            return builder;
+        }
+
+        /// <summary>
+        /// Registers a Repository pair by inferring TContext, TAggregate, and TId at runtime 
+        /// using Reflection on the TImplementation's inheritance chain. Defaults to Scoped lifetime.
+        /// </summary>
+        public IDddBuilder AddRepository<TRepository, TImplementation>()
+            where TRepository : class, IRepositoryMarker
+            where TImplementation : class, IEfcoreRepository, TRepository {
+            return AddRepository<TRepository, TImplementation>(builder, ServiceLifetime.Scoped);
+        }
+
+        /// <summary>
+        /// Registers a Repository pair by inferring TContext, TAggregate, and TId at runtime 
+        /// using Reflection with a specified service lifetime.
+        /// </summary>
+        public IDddBuilder AddRepository<TRepository, TImplementation>(ServiceLifetime lifetime)
+            where TRepository : class, IRepositoryMarker
+            where TImplementation : class, IEfcoreRepository, TRepository {
+            Type implementationType = typeof(TImplementation);
+            Type? baseType = implementationType.BaseType;
+
+            if (baseType == null || !baseType.IsGenericType || baseType.GetGenericTypeDefinition() != typeof(EfcoreRepository<,,>)) {
+                throw new InvalidOperationException(
+                    $"Error: '{implementationType.Name}' must inherit from 'EfcoreRepository<TContext, TAggregate, TId>'. The base type check failed."
+                );
+            }
+
+            builder.Services.TryAdd(ServiceDescriptor.Describe(typeof(TRepository), implementationType, lifetime));
+            return builder;
+        }
+
+        /// <summary>
+        /// Scans a collection of Assemblies for concrete Repository implementations (classes implementing IEfcoreRepository)
+        /// and registers them against their corresponding Repository interfaces (implementing IRepositoryMarker).
+        /// Defaults to Scoped lifetime.
+        /// </summary>
+        /// <typeparam name="TContext">The common DbContext used by all repositories in the scanned assemblies.</typeparam>
+        /// <param name="assemblies">The assemblies to scan for Repository types.</param>
+        public IDddBuilder AddRepositoriesFromAssemblies<TContext>(params IEnumerable<Assembly> assemblies)
+            where TContext : DbContext {
+            return AddRepositoriesFromAssemblies<TContext>(builder, ServiceLifetime.Scoped, assemblies);
+        }
+
+        /// <summary>
+        /// Scans a collection of Assemblies for concrete Repository implementations (classes implementing IEfcoreRepository)
+        /// and registers them against their corresponding Repository interfaces (implementing IRepositoryMarker)
+        /// with a specified service lifetime.
+        /// </summary>
+        public IDddBuilder AddRepositoriesFromAssemblies<TContext>(ServiceLifetime lifetime, params IEnumerable<Assembly> assemblies)
+            where TContext : DbContext {
+            Preca.ThrowIfNull(assemblies);
+            Preca.ThrowIfFalse(assemblies.Any());
+
+            Type repositoryInterfaceType = typeof(IRepositoryMarker);
+            Type implementationMarkerType = typeof(IEfcoreRepository);
+
+            IEnumerable<Type> allTypes = assemblies
+                .SelectMany(a => a.GetTypes())
+                .Where(t => t.IsClass && !t.IsAbstract && !t.IsGenericTypeDefinition);
+
+            foreach (Type? implementationType in allTypes) {
+                if (!implementationType.IsAssignableTo(implementationMarkerType)) {
+                    continue;
+                }
+
+                IEnumerable<Type> repositoryInterfaces = implementationType
+                    .GetInterfaces()
+                    .Where(i => i.IsAssignableTo(repositoryInterfaceType) && i != repositoryInterfaceType);
+
+                foreach (Type? repositoryInterface in repositoryInterfaces) {
+                    builder.Services.TryAdd(ServiceDescriptor.Describe(repositoryInterface, implementationType, lifetime));
+                }
+            }
+
+            return builder;
+        }
+
+        /// <summary>
+        /// Scans the Assembly containing the type TMarker for all Repository implementations.
+        /// Defaults to Scoped lifetime.
+        /// </summary>
+        /// <typeparam name="TContext">The common DbContext type.</typeparam>
+        /// <typeparam name="TMarker">A type whose Assembly will be scanned (e.g., a Repository or an Aggregate).</typeparam>
+        public IDddBuilder AddRepositoriesFromAssemblyContaining<TContext, TMarker>() where TContext : DbContext {
+            return AddRepositoriesFromAssemblies<TContext>(builder, ServiceLifetime.Scoped, [typeof(TMarker).Assembly]);
+        }
+
+        /// <summary>
+        /// Scans the Assembly containing the type TMarker for all Repository implementations 
+        /// with a specified service lifetime.
+        /// </summary>
+        /// <typeparam name="TContext">The common DbContext type.</typeparam>
+        /// <typeparam name="TMarker">A type whose Assembly will be scanned (e.g., a Repository or an Aggregate).</typeparam>
+        /// <param name="lifetime">The ServiceLifetime to register the services with.</param>
+        public IDddBuilder AddRepositoriesFromAssemblyContaining<TContext, TMarker>(ServiceLifetime lifetime) where TContext : DbContext {
+            return AddRepositoriesFromAssemblies<TContext>(builder, lifetime, [typeof(TMarker).Assembly]);
         }
     }
 

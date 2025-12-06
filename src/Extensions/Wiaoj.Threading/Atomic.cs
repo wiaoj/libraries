@@ -7,7 +7,11 @@ namespace Wiaoj.Concurrency; // Convert to Wiaoj.Threading classlib, DisposeStat
 /// Provides a comprehensive set of static, type-safe, and intuitive methods for performing atomic operations,
 /// acting as a high-level wrapper around the <see cref="Interlocked"/> and <see cref="Volatile"/> classes.
 /// </summary>
+#if WIAOJ_PRIMITIVES
+internal static class Atomic {
+#else
 public static class Atomic {
+#endif   
     #region Volatile Read/Write Operations
 
     /// <summary>

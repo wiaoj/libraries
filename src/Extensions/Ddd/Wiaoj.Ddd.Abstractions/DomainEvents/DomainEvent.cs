@@ -9,9 +9,8 @@ public abstract record DomainEvent : IDomainEvent {
     public DateTimeOffset OccurredAt { get; }
     public DomainEventVersion Version { get; }
 
-#pragma warning disable CS8618  
     protected DomainEvent() : this(TimeProvider.System.GetUtcNow(), DomainEventVersion.New(1)) { }
-#pragma warning restore CS8618  
+
     protected DomainEvent(DateTimeOffset occurredAt, DomainEventVersion version) {
         this.Id = DomainEventId.New(occurredAt);
         this.OccurredAt = occurredAt;

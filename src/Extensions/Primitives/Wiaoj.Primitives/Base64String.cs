@@ -20,7 +20,7 @@ namespace Wiaoj.Primitives;
 /// </remarks>
 [DebuggerDisplay("{ToString(),nq}")]
 [JsonConverter(typeof(Base64StringJsonConverter))]
-public readonly record struct Base64String : IEquatable<Base64String>{
+public readonly record struct Base64String : IEquatable<Base64String> {
     private readonly string _encodedValue;
 
     /// <summary>
@@ -39,15 +39,18 @@ public readonly record struct Base64String : IEquatable<Base64String>{
         this._encodedValue = validatedValue;
     }
 
-    #region Creation (From Bytes)
+    #region Creation 
 
     /// <summary>
     /// Encodes a span of bytes into a Base64 string using the high-performance System.Buffers.Text.Base64 API.
     /// </summary>
     /// <param name="bytes">The raw bytes to encode.</param>
     /// <returns>A new <see cref="Base64String"/> instance containing the encoded data.</returns>
+    [SkipLocalsInit]
     public static Base64String FromBytes(ReadOnlySpan<byte> bytes) {
-        if (bytes.IsEmpty) return Empty;
+        if (bytes.IsEmpty) {
+            return Empty;
+        }
 
         int requiredLength = Base64.GetMaxEncodedToUtf8Length(bytes.Length);
         byte[]? rentedBytes = null;
@@ -63,13 +66,54 @@ public readonly record struct Base64String : IEquatable<Base64String>{
             throw new InvalidOperationException("Failed to encode bytes to Base64.");
         }
         finally {
-            if (rentedBytes is not null) ArrayPool<byte>.Shared.Return(rentedBytes);
+            if (rentedBytes is not null) {
+                ArrayPool<byte>.Shared.Return(rentedBytes);
+            }
         }
     }
 
+    /// <summary>
+    /// Encodes a plain UTF-8 string into a Base64String.
+    /// Example: FromUtf8("Hello") -> "SGVsbG8="
+    /// </summary>
+    public static Base64String FromUtf8(string text) {
+        if (string.IsNullOrEmpty(text)) {
+            return Empty;
+        }
+
+        return FromBytes(Encoding.UTF8.GetBytes(text));
+    }
+
+    /// <summary>
+    /// Encodes a string using the specified encoding into a Base64String.
+    /// Example: From("Hello", Encoding.ASCII) -> "SGVsbG8="
+    /// </summary>
+    public static Base64String From(string text, Encoding encoding) {
+        if (string.IsNullOrEmpty(text)) {
+            return Empty;
+        }
+
+        Preca.ThrowIfNull(encoding);
+
+        return FromBytes(encoding.GetBytes(text));
+    }
     #endregion
 
     #region Parsing (From Text)
+    /// <summary>
+    /// Writes the UTF-8 representation of the Base64 string to the provided buffer writer.
+    /// </summary>
+    public void WriteTo(IBufferWriter<byte> writer) {
+        if (string.IsNullOrEmpty(_encodedValue))
+            return;
+
+        ReadOnlySpan<char> chars = _encodedValue.AsSpan();
+        int byteCount = chars.Length; // Base64 is ASCII
+
+        Span<byte> buffer = writer.GetSpan(byteCount);
+        Encoding.UTF8.GetBytes(chars, buffer);
+        writer.Advance(byteCount);
+    }
 
     /// <summary>
     /// Parses a string into a <see cref="Base64String"/>.
@@ -80,7 +124,10 @@ public readonly record struct Base64String : IEquatable<Base64String>{
     /// <exception cref="FormatException">The input string is not in a valid Base64 format.</exception>
     public static Base64String Parse(string s) {
         ArgumentNullException.ThrowIfNull(s);
-        if (TryParse(s.AsSpan(), out Base64String result)) return result;
+        if (TryParse(s.AsSpan(), out Base64String result)) {
+            return result;
+        }
+
         throw new FormatException("The input string is not a valid Base64 string.");
     }
 
@@ -92,11 +139,15 @@ public readonly record struct Base64String : IEquatable<Base64String>{
 
     /// <inheritdoc cref="ISpanParsable{TSelf}.Parse(ReadOnlySpan{char}, IFormatProvider?)"/>
     public static Base64String Parse(ReadOnlySpan<char> s) {
-        if (TryParse(s, out Base64String result)) return result;
+        if (TryParse(s, out Base64String result)) {
+            return result;
+        }
+
         throw new FormatException("The input is not a valid Base64 string.");
     }
 
     /// <inheritdoc cref="ISpanParsable{TSelf}.TryParse(ReadOnlySpan{char}, IFormatProvider?, out TSelf)"/>
+    [SkipLocalsInit]
     public static bool TryParse(ReadOnlySpan<char> s, out Base64String result) {
         // For char-based validation, Convert is the most direct API.
         if (s.Length % 4 != 0) { result = default; return false; }
@@ -112,7 +163,10 @@ public readonly record struct Base64String : IEquatable<Base64String>{
 
     /// <inheritdoc cref="IUtf8SpanParsable{TSelf}.Parse(ReadOnlySpan{byte}, IFormatProvider?)"/>
     public static Base64String Parse(ReadOnlySpan<byte> utf8Text) {
-        if (TryParse(utf8Text, out Base64String result)) return result;
+        if (TryParse(utf8Text, out Base64String result)) {
+            return result;
+        }
+
         throw new FormatException("The input is not a valid Base64 string.");
     }
 
@@ -167,7 +221,10 @@ public readonly record struct Base64String : IEquatable<Base64String>{
     }
 
     private static int GetDecodedLength(ReadOnlySpan<char> encoded) {
-        if (encoded.IsEmpty) return 0;
+        if (encoded.IsEmpty) {
+            return 0;
+        }
+
         if (encoded[^1] == '=') {
             return (encoded.Length / 4 * 3) - (encoded[^2] == '=' ? 2 : 1);
         }
@@ -175,7 +232,7 @@ public readonly record struct Base64String : IEquatable<Base64String>{
     }
 
     private static int GetMaxDecodedLength(int encodedLength) {
-        return (encodedLength * 3 + 3) / 4;
+        return ((encodedLength * 3) + 3) / 4;
     }
 
     #endregion

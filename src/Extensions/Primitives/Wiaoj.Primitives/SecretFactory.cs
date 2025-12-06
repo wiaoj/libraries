@@ -32,9 +32,14 @@ public static class Secret {
         return Secret<byte>.From(hex);
     }
 
+    /// <inheritdoc cref="Secret{T}.From(HexString)"/>
+    public static Secret<byte> From(Base32String base32) {
+        return Secret<byte>.From(base32);
+    }
+
     /// <inheritdoc cref="Secret{T}.From(string , Encoding)"/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Secret<byte> From(string s, Encoding encoding) { 
+    public static Secret<byte> From(string s, Encoding encoding) {
         return Secret<byte>.From(encoding.GetBytes(s));
     }
 

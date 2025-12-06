@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -144,6 +145,28 @@ public readonly unsafe struct Secret<T> :
     }
 
     /// <summary>
+    /// Creates a new <see cref="Secret{T}"/> of bytes from a type-safe <see cref="Base32String"/>.
+    /// Critical for TOTP/2FA secrets.
+    /// </summary>
+    public static Secret<byte> From(Base32String base32) {
+        int requiredLength = base32.GetDecodedLength();
+        if (requiredLength is 0)
+            return Secret<byte>.Empty;
+
+        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)requiredLength);
+        try {
+            if (base32.TryDecode(new Span<byte>(ptr, requiredLength), out int bytesWritten) && bytesWritten == requiredLength) {
+                return new Secret<byte>(ptr, requiredLength);
+            }
+            throw new InvalidOperationException("Failed to decode Base32 string directly into secure memory.");
+        }
+        catch {
+            NativeMemory.Free(ptr);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Creates a new <see cref="Secret{T}"/> of bytes from a string using the specified encoding.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -215,6 +238,18 @@ public readonly unsafe struct Secret<T> :
     }
 
     /// <summary>
+    /// Provides safe, scoped access to the secret data with a state object to prevent closure allocations.
+    /// </summary>
+    /// <typeparam name="TState">The type of the state object.</typeparam>
+    /// <param name="state">The state object to pass to the action.</param>
+    /// <param name="action">The action to execute, receiving the state and the secret span.</param>
+    public void Expose<TState>(TState state, Action<TState, ReadOnlySpan<T>> action) {
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(Secret<>));
+        Preca.ThrowIfNull(action);
+        action(state, this._ptr is null ? [] : new ReadOnlySpan<T>(this._ptr, this._length));
+    }
+
+    /// <summary>
     /// Provides safe, scoped access to the secret data and returns a result.
     /// </summary>
     public TResult Expose<TResult>(Func<ReadOnlySpan<T>, TResult> func) {
@@ -224,12 +259,22 @@ public readonly unsafe struct Secret<T> :
     }
 
     /// <summary>
+    /// Provides safe, scoped access to the secret data with a state object and returns a result, preventing closure allocations.
+    /// </summary>
+    public TResult Expose<TState, TResult>(TState state, Func<TState, ReadOnlySpan<T>, TResult> func) {
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(Secret<>));
+        Preca.ThrowIfNull(func);
+        return func(state, this._ptr is null ? [] : new ReadOnlySpan<T>(this._ptr, this._length));
+    }     
+
+    /// <summary>
     /// Securely converts this <see cref="Secret{T}"/> of chars into a <see cref="Secret{T}"/> of bytes using the specified encoding.
     /// This method is only available when <typeparamref name="T"/> is <see cref="char"/>.
     /// </summary>
     public Secret<byte> ToBytes(Encoding encoding) {
-        if (typeof(T) != typeof(char))
-            throw new NotSupportedException("ToBytes conversion is only supported for Secret<char>.");
+        Preca.ThrowIf(
+            typeof(T) != typeof(char), 
+            () => new NotSupportedException("ToBytes conversion is only supported for Secret<char>."));
         Preca.ThrowIfNull(encoding);
 
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(Secret<>));
@@ -247,6 +292,8 @@ public readonly unsafe struct Secret<T> :
             throw;
         }
     }
+
+
 
     /// <summary>
     /// Derives a new key from this secret using a standard key derivation function (HKDF-SHA256).

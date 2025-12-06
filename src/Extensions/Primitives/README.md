@@ -1,20 +1,61 @@
 ﻿# Wiaoj.Primitives
 
-**Wiaoj.Primitives** is a high-performance, security-focused .NET library designed to combat "Primitive Obsession". It provides a suite of strongly-typed value objects and structs that replace standard primitives (`string`, `byte[]`, `double`) with semantically meaningful, validation-guaranteed types.
+**Wiaoj.Primitives** is a high-performance, security-focused .NET library designed to combat "Primitive Obsession". It provides a suite of strongly-typed value objects and structs that replace standard primitives (`string`, `byte[]`, `double`, `long`) with semantically meaningful, validation-guaranteed types.
 
 Built for .NET 10, it leverages `ref structs`, `Span<T>`, `unsafe` code, and pinned memory to ensure maximum efficiency and security.
 
 ## 🌟 Key Features
 
 *   **🛡️ Military-Grade Security:** `Secret<T>` keeps sensitive data (passwords, keys) in pinned, unmanaged memory, immune to Garbage Collector relocation and memory dumps. Automatically zeroes memory on disposal.
+*   **❄️ Distributed Identity:** `SnowflakeId` generates unique, k-sorted, time-based 64-bit IDs (Twitter Snowflake algorithm) without collisions. Includes `Urn` support for DDD/Microservices resources.
 *   **🚀 Zero-Allocation Encodings:** `Base32String`, `Base64String`, and `HexString` ensure format validity at the type level and provide allocation-free conversion to/from bytes.
 *   **📦 Semantic Types:** `SemVer`, `Percentage`, and `Sha256Hash` provide domain-specific logic, optimized parsing, and arithmetic operations.
-*   **⚡ Modern .NET Optimization:** Heavy usage of `ISpanParsable`, `ISpanFormattable`, and vectorization where applicable.
+*   **⚡ Modern .NET Optimization:** Heavy usage of `ISpanParsable`, `ISpanFormattable`, `SIMD`, and lock-free concurrency.
 
 ## 📦 Installation
 
 ```bash
 dotnet add package Wiaoj.Primitives
+```
+
+---
+
+## ❄️ Distributed Identity
+
+### `SnowflakeId`
+A high-performance, lock-free implementation of the Twitter Snowflake algorithm. Generates 64-bit unique IDs that are roughly sorted by time.
+
+*   **Thread-Safe:** Lock-free generation loop.
+*   **Overflow Protection:** Handles clock rollback and sequence overflow gracefully.
+*   **Integrations:** Converts to/from `Hex`, `Base64`, `Base32`, and `Urn`.
+
+```csharp
+// 1. Configure once at startup (e.g., in Program.cs)
+SnowflakeId.Configure(nodeId: 1);
+
+// 2. Generate IDs (Thread-safe, static access)
+SnowflakeId id = SnowflakeId.NewId();
+Console.WriteLine(id); // "123456789012345678"
+
+// 3. Format for API/Logs
+Console.WriteLine(id.ToHexString());    // "1B6F..."
+Console.WriteLine(id.ToBase64String()); // Compact URL-safe string
+```
+
+### `Urn` (Uniform Resource Name)
+Implements RFC 8141 for identifying resources in distributed systems without checking their location.
+
+```csharp
+// Create type-safe URNs
+SnowflakeId orderId = SnowflakeId.NewId();
+Urn resource = Urn.Create("orders", orderId);
+
+Console.WriteLine(resource); // "urn:orders:123456789..."
+
+// Parse and validate
+if (Urn.TryParse("urn:user:55", null, out Urn userUrn)) {
+    Console.WriteLine($"Namespace: {userUrn.Namespace}"); // "user"
+}
 ```
 
 ---
@@ -72,10 +113,8 @@ if (hex.TryDecode(buffer, out int bytesWritten)) {
     // Process bytes...
 }
 
-// JSON Serialization support included
-public class ApiRequest {
-    public Base64String Payload { get; set; } // Serializes as a standard Base64 string
-}
+// Helpers for plain text
+Base64String fromText = Base64String.FromUtf8("Hello World");
 ```
 
 ---

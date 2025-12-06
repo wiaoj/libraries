@@ -9,7 +9,7 @@ namespace Wiaoj.Primitives;
 /// Unlike LifecycleManager, this is optimized specifically for the binary state (Active vs Disposed)
 /// required by low-level primitives like Secret<T>.
 /// </summary>
-public struct DisposeState {
+public sealed class DisposeState {
     private const byte StateActive = 0;
     private const byte StateDisposing = 1;
     private const byte StateDisposed = 2;
@@ -39,7 +39,7 @@ public struct DisposeState {
     /// Throws ObjectDisposedException if the object is disposing or disposed.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly void ThrowIfDisposingOrDisposed(string objectName) {
+    public  void ThrowIfDisposingOrDisposed(string objectName) {
         if (Volatile.Read(in _state) != StateActive) {
             throw new ObjectDisposedException(objectName);
         }

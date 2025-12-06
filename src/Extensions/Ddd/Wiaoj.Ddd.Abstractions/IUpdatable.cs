@@ -16,4 +16,4 @@ public interface ICreatable {
     DateTimeOffset CreatedAt { get; }
     void SetCreatedAt(DateTimeOffset createdAt);
 }
-public interface IAggregate : ICreatable, IUpdatable, IDeletable, IHasDomainEvent;
+public interface IAggregate : ICreatable, IUpdatable, IDeletable, IHasDomainEvent, IConcurrencySafe;

@@ -166,7 +166,7 @@ public static partial class Preca {
     public static void ThrowIfFalse<TException>([DoesNotReturnIf(false)] bool argument, [NotNull] Func<TException> exceptionFactory)
         where TException : notnull, Exception {
         Preca.ThrowIf(argument is false, exceptionFactory);
-    }
+    }  
 
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

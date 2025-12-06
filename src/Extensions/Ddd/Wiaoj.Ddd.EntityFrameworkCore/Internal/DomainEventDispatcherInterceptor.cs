@@ -10,7 +10,8 @@ namespace Wiaoj.Ddd.EntityFrameworkCore.Internal;
 
 public sealed class DomainEventDispatcherInterceptor(
     IDomainEventDispatcher domainEventDispatcher,
-    ISerializer<DddEfCoreOutboxSerializerKey> serializer) : SaveChangesInterceptor {
+    ISerializer<DddEfCoreOutboxSerializerKey> serializer,
+    OutboxChannel outboxChannel) : SaveChangesInterceptor {
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
        DbContextEventData eventData,
@@ -40,9 +41,15 @@ public sealed class DomainEventDispatcherInterceptor(
                 domainEvent.OccurredAt
             ))];
 
-        await context.Set<OutboxMessage>().AddRangeAsync(outboxMessages, cancellationToken);
+        await context.Set<OutboxMessage>().AddRangeAsync(outboxMessages, cancellationToken)
+            ;
+        InterceptionResult<int> baseResult = await base.SavingChangesAsync(eventData, result, cancellationToken);
+                                                                                
+        foreach (OutboxMessage message in outboxMessages) {                                                      
+            await outboxChannel.Writer.WriteAsync(message, CancellationToken.None);
+        }
 
-        return await base.SavingChangesAsync(eventData, result, cancellationToken);
+        return baseResult;
     }
 
     private static List<IDomainEvent> GetAndClearDomainEvents(DbContext context) {

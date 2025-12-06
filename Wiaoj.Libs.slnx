@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Wiaoj.Benchmarks.Primitives/Wiaoj.Benchmarks.Primitives.csproj" Id="47a9018c-29c4-4747-8ef4-ffc2eacdaca2" />
+  </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/Extensions/">
     <Project Path="src/Extensions/Wiaoj.Extensions/Wiaoj.Extensions.csproj" />
@@ -17,12 +20,6 @@
   <Folder Name="/src/Extensions/DependencyInjection/">
     <Project Path="src/Extensions/DependencyInjection/Wiaoj.Extensions.DependencyInjection/Wiaoj.Extensions.DependencyInjection.csproj" />
   </Folder>
-  <Folder Name="/src/Extensions/ObjectPooling/">
-    <Project Path="src/Extensions/ObjectPooling/Wiaoj.ObjectPooling.Testing/Wiaoj.ObjectPooling.Testing.csproj" />
-  </Folder>
-  <Folder Name="/src/Extensions/ObjectPooling/Wiaoj.ObjectPooling/">
-    <Project Path="src/Extensions/ObjectPooling/Wiaoj.ObjectPooling/Wiaoj.ObjectPool.csproj" />
-  </Folder>
   <Folder Name="/src/Extensions/Primitives/">
     <File Path="src/Extensions/Primitives/README.md" />
     <Project Path="src/Extensions/Primitives/Wiaoj.Primitives/Wiaoj.Primitives.csproj" />
@@ -40,6 +37,11 @@
   </Folder>
   <Folder Name="/src/Extensions/Wiaoj.Threading/">
     <Project Path="src/Extensions/Wiaoj.Threading/Wiaoj.Concurrency.csproj" />
+  </Folder>
+  <Folder Name="/src/ObjectPool/">
+    <File Path="src/ObjectPool/README.md" />
+    <Project Path="src/ObjectPool/Wiaoj.ObjectPool.Testing/Wiaoj.ObjectPool.Testing.csproj" Id="b0577e50-04b2-427b-bb9d-be52fe1aefbf" />
+    <Project Path="src/ObjectPool/Wiaoj.ObjectPool/Wiaoj.ObjectPool.csproj" Id="f2d23627-085e-4e62-944f-899a3ded775c" />
   </Folder>
   <Folder Name="/src/Preconditions/">
     <File Path="src/Preconditions/README.md" />
@@ -62,5 +64,11 @@
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.MessagePack/Wiaoj.Serialization.MessagePack.csproj" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.SystemTextJson/Wiaoj.Serialization.SystemTextJson.csproj" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.YamlDotNet/Wiaoj.Serialization.YamlDotNet.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Wiaoj.Primitives.Tests.Unit/Wiaoj.Primitives.Tests.Unit.csproj" Id="cef5fdb1-e581-46b4-964c-d5f75f7db1ff" />
+  </Folder>
+  <Folder Name="/tests/Ddd/">
+    <Project Path="tests/Ddd/Wiaoj.Ddd.Tests.Unit/Wiaoj.Ddd.Tests.Unit.csproj" Id="ac985ecb-c629-44c3-b5a7-3ee827cbffe6" />
   </Folder>
 </Solution>

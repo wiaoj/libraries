@@ -2,10 +2,8 @@
 using Wiaoj.Ddd.Abstractions.Exceptions;
 using Wiaoj.Ddd.Abstractions.ValueObjects;
 
-namespace Wiaoj.Ddd.Abstractions;
-
-public abstract class Aggregate<TId> : Entity<TId>, IAggregate
-    where TId : class, IId {
+namespace Wiaoj.Ddd.Abstractions;   
+public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnull, IId {
     public DateTimeOffset CreatedAt { get; protected set; }
     public DateTimeOffset? UpdatedAt { get; protected set; }
     public DateTimeOffset? DeletedAt { get; protected set; }
@@ -13,6 +11,8 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate
 
     protected readonly List<IDomainEvent> domainEvents = [];
     public IReadOnlyList<IDomainEvent> DomainEvents => this.domainEvents.AsReadOnly();
+
+    public RowVersion Version { get; set; }
 
     protected Aggregate() { }
     protected Aggregate(TId id) : base(id) { }
@@ -28,7 +28,7 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate
     }
 
     public void SetCreatedAt(DateTimeOffset createdAt) {
-        Preca.ThrowIf<CreatedAtAlreadySetException>(this.CreatedAt != default);
+        Preca.ThrowIfDefault<CreatedAtAlreadySetException>(this.CreatedAt);
         this.CreatedAt = createdAt;
     }
 
@@ -39,10 +39,6 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate
 
     public void RaiseDomainEvent(IDomainEvent @event) {
         Preca.ThrowIfNull(@event);
-        if (this.domainEvents.Exists(x => x == @event)) {
-            return;
-        }
-
         this.domainEvents.Add(@event);
     }
 
@@ -75,16 +71,14 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate
 //    public override int GetHashCode() => HashCode.Combine(GetType(), this.Id);
 //}
 
-public abstract class Entity<TId> : IEquatable<Entity<TId>>
-    where TId : notnull {
-    public TId Id { get; protected set; } // Set protected olabilir, constructor dışında değişmesin
+public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull {
+    public TId Id { get; protected set; } 
 
 #pragma warning disable CS8618
-    protected Entity() { } // EF Core için gerekli
+    protected Entity() { } 
 #pragma warning restore CS8618
 
-    protected Entity(TId id) {
-        // ID'nin default (boş guid veya 0) olmadığından emin olmalısın
+    protected Entity(TId id) {                                           
         if (id.Equals(default(TId))) {
             throw new ArgumentException("Id cannot be default", nameof(id));
         }
@@ -115,10 +109,7 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>>
     }
 
     public override int GetHashCode() {
-        // Entity'nin HashCode'u, ID'sinin HashCode'udur.
-        // Ancak EF Core henüz ID atamadıysa (Transient state) dikkatli olmak gerekir.
-        // Ama senin tasarımında Constructor'da ID zorunlu olduğu için sorun yok.
-        return (GetType().ToString() + this.Id).GetHashCode();
+        return HashCode.Combine(GetType(), this.Id);
     }
 
     // Operatörler
