@@ -10,7 +10,6 @@ public readonly struct RowVersion : IEquatable<RowVersion>, IStructuralEquatable
 
     public static RowVersion Empty { get; } = new([]);
 
-    // EF Core bu property'yi map edecek
     public byte[] Value => this._value ?? [];
 
     private RowVersion(byte[] value) {

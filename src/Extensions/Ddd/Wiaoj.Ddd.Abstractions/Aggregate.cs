@@ -86,7 +86,6 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull 
         this.Id = id;
     }
 
-    // IEquatable implementation (Daha hızlıdır)
     public bool Equals(Entity<TId>? other) {
         if (other is null) {
             return false;
@@ -96,7 +95,6 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull 
             return true;
         }
 
-        // Entity'lerin tipi tam uyuşmalı (proxy class sorunları için GetType() kontrolü)
         if (GetType() != other.GetType()) {
             return false;
         }
@@ -112,7 +110,6 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull 
         return HashCode.Combine(GetType(), this.Id);
     }
 
-    // Operatörler
     public static bool operator ==(Entity<TId>? left, Entity<TId>? right) {
         if (left is null && right is null) {
             return true;

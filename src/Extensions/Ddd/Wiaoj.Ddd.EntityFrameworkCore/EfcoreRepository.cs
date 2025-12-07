@@ -4,17 +4,11 @@ using Wiaoj.Ddd.Abstractions;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore; 
 public interface IEfcoreRepository: IRepositoryMarker;
-public abstract class EfcoreRepository<TContext, TAggregate, TId> : IEfcoreRepository, IRepository<TAggregate, TId>
+public abstract class EfcoreRepository<TContext, TAggregate, TId>(TContext context) : IEfcoreRepository, IRepository<TAggregate, TId>
     where TContext : DbContext
     where TAggregate : class, IAggregate
     where TId : notnull {
-
-    private readonly TContext context;
-    public DbSet<TAggregate> DbSet => this.context.Set<TAggregate>();
-
-    public EfcoreRepository(TContext context) {
-        this.context = context;
-    }
+    public DbSet<TAggregate> DbSet => context.Set<TAggregate>();
 
     public Task AddAsync(TAggregate aggregate, CancellationToken cancellationToken = default) {
         return this.DbSet.AddAsync(aggregate, cancellationToken).AsTask();

@@ -1,5 +1,4 @@
 ﻿using System.Reflection;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Ddd;
@@ -8,7 +7,6 @@ using Wiaoj.Ddd.EntityFrameworkCore;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
 using Wiaoj.Preconditions;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.DependencyInjection;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
@@ -18,45 +16,44 @@ public static class DependencyInjection {
     /// <param name="builder">The DDD builder.</param>
     extension(IDddBuilder builder) {
         /// <summary>
-        /// Registers EF Core interceptors for auditing and domain event processing (via Outbox pattern).
+        /// Registers EF Core interceptors for auditing, domain event processing, and the Outbox pattern using default configuration.
         /// </summary>
-        /// <typeparam name="TContext">The DbContext type.</typeparam>
-        /// <param name="configureOutbox">An optional action to configure and enable the Outbox pattern.</param>
-        /// <param name="configureSerializer"></param>
-        /// <returns>The DDD builder for chaining.</returns>
-        public IDddBuilder AddEntityFrameworkCore<TContext>(
-            Action<IWiaojSerializationBuilder> configureSerializer,
-            Action<OutboxOptions>? configureOutbox = null) where TContext : DbContext {
+        /// <remarks>
+        /// This overload uses default <see cref="OutboxOptions"/> and defaults to System.Text.Json for serialization.
+        /// </remarks>
+        /// <typeparam name="TContext">The concrete <see cref="DbContext"/> type.</typeparam>
+        /// <returns>The <see cref="IDddBuilder"/> instance for chaining.</returns>
+        public IDddBuilder AddEntityFrameworkCore<TContext>() where TContext : DbContext {
+            return builder.AddEntityFrameworkCore<TContext>(_ => { });
+        }
+
+        /// <summary>
+        /// Registers EF Core interceptors for auditing, domain event processing, and the Outbox pattern with custom configuration.
+        /// </summary>
+        /// <typeparam name="TContext">The concrete <see cref="DbContext"/> type.</typeparam>
+        /// <param name="configure">A builder action to configure <see cref="OutboxOptions"/> and the serializer.</param>
+        /// <returns>The <see cref="IDddBuilder"/> instance for chaining.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="configure"/> is null.</exception>
+        public IDddBuilder AddEntityFrameworkCore<TContext>(Action<DddEfCoreOptionsBuilder> configure)
+            where TContext : DbContext {
+            Preca.ThrowIfNull(configure);
+
             builder.Services.TryAddSingleton<OutboxChannel>();
             builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);
+            builder.Services.TryAddSingleton<OutboxInstanceInfo>();
+
             builder.Services.TryAddScoped<AuditInterceptor>();
             builder.Services.TryAddScoped<DomainEventDispatcherInterceptor>();
 
-            builder.Services.AddWiaojSerializer(configureSerializer);
+            DddEfCoreOptionsBuilder optionsBuilder = new(builder.Services);
 
-            builder.Services.Configure<OutboxOptions>(options => {
-                configureOutbox?.Invoke(options);
-            });
+            configure.Invoke(optionsBuilder);
+
+            optionsBuilder.Build();
 
             builder.Services.AddHostedService<OutboxProcessor<TContext>>();
 
             return builder;
-        }
-
-        public IDddBuilder AddEntityFrameworkCore<TContext>(
-            Action<OutboxOptions>? configureOutbox = null,
-            Action<JsonSerializerOptions>? configureJsonOptions = null) where TContext : DbContext {
-            return builder.AddEntityFrameworkCore<TContext>(
-                configureSerializer: serializerBuilder => {
-                    if (configureJsonOptions is null) {
-                        serializerBuilder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>();
-                    }
-                    else {
-                        serializerBuilder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>(configureJsonOptions);
-                    }
-                },
-                configureOutbox: configureOutbox
-            );
         }
 
         /// <summary>
@@ -86,10 +83,6 @@ public static class DependencyInjection {
             builder.Services.TryAdd(descriptor);
             return builder;
         }
-
-        // ----------------------------------------------------------------------------------
-        // 2. AddRepository (5 Generics - Explicit Registration) Metotları
-        // ----------------------------------------------------------------------------------
 
         /// <summary>
         /// Registers a specific Repository interface and implementation pair using all explicit generic types (TAggregate, TId, TContext).
