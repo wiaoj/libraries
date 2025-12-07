@@ -28,7 +28,7 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnu
     }
 
     public void SetCreatedAt(DateTimeOffset createdAt) {
-        Preca.ThrowIfDefault<CreatedAtAlreadySetException>(this.CreatedAt);
+        Preca.ThrowIf<CreatedAtAlreadySetException>(this.CreatedAt != default);
         this.CreatedAt = createdAt;
     }
 
