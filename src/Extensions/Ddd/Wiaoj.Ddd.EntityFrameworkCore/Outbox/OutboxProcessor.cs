@@ -89,7 +89,8 @@ internal sealed class OutboxProcessor<TContext>(
         // Query for unprocessed messages where Lock is missing OR expired
         var query = dbContext.Set<OutboxMessage>()
             .Where(m => m.ProcessedAt == null)
-            .Where(m => m.LockId == null || m.LockExpiration < now);
+            .Where(m => m.LockId == null || m.LockExpiration < now)
+            .Where(m => m.RetryCount < currentOptions.MaxRetryCount);;
 
         if (!string.IsNullOrEmpty(currentOptions.PartitionKey)) {
             query = query.Where(m => m.PartitionKey == currentOptions.PartitionKey);
