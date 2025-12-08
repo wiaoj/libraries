@@ -48,6 +48,8 @@ public sealed class OutboxMessage {
     public void MarkAsProcessed(DateTimeOffset processedAt) {
         this.ProcessedAt = processedAt;
         this.Error = null;
+        this.LockId = null;
+        this.LockExpiration = null;
         this.Version = Guid.NewGuid();
     }
 

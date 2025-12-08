@@ -9,7 +9,9 @@ public class StronglyTypedIdValueConverter<TId, TValue> : ValueConverter<TId, TV
     where TId : IId<TId, TValue>
     where TValue : notnull {
 
-    public StronglyTypedIdValueConverter(ConverterMappingHints? mappingHints = null)
+    public StronglyTypedIdValueConverter() : this(null) { }
+
+    public StronglyTypedIdValueConverter(ConverterMappingHints? mappingHints)
         : base(
             id => id.Value,
             value => CreateFromValue(value),

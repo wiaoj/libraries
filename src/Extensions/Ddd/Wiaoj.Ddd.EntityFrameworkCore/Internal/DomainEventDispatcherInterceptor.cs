@@ -23,6 +23,7 @@ internal sealed class DomainEventDispatcherInterceptor(
     TimeProvider timeProvider) : SaveChangesInterceptor {
 
     private readonly int _maxIterations = options.Value.MaxDomainEventDispatchAttempts;
+    private List<OutboxMessage>? _messagesToPublish;
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
        DbContextEventData eventData,
@@ -48,13 +49,22 @@ internal sealed class DomainEventDispatcherInterceptor(
         // 3. Persist messages to the database
         await context.Set<OutboxMessage>().AddRangeAsync(outboxMessages, cancellationToken);
 
-        // 4. Commit the transaction (Saves entities + outbox messages atomically)
-        InterceptionResult<int> baseResult = await base.SavingChangesAsync(eventData, result, cancellationToken);
+        _messagesToPublish = outboxMessages;
 
-        // 5. Fast Path: Push to Channel for immediate processing (In-Memory)
-        await PublishToChannelAsync(outboxMessages, cancellationToken);
+        return await base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
 
-        return baseResult;
+    public override async ValueTask<int> SavedChangesAsync(
+        SaveChangesCompletedEventData eventData,
+        int result,
+        CancellationToken cancellationToken = default) {
+                                                                               
+        if (_messagesToPublish is not null && _messagesToPublish.Count > 0) {
+            await PublishToChannelAsync(_messagesToPublish, cancellationToken);
+            _messagesToPublish.Clear(); 
+        }
+
+        return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
 
     /// <summary>
