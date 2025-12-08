@@ -150,6 +150,7 @@ internal sealed class OutboxProcessor<TContext>(
             // this update will affect 0 rows, preserving data integrity.
             int rowsAffected = await dbContext.Set<OutboxMessage>()
                 .Where(m => m.Id == message.Id && m.LockId == _myInstanceId)
+                .Where(m => m.ProcessedAt == null)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(m => m.ProcessedAt, timeProvider.GetUtcNow())
                     .SetProperty(m => m.Error, (string?)null),
