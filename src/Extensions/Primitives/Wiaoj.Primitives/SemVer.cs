@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using static System.MemoryExtensions;
 
 namespace Wiaoj.Primitives;
 
@@ -15,8 +14,7 @@ namespace Wiaoj.Primitives;
 /// It implements <see cref="ISpanParsable{TSelf}"/> and <see cref="ISpanFormattable"/> for zero-ish GC pressure
 /// and supports the full precedence and comparison rules of the SemVer 2.0.0 standard.
 /// </remarks>
-[DebuggerDisplay("{ToString(),nq}")]
-[Serializable]
+[DebuggerDisplay("{ToString(),nq}")]   
 public readonly record struct SemVer :
     IComparable<SemVer>,
     IComparable,
@@ -24,6 +22,7 @@ public readonly record struct SemVer :
     ISpanFormattable,
     IComparisonOperators<SemVer, SemVer, bool>,
     IMinMaxValue<SemVer> {
+
     #region Properties and Constants
 
     /// <summary>
@@ -76,34 +75,30 @@ public readonly record struct SemVer :
     /// <summary>
     /// Initializes a new instance of the <see cref="SemVer"/> struct for a stable release.
     /// </summary>
-    /// <param name="major">The major version number.</param>
-    /// <param name="minor">The minor version number.</param>
-    /// <param name="patch">The patch version number.</param>
     public SemVer(int major, int minor, int patch)
         : this(major, minor, patch, string.Empty, string.Empty) { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SemVer"/> struct for a pre-release version.
     /// </summary>
-    /// <param name="major">The major version number.</param>
-    /// <param name="minor">The minor version number.</param>
-    /// <param name="patch">The patch version number.</param>
-    /// <param name="preRelease">The pre-release identifier.</param>
     public SemVer(int major, int minor, int patch, string preRelease)
         : this(major, minor, patch, preRelease, string.Empty) { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SemVer"/> struct with all components.
     /// </summary>
-    /// <param name="major">The major version number. Must be non-negative.</param>
-    /// <param name="minor">The minor version number. Must be non-negative.</param>
-    /// <param name="patch">The patch version number. Must be non-negative.</param>
-    /// <param name="preRelease">The pre-release identifier.</param>
-    /// <param name="buildMetadata">The build metadata.</param>
     public SemVer(int major, int minor, int patch, string preRelease, string buildMetadata) {
-        Preca.ThrowIfNegative(major);
-        Preca.ThrowIfNegative(minor);
-        Preca.ThrowIfNegative(patch);
+        if (major < 0) {
+            throw new ArgumentOutOfRangeException(nameof(major), "Major version cannot be negative.");
+        }
+
+        if (minor < 0) {
+            throw new ArgumentOutOfRangeException(nameof(minor), "Minor version cannot be negative.");
+        }
+
+        if (patch < 0) {
+            throw new ArgumentOutOfRangeException(nameof(patch), "Patch version cannot be negative.");
+        }
 
         this.Major = major;
         this.Minor = minor;
@@ -115,14 +110,8 @@ public readonly record struct SemVer :
     /// <summary>
     /// Creates a <see cref="SemVer"/> instance from a <see cref="System.Version"/> object.
     /// </summary>
-    /// <remarks>
-    /// Maps <c>Major</c>, <c>Minor</c>, and <c>Build</c> properties directly.
-    /// The <c>Revision</c> property of <see cref="System.Version"/> (if specified, i.e., > -1) is mapped to the build metadata, e.g., <c>+rev.123</c>.
-    /// </remarks>
-    /// <param name="version">The <see cref="System.Version"/> to convert.</param>
-    /// <returns>A new <see cref="SemVer"/> instance.</returns>
     public static SemVer FromVersion(Version version) {
-        Preca.ThrowIfNull(version);
+        ArgumentNullException.ThrowIfNull(version);
         string metadata = version.Revision > -1 ? $"rev.{version.Revision}" : string.Empty;
         return new SemVer(version.Major, version.Minor, version.Build, string.Empty, metadata);
     }
@@ -130,7 +119,6 @@ public readonly record struct SemVer :
     /// <summary>
     /// Explicitly converts a <see cref="System.Version"/> to a <see cref="SemVer"/>.
     /// </summary>
-    /// <param name="version">The <see cref="System.Version"/> to convert.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator SemVer(Version version) {
         return FromVersion(version);
@@ -138,43 +126,79 @@ public readonly record struct SemVer :
 
     #endregion
 
-    #region Parsing (ISpanParsable)
+    #region Parsing (Public & Explicit Interface Implementation)
 
-    /// <inheritdoc/>
-    public static SemVer Parse(string s, IFormatProvider? provider = null) {
-        Preca.ThrowIfNull(s);
-        if (TryParse(s.AsSpan(), provider, out SemVer result)) {
+    // --- Public API (Clean, No IFormatProvider) ---
+
+    /// <summary>
+    /// Parses a string into a <see cref="SemVer"/>.
+    /// </summary>
+    public static SemVer Parse(string s) {
+        ArgumentNullException.ThrowIfNull(s);
+        return Parse(s.AsSpan());
+    }
+
+    /// <summary>
+    /// Parses a span of characters into a <see cref="SemVer"/>.
+    /// </summary>
+    public static SemVer Parse(ReadOnlySpan<char> s) {
+        if (TryParseInternal(s, out SemVer result)) {
             return result;
         }
         throw new FormatException($"'{s}' is not a valid semantic version string.");
     }
 
-    /// <inheritdoc/>
-    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SemVer result) {
+    /// <summary>
+    /// Tries to parse a string into a <see cref="SemVer"/>.
+    /// </summary>
+    public static bool TryParse([NotNullWhen(true)] string? s, out SemVer result) {
         if (s is null) {
             result = default;
             return false;
         }
-        return TryParse(s.AsSpan(), provider, out result);
+        return TryParseInternal(s.AsSpan(), out result);
     }
 
-    /// <inheritdoc/>
-    public static SemVer Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null) {
-        if (TryParse(s, provider, out SemVer result)) {
-            return result;
-        }
-        throw new FormatException($"'{s}' is not a valid semantic version string.");
+    /// <summary>
+    /// Tries to parse a span of characters into a <see cref="SemVer"/>.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, out SemVer result) {
+        return TryParseInternal(s, out result);
     }
 
-    /// <inheritdoc/>
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SemVer result) {
+    // --- Explicit Interface Implementation (Hidden from Public API) ---
+    // These satisfy the interfaces but don't clutter IntelliSense.
+    // We ignore the IFormatProvider because SemVer is culture-invariant.
+
+    static SemVer IParsable<SemVer>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<SemVer>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SemVer result) {
+        return TryParse(s, out result);
+    }
+
+    static SemVer ISpanParsable<SemVer>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<SemVer>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SemVer result) {
+        return TryParse(s, out result);
+    }
+
+    // --- Internal Logic ---
+
+    private static bool TryParseInternal(ReadOnlySpan<char> s, out SemVer result) {
         result = default;
 
         int plusIndex = s.IndexOf('+');
         ReadOnlySpan<char> buildMetadata = default;
         if (plusIndex != -1) {
             buildMetadata = s[(plusIndex + 1)..];
-            if (buildMetadata.IsEmpty) return false;
+            if (buildMetadata.IsEmpty) {
+                return false;
+            }
+
             s = s[..plusIndex];
         }
 
@@ -182,7 +206,10 @@ public readonly record struct SemVer :
         ReadOnlySpan<char> preRelease = default;
         if (hyphenIndex != -1) {
             preRelease = s[(hyphenIndex + 1)..];
-            if (preRelease.IsEmpty) return false;
+            if (preRelease.IsEmpty) {
+                return false;
+            }
+
             s = s[..hyphenIndex];
         }
 
@@ -192,7 +219,9 @@ public readonly record struct SemVer :
             return false;
         }
 
-        if (!s.IsEmpty) return false;
+        if (!s.IsEmpty) {
+            return false;
+        }
 
         if (!AreIdentifiersValid(preRelease) || !AreIdentifiersValid(buildMetadata)) {
             return false;
@@ -204,21 +233,30 @@ public readonly record struct SemVer :
         static bool TryParseInt(ref ReadOnlySpan<char> span, char separator, out int value) {
             value = 0;
             int separatorIndex = separator == char.MinValue ? span.Length : span.IndexOf(separator);
-            if (separatorIndex == -1) return false;
+            if (separatorIndex == -1) {
+                return false;
+            }
 
             ReadOnlySpan<char> part = span[..separatorIndex];
             span = separator == char.MinValue ? [] : span[(separatorIndex + 1)..];
 
-            if (part.Length > 1 && part[0] == '0') return false;
+            if (part.Length > 1 && part[0] == '0') {
+                return false;
+            }
+
             return int.TryParse(part, NumberStyles.None, CultureInfo.InvariantCulture, out value);
         }
 
         static bool AreIdentifiersValid(ReadOnlySpan<char> identifiers) {
-            if (identifiers.IsEmpty) return true;
+            if (identifiers.IsEmpty) {
+                return true;
+            }
 
             SpanSplitEnumerator enumerator = new(identifiers, '.');
             foreach (ReadOnlySpan<char> identifier in enumerator) {
-                if (identifier.IsEmpty) return false;
+                if (identifier.IsEmpty) {
+                    return false;
+                }
             }
             return true;
         }
@@ -231,17 +269,31 @@ public readonly record struct SemVer :
     /// <inheritdoc/>
     public int CompareTo(SemVer other) {
         int comparison = this.Major.CompareTo(other.Major);
-        if (comparison != 0) return comparison;
+        if (comparison != 0) {
+            return comparison;
+        }
 
         comparison = this.Minor.CompareTo(other.Minor);
-        if (comparison != 0) return comparison;
+        if (comparison != 0) {
+            return comparison;
+        }
 
         comparison = this.Patch.CompareTo(other.Patch);
-        if (comparison != 0) return comparison;
+        if (comparison != 0) {
+            return comparison;
+        }
 
-        if (this.IsPreRelease && !other.IsPreRelease) return -1;
-        if (!this.IsPreRelease && other.IsPreRelease) return 1;
-        if (!this.IsPreRelease && !other.IsPreRelease) return 0;
+        if (this.IsPreRelease && !other.IsPreRelease) {
+            return -1;
+        }
+
+        if (!this.IsPreRelease && other.IsPreRelease) {
+            return 1;
+        }
+
+        if (!this.IsPreRelease && !other.IsPreRelease) {
+            return 0;
+        }
 
         ReadOnlySpan<char> thisPreReleaseSpan = this.PreRelease.AsSpan();
         ReadOnlySpan<char> otherPreReleaseSpan = other.PreRelease.AsSpan();
@@ -253,9 +305,17 @@ public readonly record struct SemVer :
             bool thisHasNext = thisEnumerator.MoveNext();
             bool otherHasNext = otherEnumerator.MoveNext();
 
-            if (!thisHasNext && !otherHasNext) return 0; // Both finished, equal.
-            if (!thisHasNext) return -1; // This one is shorter, so it has lower precedence.
-            if (!otherHasNext) return 1;  // The other one is shorter, so this one has higher precedence.
+            if (!thisHasNext && !otherHasNext) {
+                return 0; // Both finished, equal.
+            }
+
+            if (!thisHasNext) {
+                return -1; // This one is shorter, so it has lower precedence.
+            }
+
+            if (!otherHasNext) {
+                return 1;  // The other one is shorter, so this one has higher precedence.
+            }
 
             ReadOnlySpan<char> thisId = thisEnumerator.Current;
             ReadOnlySpan<char> otherId = otherEnumerator.Current;
@@ -265,21 +325,33 @@ public readonly record struct SemVer :
 
             if (thisIsNum && otherIsNum) {
                 comparison = thisNum.CompareTo(otherNum);
-                if (comparison != 0) return comparison;
+                if (comparison != 0) {
+                    return comparison;
+                }
             }
             else {
-                if (thisIsNum) return -1;
-                if (otherIsNum) return 1;
+                if (thisIsNum) {
+                    return -1;
+                }
+
+                if (otherIsNum) {
+                    return 1;
+                }
 
                 comparison = thisId.CompareTo(otherId, StringComparison.Ordinal);
-                if (comparison != 0) return comparison;
+                if (comparison != 0) {
+                    return comparison;
+                }
             }
         }
     }
 
     /// <inheritdoc/>
     public int CompareTo(object? obj) {
-        if (obj is SemVer other) return CompareTo(other);
+        if (obj is SemVer other) {
+            return CompareTo(other);
+        }
+
         return 1;
     }
 
@@ -305,38 +377,56 @@ public readonly record struct SemVer :
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Supports the following format specifiers:
-    /// <list type="bullet">
-    ///   <item><term>G</term><description>General format (default): Major.Minor.Patch-PreRelease+BuildMetadata.</description></item>
-    ///   <item><term>f</term><description>Full format: Major.Minor.Patch-PreRelease.</description></item>
-    ///   <item><term>s</term><description>Stable format: Major.Minor.Patch.</description></item>
-    ///   <item><term>m</term><description>MajorMinor format: Major.Minor.</description></item>
-    ///   <item><term>M</term><description>MajorOnly format: Major.</description></item>
-    /// </list>
+    /// Supports: G (Default), f (Full), s (Stable), m (MajorMinor), M (Major).
     /// </remarks>
     public override string ToString() {
-        return ToString("G", CultureInfo.InvariantCulture);
+        return ToString("G");
     }
 
-    /// <inheritdoc/>
-    public string ToString(string? format, IFormatProvider? formatProvider = null) {
+    /// <summary>
+    /// Formats the SemVer instance to a string using the specified format.
+    /// </summary>
+    public string ToString(string? format) {
+        // Mantığı buraya taşıdık.
+        // Stackalloc ile allocation yapmadan küçük buffer deniyoruz.
         Span<char> buffer = stackalloc char[128];
-        if (TryFormat(buffer, out int charsWritten, format.AsSpan(), formatProvider)) {
+        if (TryFormatInternal(buffer, out int charsWritten, format.AsSpan())) {
             return buffer[..charsWritten].ToString();
         }
 
+        // Sığmazsa string.Create ile oluşturuyoruz.
         int requiredLength = GetRequiredLength(format.AsSpan());
         return string.Create(requiredLength, this, (span, state) => {
-            state.TryFormat(span, out _, format.AsSpan(), formatProvider);
+            state.TryFormatInternal(span, out _, format.AsSpan());
         });
     }
 
-    /// <inheritdoc/>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        if (format.IsEmpty) format = "G";
+    // Explicit implementation to satisfy IFormattable
+    // Bu metot artık yukarıdaki public metoda yönlendiriyor.
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return ToString(format);
+    }
+
+    // Explicit implementation to satisfy ISpanFormattable
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        // Provider ignored
+        return TryFormatInternal(destination, out charsWritten, format);
+    }
+
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
+        return TryFormatInternal(destination, out charsWritten, format);
+    }
+
+    // --- Internal Formatting Logic ---
+
+    private bool TryFormatInternal(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
+        if (format.IsEmpty) {
+            format = "G";
+        }
+
         if (format.Length != 1) {
             charsWritten = 0;
-            return false; // Only single-character specifiers are supported.
+            return false;
         }
 
         int requiredLength = GetRequiredLength(format);
@@ -377,7 +467,6 @@ public readonly record struct SemVer :
             }
         }
 
-        // Return true if the specifier was valid, otherwise false.
         return specifier is 'G' or 'f' or 's' or 'm' or 'M';
     }
 
@@ -385,32 +474,48 @@ public readonly record struct SemVer :
         char specifier = format.IsEmpty ? 'G' : format[0];
 
         int length = 0;
-        if (specifier is 'G' or 'f' or 's' or 'm' or 'M') length += GetDigitCount(this.Major);
-        if (specifier is 'G' or 'f' or 's' or 'm') length += 1 + GetDigitCount(this.Minor);
-        if (specifier is 'G' or 'f' or 's') length += 1 + GetDigitCount(this.Patch);
+        if (specifier is 'G' or 'f' or 's' or 'm' or 'M') {
+            length += GetDigitCount(this.Major);
+        }
+
+        if (specifier is 'G' or 'f' or 's' or 'm') {
+            length += 1 + GetDigitCount(this.Minor);
+        }
+
+        if (specifier is 'G' or 'f' or 's') {
+            length += 1 + GetDigitCount(this.Patch);
+        }
+
         if (specifier is 'G' or 'f') {
-            if (this.IsPreRelease) length += 1 + this.PreRelease.Length;
+            if (this.IsPreRelease) {
+                length += 1 + this.PreRelease.Length;
+            }
         }
         if (specifier is 'G') {
-            if (!string.IsNullOrEmpty(this.BuildMetadata)) length += 1 + this.BuildMetadata.Length;
+            if (!string.IsNullOrEmpty(this.BuildMetadata)) {
+                length += 1 + this.BuildMetadata.Length;
+            }
         }
 
         return length;
 
         static int GetDigitCount(int n) {
-            if (n >= 1000000000) return 10;
-            if (n >= 100000000) return 9;
-            if (n >= 10000000) return 8;
-            if (n >= 1000000) return 7;
-            if (n >= 100000) return 6;
-            if (n >= 10000) return 5;
-            if (n >= 1000) return 4;
-            if (n >= 100) return 3;
-            if (n >= 10) return 2;
-            if (n >= 0) return 1;
-            // This part should be unreachable due to constructor checks,
-            // but we handle it defensively for negative numbers.
-            return n.ToString().Length;
+            if (n < 0) {
+                return n.ToString().Length;
+            }
+
+            return n switch {
+                < 10 => 1,
+                < 100 => 2,
+                < 1000 => 3,
+                < 10000 => 4,
+                < 100000 => 5,
+                < 1000000 => 6,
+                < 10000000 => 7,
+                < 100000000 => 8,
+                < 1000000000 => 9,
+                _ => 10
+            };
         }
     }
 

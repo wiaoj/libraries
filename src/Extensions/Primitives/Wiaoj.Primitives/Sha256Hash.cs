@@ -11,15 +11,16 @@ namespace Wiaoj.Primitives;
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
 public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
-    private fixed byte _bytes[32];
+    private const int HashSizeInBytes = 32;
+    private fixed byte _bytes[HashSizeInBytes];
 
     internal Sha256Hash(ReadOnlySpan<byte> source) {
-        if (source.Length != 32) {
+        if (source.Length != HashSizeInBytes) {
             throw new ArgumentException("Source span must be exactly 32 bytes long.", nameof(source));
         }
 
         fixed (byte* p = this._bytes) {
-            source.CopyTo(new Span<byte>(p, 32));
+            source.CopyTo(new Span<byte>(p, HashSizeInBytes));
         }
     }
 
@@ -28,7 +29,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Represents a SHA256 hash consisting of all zero bytes.
     /// Equivalent to a 32-byte array filled with 0x00.
     /// </summary>
-    public static readonly Sha256Hash Empty = new(stackalloc byte[32]);
+    public static readonly Sha256Hash Empty = new(stackalloc byte[HashSizeInBytes]);
 
     /// <summary>
     /// Creates a Sha256Hash instance from a 32-byte span.
@@ -44,11 +45,11 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// </summary>
     /// <exception cref="FormatException">The input is not a valid 64-character hexadecimal string.</exception>
     public static Sha256Hash From(HexString hex) {
-        if (hex.GetDecodedLength() != 32) {
+        if (hex.GetDecodedLength() != HashSizeInBytes) {
             throw new FormatException("Source HexString must represent exactly 32 bytes (64 hex characters).");
         }
 
-        Span<byte> buffer = stackalloc byte[32];
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
         hex.TryDecode(buffer, out _); 
         return new Sha256Hash(buffer);
     }
@@ -57,12 +58,12 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Creates a Sha256Hash instance from a Base64String.
     /// </summary>
     public static Sha256Hash From(Base64String base64) {
-        if (base64.GetDecodedLength() != 32) {
+        if (base64.GetDecodedLength() != HashSizeInBytes) {
             throw new FormatException("Source Base64String must represent exactly 32 bytes.");
         }
 
-        Span<byte> buffer = stackalloc byte[32];
-        if (!base64.TryDecode(buffer, out int written) || written != 32) {
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
+        if (!base64.TryDecode(buffer, out int written) || written != HashSizeInBytes) {
             throw new FormatException("Failed to decode Base64 into Hash.");
         }
         return new Sha256Hash(buffer);
@@ -72,12 +73,12 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Tries to create a Sha256Hash instance from a hexadecimal string representation.
     /// </summary>
     public static bool TryParse(HexString hex, out Sha256Hash result) {
-        if (hex.GetDecodedLength() != 32) {
+        if (hex.GetDecodedLength() != HashSizeInBytes) {
             result = default;
             return false;
         }
 
-        Span<byte> buffer = stackalloc byte[32];
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
         hex.TryDecode(buffer, out _);
         result = new Sha256Hash(buffer);
         return true;
@@ -99,7 +100,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// </summary>
     [SkipLocalsInit]
     public static Sha256Hash Compute(ReadOnlySpan<byte> data) {
-        Span<byte> hashBuffer = stackalloc byte[32];
+        Span<byte> hashBuffer = stackalloc byte[HashSizeInBytes];
         SHA256.HashData(data, hashBuffer);
         return new Sha256Hash(hashBuffer);
     }
@@ -124,7 +125,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
             int bytesWritten = encoding.GetBytes(chars, bytesOnStack);
 
             // Compute the hash from the byte span on the stack.
-            return Compute(bytesOnStack.Slice(0, bytesWritten));
+            return Compute(bytesOnStack[..bytesWritten]);
         });
     }
 
@@ -162,7 +163,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// </summary>
     public void Expose(Action<ReadOnlySpan<byte>> action) {
         fixed (byte* p = this._bytes) {
-            action(new ReadOnlySpan<byte>(p, 32));
+            action(new ReadOnlySpan<byte>(p, HashSizeInBytes));
         }
     }
 
@@ -171,7 +172,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// </summary>
     public TResult Expose<TResult>(Func<ReadOnlySpan<byte>, TResult> func) {
         fixed (byte* p = this._bytes) {
-            return func(new ReadOnlySpan<byte>(p, 32));
+            return func(new ReadOnlySpan<byte>(p, HashSizeInBytes));
         }
     }
 
@@ -179,7 +180,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Copies the hash bytes to a destination span.
     /// </summary>
     public void CopyTo(Span<byte> destination) {
-        if (destination.Length < 32) {
+        if (destination.Length < HashSizeInBytes) {
             throw new ArgumentException("Destination span must be at least 32 bytes long.", nameof(destination));
         }
         AsSpan().CopyTo(destination);
@@ -190,7 +191,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// </summary>
     public ReadOnlySpan<byte> AsSpan() {
         // This is the most efficient way to get a span from a fixed buffer inside a struct.
-        return new ReadOnlySpan<byte>(Unsafe.AsPointer(ref Unsafe.AsRef(in this._bytes[0])), 32);
+        return new ReadOnlySpan<byte>(Unsafe.AsPointer(ref Unsafe.AsRef(in this._bytes[0])), HashSizeInBytes);
     }
 
     /// <summary>
@@ -225,6 +226,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
         return CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) {
         return obj is Sha256Hash other && Equals(other);
     }

@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Buffers.Binary;
+using System.Buffers.Text;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -9,45 +10,45 @@ using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
 
 namespace Wiaoj.Primitives.Snowflake;
+
 /// <summary>
 /// Represents a distributed unique identifier based on the Twitter Snowflake algorithm.
-/// This struct is a 64-bit integer wrapper designed for high-performance, sorting, and database efficiency.
+/// This struct is a high-performance, immutable 64-bit integer wrapper optimized for sorting, database efficiency, and zero-allocation parsing.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="SnowflakeId"/> struct.
-/// </remarks>
-/// <param name="value">The 64-bit integer value.</param>
 [TypeConverter(typeof(SnowflakeIdTypeConverter))]
 [JsonConverter(typeof(SnowflakeIdJsonConverter))]
 [StructLayout(LayoutKind.Auto)]
 [SkipLocalsInit]
-public readonly struct SnowflakeId(long value) :
+public readonly struct SnowflakeId :
     IEquatable<SnowflakeId>,
     IComparable<SnowflakeId>,
     IComparable,
     ISpanFormattable,
-    ISpanParsable<SnowflakeId>,
     IUtf8SpanFormattable,
+    ISpanParsable<SnowflakeId>,
+    IUtf8SpanParsable<SnowflakeId>,
     IEqualityOperators<SnowflakeId, SnowflakeId, bool>,
     IComparisonOperators<SnowflakeId, SnowflakeId, bool> {
+
+    #region Static Configuration & Generator
 
     private static SnowflakeGenerator _sharedGenerator = SnowflakeGenerator.Default;
     private static readonly Lock _configLock = new();
 
     /// <summary>
     /// Configures the global shared generator using a complete options object.
-    /// This gives full control over SequenceBits, MaxDriftMs, Epoch, etc.
+    /// This allows control over SequenceBits, MaxDriftMs, Epoch, etc.
     /// </summary>
     /// <param name="options">The configuration options.</param>
     public static void Configure(SnowflakeOptions options) {
-        ArgumentNullException.ThrowIfNull(options);
-        lock (_configLock) {
-            _sharedGenerator = new SnowflakeGenerator(options);
-        }
+        Preca.ThrowIfNull(options);
+        _configLock.Enter();
+        _sharedGenerator = new SnowflakeGenerator(options);
+        _configLock.Exit();
     }
 
     /// <summary>
-    /// Configures the global shared generator with a specific Node ID using default Epoch (2024-01-01).
+    /// Configures the global shared generator with a specific Node ID using the default Epoch.
     /// </summary>
     /// <param name="nodeId">The unique ID of this machine/node.</param>
     public static void Configure(ushort nodeId) {
@@ -58,13 +59,14 @@ public readonly struct SnowflakeId(long value) :
     /// Configures the global shared generator with a specific Node ID and Epoch.
     /// </summary>
     /// <param name="nodeId">The unique ID of this machine/node.</param>
-    /// <param name="epoch">The start date for the ID generation.</param>
+    /// <param name="epoch">The start date for ID generation.</param>
     public static void Configure(ushort nodeId, DateTimeOffset epoch) {
         Configure(new SnowflakeOptions { NodeId = nodeId, Epoch = epoch });
     }
+
     /// <summary>
     /// Generates a new unique <see cref="SnowflakeId"/> using the shared global configuration.
-    /// This method is thread-safe, lock-free on the hot path, and allocation-free.
+    /// This method is thread-safe and highly optimized for hot paths.
     /// </summary>
     /// <returns>A new unique SnowflakeId.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -72,67 +74,136 @@ public readonly struct SnowflakeId(long value) :
         return _sharedGenerator.NextId();
     }
 
-    private readonly long _value = value;
+    #endregion
+
+    private readonly long _value;
 
     /// <summary>
-    /// Represents an empty or zero SnowflakeId.
+    /// Represents an empty or zero-valued SnowflakeId.
     /// </summary>
     public static readonly SnowflakeId Empty = new(0);
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SnowflakeId"/> struct.
+    /// </summary>
+    /// <param name="value">The 64-bit integer value.</param>
+    public SnowflakeId(long value) {
+        this._value = value;
+    }
 
     /// <summary>
     /// Gets the underlying 64-bit integer value of the ID.
     /// </summary>
     public long Value => this._value;
 
-    // -------------------------------------------------------------------------
-    // BUFFER WRITER SUPPORT (NEW)
-    // -------------------------------------------------------------------------
+    #region Parsing (Span & UTF-8)
+
+    // --- Public API ---
 
     /// <summary>
-    /// Writes the 64-bit ID (8 bytes) in Big Endian format to the provided buffer writer.
-    /// This method is highly optimized for network serialization (e.g. Kestrel).
+    /// Parses a span of characters into a <see cref="SnowflakeId"/>.
     /// </summary>
-    /// <param name="writer">The target buffer writer.</param>
+    /// <param name="s">The span of characters to parse.</param>
+    /// <returns>The parsed SnowflakeId.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not in a valid format.</exception>
+    public static SnowflakeId Parse(ReadOnlySpan<char> s) {
+        if (TryParseInternal(s, out SnowflakeId result)) {
+            return result;
+        }
+        throw new FormatException($"'{s}' is not a valid SnowflakeId.");
+    }
+
+    /// <summary>
+    /// Tries to parse a span of characters into a <see cref="SnowflakeId"/>.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, out SnowflakeId result) {
+        return TryParseInternal(s, out result);
+    }
+
+    /// <summary>
+    /// Parses a UTF-8 byte span into a <see cref="SnowflakeId"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 encoded text to parse.</param>
+    /// <returns>The parsed SnowflakeId.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not in a valid format.</exception>
+    public static SnowflakeId Parse(ReadOnlySpan<byte> utf8Text) {
+        if (TryParseInternal(utf8Text, out SnowflakeId result)) {
+            return result;
+        }
+        throw new FormatException("The input is not a valid UTF-8 encoded SnowflakeId.");
+    }
+
+    /// <summary>
+    /// Tries to parse a UTF-8 byte span into a <see cref="SnowflakeId"/>.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out SnowflakeId result) {
+        return TryParseInternal(utf8Text, out result);
+    }
+
+    // --- Internal Logic ---
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void WriteTo(IBufferWriter<byte> writer) {
-        Span<byte> buffer = writer.GetSpan(8);
-        BinaryPrimitives.WriteInt64BigEndian(buffer, this._value);
-        writer.Advance(8);
-    }
-
-    /// <summary>
-    /// Converts the SnowflakeId to a Guid. 
-    /// The 64-bit ID is placed in the last 8 bytes of the Guid (Big Endian).
-    /// The first 8 bytes are padded with zeros.
-    /// </summary>
-    public Guid ToGuid() {
-        if (this._value == 0) {
-            return Guid.Empty;
+    private static bool TryParseInternal(ReadOnlySpan<char> s, out SnowflakeId result) {
+        // Fast path: Try parsing as a pure long integer.
+        if (long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out long longVal)) {
+            result = new SnowflakeId(longVal);
+            return true;
         }
 
-        // SkipLocalsInit prevents zero-initialization of this stack block.
-        // We must manually clear the first 8 bytes to ensure consistent Guid format.
-        Span<byte> guidBytes = stackalloc byte[16];
-        guidBytes[..8].Clear();
-        BinaryPrimitives.WriteInt64BigEndian(guidBytes[8..], this._value);
-
-        return new Guid(guidBytes);
-    }
-
-    /// <summary>
-    /// Reconstructs a SnowflakeId from a Guid that was created via <see cref="ToGuid"/>.
-    /// Warning: Guids not created by SnowflakeId will result in data loss or invalid IDs.
-    /// </summary>
-    public static SnowflakeId FromGuid(Guid guid) {
-        if (guid == Guid.Empty) {
-            return Empty;
+        // Fallback: Check if it's a Guid string (compatibility mode).
+        if (Guid.TryParse(s, out Guid guidVal)) {
+            result = FromGuid(guidVal);
+            return true;
         }
 
-        Span<byte> guidBytes = stackalloc byte[16];
-        guid.TryWriteBytes(guidBytes);
-        long val = BinaryPrimitives.ReadInt64BigEndian(guidBytes[8..]);
-        return new SnowflakeId(val);
+        result = Empty;
+        return false;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryParseInternal(ReadOnlySpan<byte> utf8Text, out SnowflakeId result) {
+        // High-performance UTF-8 parsing without string allocation.
+        if (Utf8Parser.TryParse(utf8Text, out long longVal, out int bytesConsumed) && bytesConsumed == utf8Text.Length) {
+            result = new SnowflakeId(longVal);
+            return true;
+        }
+
+        // We don't support Guid parsing from raw UTF-8 bytes here for simplicity and speed,
+        // but it could be added if necessary.
+        result = Empty;
+        return false;
+    }
+
+    // --- Explicit Interface Implementations ---
+
+    static SnowflakeId IParsable<SnowflakeId>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s.AsSpan());
+    }
+
+    static bool IParsable<SnowflakeId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SnowflakeId result) {
+        if (s is null) { result = default; return false; }
+        return TryParseInternal(s.AsSpan(), out result);
+    }
+
+    static SnowflakeId ISpanParsable<SnowflakeId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<SnowflakeId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SnowflakeId result) {
+        return TryParse(s, out result);
+    }
+
+    static SnowflakeId IUtf8SpanParsable<SnowflakeId>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<SnowflakeId>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out SnowflakeId result) {
+        return TryParse(utf8Text, out result);
+    }
+
+    #endregion
+
+    #region Formatting
 
     /// <inheritdoc/>
     public override string ToString() {
@@ -155,92 +226,50 @@ public readonly struct SnowflakeId(long value) :
     }
 
     /// <summary>
-    /// Converts the string representation of a number or Guid to its SnowflakeId equivalent.
+    /// Writes the 64-bit ID (8 bytes) in Big Endian format to the provided buffer writer.
+    /// Highly optimized for binary serialization (e.g., Kestrel, gRPC).
     /// </summary>
-    public static SnowflakeId Parse(string s, IFormatProvider? provider) {
-        return Parse(s.AsSpan(), provider);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void WriteTo(IBufferWriter<byte> writer) {
+        Span<byte> buffer = writer.GetSpan(8);
+        BinaryPrimitives.WriteInt64BigEndian(buffer, this._value);
+        writer.Advance(8);
     }
 
-    /// <summary>
-    /// Converts the string representation of a number or Guid to its SnowflakeId equivalent.
-    /// </summary>
-    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, [MaybeNullWhen(false)] out SnowflakeId result) {
-        return TryParse(s.AsSpan(), provider, out result);
-    }
+    #endregion
+
+    #region Conversions (Guid, Bytes, Int128)
 
     /// <summary>
-    /// Converts the span representation of a number or Guid to its SnowflakeId equivalent.
+    /// Converts the SnowflakeId to a Guid. 
+    /// The 64-bit ID is placed in the last 8 bytes of the Guid (Big Endian).
+    /// The first 8 bytes are zeroed out.
     /// </summary>
-    public static SnowflakeId Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        if (TryParse(s, provider, out SnowflakeId result)) {
-            return result;
+    public Guid ToGuid() {
+        if (this._value == 0) {
+            return Guid.Empty;
         }
 
-        throw new FormatException("Invalid SnowflakeId format. Expected a numeric string or a Guid string.");
+        Span<byte> guidBytes = stackalloc byte[16];
+        // Ensure first 8 bytes are zero.
+        guidBytes[..8].Clear();
+        BinaryPrimitives.WriteInt64BigEndian(guidBytes[8..], this._value);
+
+        return new Guid(guidBytes);
     }
 
     /// <summary>
-    /// Converts the span representation of a number or Guid to its SnowflakeId equivalent.
+    /// Reconstructs a SnowflakeId from a Guid created via <see cref="ToGuid"/>.
     /// </summary>
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, [MaybeNullWhen(false)] out SnowflakeId result) {
-        // 1. Try parsing as Long (Standard usage) - Fastest
-        if (long.TryParse(s, NumberStyles.Integer, provider, out var longVal)) {
-            result = new SnowflakeId(longVal);
-            return true;
-        }
-        // 2. Try parsing as Guid (Compatibility usage)
-        if (Guid.TryParse(s, provider, out Guid guidVal)) {
-            result = FromGuid(guidVal);
-            return true;
+    public static SnowflakeId FromGuid(Guid guid) {
+        if (guid == Guid.Empty) {
+            return Empty;
         }
 
-        result = Empty;
-        return false;
-    }
-
-    /// <summary>Implicitly converts a <see cref="long"/> value to a <see cref="SnowflakeId"/>.</summary>
-    public static implicit operator SnowflakeId(long value) {
-        return new(value);
-    }
-
-    /// <summary>Implicitly converts a <see cref="SnowflakeId"/> to its underlying <see cref="long"/> value.</summary>
-    public static implicit operator long(SnowflakeId id) {
-        return id._value;
-    }
-
-    /// <summary>Explicitly converts a <see cref="Guid"/> to a <see cref="SnowflakeId"/>.</summary>
-    public static explicit operator SnowflakeId(Guid guid) {
-        return FromGuid(guid);
-    }
-
-    /// <summary>Implicitly converts a <see cref="SnowflakeId"/> to a <see cref="Guid"/>.</summary>
-    public static implicit operator Guid(SnowflakeId id) {
-        return id.ToGuid();
-    }
-
-    /// <summary>
-    /// Converts the SnowflakeId to an Int128. The value is placed in the lower 64 bits.
-    /// </summary>
-    public Int128 ToInt128() {
-        return (Int128)this._value;
-    }
-
-    /// <summary>Implicitly converts a <see cref="SnowflakeId"/> to an <see cref="Int128"/>.</summary>
-    public static implicit operator Int128(SnowflakeId id) {
-        return id.ToInt128();
-    }
-
-    /// <summary>
-    /// Writes the 64-bit ID into a span of bytes (Big Endian).
-    /// Requires 8 bytes.
-    /// </summary>
-    public bool TryWriteBytes(Span<byte> destination) {
-        if (destination.Length < 8) {
-            return false;
-        }
-
-        BinaryPrimitives.WriteInt64BigEndian(destination, this._value);
-        return true;
+        Span<byte> guidBytes = stackalloc byte[16];
+        guid.TryWriteBytes(guidBytes);
+        long val = BinaryPrimitives.ReadInt64BigEndian(guidBytes[8..]);
+        return new SnowflakeId(val);
     }
 
     /// <summary>
@@ -250,6 +279,18 @@ public readonly struct SnowflakeId(long value) :
         byte[] bytes = new byte[8];
         BinaryPrimitives.WriteInt64BigEndian(bytes, this._value);
         return bytes;
+    }
+
+    /// <summary>
+    /// Writes the 64-bit ID into a span of bytes (Big Endian).
+    /// </summary>
+    public bool TryWriteBytes(Span<byte> destination) {
+        if (destination.Length < 8) {
+            return false;
+        }
+
+        BinaryPrimitives.WriteInt64BigEndian(destination, this._value);
+        return true;
     }
 
     /// <summary>
@@ -263,13 +304,72 @@ public readonly struct SnowflakeId(long value) :
         return new SnowflakeId(BinaryPrimitives.ReadInt64BigEndian(source));
     }
 
-    // -------------------------------------------------------------------------
-    // INTEGRATION: Hex, Base64, Base32
-    // -------------------------------------------------------------------------
+    // --- Operators ---
+
+    /// <summary>
+    /// Implicitly converts a 64-bit signed integer to a <see cref="SnowflakeId"/>.
+    /// </summary>
+    /// <param name="value">The long value.</param>
+    public static implicit operator SnowflakeId(long value) {
+        return new(value);
+    }
+
+    /// <summary>
+    /// Implicitly converts a <see cref="SnowflakeId"/> to its underlying 64-bit signed integer value.
+    /// </summary>
+    /// <param name="id">The SnowflakeId.</param>
+    public static implicit operator long(SnowflakeId id) {
+        return id._value;
+    }
+
+    /// <summary>
+    /// Explicitly converts a <see cref="Guid"/> to a <see cref="SnowflakeId"/>.
+    /// </summary>
+    /// <remarks>
+    /// This operation extracts the last 8 bytes of the Guid (Big Endian) to form the ID. 
+    /// Data loss may occur if the Guid was not originally created from a SnowflakeId.
+    /// </remarks>
+    /// <param name="guid">The source Guid.</param>
+    public static explicit operator SnowflakeId(Guid guid) {
+        return FromGuid(guid);
+    }
+
+    /// <summary>
+    /// Implicitly converts a <see cref="SnowflakeId"/> to a <see cref="Guid"/>.
+    /// </summary>
+    /// <remarks>
+    /// The resulting Guid will have its first 8 bytes set to zero, and the last 8 bytes will contain the SnowflakeId.
+    /// </remarks>
+    /// <param name="id">The SnowflakeId.</param>
+    public static implicit operator Guid(SnowflakeId id) {
+        return id.ToGuid();
+    }
+
+    /// <summary>
+    /// Implicitly converts a <see cref="SnowflakeId"/> to an <see cref="Int128"/>.
+    /// </summary>
+    /// <remarks>
+    /// The SnowflakeId value is placed in the lower 64 bits of the Int128.
+    /// </remarks>
+    /// <param name="id">The SnowflakeId.</param>
+    public static implicit operator Int128(SnowflakeId id) {
+        return (Int128)id._value;
+    }
+
+    /// <summary>
+    /// Converts the <see cref="SnowflakeId"/> to an <see cref="Int128"/>.
+    /// </summary>
+    /// <returns>An Int128 containing the SnowflakeId in its lower 64 bits.</returns>
+    public Int128 ToInt128() {
+        return (Int128)this._value;
+    }
+
+    #endregion
+
+    #region Integration (Hex, Base64, Base32, Urn)
 
     /// <summary>
     /// Converts the SnowflakeId to a type-safe HexString.
-    /// Useful for debugging and logging.
     /// </summary>
     public HexString ToHexString() {
         Span<byte> buffer = stackalloc byte[8];
@@ -279,7 +379,6 @@ public readonly struct SnowflakeId(long value) :
 
     /// <summary>
     /// Converts the SnowflakeId to a type-safe Base64String.
-    /// Useful for compact storage or JSON transmission.
     /// </summary>
     public Base64String ToBase64String() {
         Span<byte> buffer = stackalloc byte[8];
@@ -289,7 +388,6 @@ public readonly struct SnowflakeId(long value) :
 
     /// <summary>
     /// Converts the SnowflakeId to a type-safe Base32String.
-    /// Useful for case-insensitive, URL-safe identifiers (shorter than UUID).
     /// </summary>
     public Base32String ToBase32String() {
         Span<byte> buffer = stackalloc byte[8];
@@ -299,52 +397,59 @@ public readonly struct SnowflakeId(long value) :
 
     /// <summary>
     /// Creates a URN using this ID and a specified namespace.
-    /// Example: "urn:order:123456"
     /// </summary>
     public Urn ToUrn(string nid) {
         return Urn.Create(nid, this);
     }
 
-
     /// <summary>
-    /// Creates a SnowflakeId from a HexString.
+    /// Creates a <see cref="SnowflakeId"/> from a <see cref="HexString"/>.
     /// </summary>
+    /// <param name="hex">The hexadecimal string representation to convert.</param>
+    /// <returns>A new <see cref="SnowflakeId"/> derived from the hex string.</returns>
+    /// <exception cref="FormatException">Thrown if the hex string does not represent exactly 8 bytes (64 bits).</exception>
     public static SnowflakeId From(HexString hex) {
-        if (hex.GetDecodedLength() != 8) {
-            throw new FormatException("HexString for SnowflakeId must represent exactly 8 bytes.");
+        Span<byte> buffer = stackalloc byte[8];
+        if (!hex.TryDecode(buffer, out int written) || written != 8) {
+            throw new FormatException("HexString must correspond to exactly 8 bytes.");
         }
 
-        Span<byte> buffer = stackalloc byte[8];
-        hex.TryDecode(buffer, out _);
         return FromBytes(buffer);
     }
 
     /// <summary>
-    /// Creates a SnowflakeId from a Base64String.
+    /// Creates a <see cref="SnowflakeId"/> from a <see cref="Base64String"/>.
     /// </summary>
+    /// <param name="base64">The Base64 string representation to convert.</param>
+    /// <returns>A new <see cref="SnowflakeId"/> derived from the Base64 string.</returns>
+    /// <exception cref="FormatException">Thrown if the Base64 string does not represent exactly 8 bytes (64 bits).</exception>
     public static SnowflakeId From(Base64String base64) {
-        if (base64.GetDecodedLength() != 8) {
-            throw new FormatException("Base64String for SnowflakeId must represent exactly 8 bytes.");
+        Span<byte> buffer = stackalloc byte[8];
+        if (!base64.TryDecode(buffer, out int written) || written != 8) {
+            throw new FormatException("Base64String must correspond to exactly 8 bytes.");
         }
 
-        Span<byte> buffer = stackalloc byte[8];
-        base64.TryDecode(buffer, out _);
         return FromBytes(buffer);
     }
 
     /// <summary>
-    /// Creates a SnowflakeId from a Base32String.
+    /// Creates a <see cref="SnowflakeId"/> from a <see cref="Base32String"/>.
     /// </summary>
+    /// <param name="base32">The Base32 string representation to convert.</param>
+    /// <returns>A new <see cref="SnowflakeId"/> derived from the Base32 string.</returns>
+    /// <exception cref="FormatException">Thrown if the Base32 string does not represent exactly 8 bytes (64 bits).</exception>
     public static SnowflakeId From(Base32String base32) {
-        if (base32.GetDecodedLength() != 8) {
-            throw new FormatException("Base32String for SnowflakeId must represent exactly 8 bytes.");
+        Span<byte> buffer = stackalloc byte[8];
+        if (!base32.TryDecode(buffer, out int written) || written != 8) {
+            throw new FormatException("Base32String must correspond to exactly 8 bytes.");
         }
 
-        Span<byte> buffer = stackalloc byte[8];
-        base32.TryDecode(buffer, out _);
         return FromBytes(buffer);
     }
 
+    #endregion
+
+    #region Equality & Comparison
     /// <inheritdoc/>
     public bool Equals(SnowflakeId other) {
         return this._value == other._value;
@@ -375,17 +480,17 @@ public readonly struct SnowflakeId(long value) :
             return CompareTo(other);
         }
 
-        throw new ArgumentException("Object is not a SnowflakeId");
+        throw new ArgumentException($"Object must be of type {nameof(SnowflakeId)}", nameof(obj));
     }
 
     /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
     public static bool operator ==(SnowflakeId left, SnowflakeId right) {
-        return left.Equals(right);
+        return left._value == right._value;
     }
 
     /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Inequality(TSelf, TOther)" />
     public static bool operator !=(SnowflakeId left, SnowflakeId right) {
-        return !left.Equals(right);
+        return left._value != right._value;
     }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
@@ -407,4 +512,6 @@ public readonly struct SnowflakeId(long value) :
     public static bool operator >=(SnowflakeId left, SnowflakeId right) {
         return left._value >= right._value;
     }
+
+    #endregion
 }

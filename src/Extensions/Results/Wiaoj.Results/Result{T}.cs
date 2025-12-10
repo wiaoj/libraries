@@ -1,6 +1,8 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace Wiaoj.Results;
+
 /// <summary>
 /// Represents the result of an operation: either a successful value (<typeparamref name="TValue"/>) or a list of errors.
 /// This struct is the core primitive for Railway Oriented Programming.
@@ -13,33 +15,45 @@ public readonly record struct Result<TValue> : IDisposable {
     /// <summary>
     /// Gets a value indicating whether the result represents a failure.
     /// </summary>
+    [MemberNotNullWhen(true, nameof(_errors))]
+    [MemberNotNullWhen(false, nameof(_value))] // TValue class ise value null değildir (genel kabul)
     public bool IsError => this._errors is not null;
 
     /// <summary>
     /// Gets a value indicating whether the result represents a success.
     /// </summary>
+    [MemberNotNullWhen(false, nameof(_errors))]
     public bool IsSuccess => this._errors is null;
 
     /// <summary>
     /// Gets the value of the successful operation.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if accessed when <see cref="IsError"/> is true.</exception>
-    public TValue Value => this.IsSuccess
-        ? this._value!
-        : throw new InvalidOperationException("Cannot access the value of an error result. Use FirstError or Errors instead.");
+    public TValue Value {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this.IsSuccess
+            ? this._value!
+            : throw new InvalidOperationException("Cannot access the value of an error result. Use FirstError or Errors instead.");
+    }
 
     /// <summary>
     /// Gets the first error of a failed operation.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if accessed when <see cref="IsSuccess"/> is true.</exception>
-    public Error FirstError => this.IsError
-        ? this._errors![0]
-        : throw new InvalidOperationException("Cannot access an error of a successful result.");
+    public Error FirstError {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this.IsError
+            ? this._errors[0]
+            : throw new InvalidOperationException("Cannot access an error of a successful result.");
+    }
 
     /// <summary>
     /// Gets the list of errors. Returns an empty list if the result is successful.
     /// </summary>
-    public IReadOnlyList<Error> Errors => this._errors ?? (IReadOnlyList<Error>)[];
+    public IReadOnlyList<Error> Errors {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this._errors ?? (IReadOnlyList<Error>)[];
+    }
 
     private Result(TValue value) {
         this._value = value;
@@ -47,6 +61,7 @@ public readonly record struct Result<TValue> : IDisposable {
     }
 
     private Result(List<Error> errors) {
+        // Performans: Parametre kontrolünü çağıran yerde yapmak daha iyidir ama safety için burada kalabilir.
         if (errors is null || errors.Count == 0) {
             throw new ArgumentException("At least one error is required to create an error state.", nameof(errors));
         }
@@ -57,94 +72,150 @@ public readonly record struct Result<TValue> : IDisposable {
 
     // --- Implicit Operators ---
 
-    /// <summary>
-    /// Implicitly converts a value to a successful <see cref="Result{TValue}"/>.
-    /// </summary>
-    /// <param name="value">The value to wrap.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator Result<TValue>(TValue value) {
         return new(value);
     }
 
-    /// <summary>
-    /// Implicitly converts a single <see cref="Error"/> to a failed <see cref="Result{TValue}"/>.
-    /// </summary>
-    /// <param name="error">The error to convert.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator Result<TValue>(Error error) {
         return new([error]);
     }
 
-    /// <summary>
-    /// Implicitly converts a list of <see cref="Error"/> objects to a failed <see cref="Result{TValue}"/>.
-    /// </summary>
-    /// <param name="errors">The list of errors.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator Result<TValue>(List<Error> errors) {
         return new(errors);
     }
 
-    /// <summary>
-    /// Implicitly converts an array of <see cref="Error"/> objects to a failed <see cref="Result{TValue}"/>.
-    /// </summary>
-    /// <param name="errors">The array of errors.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator Result<TValue>(Error[] errors) {
         return new([.. errors]);
     }
 
     // --- Factory Methods ---
 
-    /// <summary>
-    /// Creates a successful result containing the specified value.
-    /// </summary>
-    /// <param name="value">The success value.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Result<TValue> Success(TValue value) {
         return new(value);
     }
 
-    // --- ROP Methods ---
+    // --- ROP Core Methods ---
 
     /// <summary>
     /// Transforms the result by applying a function to the value if successful, or handling errors if failed.
     /// </summary>
-    /// <typeparam name="TResult">The return type of the transformation.</typeparam>
-    /// <param name="onValue">The function to execute if the result is successful.</param>
-    /// <param name="onError">The function to execute if the result is an error.</param>
-    /// <returns>The result of the transformation.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TResult Match<TResult>(Func<TValue, TResult> onValue, Func<IReadOnlyList<Error>, TResult> onError) {
         if (this.IsError) {
-            return onError(this.Errors);
+            return onError(this._errors);
         }
-
-        return onValue(this.Value);
+        return onValue(this._value!);
     }
 
     /// <summary>
-    /// Executes an action based on the result state (Success or Error).
+    /// Executes an action based on the result state.
     /// </summary>
-    /// <param name="onValue">The action to execute if successful.</param>
-    /// <param name="onError">The action to execute if failed.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Switch(Action<TValue> onValue, Action<IReadOnlyList<Error>> onError) {
         if (this.IsError) {
-            onError(this.Errors);
+            onError(this._errors);
         }
         else {
-            onValue(this.Value);
+            onValue(this._value!);
         }
+    }
+
+    // --- Functional Combinators ---
+
+    /// <summary>
+    /// Binds the current result to a new result. Useful for chaining operations that may fail.
+    /// (Equivalent to "Bind" or "FlatMap").
+    /// </summary>
+    public Result<TNextValue> Then<TNextValue>(Func<TValue, Result<TNextValue>> next) {
+        if (this.IsError) {
+            return this._errors!; // Hataları taşı
+        }
+        return next(this._value!);
     }
 
     /// <summary>
-    /// Chains another operation if the current result is successful.
-    /// If the current result is an error, the error is propagated without executing the next step.
+    /// Transforms the successful value into a new value.
+    /// Does not allow returning an error (use <see cref="Then{TNextValue}"/> for that).
     /// </summary>
-    /// <typeparam name="TNextValue">The value type of the next result.</typeparam>
-    /// <param name="next">The function to execute if the current result is successful.</param>
-    /// <returns>The result of the next operation or the existing errors.</returns>
-    public Result<TNextValue> Then<TNextValue>(Func<TValue, Result<TNextValue>> next) {
+    public Result<TNew> Map<TNew>(Func<TValue, TNew> mapper) {
         if (this.IsError) {
-            return this._errors!; // Propagate errors
+            return this._errors!;
+        }
+        return mapper(this._value!);
+    }
+
+    /// <summary>
+    /// Executes a side-effect (e.g., logging, setting a variable) without changing the result.
+    /// </summary>
+    public Result<TValue> Do(Action<TValue> action) {
+        if (this.IsSuccess) {
+            action(this._value!);
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Executes a side-effect without accessing the value (e.g. logging).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Result<TValue> Do(Action action) {
+        if (this.IsSuccess) {
+            action();
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Validates a condition. If the condition is false, returns the specified error.
+    /// </summary>
+    public Result<TValue> Ensure(Func<TValue, bool> predicate, Error error) {
+        if (this.IsError) {
+            return this;
         }
 
-        return next(this.Value);
+        if (!predicate(this._value!)) {
+            return error;
+        }
+
+        return this;
     }
+
+    /// <summary>
+    /// Attempts to recover from an error by returning a fallback value.
+    /// </summary>
+    public Result<TValue> Recover(Func<IReadOnlyList<Error>, TValue> recover) {
+        if (this.IsSuccess) {
+            return this;
+        }
+        return recover(this._errors!);
+    }
+
+    /// <summary>
+    /// Executes an action only if the result is successful.
+    /// (Alias for Do)
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Result<TValue> IfSuccess(Action<TValue> action) {
+        return this.Do(action);
+    }
+
+    /// <summary>
+    /// Executes an action only if the result is a failure.
+    /// Useful for logging errors without breaking the chain.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Result<TValue> IfFailure(Action<IReadOnlyList<Error>> action) {
+        if (this.IsError) {
+            action(this._errors!);
+        }
+        return this;
+    }
+
 
     /// <summary>
     /// Disposes the underlying value if it implements <see cref="IDisposable"/>.

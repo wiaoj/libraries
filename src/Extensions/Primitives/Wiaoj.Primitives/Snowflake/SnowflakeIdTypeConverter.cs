@@ -6,7 +6,10 @@ namespace Wiaoj.Primitives.Snowflake;
 /// Provides a type converter to convert <see cref="SnowflakeId"/> objects to and from other representations.
 /// Supported types: String, Long, Guid.
 /// </summary>
-public class SnowflakeIdTypeConverter : TypeConverter {
+/// <summary>
+/// A generic type converter for <see cref="SnowflakeId"/>.
+/// </summary>
+public sealed class SnowflakeIdTypeConverter : TypeConverter {    
     /// <inheritdoc/>
     public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) {
         return sourceType == typeof(string) || sourceType == typeof(long) || sourceType == typeof(Guid) || base.CanConvertFrom(context, sourceType);
@@ -14,12 +17,15 @@ public class SnowflakeIdTypeConverter : TypeConverter {
 
     /// <inheritdoc/>
     public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value) {
-        if (value is string str)
-            return SnowflakeId.Parse(str, culture);
-        if (value is long l)
+        if (value is string str) {
+            return SnowflakeId.Parse(str.AsSpan());
+        }
+        if (value is long l) {
             return new SnowflakeId(l);
-        if (value is Guid g)
+        }
+        if (value is Guid g) {
             return SnowflakeId.FromGuid(g);
+        }
         return base.ConvertFrom(context, culture, value);
     }
 

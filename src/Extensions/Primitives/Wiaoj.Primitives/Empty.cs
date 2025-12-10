@@ -1,7 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace Wiaoj.Primitives;
-
+namespace Wiaoj.Primitives;   
 /// <summary>
 /// Represents an empty value — similar to <see cref="void"/> in functional languages.
 /// </summary>
