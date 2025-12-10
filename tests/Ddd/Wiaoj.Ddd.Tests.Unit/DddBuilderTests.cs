@@ -14,7 +14,8 @@ public class DddBuilderTests {
 
         // Act
         // İçinde handler olan assembly'i tara (Current Assembly)
-        builder.ScanAssemblies(ServiceLifetime.Scoped, typeof(DddBuilderTests).Assembly);
+        builder.ScanDomainEventHandlers(ServiceLifetime.Scoped, typeof(DddBuilderTests).Assembly);
+
 
         // Assert
         // TestHandler'ın kaydedilip kaydedilmediğini kontrol et

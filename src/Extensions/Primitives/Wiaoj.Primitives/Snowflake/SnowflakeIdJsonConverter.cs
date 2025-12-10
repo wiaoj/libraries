@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Buffers.Text;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -30,12 +31,12 @@ public class SnowflakeIdJsonConverter : JsonConverter<SnowflakeId> {
 
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, SnowflakeId value, JsonSerializerOptions options) {
-        Span<byte> buffer = stackalloc byte[20]; 
-        if (value.TryFormat(buffer, out int written, default, CultureInfo.InvariantCulture)) {
+        Span<byte> buffer = stackalloc byte[20];
+   
+        if (Utf8Formatter.TryFormat(value.Value, buffer, out int written)) {  
             writer.WriteStringValue(buffer[..written]);
         }
-        else {
-            // Fallback (unlikely)
+        else {                                           
             writer.WriteStringValue(value.ToString());
         }
     }

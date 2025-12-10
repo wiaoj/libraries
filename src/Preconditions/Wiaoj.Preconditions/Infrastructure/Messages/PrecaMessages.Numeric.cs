@@ -63,5 +63,27 @@ internal static partial class PrecaMessages {
         public static string GetMinimumMessage<T>(T minimum) {
             return $"Value must be greater than or equal to {minimum}.";
         }
+
+        /// <summary>
+        /// Creates a dynamic strict upper bound validation message (Exclusive).
+        /// Used when value must be less than <paramref name="limit"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of the limit value.</typeparam>
+        /// <param name="limit">The exclusive upper bound limit.</param>
+        /// <returns>A formatted validation message.</returns>
+        public static string GetLessThanMessage<T>(T limit) {
+            return $"Value must be less than {limit}.";
+        }
+
+        /// <summary>
+        /// Creates a dynamic strict lower bound validation message (Exclusive).
+        /// Used when value must be greater than <paramref name="limit"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of the limit value.</typeparam>
+        /// <param name="limit">The exclusive lower bound limit.</param>
+        /// <returns>A formatted validation message.</returns>
+        public static string GetGreaterThanMessage<T>(T limit) {
+            return $"Value must be greater than {limit}.";
+        }
     }
 }

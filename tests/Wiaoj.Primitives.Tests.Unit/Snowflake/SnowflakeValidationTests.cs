@@ -6,13 +6,13 @@ public class SnowflakeValidationTests {
 
     [Fact]
     public void Parse_Should_Throw_On_Invalid_Format() {
-        Assert.Throws<FormatException>(() => SnowflakeId.Parse("invalid-text", null));
-        Assert.Throws<FormatException>(() => SnowflakeId.Parse("", null));
+        Assert.Throws<FormatException>(() => SnowflakeId.Parse("invalid-text"));
+        Assert.Throws<FormatException>(() => SnowflakeId.Parse(string.Empty));
     }
 
     [Fact]
     public void TryParse_Should_Return_False_On_Invalid_Format() {
-        bool result = SnowflakeId.TryParse("not-a-number", null, out var id);
+        bool result = SnowflakeId.TryParse("not-a-number", out var id);
         Assert.False(result);
         Assert.Equal(SnowflakeId.Empty, id);
     }

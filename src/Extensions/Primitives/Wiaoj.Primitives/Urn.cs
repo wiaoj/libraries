@@ -219,4 +219,13 @@ public class UrnJsonConverter : JsonConverter<Urn> {
     public override void Write(Utf8JsonWriter writer, Urn value, JsonSerializerOptions options) {
         writer.WriteStringValue(value.Value);
     }
+
+    public override Urn ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        string? s = reader.GetString();
+        return s is null ? Urn.Empty : Urn.Parse(s);
+    }
+
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, Urn value, JsonSerializerOptions options) {
+        writer.WritePropertyName(value.Value);
+    }
 }

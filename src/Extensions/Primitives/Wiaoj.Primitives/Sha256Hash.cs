@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Buffers;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;         
@@ -11,7 +12,7 @@ namespace Wiaoj.Primitives;
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
 public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
-    private const int HashSizeInBytes = 32;
+    internal const int HashSizeInBytes = 32;
     private fixed byte _bytes[HashSizeInBytes];
 
     internal Sha256Hash(ReadOnlySpan<byte> source) {
@@ -262,9 +263,19 @@ public static partial class Sha256HashExtensions {
         /// This method does not use the 'async' keyword directly to remain compatible with the 'unsafe' struct context.
         /// </summary>
         public static async ValueTask<Sha256Hash> ComputeAsync(Stream stream, CancellationToken cancellationToken = default) {
-            ValueTask<byte[]> hashBytesTask = SHA256.HashDataAsync(stream, cancellationToken);
-            byte[] hashBytes = await hashBytesTask;
-            return new Sha256Hash(hashBytes);
+            //ValueTask<byte[]> hashBytesTask = SHA256.HashDataAsync(stream, cancellationToken);
+            //byte[] hashBytes = await hashBytesTask;
+            //return new Sha256Hash(hashBytes);
+
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(Sha256Hash.HashSizeInBytes);
+            try {
+                int bytesWritten = await SHA256.HashDataAsync(stream, buffer.AsMemory(0, Sha256Hash.HashSizeInBytes), cancellationToken);
+
+                return new Sha256Hash(buffer.AsSpan(0, Sha256Hash.HashSizeInBytes));
+            }
+            finally {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
     }
 }

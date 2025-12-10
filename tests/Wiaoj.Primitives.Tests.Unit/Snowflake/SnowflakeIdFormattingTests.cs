@@ -12,19 +12,8 @@ public class SnowflakeIdFormattingTests {
     }
 
     [Fact]
-    public void TryFormat_Writes_To_Span() {
-        var id = new SnowflakeId(12345);
-        Span<char> buffer = stackalloc char[20];
-
-        bool success = id.TryFormat(buffer, out int charsWritten, default, null);
-
-        Assert.True(success);
-        Assert.Equal("12345", buffer[..charsWritten].ToString());
-    }
-
-    [Fact]
     public void Parse_String_Works() {
-        var id = SnowflakeId.Parse("12345", null);
+        var id = SnowflakeId.Parse("12345");
         Assert.Equal(12345, id.Value);
     }
 

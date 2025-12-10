@@ -211,17 +211,17 @@ public readonly struct SnowflakeId :
     }
 
     /// <inheritdoc/>
-    public string ToString(string? format, IFormatProvider? formatProvider) {
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
         return this._value.ToString(format, formatProvider);
     }
 
     /// <inheritdoc/>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         return this._value.TryFormat(destination, out charsWritten, format, provider);
     }
 
     /// <inheritdoc/>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         return this._value.TryFormat(utf8Destination, out bytesWritten, format, provider);
     }
 

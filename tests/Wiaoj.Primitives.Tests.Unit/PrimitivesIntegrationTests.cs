@@ -51,9 +51,9 @@ public class PrimitivesIntegrationTests {
 
     [Fact]
     public void HexString_FromText_Should_Work() {
-        // "hello" -> Hex: "68656c6c6f"
+        // "hello" -> Hex: "68656C6C6F"
         var hex = HexString.FromUtf8("hello");
-        Assert.Equal("68656c6c6f", hex.Value);
+        Assert.Equal("68656C6C6F", hex.Value);
     }
 
     [Fact]

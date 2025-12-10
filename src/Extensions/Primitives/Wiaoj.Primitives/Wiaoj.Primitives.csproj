@@ -52,14 +52,14 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />  
-	</ItemGroup>
-
-	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" Condition="Exists('..\README.md')" />
 		<None Include="CHANGELOG.md" Pack="true" PackagePath="\" Condition="Exists('CHANGELOG.md')" />
 		<None Include="icon.png" Pack="true" PackagePath="\" Condition="Exists('icon.png')" />
 		<None Include="..\..\LICENSE" Pack="true" PackagePath="\" Condition="Exists('..\..\LICENSE')" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
 	</ItemGroup>
 
 </Project>

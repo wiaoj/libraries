@@ -46,7 +46,7 @@ public class SemVerBenchmark {
     [Benchmark]
     public bool Wiaoj_SemVer_TryFormat() {
         // Zero Allocation Formatting
-        return _v1.TryFormat(_charBuffer, out _, "G", null);
+        return _v1.TryFormat(_charBuffer, out _, "G");
     }
 
     // --- COMPARISON ---

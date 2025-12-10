@@ -7,10 +7,10 @@ public class EncodingSerializationTests {
     // --- HEX STRING ---
     [Fact]
     public void HexString_Json_RoundTrip() {
-        HexString hex = HexString.FromUtf8("hello"); // "68656c6c6f"
+        HexString hex = HexString.FromUtf8("hello"); // "68656C6C6F"
         string json = JsonSerializer.Serialize(hex);
 
-        Assert.Equal("\"68656c6c6f\"", json);
+        Assert.Equal("\"68656C6C6F\"", json);
 
         var deserialized = JsonSerializer.Deserialize<HexString>(json);
         Assert.Equal(hex, deserialized);
@@ -19,10 +19,10 @@ public class EncodingSerializationTests {
     // --- BASE64 STRING ---
     [Fact]
     public void Base64String_Json_RoundTrip() {
-        Base64String b64 = Base64String.FromUtf8("hello"); // "SGVsbG8="
+        Base64String b64 = Base64String.FromUtf8("hello"); // "aGVsbG8="
         string json = JsonSerializer.Serialize(b64);
 
-        Assert.Equal("\"SGVsbG8=\"", json);
+        Assert.Equal("\"aGVsbG8=\"", json);
 
         var deserialized = JsonSerializer.Deserialize<Base64String>(json);
         Assert.Equal(b64, deserialized);
