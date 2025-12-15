@@ -1,6 +1,6 @@
 {
   "solution": {
-    "path": "Wiaoj.Libs.sln",
+    "path": "Wiaoj.Libs.slnx",
     "projects": [
       "src\\Extensions\\Abstractions\\Wiaoj.Abstractions\\Wiaoj.Abstractions.csproj",
       "src\\Extensions\\Ddd\\Wiaoj.Ddd\\Wiaoj.Ddd.csproj",
