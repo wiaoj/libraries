@@ -1,5 +1,4 @@
-﻿using Wiaoj.ObjectPool.Abstractions;
-using Wiaoj.ObjectPool.Internal;
+﻿using Wiaoj.ObjectPool.Internal;
 
 namespace Wiaoj.ObjectPool;
 /// <summary>

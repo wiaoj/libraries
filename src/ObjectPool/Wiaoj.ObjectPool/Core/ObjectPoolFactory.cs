@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.ObjectPool;
-using Wiaoj.ObjectPool.Abstractions;
 using Wiaoj.ObjectPool.Internal;
 using Wiaoj.ObjectPool.Internal.AsyncObjectPool;
 

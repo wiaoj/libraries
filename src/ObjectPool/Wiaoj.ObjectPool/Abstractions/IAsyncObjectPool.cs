@@ -36,5 +36,5 @@ public interface IAsyncObjectPool<T> where T : class {
 
 public readonly struct PoolStats(int free, int max) {
     public int Free { get; } = free;
-    public int MaxCapacity { get; } = max;.
+    public int MaxCapacity { get; } = max;
 }
