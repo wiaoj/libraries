@@ -8,10 +8,6 @@
 	  <VersionPrefix>0.0.0.1</VersionPrefix>
   </PropertyGroup>
 
-<PropertyGroup>
-  <IsPackable>false</IsPackable>
-</PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
     <ProjectReference Include="..\Abstractions\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
