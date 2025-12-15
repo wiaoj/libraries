@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.ObjectPool.Abstractions;
+﻿namespace Wiaoj.ObjectPool;
 
 /// <summary>
 /// Defines a contract for asynchronously creating and resetting objects within a pool.

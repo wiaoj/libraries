@@ -1,7 +1,4 @@
-﻿using Wiaoj.ObjectPool.Abstractions;
-using Wiaoj.ObjectPool.Core;
-
-namespace Wiaoj.ObjectPool.Testing;
+﻿namespace Wiaoj.ObjectPool.Testing;
 /// <summary>
 /// A "no-operation" implementation of ObjectPool for testing purposes.
 /// Its purpose is to satisfy the PooledObject constructor, which requires a non-null pool.

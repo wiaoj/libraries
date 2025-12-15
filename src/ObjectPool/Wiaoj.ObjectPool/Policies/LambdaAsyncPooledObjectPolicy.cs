@@ -1,7 +1,4 @@
-﻿using Wiaoj.ObjectPool.Abstractions;
-
-namespace Wiaoj.ObjectPool.Policies;
-
+﻿namespace Wiaoj.ObjectPool.Policies;
 internal sealed class LambdaAsyncPooledObjectPolicy<T>(
     Func<CancellationToken, ValueTask<T>> factory,
     Func<T, ValueTask<bool>> resetter) : IAsyncPoolPolicy<T> where T : notnull {

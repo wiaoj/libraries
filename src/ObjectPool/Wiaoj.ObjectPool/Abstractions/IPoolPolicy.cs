@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.ObjectPool.Abstractions;
+﻿namespace Wiaoj.ObjectPool;
 /// <summary>
 /// Defines a contract for creating and resetting objects within a pool.
 /// This is the core policy interface for the Wiaoj.ObjectPooling library.

@@ -1,7 +1,4 @@
-﻿using Wiaoj.ObjectPool.Core;
-
-namespace Wiaoj.ObjectPool.Abstractions;
-
+﻿namespace Wiaoj.ObjectPool;
 /// <summary>
 /// Defines a contract for an object pool that supports asynchronous leasing of objects.
 /// This is the preferred type to inject for services that require asynchronously created pooled objects.
@@ -39,6 +36,5 @@ public interface IAsyncObjectPool<T> where T : class {
 
 public readonly struct PoolStats(int free, int max) {
     public int Free { get; } = free;
-    public int MaxCapacity { get; } = max;
-    // Bounded modda 'Free' tam doğrudur, FIFO'da yaklaşık değerdir.
+    public int MaxCapacity { get; } = max;.
 }

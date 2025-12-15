@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.ObjectPool.Abstractions;
+﻿namespace Wiaoj.ObjectPool;
 /// <summary>
 /// Defines a contract for an object that requires asynchronous operations to reset its state.
 /// Essential for objects involving I/O during cleanup (e.g., DB connections, Sockets).

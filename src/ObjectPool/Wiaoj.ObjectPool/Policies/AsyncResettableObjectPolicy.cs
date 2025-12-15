@@ -1,8 +1,6 @@
 ﻿using Wiaoj.Abstractions;
-using Wiaoj.ObjectPool.Abstractions;
 
 namespace Wiaoj.ObjectPool.Policies;
-
 /// <summary>
 /// A policy that handles objects implementing IAsyncResettable.
 /// Can optionally use an IAsyncFactory for creation.

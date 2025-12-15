@@ -1,6 +1,4 @@
-﻿using Wiaoj.ObjectPool.Core;
-
-namespace Wiaoj.ObjectPool.Abstractions;
+﻿namespace Wiaoj.ObjectPool;
 /// <summary>
 /// Defines a contract for an object pool, abstracting the underlying implementation.
 /// This is the preferred type to inject into services for leasing pooled objects.

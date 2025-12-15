@@ -1,6 +1,4 @@
-﻿using Wiaoj.ObjectPool.Core;
-
-namespace Wiaoj.ObjectPool.Testing;
+﻿namespace Wiaoj.ObjectPool.Testing;
 /// <summary>
 /// Provides a factory method for creating valid <see cref="PooledObject{T}"/> instances for use in test environments.
 /// This is necessary to bypass the internal constructor of <see cref="PooledObject{T}"/>.

@@ -3,7 +3,7 @@ using Wiaoj.ObjectPool.Core;
 using Wiaoj.ObjectPool.Internal;
 using Wiaoj.Preconditions;
 
-namespace Wiaoj.ObjectPool.Extensions;
+namespace Wiaoj.ObjectPool;
 
 public static class MicrosoftObjectPoolExtensions {
     public static PooledObject<T> Lease<T>(this ObjectPool<T> pool) where T : class {

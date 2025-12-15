@@ -1,11 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using Wiaoj.Concurrency;
-using Wiaoj.ObjectPool.Abstractions;
-using Wiaoj.ObjectPool.Configuration;
-using Wiaoj.ObjectPool.Core;
 
 namespace Wiaoj.ObjectPool.Internal.AsyncObjectPool;
-
 internal sealed class FifoAsyncObjectPool<T> : IAsyncObjectPool<T>, IObjectPool<T> where T : class {
     private readonly ConcurrentQueue<T> _queue = new();
     private readonly IAsyncPoolPolicy<T> _policy;
@@ -29,36 +25,10 @@ internal sealed class FifoAsyncObjectPool<T> : IAsyncObjectPool<T>, IObjectPool<
         else {
             instance = await this._policy.CreateAsync(cancellationToken).ConfigureAwait(false);
         }
-
-#if DEBUG
-        if (this._options.LeakDetectionEnabled) {
-            LeakDetector.Track(instance);
-        }
-#endif
         return instance;
     }
 
     public void Return(T obj) {
-#if DEBUG
-        // 1. Leak Detection Kapatma
-        if (this._options.LeakDetectionEnabled) {
-            LeakDetector.Untrack(obj);
-        }
-
-        // 2. Validation Kontrolü
-        if (this._options.OnReturnValidation is not null) {
-            try { this._options.OnReturnValidation(obj); }
-            catch (Exception ex) {
-                // Validation patlarsa objeyi havuza alma, direkt at.
-                // Loglama yapılabilir.
-                DisposeItem(obj);
-                // Eğer sayacı artırdıysak (aşağıda) geri almamız gerekir ama şu an daha logic'e girmedik.
-                // Burada logic biraz karışık, en iyisi validation'ı logic öncesi yapmak.
-                throw new InvalidOperationException("Validation failed on return.", ex);
-            }
-        }
-#endif
-
         int currentCount = Atomic.Read(ref this._count);
         if (currentCount >= this._maxCapacity) {
             DisposeItem(obj);

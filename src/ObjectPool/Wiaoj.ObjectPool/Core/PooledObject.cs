@@ -1,8 +1,7 @@
 ﻿using Wiaoj.ObjectPool.Abstractions;
 using Wiaoj.ObjectPool.Internal;
 
-namespace Wiaoj.ObjectPool.Core;
-
+namespace Wiaoj.ObjectPool;
 /// <summary>
 /// A disposable struct that wraps a leased object from an <see cref="IObjectPool{T}"/>,
 /// ensuring it is returned to the pool when disposed. This type is safe to use in

@@ -1,10 +1,9 @@
 ﻿using Microsoft.Extensions.ObjectPool;
 using Wiaoj.ObjectPool.Abstractions;
-using Wiaoj.ObjectPool.Configuration;
 using Wiaoj.ObjectPool.Internal;
 using Wiaoj.ObjectPool.Internal.AsyncObjectPool;
 
-namespace Wiaoj.ObjectPool.Core;
+namespace Wiaoj.ObjectPool;
 /// <summary>
 /// Provides factory methods for creating <see cref="IObjectPool{T}"/> instances.
 /// </summary>
@@ -20,11 +19,14 @@ public static class ObjectPoolFactory {
     public static IObjectPool<T> Create<T>(IPoolPolicy<T> policy, ObjectPoolOptions? options = null) where T : class {
         options ??= new ObjectPoolOptions();
 
-        DefaultObjectPoolProvider provider = new();
+        DefaultObjectPoolProvider provider = new() {
+            MaximumRetained = options.MaximumRetained
+        };
+
         MicrosoftPooledObjectPolicyAdapter<T> microsoftPolicy = new(policy);
         ObjectPool<T> microsoftPool = provider.Create(microsoftPolicy);
 
-        return new DefaultObjectPoolAdapter<T>(microsoftPool, options);
+        return new DefaultObjectPoolAdapter<T>(microsoftPool);
     }
 
     /// <summary>

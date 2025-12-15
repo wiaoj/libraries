@@ -1,9 +1,6 @@
-﻿using Wiaoj.ObjectPool.Abstractions;
-using Wiaoj.ObjectPool.Core;
-using Wiaoj.Primitives;
+﻿using Wiaoj.Primitives;
 
 namespace Wiaoj.ObjectPool.Internal;
-
 /// <summary>
 /// A private, heap-allocated class that holds the state for a single leased object.
 /// This allows the <see cref="PooledObject{T}"/> struct to be safely copied across await boundaries

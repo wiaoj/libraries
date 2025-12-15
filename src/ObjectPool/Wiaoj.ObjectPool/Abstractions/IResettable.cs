@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.ObjectPool.Abstractions;
+﻿namespace Wiaoj.ObjectPool;
 /// <summary>
 /// Defines a contract for an object that can be reset to its initial state.
 /// This is essential for objects that are managed by an object pool.

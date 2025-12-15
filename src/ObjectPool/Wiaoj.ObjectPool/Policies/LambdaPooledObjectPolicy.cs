@@ -1,6 +1,4 @@
-﻿using Wiaoj.ObjectPool.Abstractions;
-
-namespace Wiaoj.ObjectPool.Policies;
+﻿namespace Wiaoj.ObjectPool.Policies;
 /// <summary>
 /// An internal implementation of <see cref="IPoolPolicy{T}"/> that uses
 /// delegates (lambdas) to create and reset objects.

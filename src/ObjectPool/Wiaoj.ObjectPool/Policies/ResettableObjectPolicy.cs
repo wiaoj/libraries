@@ -1,7 +1,4 @@
-﻿using Wiaoj.ObjectPool.Abstractions;
-
-namespace Wiaoj.ObjectPool.Policies;
-
+﻿namespace Wiaoj.ObjectPool.Policies;
 /// <summary>
 /// A unified policy for objects that implement the IResettable interface.
 /// supports both Synchronous and Asynchronous pooling scenarios.

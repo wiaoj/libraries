@@ -5,8 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+	<PropertyGroup>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
 
-  <ItemGroup>
+	<ItemGroup>
     <ProjectReference Include="..\..\Wiaoj.Extensions.DependencyInjection\Wiaoj.Extensions.DependencyInjection.csproj" />
     <ProjectReference Include="..\Wiaoj.Consensus.Raft.Persistence.Faster\Wiaoj.Consensus.Raft.Persistence.Faster.csproj" />
     <ProjectReference Include="..\Wiaoj.Consensus.Raft.Transport.Grpc\Wiaoj.Consensus.Raft.Transport.Grpc.csproj" />

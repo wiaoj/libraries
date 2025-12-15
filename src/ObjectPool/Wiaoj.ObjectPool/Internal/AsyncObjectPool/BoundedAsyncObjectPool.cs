@@ -1,10 +1,6 @@
 ﻿using System.Collections.Concurrent;
-using Wiaoj.ObjectPool.Abstractions;
-using Wiaoj.ObjectPool.Configuration;
-using Wiaoj.ObjectPool.Core;
 
 namespace Wiaoj.ObjectPool.Internal.AsyncObjectPool;
-
 internal sealed class BoundedAsyncObjectPool<T> : IAsyncObjectPool<T>, IObjectPool<T> where T : class {
     private readonly ConcurrentQueue<T> _queue = new();
     private readonly IAsyncPoolPolicy<T> _policy;
@@ -34,31 +30,10 @@ internal sealed class BoundedAsyncObjectPool<T> : IAsyncObjectPool<T>, IObjectPo
             this._semaphore.Release();
             throw;
         }
-
-#if DEBUG
-        if (this._options.LeakDetectionEnabled) {
-            LeakDetector.Track(instance);
-        }
-#endif
         return instance;
     }
 
     public void Return(T obj) {
-#if DEBUG
-        if (this._options.LeakDetectionEnabled) {
-            LeakDetector.Untrack(obj);
-        }
-
-        if (this._options.OnReturnValidation is not null) {
-            try { this._options.OnReturnValidation(obj); }
-            catch (Exception ex) {                                                    
-                DisposeItem(obj);
-                this._semaphore.Release();
-                throw new InvalidOperationException("Validation failed on return.", ex);
-            }
-        }
-#endif
-
         ValueTask<bool> resetTask = this._policy.TryResetAsync(obj);
         if (resetTask.IsCompletedSuccessfully) {
             if (resetTask.Result) {

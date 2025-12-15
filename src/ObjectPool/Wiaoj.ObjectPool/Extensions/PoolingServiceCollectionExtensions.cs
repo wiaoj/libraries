@@ -1,384 +1,233 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.ObjectPool;
+using System.Diagnostics.CodeAnalysis;
 using Wiaoj.Abstractions;
-using Wiaoj.ObjectPool.Abstractions;
-using Wiaoj.ObjectPool.Configuration;
-using Wiaoj.ObjectPool.Core;
 using Wiaoj.ObjectPool.Policies;
-using IResettable = Wiaoj.ObjectPool.Abstractions.IResettable;
 
 namespace Wiaoj.ObjectPool.Extensions;
 /// <summary>
-/// Provides extension methods for setting up object pooling in an <see cref="IServiceCollection"/>.
-/// Includes support for Synchronous, Asynchronous, and Factory-based creation patterns.
+/// Provides streamlined extension methods for registering Object Pools in DI.
 /// </summary>
 public static class PoolingServiceCollectionExtensions {
+
     /// <summary>
-    /// Registers the core object pool provider services. 
-    /// This is automatically called by other registration methods, but can be called manually if needed.
+    /// Ensures the core provider is registered.
     /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddObjectPoolProvider(this IServiceCollection services) {
         services.TryAddSingleton<ObjectPoolProvider, DefaultObjectPoolProvider>();
         return services;
     }
 
-    #region Standard (new T())
+    #region Synchronous Pools
 
     /// <summary>
-    /// Registers a synchronous <see cref="IObjectPool{T}"/> using the default parameterless constructor.
+    /// Registers a standard synchronous pool for type <typeparamref name="T"/>.
+    /// <typeparamref name="T"/> must have a parameterless constructor.
     /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must have a public parameterless constructor.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services)
+    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services, Action<ObjectPoolOptions>? configure = null)
         where T : class, new() {
-        return services.AddObjectPool<T>(_ => { });
+        return services.RegisterPool(new DefaultPoolPolicy<T>(), configure);
     }
 
     /// <summary>
-    /// Registers a synchronous <see cref="IObjectPool{T}"/> using the default parameterless constructor, with custom options.
+    /// Registers a pool for <see cref="IResettable"/> types. 
+    /// Reset logic is handled automatically by the object.
     /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must have a public parameterless constructor.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureOptions">An action to configure pool options (e.g., maximum retained capacity).</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services, Action<ObjectPoolOptions> configureOptions)
-        where T : class, new() {
-        return services.AddObjectPool(new DefaultPoolPolicy<T>(), configureOptions);
-    }
-
-    #endregion
-
-    #region IResettable (Self-Resetting)
-
-    /// <summary>
-    /// Registers a synchronous <see cref="IObjectPool{T}"/> for a type that implements <see cref="IResettable"/>.
-    /// The reset logic is automatically handled by the object itself.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must implement <see cref="IResettable"/> and have a parameterless constructor.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddResettableObjectPool<T>(this IServiceCollection services)
+    public static IServiceCollection AddResettablePool<T>(this IServiceCollection services, Action<ObjectPoolOptions>? configure = null)
         where T : class, IResettable, new() {
-        return services.AddResettableObjectPool<T>(_ => { });
+        return services.RegisterPool(new ResettableObjectPolicy<T>(), configure);
     }
 
     /// <summary>
-    /// Registers a synchronous <see cref="IObjectPool{T}"/> for a type that implements <see cref="IResettable"/>, with custom options.
-    /// The reset logic is automatically handled by the object itself.
+    /// Registers a pool with custom factory and reset delegates.
     /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must implement <see cref="IResettable"/> and have a parameterless constructor.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureOptions">An action to configure pool options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddResettableObjectPool<T>(this IServiceCollection services, Action<ObjectPoolOptions> configureOptions)
+    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services, Func<T> factory, Predicate<T> resetter, Action<ObjectPoolOptions>? configure = null)
+        where T : class {
+        return services.RegisterPool(new LambdaPooledObjectPolicy<T>(factory, resetter), configure);
+    }
+
+    /// <summary>
+    /// Registers a pool with a completely custom <see cref="IPoolPolicy{T}"/>.
+    /// </summary>
+    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services, IPoolPolicy<T> policy, Action<ObjectPoolOptions>? configure = null)
+        where T : class {
+        return services.RegisterPool(policy, configure);
+    }
+
+    #endregion
+
+    #region Asynchronous Pools
+
+    /// <summary>
+    /// Registers an async pool for <see cref="IResettable"/> types (Sync reset).
+    /// </summary>
+    public static IServiceCollection AddAsyncPool<T>(this IServiceCollection services, Action<ObjectPoolOptions>? configure = null)
         where T : class, IResettable, new() {
-        return services.AddObjectPool(new ResettableObjectPolicy<T>(), configureOptions);
+        return services.RegisterAsyncPool(new ResettableObjectPolicy<T>(), configure);
+    }
+
+    /// <summary>
+    /// Registers an async pool for <see cref="IAsyncResettable"/> types (True async reset).
+    /// </summary>
+    public static IServiceCollection AddAsyncResettablePool<T>(this IServiceCollection services, Action<ObjectPoolOptions>? configure = null)
+        where T : class, IAsyncResettable, new() {
+        // Factory null geçiliyor, policy içinde T new() ile oluşturulacak.
+        var policy = new AsyncResettableObjectPolicy<T>(factory: null);
+        return services.RegisterAsyncPool(policy, configure);
+    }
+
+    /// <summary>
+    /// Registers an async pool using custom async delegates.
+    /// </summary>
+    public static IServiceCollection AddAsyncPool<T>(this IServiceCollection services, Func<CancellationToken, ValueTask<T>> factory, Func<T, ValueTask<bool>> resetter, Action<ObjectPoolOptions>? configure = null)
+        where T : class {
+        return services.RegisterAsyncPool(new LambdaAsyncPooledObjectPolicy<T>(factory, resetter), configure);
+    }
+
+    /// <summary>
+    /// Registers an async pool with a custom <see cref="IAsyncPoolPolicy{T}"/>.
+    /// </summary>
+    public static IServiceCollection AddAsyncPool<T>(this IServiceCollection services, IAsyncPoolPolicy<T> policy, Action<ObjectPoolOptions>? configure = null)
+        where T : class {
+        return services.RegisterAsyncPool(policy, configure);
     }
 
     #endregion
 
-    #region Lambda (Custom Factory/Reset)
+    #region Factory Integration (IAsyncFactory)
 
     /// <summary>
-    /// Registers a synchronous <see cref="IObjectPool{T}"/> using custom delegates for creation and resetting.
+    /// Registers an async pool that resolves an <see cref="IAsyncFactory{T}"/> from DI.
+    /// Automatically handles reset if T implements <see cref="IResettable"/> or <see cref="IAsyncResettable"/>.
     /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="factory">A delegate to create a new instance of <typeparamref name="T"/>.</param>
-    /// <param name="resetter">A delegate to reset the object state. Returns <c>true</c> if successful.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services, Func<T> factory, Predicate<T> resetter)
+    public static IServiceCollection AddAsyncFactoryPool<T>(this IServiceCollection services, Action<ObjectPoolOptions>? configure = null)
         where T : class {
-        return services.AddObjectPool(factory, resetter, _ => { });
+
+        // Bu metod akıllı davranır: T'nin tipine göre reset mantığını seçer.
+        Func<T, ValueTask<bool>> resetLogic;
+
+        if(typeof(IAsyncResettable).IsAssignableFrom(typeof(T))) {
+            resetLogic = obj => ((IAsyncResettable)obj).TryResetAsync();
+        }
+        else if(typeof(IResettable).IsAssignableFrom(typeof(T))) {
+            resetLogic = obj => new ValueTask<bool>(((IResettable)obj).TryReset());
+        }
+        else {
+            throw new InvalidOperationException(
+                $"Type '{typeof(T).Name}' must implement IResettable or IAsyncResettable to use auto-factory pooling. " +
+                $"Otherwise, specify a reset delegate.");
+        }
+
+        return services.AddAsyncFactoryPoolInternal(resetLogic, configure);
     }
 
     /// <summary>
-    /// Registers a synchronous <see cref="IObjectPool{T}"/> using custom delegates for creation and resetting, with custom options.
+    /// Registers an async pool that resolves an <see cref="IAsyncFactory{T}"/> from DI, 
+    /// using a custom reset delegate.
     /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="factory">A delegate to create a new instance of <typeparamref name="T"/>.</param>
-    /// <param name="resetter">A delegate to reset the object state. Returns <c>true</c> if successful.</param>
-    /// <param name="configureOptions">An action to configure pool options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services, Func<T> factory, Predicate<T> resetter, Action<ObjectPoolOptions> configureOptions)
+    public static IServiceCollection AddAsyncFactoryPool<T>(this IServiceCollection services, Func<T, ValueTask<bool>> resetter, Action<ObjectPoolOptions>? configure = null)
         where T : class {
-        return services.AddObjectPool(new LambdaPooledObjectPolicy<T>(factory, resetter), configureOptions);
+        return services.AddAsyncFactoryPoolInternal(resetter, configure);
     }
 
     #endregion
 
-    #region Policy (IPoolPolicy)
+    #region Generic Policy Registration (DI Support)
 
     /// <summary>
-    /// Registers a synchronous <see cref="IObjectPool{T}"/> using a custom policy implementation.
+    /// Registers a synchronous object pool where the Policy type is also resolved via DI.
+    /// This allows injecting dependencies (like ILogger, IConfiguration) into your Policy constructor.
     /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="policy">The policy instance defining creation and reset logic.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services, IPoolPolicy<T> policy)
-        where T : class {
-        return services.AddObjectPool(policy, _ => { });
-    }
+    /// <typeparam name="TObject">The type of object to pool.</typeparam>
+    /// <typeparam name="TPolicy">The type of the policy, which must implement IPoolPolicy<TObject>.</typeparam>
+    public static IServiceCollection AddObjectPool<TObject, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TPolicy>(this IServiceCollection services, Action<ObjectPoolOptions>? configure = null)
+        where TObject : class
+        where TPolicy : class, IPoolPolicy<TObject> {
 
-    /// <summary>
-    /// Registers a synchronous <see cref="IObjectPool{T}"/> using a custom policy implementation, with custom options.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="policy">The policy instance defining creation and reset logic.</param>
-    /// <param name="configureOptions">An action to configure pool options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddObjectPool<T>(this IServiceCollection services, IPoolPolicy<T> policy, Action<ObjectPoolOptions> configureOptions)
-        where T : class {
         services.AddObjectPoolProvider();
 
+        services.TryAddSingleton<IObjectPool<TObject>>(sp => {
+            // ActivatorUtilities, TPolicy'yi oluştururken constructor'ındaki 
+            // parametreleri DI container'dan otomatik çeker.
+            var policy = ActivatorUtilities.CreateInstance<TPolicy>(sp);
+
+            var options = new ObjectPoolOptions();
+            configure?.Invoke(options);
+
+            return ObjectPoolFactory.Create(policy, options);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers an ASYNCHRONOUS object pool where the Async Policy type is resolved via DI.
+    /// This allows injecting dependencies into your Async Policy constructor.
+    /// </summary>
+    /// <typeparam name="TObject">The type of object to pool.</typeparam>
+    /// <typeparam name="TPolicy">The type of the policy, which must implement IAsyncPoolPolicy<TObject>.</typeparam>
+    public static IServiceCollection AddAsyncPool<TObject, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TPolicy>(this IServiceCollection services, Action<ObjectPoolOptions>? configure = null)
+        where TObject : class
+        where TPolicy : class, IAsyncPoolPolicy<TObject> {
+
+        services.AddObjectPoolProvider();
+
+        services.TryAddSingleton<IAsyncObjectPool<TObject>>(sp => {
+            // Policy oluşturulurken DI servisleri enjekte edilir.
+            var policy = ActivatorUtilities.CreateInstance<TPolicy>(sp);
+
+            var options = new ObjectPoolOptions();
+            configure?.Invoke(options);
+
+            return ObjectPoolFactory.CreateAsync(policy, options);
+        });
+
+        return services;
+    }
+
+    #endregion
+
+    #region Internal Helpers
+
+    private static IServiceCollection RegisterPool<T>(this IServiceCollection services, IPoolPolicy<T> policy, Action<ObjectPoolOptions>? configure)
+        where T : class {
+        services.AddObjectPoolProvider();
         services.TryAddSingleton<IObjectPool<T>>(sp => {
-            ObjectPoolOptions options = new();
-            configureOptions(options);
+            var options = new ObjectPoolOptions();
+            configure?.Invoke(options);
             return ObjectPoolFactory.Create(policy, options);
         });
         return services;
     }
 
-    #endregion
-    #region IResettable (Sync Reset in Async Pool)
-    /// <summary>
-    /// Registers an asynchronous <see cref="IAsyncObjectPool{T}"/> for a type that implements <see cref="IResettable"/> (Synchronous Reset).
-    /// Uses the object's synchronous reset logic wrapped in a ValueTask.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must implement <see cref="IResettable"/>.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncObjectPool<T>(this IServiceCollection services)
-        where T : class, IResettable, new() {
-        return services.AddAsyncObjectPool<T>(_ => { });
-    }
-
-    /// <summary>
-    /// Registers an asynchronous <see cref="IAsyncObjectPool{T}"/> for a type that implements <see cref="IResettable"/> (Synchronous Reset), with custom options.
-    /// Uses the object's synchronous reset logic wrapped in a ValueTask.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must implement <see cref="IResettable"/>.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureOptions">An action to configure pool options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncObjectPool<T>(this IServiceCollection services, Action<ObjectPoolOptions> configureOptions)
-        where T : class, IResettable, new() {
-        return services.AddAsyncObjectPool(new ResettableObjectPolicy<T>(), configureOptions);
-    }
-
-    #endregion
-
-    #region IAsyncResettable (True Async Reset)
-
-    /// <summary>
-    /// Registers an asynchronous <see cref="IAsyncObjectPool{T}"/> for a type that implements <see cref="IAsyncResettable"/>.
-    /// This allows for non-blocking cleanup (e.g., I/O) during object return.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must implement <see cref="IAsyncResettable"/>.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncResettableObjectPool<T>(this IServiceCollection services)
-        where T : class, IAsyncResettable, new() {
-        return services.AddAsyncResettableObjectPool<T>(_ => { });
-    }
-
-    /// <summary>
-    /// Registers an asynchronous <see cref="IAsyncObjectPool{T}"/> for a type that implements <see cref="IAsyncResettable"/>, with custom options.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must implement <see cref="IAsyncResettable"/>.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureOptions">An action to configure pool options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncResettableObjectPool<T>(this IServiceCollection services, Action<ObjectPoolOptions> configureOptions)
-        where T : class, IAsyncResettable, new() {
-        LambdaAsyncPooledObjectPolicy<T> policy = new(
-            factory: _ => new ValueTask<T>(new T()),
-            resetter: obj => obj.TryResetAsync()
-        );
-        return services.AddAsyncObjectPool(policy, configureOptions);
-    }
-
-    #endregion
-
-    #region Lambda (Async Factory/Reset)
-
-    /// <summary>
-    /// Registers an asynchronous <see cref="IAsyncObjectPool{T}"/> using custom async delegates.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="factory">An async delegate to create a new instance.</param>
-    /// <param name="resetter">An async delegate to reset the object state.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncObjectPool<T>(this IServiceCollection services, Func<CancellationToken, ValueTask<T>> factory, Func<T, ValueTask<bool>> resetter)
+    private static IServiceCollection RegisterAsyncPool<T>(this IServiceCollection services, IAsyncPoolPolicy<T> policy, Action<ObjectPoolOptions>? configure)
         where T : class {
-        return services.AddAsyncObjectPool(factory, resetter, _ => { });
-    }
-
-    /// <summary>
-    /// Registers an asynchronous <see cref="IAsyncObjectPool{T}"/> using custom async delegates, with custom options.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="factory">An async delegate to create a new instance.</param>
-    /// <param name="resetter">An async delegate to reset the object state.</param>
-    /// <param name="configureOptions">An action to configure pool options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncObjectPool<T>(this IServiceCollection services, Func<CancellationToken, ValueTask<T>> factory, Func<T, ValueTask<bool>> resetter, Action<ObjectPoolOptions> configureOptions)
-        where T : class {
-        return services.AddAsyncObjectPool(new LambdaAsyncPooledObjectPolicy<T>(factory, resetter), configureOptions);
-    }
-
-    #endregion
-
-    #region Policy (IAsyncPoolPolicy)
-
-    /// <summary>
-    /// Registers an asynchronous <see cref="IAsyncObjectPool{T}"/> using a custom async policy.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="policy">The async policy instance.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncObjectPool<T>(this IServiceCollection services, IAsyncPoolPolicy<T> policy)
-        where T : class {
-        return services.AddAsyncObjectPool(policy, _ => { });
-    }
-
-    /// <summary>
-    /// Registers an asynchronous <see cref="IAsyncObjectPool{T}"/> using a custom async policy, with custom options.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="policy">The async policy instance.</param>
-    /// <param name="configureOptions">An action to configure pool options.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncObjectPool<T>(this IServiceCollection services, IAsyncPoolPolicy<T> policy, Action<ObjectPoolOptions> configureOptions)
-        where T : class {
-
-        services.TryAddSingleton<IAsyncObjectPool<T>>(sp => {
-            ObjectPoolOptions options = new();
-            configureOptions(options);
-            return ObjectPoolFactory.CreateAsync(policy, options);
-        });
-        return services;
-    }
-
-    #endregion
-
-    #region Factory + Lambda Reset
-
-    /// <summary>
-    /// Registers an <see cref="IAsyncObjectPool{T}"/> that uses a registered <see cref="IAsyncFactory{T}"/> for creation
-    /// and a lambda for resetting.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="resetter">An async delegate to reset the object state.</param>
-    /// <returns>The service collection for chaining.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if no <see cref="IAsyncFactory{T}"/> is found in DI.</exception>
-    public static IServiceCollection AddAsyncObjectPoolFromFactory<T>(this IServiceCollection services, Func<T, ValueTask<bool>> resetter)
-        where T : class {
-        return services.AddAsyncObjectPoolFromFactory<T>(resetter, _ => { });
-    }
-
-    /// <summary>
-    /// Registers an <see cref="IAsyncObjectPool{T}"/> that uses a registered <see cref="IAsyncFactory{T}"/> for creation
-    /// and a lambda for resetting, with custom options.
-    /// </summary>
-    public static IServiceCollection AddAsyncObjectPoolFromFactory<T>(this IServiceCollection services, Func<T, ValueTask<bool>> resetter, Action<ObjectPoolOptions> configureOptions)
-        where T : class {
-        return services.AddAsyncObjectPoolFromFactoryInternal<T>((sp, obj) => resetter(obj), configureOptions);
-    }
-
-    #endregion
-
-    #region Factory + IResettable
-
-    /// <summary>
-    /// Registers an <see cref="IAsyncObjectPool{T}"/> that uses a registered <see cref="IAsyncFactory{T}"/> for creation
-    /// and relies on <see cref="IResettable"/> for cleanup.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must implement <see cref="IResettable"/>.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncObjectPoolFromFactory<T>(this IServiceCollection services)
-        where T : class, IResettable {
-        return services.AddAsyncObjectPoolFromFactory<T>(_ => { });
-    }
-
-    /// <summary>
-    /// Registers an <see cref="IAsyncObjectPool{T}"/> that uses a registered <see cref="IAsyncFactory{T}"/> for creation
-    /// and relies on <see cref="IResettable"/> for cleanup, with custom options.
-    /// </summary>
-    public static IServiceCollection AddAsyncObjectPoolFromFactory<T>(this IServiceCollection services, Action<ObjectPoolOptions> configureOptions)
-        where T : class, IResettable {
-        return services.AddAsyncObjectPoolFromFactoryInternal<T>((sp, obj) => new ValueTask<bool>(obj.TryReset()), configureOptions);
-    }
-
-    #endregion
-
-    #region Factory + IAsyncResettable
-
-    /// <summary>
-    /// Registers an <see cref="IAsyncObjectPool{T}"/> that uses a registered <see cref="IAsyncFactory{T}"/> for creation
-    /// and relies on <see cref="IAsyncResettable"/> for cleanup.
-    /// </summary>
-    /// <typeparam name="T">The type of object to pool. Must implement <see cref="IAsyncResettable"/>.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAsyncResettableObjectPoolFromFactory<T>(this IServiceCollection services)
-        where T : class, IAsyncResettable {
-        return services.AddAsyncResettableObjectPoolFromFactory<T>(_ => { });
-    }
-
-    /// <summary>
-    /// Registers an <see cref="IAsyncObjectPool{T}"/> that uses a registered <see cref="IAsyncFactory{T}"/> for creation
-    /// and relies on <see cref="IAsyncResettable"/> for cleanup, with custom options.
-    /// </summary>
-    public static IServiceCollection AddAsyncResettableObjectPoolFromFactory<T>(this IServiceCollection services, Action<ObjectPoolOptions> configureOptions)
-        where T : class, IAsyncResettable {
-        return services.AddAsyncObjectPoolFromFactoryInternal<T>((sp, obj) => obj.TryResetAsync(), configureOptions);
-    }
-
-    #endregion
-
-    private static IServiceCollection AddAsyncObjectPoolFromFactoryInternal<T>(
-        this IServiceCollection services,
-        Func<IServiceProvider, T, ValueTask<bool>> resetLogic,
-        Action<ObjectPoolOptions> configureOptions)
-        where T : class {
-
         services.AddObjectPoolProvider();
-
         services.TryAddSingleton<IAsyncObjectPool<T>>(sp => {
-            // 1. DI Container'dan IAsyncFactory<T>'yi bul
-            var factory = sp.GetService<IAsyncFactory<T>>();
-            if (factory is null) {
-                throw new InvalidOperationException(
-                    $"Cannot register AsyncObjectPool for '{typeof(T).Name}' because no 'IAsyncFactory<{typeof(T).Name}>' " +
-                    $"was found in the Dependency Injection container.");
-            }
-
-            // 2. Factory Policy oluştur
-            AsyncFactoryPooledObjectPolicy<T> policy = new(
-                factory,
-                obj => resetLogic(sp, obj)
-            );
-
-            // 3. Pool oluştur
-            ObjectPoolOptions options = new();
-            configureOptions(options);
+            var options = new ObjectPoolOptions();
+            configure?.Invoke(options);
             return ObjectPoolFactory.CreateAsync(policy, options);
         });
-
         return services;
     }
+
+    private static IServiceCollection AddAsyncFactoryPoolInternal<T>(this IServiceCollection services, Func<T, ValueTask<bool>> resetter, Action<ObjectPoolOptions>? configure)
+        where T : class {
+        services.AddObjectPoolProvider();
+        services.TryAddSingleton<IAsyncObjectPool<T>>(sp => {
+            var factory = sp.GetService<IAsyncFactory<T>>()
+                          ?? throw new InvalidOperationException($"No 'IAsyncFactory<{typeof(T).Name}>' found in DI.");
+
+            var policy = new AsyncFactoryPooledObjectPolicy<T>(factory, resetter);
+
+            var options = new ObjectPoolOptions();
+            configure?.Invoke(options);
+
+            return ObjectPoolFactory.CreateAsync(policy, options);
+        });
+        return services;
+    }
+
+    #endregion
 }

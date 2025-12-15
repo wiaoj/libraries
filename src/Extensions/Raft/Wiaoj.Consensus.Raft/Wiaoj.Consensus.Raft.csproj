@@ -10,7 +10,12 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0-rc.2.25502.107" />
   </ItemGroup>
 
-  <ItemGroup>
+	<PropertyGroup>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+
+	<ItemGroup>
     <ProjectReference Include="..\..\Wiaoj.Extensions\Wiaoj.Extensions.csproj" />
     <ProjectReference Include="..\Wiaoj.Consensus.Raft.Abstractions\Wiaoj.Consensus.Raft.Abstractions.csproj" />
   </ItemGroup>
