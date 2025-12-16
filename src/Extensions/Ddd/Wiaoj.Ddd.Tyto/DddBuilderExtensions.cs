@@ -1,9 +1,9 @@
 ﻿using System.Reflection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Wiaoj.Corvus.Abstractions;
+using Tyto;
 using Wiaoj.Ddd;
 using Wiaoj.Ddd.Abstractions;
-using Wiaoj.Ddd.Corvus;
+using Wiaoj.Ddd.Tyto;
 
 #pragma warning disable IDE0130
 namespace Microsoft.Extensions.DependencyInjection;

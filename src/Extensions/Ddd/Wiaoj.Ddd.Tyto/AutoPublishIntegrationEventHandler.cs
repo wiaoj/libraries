@@ -1,8 +1,8 @@
-﻿using Wiaoj.Corvus.Abstractions;
+﻿using Tyto;
 using Wiaoj.Ddd.Abstractions;
 using Wiaoj.Ddd.Abstractions.DomainEvents;
 
-namespace Wiaoj.Ddd.Corvus; 
+namespace Wiaoj.Ddd.Tyto; 
 internal sealed class AutoPublishIntegrationEventHandler<TDomainEvent, TIntegrationEvent>(
     IBus bus,
     IIntegrationEventMapper<TDomainEvent, TIntegrationEvent> mapper)

@@ -13,8 +13,8 @@
   <Folder Name="/src/Extensions/Ddd/">
     <File Path="src/Extensions/Ddd/README.md" />
     <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.Abstractions/Wiaoj.Ddd.Abstractions.csproj" />
-    <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.Corvus/Wiaoj.Ddd.Corvus.csproj" />
     <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.EntityFrameworkCore/Wiaoj.Ddd.EntityFrameworkCore.csproj" />
+    <Project Path="src/Extensions/Ddd/Wiaoj.Ddd.Tyto/Wiaoj.Ddd.Tyto.csproj" Id="a0b6d702-0d0d-4e46-b998-c0d59d6a6bd1" />
     <Project Path="src/Extensions/Ddd/Wiaoj.Ddd/Wiaoj.Ddd.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/DependencyInjection/">
