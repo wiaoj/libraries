@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Extensions;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Wiaoj.Extensions;
 
 public static partial class TimeSpanExtensions {
     extension(TimeSpan) {
@@ -8,9 +10,7 @@ public static partial class TimeSpanExtensions {
         /// <param name="first">The first TimeSpan to compare.</param>
         /// <param name="second">The second TimeSpan to compare.</param>
         /// <returns>The smaller of the two TimeSpan values.</returns>
-        public static TimeSpan Min(TimeSpan first, TimeSpan second) {
-            return first < second ? first : second;
-        }
+        public static TimeSpan Min(TimeSpan first, TimeSpan second) => first < second ? first : second;
 
         /// <summary>
         /// Returns the larger of two TimeSpan values.
@@ -18,9 +18,7 @@ public static partial class TimeSpanExtensions {
         /// <param name="first">The first TimeSpan to compare.</param>
         /// <param name="second">The second TimeSpan to compare.</param>
         /// <returns>The larger of the two TimeSpan values.</returns>
-        public static TimeSpan Max(TimeSpan first, TimeSpan second) {
-            return first > second ? first : second;
-        }
+        public static TimeSpan Max(TimeSpan first, TimeSpan second) => first > second ? first : second;
 
         /// <summary>
         /// Returns the smallest <see cref="TimeSpan"/> from a set of values.
@@ -32,8 +30,8 @@ public static partial class TimeSpanExtensions {
             Preca.ThrowIfEmpty(timeSpans, static () => new ArgumentException("At least one TimeSpan must be provided."));
 
             TimeSpan min = timeSpans[0];
-            foreach (TimeSpan ts in timeSpans) {
-                if (ts < min)
+            foreach(TimeSpan ts in timeSpans) {
+                if(ts < min)
                     min = ts;
             }
             return min;
@@ -49,11 +47,15 @@ public static partial class TimeSpanExtensions {
             Preca.ThrowIfEmpty(timeSpans, static () => new ArgumentException("At least one TimeSpan must be provided."));
 
             TimeSpan max = timeSpans[0];
-            foreach (TimeSpan ts in timeSpans) {
-                if (ts > max)
+            foreach(TimeSpan ts in timeSpans) {
+                if(ts > max)
                     max = ts;
             }
             return max;
         }
+    }
+
+    extension([NotNullWhen(false)] TimeSpan? timeSpan) {
+        public bool IsNullOrLessThanOrEqualToZero() => timeSpan is null || timeSpan.Value <= TimeSpan.Zero;
     }
 }
