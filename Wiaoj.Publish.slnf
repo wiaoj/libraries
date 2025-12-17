@@ -4,6 +4,7 @@
     "projects": [
       "src\\Extensions\\Abstractions\\Wiaoj.Abstractions\\Wiaoj.Abstractions.csproj",
       "src\\Extensions\\Ddd\\Wiaoj.Ddd\\Wiaoj.Ddd.csproj",
+      "src\\Extensions\\Ddd\\Wiaoj.Ddd.Tyto\\Wiaoj.Ddd.Tyto.csproj",
       "src\\Extensions\\Ddd\\Wiaoj.Ddd.Abstractions\\Wiaoj.Ddd.Abstractions.csproj",
       "src\\Extensions\\Ddd\\Wiaoj.Ddd.EntityFrameworkCore\\Wiaoj.Ddd.EntityFrameworkCore.csproj",
       "src\\Extensions\\DependencyInjection\\Wiaoj.Extensions.DependencyInjection\\Wiaoj.Extensions.DependencyInjection.csproj",
