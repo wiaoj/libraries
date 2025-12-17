@@ -12,9 +12,9 @@ namespace Microsoft.Extensions.DependencyInjection;
 public static class DddBuilderExtensions {
     /// <summary>
     /// Verilen assembly'leri tarar, IIntegrationEventMapper implementasyonlarını bulur
-    /// ve bunları Corvus üzerinden otomatik publish edecek şekilde ayarlar.
+    /// ve bunları Tyto üzerinden otomatik publish edecek şekilde ayarlar.
     /// </summary>
-    public static IDddBuilder AddCorvusIntegration(this IDddBuilder builder, params Assembly[] assemblies) {
+    public static IDddBuilder AddTytoIntegration(this IDddBuilder builder, params Assembly[] assemblies) {
 
         // 1. IIntegrationEventMapper<,> generic tip tanımını al
         Type openMapperType = typeof(IIntegrationEventMapper<,>);
