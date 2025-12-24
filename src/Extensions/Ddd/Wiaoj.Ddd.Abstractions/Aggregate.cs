@@ -2,7 +2,8 @@
 using Wiaoj.Ddd.Abstractions.Exceptions;
 using Wiaoj.Ddd.Abstractions.ValueObjects;
 
-namespace Wiaoj.Ddd.Abstractions;   
+namespace Wiaoj.Ddd.Abstractions;
+
 public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnull, IId {
     public DateTimeOffset CreatedAt { get; protected set; }
     public DateTimeOffset? UpdatedAt { get; protected set; }
@@ -37,13 +38,27 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnu
         this.UpdatedAt = updatedAt;
     }
 
+    [Obsolete("Removed latest versions")]
     public void RaiseDomainEvent(IDomainEvent @event) {
+        Preca.ThrowIfNull(@event);
+        this.domainEvents.Add(@event);
+    }
+
+    public void RaiseDomainEvent<TEvent>(TEvent @event) where TEvent : IDomainEvent {
         Preca.ThrowIfNull(@event);
         this.domainEvents.Add(@event);
     }
 
     public void ClearDomainEvents() {
         this.domainEvents.Clear();
+    }
+}
+
+public static class Ex {
+    extension<TAggregate>(TAggregate aggregate) where TAggregate : IHasDomainEvent {
+        public void RaiseDomainEvent<TDomainEvent>(Func<TAggregate, TDomainEvent> factory) where TDomainEvent : IDomainEvent {
+            aggregate.RaiseDomainEvent(factory(aggregate));
+        }
     }
 }
 
@@ -72,14 +87,14 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnu
 //}
 
 public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull {
-    public TId Id { get; protected set; } 
+    public TId Id { get; protected set; }
 
 #pragma warning disable CS8618
-    protected Entity() { } 
+    protected Entity() { }
 #pragma warning restore CS8618
 
-    protected Entity(TId id) {                                           
-        if (id.Equals(default(TId))) {
+    protected Entity(TId id) {
+        if(id.Equals(default(TId))) {
             throw new ArgumentException("Id cannot be default", nameof(id));
         }
 
@@ -87,15 +102,15 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull 
     }
 
     public bool Equals(Entity<TId>? other) {
-        if (other is null) {
+        if(other is null) {
             return false;
         }
 
-        if (ReferenceEquals(this, other)) {
+        if(ReferenceEquals(this, other)) {
             return true;
         }
 
-        if (GetType() != other.GetType()) {
+        if(GetType() != other.GetType()) {
             return false;
         }
 
@@ -111,11 +126,11 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull 
     }
 
     public static bool operator ==(Entity<TId>? left, Entity<TId>? right) {
-        if (left is null && right is null) {
+        if(left is null && right is null) {
             return true;
         }
 
-        if (left is null || right is null) {
+        if(left is null || right is null) {
             return false;
         }
 

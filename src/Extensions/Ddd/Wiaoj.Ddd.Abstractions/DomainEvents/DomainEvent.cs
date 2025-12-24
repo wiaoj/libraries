@@ -83,7 +83,7 @@ public interface IDomainEvent {
 }
 public interface IHasDomainEvent {
     IReadOnlyList<IDomainEvent> DomainEvents { get; }
-    void RaiseDomainEvent(IDomainEvent @event);
+    void RaiseDomainEvent<TEvent>(TEvent @event) where TEvent: IDomainEvent;
     void ClearDomainEvents();
 }
 
