@@ -9,6 +9,7 @@ public abstract class EfcoreRepository<TContext, TAggregate, TId>(TContext conte
     where TAggregate : class, IAggregate
     where TId : notnull {
     public DbSet<TAggregate> DbSet => context.Set<TAggregate>();
+    public TContext Context => context;
 
     public Task AddAsync(TAggregate aggregate, CancellationToken cancellationToken = default) {
         return this.DbSet.AddAsync(aggregate, cancellationToken).AsTask();
