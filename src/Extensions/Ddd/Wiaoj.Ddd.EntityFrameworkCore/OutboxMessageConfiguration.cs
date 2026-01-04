@@ -21,6 +21,6 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
 
         // 2. Partitioning kullanılıyorsa: PartitionKey + ProcessedAt
         builder.HasIndex(x => new { x.PartitionKey, x.ProcessedAt })
-               .HasFilter("\"ProcessedAt\" IS NULL"); 
+               .HasFilter("\"ProcessedAt\" IS NULL");
     }
-}                                         
+}
