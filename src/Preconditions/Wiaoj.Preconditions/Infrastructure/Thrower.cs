@@ -94,6 +94,15 @@ internal static class Thrower {
         throw new PrecaArgumentValueException(paramName, message);
     }
 
+    [DoesNotReturn]
+    [StackTraceHidden]
+    internal static void ThrowPrecaInvalidTypeException<TExpected>(object? argument, string? paramName) {
+        string expectedTypeName = typeof(TExpected).Name;
+        string actualTypeName = argument?.GetType().Name ?? "null";
+
+        throw new PrecaInvalidTypeException(paramName, expectedTypeName, actualTypeName);
+    }
+
     /// <summary>
     /// Creates and throws an exception of the specified type using the parameterless constructor.
     /// </summary>
