@@ -408,10 +408,22 @@ public readonly unsafe struct Secret<T> :
         return "[SECRET]";
     }
 
+    /// <summary>
+    /// Determines whether two specified instances of <see cref="Secret{T}"/> are equal.
+    /// </summary>
+    /// <param name="left">The first secret to compare.</param>
+    /// <param name="right">The second secret to compare.</param>
+    /// <returns><see langword="true"/> if the value of <paramref name="left"/> is the same as the value of <paramref name="right"/>; otherwise, <see langword="false"/>.</returns>
     public static bool operator ==(Secret<T> left, Secret<T> right) {
         return left.Equals(right);
     }
 
+    /// <summary>
+    /// Determines whether two specified instances of <see cref="Secret{T}"/> are not equal.
+    /// </summary>
+    /// <param name="left">The first secret to compare.</param>
+    /// <param name="right">The second secret to compare.</param>
+    /// <returns><see langword="true"/> if the value of <paramref name="left"/> is different from the value of <paramref name="right"/>; otherwise, <see langword="false"/>.</returns>
     public static bool operator !=(Secret<T> left, Secret<T> right) {
         return !left.Equals(right);
     }

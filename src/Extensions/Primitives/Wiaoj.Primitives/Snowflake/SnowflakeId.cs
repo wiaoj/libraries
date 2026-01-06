@@ -366,7 +366,7 @@ public readonly struct SnowflakeId :
 
     #endregion
 
-    #region Integration (Hex, Base64, Base32, Urn)
+    #region Integration (Hex, Base64, Base32, Base62, Urn)
 
     /// <summary>
     /// Converts the SnowflakeId to a type-safe HexString.
@@ -384,6 +384,14 @@ public readonly struct SnowflakeId :
         Span<byte> buffer = stackalloc byte[8];
         BinaryPrimitives.WriteInt64BigEndian(buffer, this._value);
         return Base64String.FromBytes(buffer);
+    }
+
+    /// <summary>
+    /// Converts the SnowflakeId to a type-safe Base62String.
+    /// This is ideal for URL shortening (e.g., "3k7Za").
+    /// </summary>
+    public Base62String ToBase62String() {
+        return Base62String.FromInt64(this._value);
     }
 
     /// <summary>
