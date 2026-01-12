@@ -9,7 +9,7 @@ namespace Wiaoj.Primitives;
 /// Unlike LifecycleManager, this is optimized specifically for the binary state (Active vs Disposed)
 /// required by low-level primitives like Secret<T>.
 /// </summary>
-public sealed class DisposeState {
+internal sealed class DisposeState {
     private const byte StateActive = 0;
     private const byte StateDisposing = 1;
     private const byte StateDisposed = 2;

@@ -22,15 +22,11 @@ public static class TaskTimeoutExtensions {
         }
 
         using CancellationTokenSource cts = timeout.CreateCancellationTokenSource();
-        Task timeoutTask = Task.Delay(System.Threading.Timeout.InfiniteTimeSpan, cts.Token);
-
-        Task completedTask = await Task.WhenAny(task, timeoutTask);
-
-        if (completedTask == task) {
-            cts.Cancel(); // Diğer task'in gereksiz yere beklemesini önle.
-            await task;   // Orijinal task'ten gelebilecek exception'ı yaymak için.
+        try {
+            await task.WaitAsync(cts.Token).ConfigureAwait(false);
         }
-        else {
+        catch(OperationCanceledException) when(cts.Token.IsCancellationRequested) {
+            // Token timeout yüzünden iptal olduysa TimeoutException fırlat
             throw new TimeoutException("The operation has timed out.");
         }
     }
@@ -39,8 +35,7 @@ public static class TaskTimeoutExtensions {
     /// Applies a timeout policy to a generic task. If the task does not complete within the timeout,
     /// a <see cref="TimeoutException"/> is thrown.
     /// </summary>
-    public static async Task<TResult> WithTimeout<TResult>(this Task<TResult> task, OperationTimeout timeout) {
-        // Yukarıdaki metodun aynısı, sadece dönüş tipi farklı.
+    public static async Task<TResult> WithTimeout<TResult>(this Task<TResult> task, OperationTimeout timeout) { 
         if (timeout == OperationTimeout.Cancelled) throw new TaskCanceledException();
         if (timeout == OperationTimeout.None) {
             if (task.IsCompleted) return await task;
@@ -48,15 +43,10 @@ public static class TaskTimeoutExtensions {
         }
 
         using CancellationTokenSource cts = timeout.CreateCancellationTokenSource();
-        Task timeoutTask = Task.Delay(System.Threading.Timeout.InfiniteTimeSpan, cts.Token);
-
-        Task completedTask = await Task.WhenAny(task, timeoutTask);
-
-        if (completedTask == task) {
-            cts.Cancel();
-            return await task;
+        try {
+           return await task.WaitAsync(cts.Token).ConfigureAwait(false);
         }
-        else {
+        catch(OperationCanceledException) when(cts.Token.IsCancellationRequested) { 
             throw new TimeoutException("The operation has timed out.");
         }
     }
@@ -67,7 +57,6 @@ public static class TaskTimeoutExtensions {
     /// Applies a timeout policy to a ValueTask.
     /// </summary>
     public static async ValueTask WithTimeout(this ValueTask task, OperationTimeout timeout) {
-        // ValueTask senkron olarak tamamlanmış olabilir, bu en verimli durumdur.
         if (task.IsCompletedSuccessfully) {
             await task; // Olası senkron exception'ları yakalamak için.
             return;
@@ -83,7 +72,7 @@ public static class TaskTimeoutExtensions {
     /// </summary>
     public static async ValueTask<TResult> WithTimeout<TResult>(this ValueTask<TResult> task, OperationTimeout timeout) {
         if (task.IsCompletedSuccessfully) {
-            return await task;
+            return task.Result;
         }
 
         return await task.AsTask().WithTimeout(timeout);

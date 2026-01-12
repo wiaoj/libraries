@@ -5,7 +5,7 @@ using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Order;
 using IdGen;
 using Wiaoj.Primitives.Snowflake;
-using Snowflake.Core; // YENİ EKLENDİ
+using Snowflake.Core;
 
 namespace Wiaoj.Benchmarks.Primitives;
 

@@ -19,7 +19,8 @@ public readonly record struct OperationTimeout {
     #endregion
 
     private readonly TimeSpan _delay;
-    private readonly CancellationToken _token;
+    public readonly CancellationToken Token { get; }
+     
 
     // Private constructor to enforce creation via factory methods.
     private OperationTimeout(TimeSpan delay, CancellationToken token) {
@@ -28,7 +29,7 @@ public readonly record struct OperationTimeout {
             () => new ArgumentOutOfRangeException(nameof(delay), "OperationTimeout delay must be infinite (-1ms) or non-negative."));
 
         this._delay = delay;
-        this._token = token;
+        this.Token = token;
     }
 
     #region Factory Methods
@@ -62,20 +63,56 @@ public readonly record struct OperationTimeout {
     /// <summary>
     /// Gets a value indicating whether an external CancellationToken is linked to this timeout.
     /// </summary>
-    public bool IsCancellable => this._token.CanBeCanceled;
+    public bool IsCancellable => this.Token.CanBeCanceled;
 
     /// <summary>
     /// Gets a value indicating whether this timeout represents an infinite wait (no delay and no cancellable token).
     /// </summary>
     public bool IsInfinite =>
-        this._delay == System.Threading.Timeout.InfiniteTimeSpan && !this._token.CanBeCanceled;
+        this._delay == System.Threading.Timeout.InfiniteTimeSpan && !this.Token.CanBeCanceled;
 
     /// <summary>
     /// Gets a value indicating whether this timeout is pre-cancelled (either the token is already 
     /// cancelled or the delay is zero, representing an immediate check).
     /// </summary>
     public bool IsAlreadyCancelled =>
-        this._token.IsCancellationRequested || (this._delay == TimeSpan.Zero && this._token.CanBeCanceled);
+        this.Token.IsCancellationRequested || (this._delay == TimeSpan.Zero && this.Token.CanBeCanceled);
+
+    #region Implicit Operators
+
+    /// <summary>
+    /// Defines an implicit conversion from a <see cref="TimeSpan"/> to an <see cref="OperationTimeout"/>.
+    /// </summary>
+    /// <param name="delay">The time duration to wait before the operation times out.</param>
+    /// <remarks>
+    /// This allows passing a <see cref="TimeSpan"/> directly into any method that expects an <see cref="OperationTimeout"/>.
+    /// <example>
+    /// <code>
+    /// await repository.GetAsync(id, TimeSpan.FromSeconds(5));
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public static implicit operator OperationTimeout(TimeSpan delay) {
+        return From(delay);
+    }
+
+    /// <summary>
+    /// Defines an implicit conversion from a <see cref="CancellationToken"/> to an <see cref="OperationTimeout"/>.
+    /// </summary>
+    /// <param name="token">The cancellation token to observe.</param>
+    /// <remarks>
+    /// This allows passing a <see cref="CancellationToken"/> directly into any method that expects an <see cref="OperationTimeout"/>, 
+    /// treating it as an infinite timeout that only responds to the provided token.
+    /// <example>
+    /// <code>
+    /// await repository.GetAsync(id, HttpContext.RequestAborted);
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public static implicit operator OperationTimeout(CancellationToken token) {
+        return From(token);
+    }
+    #endregion
 
     /// <summary>
     /// Creates and returns a new <see cref="CancellationTokenSource"/> that represents the combined timeout logic.
@@ -88,24 +125,24 @@ public readonly record struct OperationTimeout {
     /// <returns>A new, disposable <see cref="CancellationTokenSource"/>.</returns>
     public CancellationTokenSource CreateCancellationTokenSource() {
         bool hasDelay = this._delay != System.Threading.Timeout.InfiniteTimeSpan;
-        bool hasToken = this._token.CanBeCanceled;
+        bool hasToken = this.Token.CanBeCanceled;
 
         // Case 1: No timeout, no cancellation token. Nothing can cancel this.
-        if (!hasDelay && !hasToken) {
+        if(!hasDelay && !hasToken) {
             return new CancellationTokenSource(); // Returns a CTS that will never be cancelled.
         }
 
         // Case 2: Only a token is provided. Link to it.
-        if (!hasDelay && hasToken) {
-            return CancellationTokenSource.CreateLinkedTokenSource(this._token);
+        if(!hasDelay && hasToken) {
+            return CancellationTokenSource.CreateLinkedTokenSource(this.Token);
         }
 
         // Case 3: Only a delay is provided.
         CancellationTokenSource cts = new(this._delay);
 
         // Case 4: Both delay and token are provided. Link them.
-        if (hasToken) {
-            return CancellationTokenSource.CreateLinkedTokenSource(cts.Token, this._token);
+        if(hasToken) {
+            return CancellationTokenSource.CreateLinkedTokenSource(cts.Token, this.Token);
         }
 
         // Return the delay-only CTS from Case 3.
@@ -122,19 +159,48 @@ public readonly record struct OperationTimeout {
         cts.Token.ThrowIfCancellationRequested();
     }
 
+    /// <summary>
+    /// Executes an operation by wrapping the active cancellation signal into a new <see cref="OperationTimeout"/> instance.
+    /// </summary>
+    /// <param name="action">The operation to execute, receiving a <see cref="OperationTimeout"/> that encapsulates the current running state.</param>
+    /// <returns>A <see cref="Task"/> representing the operation.</returns>
+    /// <remarks>
+    /// This "recursive" flow allows passing the timeout logic down to deeper layers of the architecture (e.g., Services to Repositories) 
+    /// while maintaining a consistent API surface. The injected <see cref="OperationTimeout"/> will have an infinite delay 
+    /// but will be bound to the parent's cancellation signal.
+    /// </remarks>
+    public async Task ExecuteAsync(Func<OperationTimeout, Task> action) {
+        // 1. Sayacı başlat (Fırın yandı)
+        using CancellationTokenSource cts = CreateCancellationTokenSource();
+
+        try {
+            // 2. KRİTİK HAMLE:
+            // Çalışan token'dan yeni bir OperationTimeout paketi oluşturuyoruz.
+            // Bu paketin içinde "Süre: Infinite" ve "Token: cts.Token" var.
+            var runningTimeout = OperationTimeout.From(cts.Token);
+
+            // 3. Kullanıcıya (Action'a) orijinal 'timeout'u değil, 
+            // bu yeni 'runningTimeout'u veriyoruz.
+            await action(runningTimeout).ConfigureAwait(false);
+        }
+        catch(OperationCanceledException) {
+            throw;
+        }
+    }
+
     /// <inheritdoc/>
     public override string ToString() {
         bool hasDelay = this._delay != System.Threading.Timeout.InfiniteTimeSpan;
-        bool hasToken = this._token.CanBeCanceled;
-        if (!hasDelay && !hasToken) {
+        bool hasToken = this.Token.CanBeCanceled;
+        if(!hasDelay && !hasToken) {
             return "Infinite";
         }
 
-        if (hasDelay && !hasToken) {
+        if(hasDelay && !hasToken) {
             return $"{this._delay.TotalMilliseconds}ms";
         }
 
-        if (!hasDelay && hasToken) {
+        if(!hasDelay && hasToken) {
             return "Cancellable Token";
         }
 
