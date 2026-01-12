@@ -31,6 +31,16 @@ public static class Atomic {
         Volatile.Write(ref location, value);
     }
 
+    /// <inheritdoc cref="Volatile.Read(ref readonly byte)"/>
+    public static int Read(ref readonly byte location) {
+        return Volatile.Read(in location);
+    }
+
+    /// <inheritdoc cref="Volatile.Write(ref byte, byte)"/>
+    public static void Write(ref byte location, byte value) {
+        Volatile.Write(ref location, value);
+    }
+
     /// <inheritdoc cref="Volatile.Read(ref readonly int)"/>
     public static int Read(ref readonly int location) {
         return Volatile.Read(in location);
@@ -101,6 +111,12 @@ public static class Atomic {
     [return: NotNullIfNotNull(nameof(location))]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static unsafe bool CompareExchange<T>(ref T? location, T? value, T? comparand) where T : class {
+        return Interlocked.CompareExchange(ref location, value, comparand) == comparand;
+    }
+
+    [return: NotNullIfNotNull(nameof(location))]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe bool CompareExchange(ref byte location, byte value, byte comparand) {
         return Interlocked.CompareExchange(ref location, value, comparand) == comparand;
     }
 

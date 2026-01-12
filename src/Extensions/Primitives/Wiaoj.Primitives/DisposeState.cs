@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Text;
+﻿using System.Runtime.CompilerServices;
+using Wiaoj.Concurrency;
 
 namespace Wiaoj.Primitives;
 /// <summary>
@@ -16,7 +14,7 @@ public sealed class DisposeState {
 
     private byte _state;
 
-    public bool IsDisposed => Volatile.Read(ref _state) == StateDisposed;
+    public bool IsDisposed => Atomic.Read(ref this._state) == StateDisposed;
 
     /// <summary>
     /// Attempts to transition from Active to Disposing.
@@ -24,7 +22,7 @@ public sealed class DisposeState {
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryBeginDispose() {
-        return Interlocked.CompareExchange(ref _state, StateDisposing, StateActive) == StateActive;
+        return Atomic.CompareExchange(ref this._state, StateDisposing, StateActive);
     }
 
     /// <summary>
@@ -32,15 +30,15 @@ public sealed class DisposeState {
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDisposed() {
-        Volatile.Write(ref _state, StateDisposed);
+        Atomic.Write(ref this._state, StateDisposed);
     }
 
     /// <summary>
     /// Throws ObjectDisposedException if the object is disposing or disposed.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public  void ThrowIfDisposingOrDisposed(string objectName) {
-        if (Volatile.Read(in _state) != StateActive) {
+    public void ThrowIfDisposingOrDisposed(string objectName) {
+        if(Atomic.Read(in this._state) != StateActive) {
             throw new ObjectDisposedException(objectName);
         }
     }
