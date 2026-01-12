@@ -7,7 +7,7 @@ namespace Wiaoj.Results;
 /// <summary>
 /// Provides extension methods for handling asynchronous operations with <see cref="Result{TValue}"/>.
 /// </summary>
-public static class ResultsExtensions {
+public static partial class ResultsExtensions {
 
     // CancellationToken desteği için Task'ı beklemeden önce kontrol yapmak için (Opsiyonel: Ancak ThenAsync'in temel rolü bu değil)
     // Bu metodun temel rolü Func'ı çağırmak olduğu için, genellikle token'ı Func'a aktarmak en iyisidir.

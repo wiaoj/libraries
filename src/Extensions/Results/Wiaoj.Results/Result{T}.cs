@@ -1,14 +1,13 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
-namespace Wiaoj.Results;
-
+namespace Wiaoj.Results; 
 /// <summary>
 /// Represents the result of an operation: either a successful value (<typeparamref name="TValue"/>) or a list of errors.
 /// This struct is the core primitive for Railway Oriented Programming.
 /// </summary>
 /// <typeparam name="TValue">The type of the underlying value.</typeparam>
-public readonly record struct Result<TValue> : IDisposable {
+public readonly record struct Result<TValue> : IResult, IDisposable {
     private readonly TValue? _value;
     private readonly List<Error>? _errors;
 
@@ -133,9 +132,9 @@ public readonly record struct Result<TValue> : IDisposable {
     /// </summary>
     public Result<TNextValue> Then<TNextValue>(Func<TValue, Result<TNextValue>> next) {
         if (this.IsError) {
-            return this._errors!; // Hataları taşı
+            return this._errors;
         }
-        return next(this._value!);
+        return next(this._value);
     }
 
     /// <summary>
@@ -144,9 +143,9 @@ public readonly record struct Result<TValue> : IDisposable {
     /// </summary>
     public Result<TNew> Map<TNew>(Func<TValue, TNew> mapper) {
         if (this.IsError) {
-            return this._errors!;
+            return this._errors;
         }
-        return mapper(this._value!);
+        return mapper(this._value);
     }
 
     /// <summary>
@@ -154,7 +153,7 @@ public readonly record struct Result<TValue> : IDisposable {
     /// </summary>
     public Result<TValue> Do(Action<TValue> action) {
         if (this.IsSuccess) {
-            action(this._value!);
+            action(this._value);
         }
         return this;
     }
@@ -178,7 +177,7 @@ public readonly record struct Result<TValue> : IDisposable {
             return this;
         }
 
-        if (!predicate(this._value!)) {
+        if (!predicate(this._value)) {
             return error;
         }
 
@@ -192,7 +191,7 @@ public readonly record struct Result<TValue> : IDisposable {
         if (this.IsSuccess) {
             return this;
         }
-        return recover(this._errors!);
+        return recover(this._errors);
     }
 
     /// <summary>
@@ -211,7 +210,7 @@ public readonly record struct Result<TValue> : IDisposable {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Result<TValue> IfFailure(Action<IReadOnlyList<Error>> action) {
         if (this.IsError) {
-            action(this._errors!);
+            action(this._errors);
         }
         return this;
     }
