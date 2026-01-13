@@ -5,7 +5,6 @@ using System.Security.Cryptography;
 using System.Text;         
 
 namespace Wiaoj.Primitives;
-
 /// <summary>
 /// Represents a 32-byte SHA256 hash. This struct guarantees the correct size
 /// and provides high-performance, allocation-free operations for computing and comparing hashes.

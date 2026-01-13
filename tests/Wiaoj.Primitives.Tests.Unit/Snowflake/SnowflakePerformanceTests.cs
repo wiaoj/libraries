@@ -29,7 +29,7 @@ public class SnowflakePerformanceTests {
     [InlineData("single", 1, 10_000, 2_000_000, 0, 5_000_000)]
     [InlineData("multi", 0, 10_000, 0, 2_000_000, 4_000_000)]
     [InlineData("single", 7, 50_000, 3_000_000, 0, 8_000_000)]
-    [InlineData("multi", 15, 100_000, 0, 3_000_000, 10_000_000)]
+    [InlineData("multi", 15, 100_000, 0, 3_000_000, 5_000_000)]
     public void Measure_Throughput(
         string mode,
         ushort nodeId,

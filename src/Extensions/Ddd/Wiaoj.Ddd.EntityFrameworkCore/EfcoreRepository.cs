@@ -1,9 +1,8 @@
-﻿using System.Linq.Expressions;
-using Microsoft.EntityFrameworkCore;
-using Wiaoj.Ddd.Abstractions;
+﻿using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
-namespace Wiaoj.Ddd.EntityFrameworkCore; 
-public interface IEfcoreRepository: IRepositoryMarker;
+namespace Wiaoj.Ddd.EntityFrameworkCore;
+public interface IEfcoreRepository : IRepositoryMarker;
 public abstract class EfcoreRepository<TContext, TAggregate, TId>(TContext context) : IEfcoreRepository, IRepository<TAggregate, TId>
     where TContext : DbContext
     where TAggregate : class, IAggregate

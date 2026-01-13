@@ -6,6 +6,8 @@
 		<Nullable>enable</Nullable>
 
 		<PackageId>Wiaoj.Ddd.EntityFrameworkCore</PackageId>
+		<RootNamespace>Wiaoj.Ddd.EntityFrameworkCore</RootNamespace>
+		<AssemblyName>Wiaoj.Ddd.EntityFrameworkCore</AssemblyName>
 		<Version>0.0.1-alpha.1</Version>
 		<Authors>wiaoj</Authors>
 		<Title>Wiaoj DDD Entity Framework Core</Title>
@@ -19,9 +21,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>

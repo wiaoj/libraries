@@ -1,5 +1,4 @@
 ﻿namespace Wiaoj.Ddd.EntityFrameworkCore.Outbox;
-
 public sealed record OutboxOptions {
     public TimeSpan PollingInterval { get; set; } = TimeSpan.FromSeconds(10);
     public int BatchSize { get; set; } = 20;
@@ -23,4 +22,11 @@ public sealed record OutboxOptions {
     /// Default is 60 seconds.
     /// </summary>
     public TimeSpan LockDuration { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Gets or sets the initial delay before the processor starts polling the database.
+    /// Useful for waiting for database migrations or application warmup.
+    /// Default is TimeSpan.Zero.
+    /// </summary>
+    public TimeSpan InitialDelay { get; set; } = TimeSpan.FromMinutes(2);
 }

@@ -3,16 +3,17 @@
 [![NuGet](https://img.shields.io/nuget/v/Wiaoj.Abstractions.svg)](https://www.nuget.org/packages/Wiaoj.Abstractions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Wiaoj.Abstractions** provides a set of essential, generic interfaces and extension methods to standardize common architectural patterns in .NET applications.
+**Wiaoj.Abstractions** is a comprehensive library providing essential, generic interfaces and extension methods to standardize common architectural patterns in .NET applications.
 
-It focuses on type safety and clarity, solving common ambiguities found in standard .NET interfaces (such as the confusion between Deep vs. Shallow cloning).
+It eliminates ambiguity in standard .NET interfaces (like `ICloneable`), provides robust contracts for Object Construction (Builders/Factories), and simplifies State Transfer between objects.
 
-## 🚀 Features
+## 🚀 Key Features
 
-*   **Explicit Cloning:** Separated `IDeepCloneable<T>` and `IShallowCloneable<T>` interfaces to eliminate ambiguity.
-*   **State Copying:** `ICopyFrom<T>` and `ICopyTo<T>` interfaces for transferring state between instances without creating new objects.
-*   **Async Factories:** Standardized `IAsyncFactory<T>` interfaces for handling asynchronous object creation and initialization.
-*   **Zero-Boilerplate Extensions:** Rich set of extension methods like `DeepClone()`, `CopyIntoNew()`, and factory integrations.
+*   **Type-Safe Cloning:** Replaces the ambiguous `object ICloneable.Clone()` with strongly-typed `IDeepCloneable<T>` and `IShallowCloneable<T>`.
+*   **State Transfer:** Interfaces (`ICopyFrom`, `ICopyTo`) and extensions (`CopyIntoNew`) for transferring state between instances efficiently.
+*   **Async Factories:** Standardized `IAsyncFactory` interfaces to handle complex object creation requiring asynchronous initialization (e.g., DB connections).
+*   **Builder Pattern:** Abstracted `IBuilder<T>` and `IAsyncBuilder<T>` contracts to standardize object construction logic.
+*   **Rich Extensions:** Zero-boilerplate extension methods to simplify usage and reduce code duplication.
 
 ## 📦 Installation
 
@@ -22,97 +23,168 @@ Install via NuGet Package Manager:
 dotnet add package Wiaoj.Abstractions
 ```
 
+> **Note:** This library depends on `Wiaoj.Preconditions` for argument validation.
+
+---
+
 ## ⚡ Usage Examples
 
-### 1. Robust Cloning
-Resolve the ambiguity of .NET's `ICloneable` by explicitly defining cloning behavior.
+### 1. Robust Cloning (Deep vs. Shallow)
+Standard .NET `ICloneable` is ambiguous. This library forces you to be explicit about whether a clone is a "Deep Copy" (independent instance) or a "Shallow Copy" (shared references).
 
 ```csharp
 using Wiaoj.Abstractions;
 
-public class User : IDeepCloneable<User>, IShallowCloneable<User>
+// Implement specific strategies
+public class UserProfile : IDeepCloneable<UserProfile>, IShallowCloneable<UserProfile>
 {
-    public string Name { get; set; }
+    public string Username { get; set; }
     public Address Address { get; set; } // Reference type
 
-    public User DeepClone()
+    // 1. Deep Clone: Create a totally new instance with new references
+    public UserProfile DeepClone()
     {
-        return new User 
+        return new UserProfile 
         { 
-            Name = this.Name, 
-            Address = this.Address.DeepClone() // Recursively clone
+            Username = this.Username, 
+            Address = this.Address.DeepClone() // Assuming Address also implements IDeepCloneable
         };
     }
 
-    public User ShallowClone()
+    // 2. Shallow Clone: Copy values, share references
+    public UserProfile ShallowClone()
     {
-        return new User 
+        return new UserProfile 
         { 
-            Name = this.Name, 
-            Address = this.Address // Copy reference
+            Username = this.Username, 
+            Address = this.Address 
         };
     }
 }
 
-// Usage
-var user = new User { Name = "John", Address = new Address("NY") };
-var deepCopy = user.DeepClone();       // Completely independent copy
-var shallowCopy = user.ShallowClone(); // Shares the Address reference
+// --- Usage ---
+var original = new UserProfile { ... };
+
+// Specific usage
+var deepCopy = original.DeepClone();
+var shallowCopy = original.ShallowClone();
+
+// Polymorphic usage via Extensions (defaults to DeepClone)
+var clone = original.Clone(); 
+var specificClone = original.Clone(CloneKind.Shallow);
 ```
 
-### 2. Copying State (Copy Pattern)
-Useful for updating existing instances or implementing "Prototype" patterns where you want to copy state into a fresh instance created by a specific factory.
+### 2. State Copying & Prototyping
+Instead of mapping properties manually or using heavy reflection libraries, implement `ICopyFrom` to define how state is transferred.
 
 ```csharp
-public class Configuration : ICopyFrom<Configuration>
+public class AppSettings : ICopyFrom<AppSettings>
 {
     public int Timeout { get; set; }
+    public string Theme { get; set; }
 
-    public void CopyFrom(Configuration source)
+    public void CopyFrom(AppSettings source)
     {
         this.Timeout = source.Timeout;
+        this.Theme = source.Theme;
     }
 }
 
-// Usage
-var defaultConfig = new Configuration { Timeout = 30 };
+// --- Usage ---
+var defaultSettings = new AppSettings { Timeout = 30, Theme = "Dark" };
 
-// 1. Copy into a new instance using default constructor
-var config1 = defaultConfig.CopyIntoNew();
+// Scenario A: Update an existing instance
+var currentSettings = new AppSettings();
+currentSettings.CopyFrom(defaultSettings);
 
-// 2. Copy into a new instance using a custom factory (e.g., DI container)
-var config2 = defaultConfig.CopyIntoNew(() => _serviceProvider.GetRequiredService<Configuration>());
+// Scenario B: Create a fresh copy (Prototype Pattern)
+// Uses the default constructor (new())
+var newSettings = defaultSettings.CopyIntoNew(); 
 ```
 
-### 3. Asynchronous Factories
-Ideal for creating objects that require asynchronous initialization (e.g., establishing a database connection or loading remote configuration).
+### 3. Advanced Copying (Dependency Injection Friendly)
+The `CopyIntoNew` extension is powerful when the target object cannot be created with a simple `new()` (e.g., needs dependencies).
 
 ```csharp
-public class ConnectionFactory : IAsyncFactory<DatabaseConnection, string>
+// Scenario: Creating a copy using a Factory or DI Container
+var prototype = new ServiceConfig { Retries = 3 };
+
+// Pass a factory function to create the new instance, then copy state into it
+var newInstance = prototype.CopyIntoNew(() => 
 {
-    public async Task<DatabaseConnection> CreateAsync(string connectionString, CancellationToken ct = default)
+    // Example: Resolve from DI
+    return _serviceProvider.GetRequiredService<ServiceConfig>(); 
+});
+
+// Pass arguments to the factory
+var customizedInstance = prototype.CopyIntoNew(
+    factory: (name) => new ServiceConfig(name), 
+    arg: "CustomService"
+);
+```
+
+### 4. Asynchronous Factories
+Constructors in C# cannot be `async`. Use `IAsyncFactory` for objects that need awaitable initialization logic (Database connections, File handles, Network streams).
+
+```csharp
+// Factory that creates an initialized Redis connection
+public class RedisConnectionFactory : IAsyncFactory<IConnectionMultiplexer, string>
+{
+    public async Task<IConnectionMultiplexer> CreateAsync(string connectionString, CancellationToken ct = default)
     {
-        var connection = new DatabaseConnection(connectionString);
-        await connection.OpenAsync(ct);
+        var connection = await ConnectionMultiplexer.ConnectAsync(connectionString);
         return connection;
     }
 }
 
-// Usage
-var factory = new ConnectionFactory();
-var db = await factory.CreateAsync("Server=...;");
+// --- Usage ---
+var factory = new RedisConnectionFactory();
+var redis = await factory.CreateAsync("localhost:6379");
+```
+*Note: Supports generic factories with up to 3 arguments.*
+
+### 5. Builder Pattern
+Standardize how you build complex objects, both synchronously and asynchronously.
+
+```csharp
+public class ReportBuilder : IAsyncBuilder<Report>
+{
+    public async Task<Report> BuildAsync(CancellationToken ct = default)
+    {
+        var data = await _repository.GetDataAsync(ct);
+        return new Report(data);
+    }
+}
+
+// --- Usage ---
+IAsyncBuilder<Report> builder = new ReportBuilder();
+var report = await builder.BuildAsync();
 ```
 
-## 🛠 Interfaces Overview
+---
 
+## 🛠 API Reference
+
+### Cloning Interfaces
 | Interface | Description |
 | :--- | :--- |
-| **`IDeepCloneable<T>`** | Defines a contract for creating a deep copy of an object (cloning all nested references). |
-| **`IShallowCloneable<T>`** | Defines a contract for creating a shallow copy (copying values and references only). |
-| **`ICloneable<T>`** | Combines both Deep and Shallow strategies, allowing runtime selection via `CloneKind`. |
-| **`ICopyFrom<T>`** | Allows an object to populate its own state from a source object. |
-| **`ICopyTo<T>`** | Allows an object to push its state into a target object. |
-| **`IAsyncFactory<T>`** | Standardizes async object creation (supports up to 3 arguments). |
+| **`IDeepCloneable<T>`** | Contract for creating a full, independent copy of an object graph. |
+| **`IShallowCloneable<T>`** | Contract for creating a lightweight copy (shared references). |
+| **`ICloneable<T>`** | Aggregates both Deep and Shallow interfaces. Enables `obj.Clone(CloneKind.Deep)` usage. |
+
+### State Interfaces
+| Interface | Description |
+| :--- | :--- |
+| **`ICopyFrom<T>`** | Defines how an object pulls state *from* a source. |
+| **`ICopyTo<T>`** | Defines how an object pushes state *to* a target. |
+
+### Construction Interfaces
+| Interface | Description |
+| :--- | :--- |
+| **`IBuilder<T>`** | Contract for synchronous object construction. |
+| **`IAsyncBuilder<T>`** | Contract for asynchronous object construction. |
+| **`IAsyncFactory<T>`** | Contract for async object creation (0 args). |
+| **`IAsyncFactory<T, T1...>`** | Contract for async object creation with arguments (supports up to 3 args). |
 
 ## 🤝 Contributing
 

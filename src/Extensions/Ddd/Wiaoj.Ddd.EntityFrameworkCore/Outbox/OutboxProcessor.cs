@@ -1,20 +1,20 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Wiaoj.Ddd.Abstractions;
-using Wiaoj.Ddd.Abstractions.DomainEvents;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
+using Wiaoj.Ddd.DomainEvents;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal.Loggers;
+using Wiaoj.Ddd.Extensions;
+using Wiaoj.Extensions;
 using Wiaoj.Serialization.Abstractions;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.Outbox;
-
 internal sealed class OutboxProcessor<TContext>(
     IServiceProvider serviceProvider,
     IOptionsMonitor<OutboxOptions> options,
@@ -29,7 +29,14 @@ internal sealed class OutboxProcessor<TContext>(
     private readonly string _myInstanceId = instanceInfo.InstanceId;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
-        using (logger.BeginScope(new Dictionary<string, object> {
+        TimeSpan initialDelay = options.CurrentValue.InitialDelay;
+
+        if(initialDelay > TimeSpan.Zero) { 
+            logger.LogInitialDelayPending(initialDelay); 
+            await initialDelay.Delay(stoppingToken);
+        }
+
+        using(logger.BeginScope(new Dictionary<string, object> {
             ["ProcessorInstanceId"] = this._myInstanceId,
             ["PartitionKey"] = options.CurrentValue.PartitionKey ?? "Global"
         })) {
@@ -47,16 +54,16 @@ internal sealed class OutboxProcessor<TContext>(
         logger.LogFastPathStarted();
 
         try {
-            await foreach (OutboxMessage message in this._channelReader.ReadAllAsync(stoppingToken)) {
-                if (message.LockId == this._myInstanceId) {
+            await foreach(OutboxMessage message in this._channelReader.ReadAllAsync(stoppingToken)) {
+                if(message.LockId == this._myInstanceId) {
                     await ProcessSingleMessageSafeAsync(message, processingMode: "FastPath", stoppingToken);
                 }
             }
         }
-        catch (OperationCanceledException) {
+        catch(OperationCanceledException) {
             logger.LogFastPathStopped();
         }
-        catch (Exception ex) {
+        catch(Exception ex) {
             logger.LogFastPathCriticalError(ex);
         }
     }
@@ -64,11 +71,11 @@ internal sealed class OutboxProcessor<TContext>(
     private async Task ProcessDbPollingAsync(CancellationToken stoppingToken) {
         logger.LogSlowPathStarted();
 
-        while (!stoppingToken.IsCancellationRequested) {
+        while(!stoppingToken.IsCancellationRequested) {
             try {
                 await RecoverAndProcessZombiesAsync(stoppingToken);
             }
-            catch (Exception ex) {
+            catch(Exception ex) {
                 logger.LogPollingError(ex);
             }
 
@@ -90,7 +97,7 @@ internal sealed class OutboxProcessor<TContext>(
             .Where(m => m.LockId == null || m.LockExpiration < now)
             .Where(m => m.RetryCount < currentOptions.RetryCount);
 
-        if (!string.IsNullOrEmpty(currentOptions.PartitionKey)) {
+        if(!string.IsNullOrEmpty(currentOptions.PartitionKey)) {
             query = query.Where(m => m.PartitionKey == currentOptions.PartitionKey);
         }
 
@@ -102,7 +109,7 @@ internal sealed class OutboxProcessor<TContext>(
                 .SetProperty(m => m.LockExpiration, now.Add(currentOptions.LockDuration)),
                 stoppingToken);
 
-        if (claimedCount == 0) {
+        if(claimedCount == 0) {
             return;
         }
 
@@ -112,7 +119,7 @@ internal sealed class OutboxProcessor<TContext>(
             .Where(m => m.LockId == this._myInstanceId && m.ProcessedAt == null)
             .ToListAsync(stoppingToken);
 
-        foreach (OutboxMessage? message in messages) {
+        foreach(OutboxMessage? message in messages) {
             await ProcessSingleMessageSafeAsync(message, processingMode: "SlowPath", stoppingToken);
         }
     }
@@ -136,14 +143,14 @@ internal sealed class OutboxProcessor<TContext>(
         try {
             IDomainEvent? domainEvent = DeserializeEvent(message);
 
-            if (domainEvent is null) {
+            if(domainEvent is null) {
                 logger.LogDeserializationFailed();
                 await MarkAsFailedDbAsync(dbContext, message.Id, $"Type resolution failed: {message.Type}", stoppingToken);
                 return;
             }
 
             logger.LogDispatchingHandlers();
-            await dispatcher.DispatchPostCommitAsync((dynamic)domainEvent, stoppingToken);
+            await dispatcher.DispatchPostCommitCompiledAsync(domainEvent, stoppingToken);
 
             stopwatch.Stop();
             logger.LogHandlersExecuted(stopwatch.ElapsedMilliseconds);
@@ -157,14 +164,14 @@ internal sealed class OutboxProcessor<TContext>(
                     .SetProperty(m => m.LockExpiration, (DateTimeOffset?)null),
                     stoppingToken);
 
-            if (rowsAffected > 0) {
+            if(rowsAffected > 0) {
                 logger.LogMessageProcessedSuccessfully(stopwatch.ElapsedMilliseconds);
             }
             else {
                 await RunDiagnosticsForMissingUpdateAsync(dbContext, message.Id, stopwatch.ElapsedMilliseconds, stoppingToken);
             }
         }
-        catch (Exception ex) {
+        catch(Exception ex) {
             stopwatch.Stop();
             logger.LogProcessingFailed(ex, stopwatch.ElapsedMilliseconds);
             await MarkAsFailedDbAsync(dbContext, message.Id, ex.ToString(), stoppingToken);
@@ -176,17 +183,17 @@ internal sealed class OutboxProcessor<TContext>(
             .AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == messageId, stoppingToken);
 
-        if (actualState is null) {
+        if(actualState is null) {
             logger.LogDiagRecordNotFound();
             return;
         }
 
-        if (actualState.ProcessedAt.HasValue) {
+        if(actualState.ProcessedAt.HasValue) {
             logger.LogDiagAlreadyProcessed(actualState.ProcessedAt);
             return;
         }
 
-        if (actualState.LockId != this._myInstanceId) {
+        if(actualState.LockId != this._myInstanceId) {
             logger.LogDiagLockLost(actualState.LockId ?? "NULL", durationMs);
             return;
         }
@@ -203,32 +210,32 @@ internal sealed class OutboxProcessor<TContext>(
                     .SetProperty(m => m.RetryCount, c => c.RetryCount + 1),
                     token);
 
-            if (rows > 0) {
+            if(rows > 0) {
                 logger.LogMarkedAsFailed();
             }
             else {
                 logger.LogMarkFailedStatusUpdateLost();
             }
         }
-        catch (Exception ex) {
+        catch(Exception ex) {
             logger.LogCriticalMarkFailedError(ex);
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private IDomainEvent? DeserializeEvent(OutboxMessage message) {
-        if (!_typeCache.TryGetValue(message.Type, out Type? eventType)) {
+        if(!_typeCache.TryGetValue(message.Type, out Type? eventType)) {
             try {
                 eventType = Type.GetType(message.Type);
                 _typeCache.TryAdd(message.Type, eventType);
             }
-            catch (Exception ex) {
+            catch(Exception ex) {
                 logger.LogTypeResolutionError(ex, message.Type);
                 return null;
             }
         }
 
-        if (eventType is null) {
+        if(eventType is null) {
             logger.LogTypeResolutionNull(message.Type);
             return null;
         }
@@ -236,7 +243,7 @@ internal sealed class OutboxProcessor<TContext>(
         try {
             return serializer.DeserializeFromString(message.Content, eventType) as IDomainEvent;
         }
-        catch (Exception ex) {
+        catch(Exception ex) {
             logger.LogDeserializationError(ex, message.Type);
             return null;
         }

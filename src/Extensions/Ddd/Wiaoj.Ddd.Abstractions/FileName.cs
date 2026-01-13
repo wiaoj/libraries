@@ -1,8 +1,8 @@
 ﻿using System.Linq.Expressions;
 using System.Reflection;
-using Wiaoj.Ddd.Abstractions.ValueObjects;
+using Wiaoj.Ddd.ValueObjects;
 
-namespace Wiaoj.Ddd.Abstractions;
+namespace Wiaoj.Ddd;
 /// <summary>
 /// Marks an aggregate root as concurrency-safe using Optimistic Concurrency Control.
 /// </summary>
@@ -41,7 +41,7 @@ public abstract record Enumeration<TId> : IComparable<Enumeration<TId>> where TI
         public static readonly T[] Items;
 
         static Cache() {
-            var fields = typeof(T).GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            FieldInfo[] fields = typeof(T).GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
             Items = [.. fields.Select(f => f.GetValue(null)).Cast<T>()];
         }
@@ -77,13 +77,13 @@ public interface IRepository<TAggregate, TId>
     where TAggregate : class, IAggregate
     where TId : notnull;
 
-public interface IWriteOnlyRepository<TAggregate, TId> : IRepositoryMarker where TAggregate : class, IAggregate where TId : notnull {  
+public interface IWriteOnlyRepository<TAggregate, TId> : IRepositoryMarker where TAggregate : class, IAggregate where TId : notnull {
     Task AddAsync(TAggregate aggregate, CancellationToken cancellationToken = default);
     void Update(TAggregate aggregate);
     void Delete(TAggregate aggregate);
 }
 
-public interface IReadOnlyRepository<TAggregate, TId> : IRepositoryMarker where TAggregate : class, IAggregate where TId : notnull {  
+public interface IReadOnlyRepository<TAggregate, TId> : IRepositoryMarker where TAggregate : class, IAggregate where TId : notnull {
     Task<TAggregate?> GetByIdAsync(TId id, CancellationToken cancellationToken = default);
     Task<List<TAggregate>> ListAsync(CancellationToken cancellationToken = default);
     Task<List<TAggregate>> ListAsync(Expression<Func<TAggregate, bool>> expression, CancellationToken cancellationToken = default);

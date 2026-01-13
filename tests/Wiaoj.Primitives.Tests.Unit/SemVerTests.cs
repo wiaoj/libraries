@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Wiaoj.Primitives.Tests.Unit;
 
-public class SemVerTests {
+public sealed class SemVerTests {
     [Fact]
     public void Precedence_Rules_Compliance() {
         // SemVer 2.0.0 Spec sıralama kuralları

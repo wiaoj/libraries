@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Wiaoj.Ddd.Abstractions.ValueObjects;
+using Wiaoj.Ddd.ValueObjects;
 using Wiaoj.Ddd.EntityFrameworkCore.ValueConverters;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.Extensions;  

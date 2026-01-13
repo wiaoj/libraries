@@ -1,6 +1,6 @@
 ﻿namespace Wiaoj.Primitives.Tests.Unit;
 
-public class SecretSafetyTests {
+public sealed class SecretSafetyTests {
     [Fact]
     public void Dispose_Should_Clear_State_And_Prevent_Access() {
         Secret<byte> secret = Secret.From("SensitiveData");

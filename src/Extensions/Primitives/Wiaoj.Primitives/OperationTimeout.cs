@@ -160,28 +160,44 @@ public readonly record struct OperationTimeout {
     }
 
     /// <summary>
-    /// Executes an operation by wrapping the active cancellation signal into a new <see cref="OperationTimeout"/> instance.
+    /// Executes an operation using <see cref="ValueTask"/> for better memory efficiency by wrapping the active cancellation signal.
     /// </summary>
-    /// <param name="action">The operation to execute, receiving a <see cref="OperationTimeout"/> that encapsulates the current running state.</param>
-    /// <returns>A <see cref="Task"/> representing the operation.</returns>
+    /// <param name="action">The operation to execute, receiving an <see cref="OperationTimeout"/> that encapsulates the current running state.</param>
+    /// <returns>A <see cref="ValueTask"/> representing the asynchronous operation.</returns>
     /// <remarks>
-    /// This "recursive" flow allows passing the timeout logic down to deeper layers of the architecture (e.g., Services to Repositories) 
-    /// while maintaining a consistent API surface. The injected <see cref="OperationTimeout"/> will have an infinite delay 
-    /// but will be bound to the parent's cancellation signal.
+    /// Recommended for high-throughput operations or scenarios where the operation might complete synchronously, 
+    /// reducing Garbage Collector (GC) overhead.
     /// </remarks>
-    public async Task ExecuteAsync(Func<OperationTimeout, Task> action) {
-        // 1. Sayacı başlat (Fırın yandı)
+    /// <exception cref="OperationCanceledException">Thrown when a timeout occurs or an external cancellation is requested.</exception>
+    public async ValueTask ExecuteAsync(Func<OperationTimeout, ValueTask> action) {
         using CancellationTokenSource cts = CreateCancellationTokenSource();
 
         try {
-            // 2. KRİTİK HAMLE:
-            // Çalışan token'dan yeni bir OperationTimeout paketi oluşturuyoruz.
-            // Bu paketin içinde "Süre: Infinite" ve "Token: cts.Token" var.
             var runningTimeout = OperationTimeout.From(cts.Token);
-
-            // 3. Kullanıcıya (Action'a) orijinal 'timeout'u değil, 
-            // bu yeni 'runningTimeout'u veriyoruz.
             await action(runningTimeout).ConfigureAwait(false);
+        }
+        catch(OperationCanceledException) {
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Executes an operation that returns a value using <see cref="ValueTask{TResult}"/> for optimized memory allocation.
+    /// </summary>
+    /// <typeparam name="TResult">The type of the result returned by the operation.</typeparam>
+    /// <param name="action">The operation to execute, receiving an <see cref="OperationTimeout"/> that encapsulates the current running state.</param>
+    /// <returns>A <see cref="ValueTask{TResult}"/> representing the asynchronous operation and its result.</returns>
+    /// <remarks>
+    /// Use this method instead of <see cref="Task{T}"/> in performance-critical loops or high-frequency API requests 
+    /// to minimize heap allocations.
+    /// </remarks>
+    /// <exception cref="OperationCanceledException">Thrown when a timeout occurs or an external cancellation is requested.</exception>
+    public async ValueTask<TResult> ExecuteAsync<TResult>(Func<OperationTimeout, ValueTask<TResult>> action) {
+        using CancellationTokenSource cts = CreateCancellationTokenSource();
+
+        try {
+            var runningTimeout = OperationTimeout.From(cts.Token);
+            return await action(runningTimeout).ConfigureAwait(false);
         }
         catch(OperationCanceledException) {
             throw;

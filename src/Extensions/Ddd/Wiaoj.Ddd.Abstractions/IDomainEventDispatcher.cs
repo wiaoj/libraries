@@ -1,11 +1,12 @@
-﻿using Wiaoj.Ddd.Abstractions.DomainEvents;
+﻿using Wiaoj.Ddd.DomainEvents;
 
-namespace Wiaoj.Ddd.Abstractions;
-
-public interface IDomainEventDispatcher {  
-    ValueTask DispatchPreCommitAsync<TDomainEvent>( TDomainEvent @event, CancellationToken cancellationToken) where TDomainEvent : IDomainEvent;
-    ValueTask DispatchPostCommitAsync<TDomainEvent>( TDomainEvent @event, CancellationToken cancellationToken) where TDomainEvent : IDomainEvent;
-} 
+namespace Wiaoj.Ddd; 
+public interface IDomainEventDispatcher {
+    ValueTask DispatchPreCommitAsync<TDomainEvent>(TDomainEvent @event, CancellationToken cancellationToken = default) 
+        where TDomainEvent : IDomainEvent;
+    ValueTask DispatchPostCommitAsync<TDomainEvent>(TDomainEvent @event, CancellationToken cancellationToken = default) 
+        where TDomainEvent : IDomainEvent;
+}
 
 /// <summary>
 /// Veritabanı işlemi (transaction) commit edilmeden HEMEN ÖNCE çalıştırılacak event handler'ları tanımlar.

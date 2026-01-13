@@ -59,6 +59,7 @@ public sealed class DddEfCoreOptionsBuilder(IServiceCollection services) {
             options.MaxDomainEventDispatchAttempts = this._outboxOptions.MaxDomainEventDispatchAttempts;
             options.PartitionKey = this._outboxOptions.PartitionKey;
             options.LockDuration = this._outboxOptions.LockDuration;
+            options.InitialDelay = this._outboxOptions.InitialDelay;
         });
 
         if (!this.IsSerializerConfigured) {

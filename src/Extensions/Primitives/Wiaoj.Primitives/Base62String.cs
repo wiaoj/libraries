@@ -101,18 +101,22 @@ public readonly record struct Base62String :
     /// <exception cref="ArgumentOutOfRangeException">Thrown if the value is negative.</exception>
     [SkipLocalsInit]
     public static Base62String FromInt64(long value) {
-        if(value < 0) throw new ArgumentOutOfRangeException(nameof(value), "Value must be non-negative.");
+        Preca.ThrowIfNegative(value);
         if(value == 0) return new Base62String("0");
 
-        // Max int64 (19 digits) fits easily in 11-12 Base62 chars.
-        Span<char> buffer = stackalloc char[12];
-        int idx = 11;
+        // long.MaxValue (9,223,372,036,854,775,807) Base62'de "AzL8n0Y58m7" (11 hane) eder.
+        // Emniyet payı ile 13 karakterlik yer ayırıyoruz.
+        Span<char> buffer = stackalloc char[13];
+        int idx = 12; // Buffer'ın sonundan başlıyoruz
 
         while(value > 0) {
+            // Mod alma ve bölme işlemi
+            // (int) cast işlemi güvenlidir çünkü sonuç 0-61 arasıdır.
             buffer[idx--] = Alphabet[(int)(value % 62)];
             value /= 62;
         }
 
+        // Dolu olan kısmı alıp string'e çeviriyoruz.
         return new Base62String(buffer[(idx + 1)..].ToString());
     }
 
@@ -222,21 +226,20 @@ public readonly record struct Base62String :
 
     /// <summary>
     /// Decodes the Base62 string back to a long.
+    /// Uses Horner's Method for high performance and accurate overflow detection.
     /// </summary>
-    /// <returns>The decoded Int64 value.</returns>
-    /// <exception cref="OverflowException">Thrown if the value exceeds Int64.MaxValue.</exception>
     public long ToInt64() {
         if(string.IsNullOrEmpty(this._value)) return 0;
 
         long result = 0;
-        long multiplier = 1;
 
-        // Iterate backwards from LSD (Least Significant Digit)
-        for(int i = this._value.Length - 1; i >= 0; i--) {
-            int val = CharToValue(this._value[i]);
-            result = checked(result + (val * multiplier));
-            multiplier = checked(multiplier * 62);
+        // "123" -> ((1 * 10) + 2) * 10 + 3
+        foreach(char c in this._value) {
+            int val = CharToValue(c);
+
+            result = checked((result * 62) + val);
         }
+
         return result;
     }
 

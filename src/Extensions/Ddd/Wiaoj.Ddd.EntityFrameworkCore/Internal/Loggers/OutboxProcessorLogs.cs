@@ -46,6 +46,11 @@ internal static partial class OutboxProcessorLogs {
         Message = "Successfully claimed ownership of {Count} stalled/zombie messages via Polling.")]
     public static partial void LogZombieMessagesClaimed(this ILogger logger, int count);
 
+    [LoggerMessage(
+        EventId = 1008,
+        Level = LogLevel.Information,
+        Message = "Outbox Processor is waiting for {Delay} before starting operations (InitialDelay configured).")]
+    public static partial void LogInitialDelayPending(this ILogger logger, TimeSpan delay);
     // --- Message Processing Workflow ---
 
     [LoggerMessage(

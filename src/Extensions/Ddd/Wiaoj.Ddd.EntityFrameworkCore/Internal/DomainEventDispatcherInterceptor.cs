@@ -1,12 +1,12 @@
-﻿using System.Runtime.CompilerServices;
-using System.Text;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
-using Wiaoj.Ddd.Abstractions;
-using Wiaoj.Ddd.Abstractions.DomainEvents;
+using System.Runtime.CompilerServices;
+using System.Text;
+using Wiaoj.Ddd.DomainEvents;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
+using Wiaoj.Ddd.Extensions;
 using Wiaoj.Serialization.Abstractions;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.Internal;
@@ -31,7 +31,7 @@ internal sealed class DomainEventDispatcherInterceptor(
        CancellationToken cancellationToken = default) {
 
         DbContext? context = eventData.Context;
-        if (context is null) {
+        if(context is null) {
             return await base.SavingChangesAsync(eventData, result, cancellationToken);
         }
 
@@ -39,7 +39,7 @@ internal sealed class DomainEventDispatcherInterceptor(
         List<IDomainEvent> processedEvents = await ProcessDomainEventsRecursivelyAsync(context, cancellationToken);
 
         // If no events triggered, proceed with normal commit
-        if (processedEvents.Count == 0) {
+        if(processedEvents.Count == 0) {
             return await base.SavingChangesAsync(eventData, result, cancellationToken);
         }
 
@@ -49,7 +49,7 @@ internal sealed class DomainEventDispatcherInterceptor(
         // 3. Persist messages to the database
         await context.Set<OutboxMessage>().AddRangeAsync(outboxMessages, cancellationToken);
 
-        _messagesToPublish = outboxMessages;
+        this._messagesToPublish = outboxMessages;
 
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
@@ -58,10 +58,10 @@ internal sealed class DomainEventDispatcherInterceptor(
         SaveChangesCompletedEventData eventData,
         int result,
         CancellationToken cancellationToken = default) {
-                                                                               
-        if (_messagesToPublish is not null && _messagesToPublish.Count > 0) {
-            await PublishToChannelAsync(_messagesToPublish, cancellationToken);
-            _messagesToPublish.Clear(); 
+
+        if(this._messagesToPublish is not null && this._messagesToPublish.Count > 0) {
+            await PublishToChannelAsync(this._messagesToPublish, cancellationToken);
+            this._messagesToPublish.Clear();
         }
 
         return await base.SavedChangesAsync(eventData, result, cancellationToken);
@@ -75,22 +75,22 @@ internal sealed class DomainEventDispatcherInterceptor(
         List<IDomainEvent> allProcessedEvents = [];
         int currentIteration = 0;
 
-        while (true) {
+        while(true) {
             // Fast check before allocating enumerators
-            if (!HasDomainEvents(context)) {
+            if(!HasDomainEvents(context)) {
                 break;
             }
 
             // Safety Valve: Infinite Loop Detection
-            if (currentIteration >= this._maxIterations) {
+            if(currentIteration >= this._maxIterations) {
                 string debugInfo = GenerateInfiniteLoopDebugInfo(context, currentIteration);
                 throw new InvalidOperationException(debugInfo);
             }
 
             List<IDomainEvent> batchEvents = GetAndClearDomainEvents(context);
 
-            foreach (IDomainEvent domainEvent in batchEvents) {
-                await domainEventDispatcher.DispatchPreCommitAsync((dynamic)domainEvent, cancellationToken);
+            foreach(IDomainEvent domainEvent in batchEvents) {
+                await domainEventDispatcher.DispatchPreCommitCompiledAsync(domainEvent, cancellationToken);
             }
 
             allProcessedEvents.AddRange(batchEvents);
@@ -113,7 +113,7 @@ internal sealed class DomainEventDispatcherInterceptor(
         string myLockId = instanceInfo.InstanceId;
         DateTimeOffset lockExpiration = timeProvider.GetUtcNow().Add(options.Value.LockDuration);
 
-        foreach (IDomainEvent evt in domainEvents) {
+        foreach(IDomainEvent evt in domainEvents) {
             string content = serializer.SerializeToString(evt, evt.GetType());
             string type = evt.GetType().AssemblyQualifiedName!;
 
@@ -136,7 +136,7 @@ internal sealed class DomainEventDispatcherInterceptor(
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private async Task PublishToChannelAsync(List<OutboxMessage> messages, CancellationToken cancellationToken) {
-        foreach (OutboxMessage message in messages) {
+        foreach(OutboxMessage message in messages) {
             await outboxChannel.Writer.WriteAsync(message, cancellationToken);
         }
     }
@@ -149,9 +149,9 @@ internal sealed class DomainEventDispatcherInterceptor(
         IEnumerable<EntityEntry<IHasDomainEvent>> entries = context.ChangeTracker.Entries<IHasDomainEvent>();
         List<IDomainEvent> events = [];
 
-        foreach (EntityEntry<IHasDomainEvent> entry in entries) {
+        foreach(EntityEntry<IHasDomainEvent> entry in entries) {
             IHasDomainEvent entity = entry.Entity;
-            if (entity.DomainEvents.Count != 0) {
+            if(entity.DomainEvents.Count != 0) {
                 events.AddRange(entity.DomainEvents);
                 entity.ClearDomainEvents();
             }
@@ -180,10 +180,10 @@ internal sealed class DomainEventDispatcherInterceptor(
         IEnumerable<EntityEntry<IHasDomainEvent>> pending = context.ChangeTracker.Entries<IHasDomainEvent>()
             .Where(e => e.Entity.DomainEvents.Count > 0);
 
-        foreach (EntityEntry<IHasDomainEvent>? entry in pending) {
+        foreach(EntityEntry<IHasDomainEvent>? entry in pending) {
             string typeName = entry.Entity.GetType().Name;
             sb.AppendLine($" - Aggregate: {typeName}");
-            foreach (IDomainEvent evt in entry.Entity.DomainEvents) {
+            foreach(IDomainEvent evt in entry.Entity.DomainEvents) {
                 sb.AppendLine($"    -> Event: {evt.GetType().Name}");
             }
         }

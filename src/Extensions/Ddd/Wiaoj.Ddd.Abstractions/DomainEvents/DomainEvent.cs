@@ -1,9 +1,8 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using Wiaoj.Ddd.Abstractions.Exceptions;
-using Wiaoj.Ddd.Abstractions.ValueObjects;
+using Wiaoj.Ddd.Exceptions;
+using Wiaoj.Ddd.ValueObjects;
 
-namespace Wiaoj.Ddd.Abstractions.DomainEvents;
-
+namespace Wiaoj.Ddd.DomainEvents;
 public abstract record DomainEvent : IDomainEvent {
     public DomainEventId Id { get; }
     public DateTimeOffset OccurredAt { get; }
@@ -38,7 +37,7 @@ public sealed record DomainEventId : IValueObject<DomainEventId, DateTimeOffset>
     public static bool TryParse(string? value, [NotNullWhen(true)] out DomainEventId? domainEventId) {
         domainEventId = null;
 
-        if (Guid.TryParse(value, out Guid parsedGuid)) {
+        if(Guid.TryParse(value, out Guid parsedGuid)) {
             domainEventId = new DomainEventId(parsedGuid);
             return true;
         }
@@ -83,7 +82,7 @@ public interface IDomainEvent {
 }
 public interface IHasDomainEvent {
     IReadOnlyList<IDomainEvent> DomainEvents { get; }
-    void RaiseDomainEvent<TEvent>(TEvent @event) where TEvent: IDomainEvent;
+    void RaiseDomainEvent<TEvent>(TEvent @event) where TEvent : IDomainEvent;
     void ClearDomainEvents();
 }
 

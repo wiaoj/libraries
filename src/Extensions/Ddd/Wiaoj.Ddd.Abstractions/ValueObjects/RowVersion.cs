@@ -1,6 +1,6 @@
 ﻿using System.Collections;
 
-namespace Wiaoj.Ddd.Abstractions.ValueObjects;
+namespace Wiaoj.Ddd.ValueObjects;
 /// <summary>
 /// Represents a database concurrency token (Optimistic Concurrency Control).
 /// Replaces raw byte[] to prevent primitive obsession.
@@ -17,7 +17,7 @@ public readonly struct RowVersion : IEquatable<RowVersion>, IStructuralEquatable
     }
 
     public static RowVersion From(byte[] bytes) {
-        if (bytes is null || bytes.Length == 0) {
+        if(bytes is null || bytes.Length == 0) {
             return Empty;
         }
 
@@ -47,7 +47,7 @@ public readonly struct RowVersion : IEquatable<RowVersion>, IStructuralEquatable
 
     // --- Interface for Structural Equality (Array comparison) ---
     bool IStructuralEquatable.Equals(object? other, IEqualityComparer comparer) {
-        if (other is RowVersion rv) {
+        if(other is RowVersion rv) {
             return comparer.Equals(this.Value, rv.Value);
         }
         return false;

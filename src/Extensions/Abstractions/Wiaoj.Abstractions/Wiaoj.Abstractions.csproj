@@ -5,8 +5,10 @@
 		<LangVersion>preview</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<RootNamespace>Wiaoj.Abstractions</RootNamespace>
 
+		<RootNamespace>Wiaoj.Abstractions</RootNamespace>
+		<AssemblyName>Wiaoj.Abstractions</AssemblyName>
+		
 		<!-- Package Info -->
 		<PackageId>Wiaoj.Abstractions</PackageId>
 		<Version>0.0.1-alpha.1</Version>

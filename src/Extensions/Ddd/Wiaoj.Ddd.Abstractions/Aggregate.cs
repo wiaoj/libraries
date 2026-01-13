@@ -1,8 +1,8 @@
-﻿using Wiaoj.Ddd.Abstractions.DomainEvents;
-using Wiaoj.Ddd.Abstractions.Exceptions;
-using Wiaoj.Ddd.Abstractions.ValueObjects;
+﻿using Wiaoj.Ddd.DomainEvents;
+using Wiaoj.Ddd.Exceptions;
+using Wiaoj.Ddd.ValueObjects;
 
-namespace Wiaoj.Ddd.Abstractions;
+namespace Wiaoj.Ddd;
 
 public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnull, IId {
     public DateTimeOffset CreatedAt { get; protected set; }

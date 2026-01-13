@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Wiaoj.Ddd.Abstractions;
-using Wiaoj.Ddd.Abstractions.DomainEvents;
+using Wiaoj.Ddd;
+using Wiaoj.Ddd.DomainEvents;
 
 namespace Wiaoj.Ddd.Internal;
 

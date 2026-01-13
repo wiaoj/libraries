@@ -4,10 +4,10 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.JsonConverters;
 
-namespace Wiaoj.Primitives;  
+namespace Wiaoj.Primitives;
 /// <summary>
 /// Represents a structurally valid Base64 string.
 /// This value object eliminates "primitive obsession" by ensuring the contained value is always valid Base64.
@@ -50,7 +50,7 @@ public readonly record struct Base64String :
     /// <returns>A new <see cref="Base64String"/> instance containing the encoded data.</returns>
     [SkipLocalsInit]
     public static Base64String FromBytes(ReadOnlySpan<byte> bytes) {
-        if (bytes.IsEmpty) {
+        if(bytes.IsEmpty) {
             return Empty;
         }
 
@@ -63,14 +63,14 @@ public readonly record struct Base64String :
             : (rentedBytes = ArrayPool<byte>.Shared.Rent(requiredLength));
 
         try {
-            if (Base64.EncodeToUtf8(bytes, utf8Buffer, out _, out int bytesWritten, isFinalBlock: true) == OperationStatus.Done) {
+            if(Base64.EncodeToUtf8(bytes, utf8Buffer, out _, out int bytesWritten, isFinalBlock: true) == OperationStatus.Done) {
                 return new Base64String(Encoding.UTF8.GetString(utf8Buffer[..bytesWritten]));
             }
 
             throw new InvalidOperationException("Failed to encode bytes to Base64.");
         }
         finally {
-            if (rentedBytes is not null) {
+            if(rentedBytes is not null) {
                 ArrayPool<byte>.Shared.Return(rentedBytes);
             }
         }
@@ -82,7 +82,7 @@ public readonly record struct Base64String :
     /// <param name="text">The text to encode.</param>
     /// <returns>The Base64 encoded representation of the text.</returns>
     public static Base64String FromUtf8(string text) {
-        if (string.IsNullOrEmpty(text)) {
+        if(string.IsNullOrEmpty(text)) {
             return Empty;
         }
 
@@ -96,7 +96,7 @@ public readonly record struct Base64String :
     /// <param name="encoding">The encoding to use.</param>
     /// <returns>The Base64 encoded representation of the text.</returns>
     public static Base64String From(string text, Encoding encoding) {
-        if (string.IsNullOrEmpty(text)) {
+        if(string.IsNullOrEmpty(text)) {
             return Empty;
         }
 
@@ -108,6 +108,16 @@ public readonly record struct Base64String :
     #endregion
 
     #region Parsing (Public Span API)
+    /// <summary>
+    /// Parses a string into a <see cref="Base64String"/>.
+    /// </summary>
+    /// <param name="s">The string to parse.</param>
+    /// <exception cref="ArgumentNullException">Thrown if s is null.</exception>
+    /// <exception cref="FormatException">Thrown if the input is not valid Base64.</exception>
+    public static Base64String Parse(string s) { 
+        Preca.ThrowIfNull(s); 
+        return Parse(s.AsSpan());
+    }
 
     /// <summary>
     /// Parses a character span into a <see cref="Base64String"/>.
@@ -116,10 +126,36 @@ public readonly record struct Base64String :
     /// <returns>A valid <see cref="Base64String"/>.</returns>
     /// <exception cref="FormatException">Thrown if the input is not valid Base64.</exception>
     public static Base64String Parse(ReadOnlySpan<char> s) {
-        if (TryParseInternal(s, out Base64String result)) {
+        if(TryParseInternal(s, out Base64String result)) {
             return result;
         }
         throw new FormatException("The input is not a valid Base64 string.");
+    }
+
+    /// <summary>
+    /// Parses a UTF-8 byte span into a <see cref="Base64String"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 encoded byte span to parse.</param>
+    /// <returns>A valid <see cref="Base64String"/>.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not valid Base64.</exception>
+    public static Base64String Parse(ReadOnlySpan<byte> utf8Text) {
+        if(TryParseInternal(utf8Text, out Base64String result)) {
+            return result;
+        }
+        throw new FormatException("The input is not a valid Base64 UTF-8 sequence.");
+    }
+
+
+    /// <summary>
+    /// Tries to parse a string into a <see cref="Base64String"/>.
+    /// </summary>
+    public static bool TryParse([NotNullWhen(true)] string? s, out Base64String result) {
+        if(s is null) {
+            result = default;
+            return false;
+        }
+
+        return TryParseInternal(s.AsSpan(), out result);
     }
 
     /// <summary>
@@ -130,19 +166,6 @@ public readonly record struct Base64String :
     /// <returns><see langword="true"/> if parsing was successful; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, out Base64String result) {
         return TryParseInternal(s, out result);
-    }
-
-    /// <summary>
-    /// Parses a UTF-8 byte span into a <see cref="Base64String"/>.
-    /// </summary>
-    /// <param name="utf8Text">The UTF-8 encoded byte span to parse.</param>
-    /// <returns>A valid <see cref="Base64String"/>.</returns>
-    /// <exception cref="FormatException">Thrown if the input is not valid Base64.</exception>
-    public static Base64String Parse(ReadOnlySpan<byte> utf8Text) {
-        if (TryParseInternal(utf8Text, out Base64String result)) {
-            return result;
-        }
-        throw new FormatException("The input is not a valid Base64 UTF-8 sequence.");
     }
 
     /// <summary>
@@ -162,12 +185,12 @@ public readonly record struct Base64String :
     // Validates Base64 chars without allocating a new byte array for the result unless valid.
     [SkipLocalsInit]
     private static bool TryParseInternal(ReadOnlySpan<char> s, out Base64String result) {
-        if (s.IsEmpty) {
+        if(s.IsEmpty) {
             result = Empty;
             return true;
         }
 
-        if (s.Length % 4 != 0) {
+        if(s.Length % 4 != 0) {
             result = default;
             return false;
         }
@@ -184,13 +207,13 @@ public readonly record struct Base64String :
 
         try {
             // We just validate here. If successful, we create the string.
-            if (Convert.TryFromBase64Chars(s, decodeBuffer, out _)) {
+            if(Convert.TryFromBase64Chars(s, decodeBuffer, out _)) {
                 result = new Base64String(s.ToString());
                 return true;
             }
         }
         finally {
-            if (rented is not null) {
+            if(rented is not null) {
                 ArrayPool<byte>.Shared.Return(rented);
             }
         }
@@ -202,12 +225,12 @@ public readonly record struct Base64String :
     // Validates UTF-8 bytes without full allocation overhead.
     [SkipLocalsInit]
     private static bool TryParseInternal(ReadOnlySpan<byte> utf8Text, out Base64String result) {
-        if (utf8Text.IsEmpty) {
+        if(utf8Text.IsEmpty) {
             result = Empty;
             return true;
         }
 
-        if (utf8Text.Length % 4 != 0) {
+        if(utf8Text.Length % 4 != 0) {
             result = default;
             return false;
         }
@@ -221,13 +244,13 @@ public readonly record struct Base64String :
             : (rented = ArrayPool<byte>.Shared.Rent(requiredByteCount));
 
         try {
-            if (Base64.DecodeFromUtf8(utf8Text, decodeBuffer, out _, out _, isFinalBlock: true) == OperationStatus.Done) {
+            if(Base64.DecodeFromUtf8(utf8Text, decodeBuffer, out _, out _, isFinalBlock: true) == OperationStatus.Done) {
                 result = new Base64String(Encoding.UTF8.GetString(utf8Text));
                 return true;
             }
         }
         finally {
-            if (rented is not null) {
+            if(rented is not null) {
                 ArrayPool<byte>.Shared.Return(rented);
             }
         }
@@ -249,7 +272,7 @@ public readonly record struct Base64String :
     }
 
     static bool IParsable<Base64String>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Base64String result) {
-        if (s is null) {
+        if(s is null) {
             result = default;
             return false;
         }
@@ -290,7 +313,7 @@ public readonly record struct Base64String :
     /// </summary>
     /// <param name="writer">The buffer writer to write to.</param>
     public void WriteTo(IBufferWriter<byte> writer) {
-        if (string.IsNullOrEmpty(this._encodedValue)) {
+        if(string.IsNullOrEmpty(this._encodedValue)) {
             return;
         }
 
@@ -321,11 +344,11 @@ public readonly record struct Base64String :
     }
 
     private static int GetDecodedLength(ReadOnlySpan<char> encoded) {
-        if (encoded.IsEmpty) {
+        if(encoded.IsEmpty) {
             return 0;
         }
 
-        if (encoded[^1] == '=') {
+        if(encoded[^1] == '=') {
             return (encoded.Length / 4 * 3) - (encoded[^2] == '=' ? 2 : 1);
         }
         return encoded.Length / 4 * 3;
@@ -383,30 +406,4 @@ public readonly record struct Base64String :
     }
 
     #endregion
-}
-
-/// <summary>
-/// A custom JsonConverter for serializing and deserializing the <see cref="Base64String"/> struct efficiently.
-/// </summary>
-public sealed class Base64StringJsonConverter : JsonConverter<Base64String> {
-
-    /// <inheritdoc/>
-    public override Base64String Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if (reader.TokenType == JsonTokenType.String) {
-            // Optimization: Try to read directly from the ValueSpan (raw bytes) if possible
-            // to avoid allocating an intermediate string before validation.
-            ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
-
-            if (Base64String.TryParse(span, out Base64String result)) {
-                return result;
-            }
-        }
-
-        return default;
-    }
-
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Base64String value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value.Value);
-    }
 }

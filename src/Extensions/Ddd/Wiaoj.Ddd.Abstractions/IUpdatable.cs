@@ -1,6 +1,6 @@
-﻿using Wiaoj.Ddd.Abstractions.DomainEvents;
+﻿using Wiaoj.Ddd.DomainEvents;
 
-namespace Wiaoj.Ddd.Abstractions;
+namespace Wiaoj.Ddd;
 
 public interface IUpdatable {
     DateTimeOffset? UpdatedAt { get; }

@@ -1,5 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Wiaoj.Ddd.Abstractions.ValueObjects;
+using Wiaoj.Ddd.ValueObjects;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.ValueConverters;
 /// <summary>

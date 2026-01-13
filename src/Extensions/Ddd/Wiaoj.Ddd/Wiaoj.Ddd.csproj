@@ -6,6 +6,8 @@
 		<Nullable>enable</Nullable>
 
 		<PackageId>Wiaoj.Ddd</PackageId>
+		<RootNamespace>Wiaoj.Ddd</RootNamespace>
+		<AssemblyName>Wiaoj.Ddd</AssemblyName>
 		<Version>0.0.1-alpha.1</Version>
 		<Authors>wiaoj</Authors>
 		<Title>Wiaoj DDD Core</Title>

@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.JsonConverters;
 
 namespace Wiaoj.Primitives;
 /// <summary>
@@ -146,7 +147,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     /// <param name="s">The string to parse.</param>
     /// <exception cref="FormatException">Thrown if the string contains invalid Base32 characters.</exception>
     public static Base32String Parse(string s) {
-        ArgumentNullException.ThrowIfNull(s);
+        Preca.ThrowIfNull(s);
         if (TryParse(s.AsSpan(), out Base32String result))
             return result;
         throw new FormatException("The input string is not a valid Base32 string.");
@@ -193,11 +194,11 @@ public readonly record struct Base32String : IEquatable<Base32String> {
             }
         }
 
-        // Strict RFC 4648 length check (optional but recommended)
-        if (s.Length % 8 != 0) {
-            result = default;
-            return false;
-        }
+        //// Strict RFC 4648 length check (optional but recommended)
+        //if (s.Length % 8 != 0) {
+        //    result = default;
+        //    return false;
+        //}
 
         // Optimization 2: Check if we need to convert to UpperCase.
         // If not, we can avoid allocating a new string.
@@ -379,32 +380,4 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     }
 
     #endregion
-}
-
-/// <summary>
-/// A custom JsonConverter for serializing and deserializing the <see cref="Base32String"/> struct.
-/// </summary>
-public sealed class Base32StringJsonConverter : JsonConverter<Base32String> {
-
-    /// <inheritdoc/>
-    public override Base32String Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if (reader.TokenType == JsonTokenType.String) {
-            // Try to parse directly from UTF8 bytes if possible for performance
-            if (reader.HasValueSequence) {
-                // Sequence handling is complex, fallback to string
-                return Base32String.Parse(reader.GetString()!);
-            }
-            else {
-                return Base32String.Parse(reader.ValueSpan);
-            }
-        }
-
-        string? value = reader.GetString();
-        return value is null ? default : Base32String.Parse(value);
-    }
-
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Base32String value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value.Value);
-    }
 }

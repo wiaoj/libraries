@@ -2,12 +2,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Ddd;
-using Wiaoj.Ddd.Abstractions;
 using Wiaoj.Ddd.EntityFrameworkCore;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
 using Wiaoj.Preconditions;
-using Wiaoj.Serialization.DependencyInjection;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Microsoft.EntityFrameworkCore;

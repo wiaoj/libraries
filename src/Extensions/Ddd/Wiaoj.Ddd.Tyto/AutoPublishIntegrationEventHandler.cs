@@ -1,8 +1,7 @@
 ﻿using Tyto;
-using Wiaoj.Ddd.Abstractions;
-using Wiaoj.Ddd.Abstractions.DomainEvents;
+using Wiaoj.Ddd.DomainEvents;
 
-namespace Wiaoj.Ddd.Tyto; 
+namespace Wiaoj.Ddd.Tyto;
 internal sealed class AutoPublishIntegrationEventHandler<TDomainEvent, TIntegrationEvent>(
     IBus bus,
     IIntegrationEventMapper<TDomainEvent, TIntegrationEvent> mapper)
