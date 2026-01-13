@@ -69,6 +69,7 @@
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.YamlDotNet/Wiaoj.Serialization.YamlDotNet.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Wiaoj.Extensions.DependencyInjection.Tests.Unit/Wiaoj.Extensions.DependencyInjection.Tests.Unit.csproj" Id="dba407f5-a6c7-4f26-8bf6-f330e9e0a649" />
     <Project Path="tests/Wiaoj.Primitives.Tests.Unit/Wiaoj.Primitives.Tests.Unit.csproj" Id="cef5fdb1-e581-46b4-964c-d5f75f7db1ff" />
   </Folder>
   <Folder Name="/tests/Ddd/">
