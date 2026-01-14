@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Serialization.Abstractions;
+﻿namespace Wiaoj.Serialization;
 /// <summary>
 /// Defines the core methods for asynchronous object serialization and deserialization, typically for stream-based I/O operations.
 /// </summary>
@@ -48,5 +48,5 @@ public interface IAsyncSerializer {
     /// <param name="stream">The source stream containing the data to deserialize.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task representing the asynchronous operation, with a tuple indicating success and the deserialized object.</returns>
-    ValueTask<(bool Success, TValue? Value)> TryDeserializeAsync<TValue>(Stream stream, CancellationToken cancellationToken = default); 
-} 
+    ValueTask<(bool Success, TValue? Value)> TryDeserializeAsync<TValue>(Stream stream, CancellationToken cancellationToken = default);
+}

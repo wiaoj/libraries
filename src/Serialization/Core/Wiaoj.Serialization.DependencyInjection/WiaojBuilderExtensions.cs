@@ -1,13 +1,13 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Wiaoj.Serialization.Abstractions;
 
-namespace Wiaoj.Serialization.DependencyInjection;   
+namespace Wiaoj.Serialization.DependencyInjection;
+
 public static class WiaojBuilderExtensions {
     extension(IWiaojSerializationBuilder builder) {
         public IWiaojSerializationBuilder ConfigureServices(
             Action<IServiceCollection> configure) {
             // Pattern Matching ile kontrol ediyoruz
-            if (builder is IServiceCollectionAccessor accessor) {
+            if(builder is IServiceCollectionAccessor accessor) {
                 configure(accessor.Services);
             }
             else {

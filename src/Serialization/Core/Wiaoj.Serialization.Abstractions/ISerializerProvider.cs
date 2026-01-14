@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace Wiaoj.Serialization.Abstractions;
+namespace Wiaoj.Serialization;
 /// <summary>
 /// Provides access to serializers registered in the DI container.
 /// </summary>
@@ -38,5 +38,5 @@ public interface ISerializerProvider {
     /// </exception>
     ISerializer? GetSerializer([NotNull] Type keyType);
 
-    ISerializer GetRequiredSerializer([NotNull] Type keyType);   
-} 
+    ISerializer GetRequiredSerializer([NotNull] Type keyType);
+}

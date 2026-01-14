@@ -4,8 +4,9 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<RootNamespace>Wiaoj.Results</RootNamespace>
-
+		<RootNamespace>Wiaoj.Results</RootNamespace> 
+		<AssemblyName>Wiaoj.Results</AssemblyName>
+		
 		<!-- Package Info -->
 		<PackageId>Wiaoj.Results</PackageId>
 		<Version>0.0.1-alpha.1</Version>

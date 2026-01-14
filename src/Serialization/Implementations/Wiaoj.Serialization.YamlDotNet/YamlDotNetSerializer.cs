@@ -1,6 +1,5 @@
 ﻿using System.Buffers;
 using System.Text;
-using Wiaoj.Serialization.Abstractions;
 using YamlDotNet.Core;
 
 using IYamlDeserializer = YamlDotNet.Serialization.IDeserializer;
@@ -23,7 +22,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
         try {
             return serializer.Serialize(value);
         }
-        catch (YamlException ex) {
+        catch(YamlException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members could not be serialized to YAML. See inner exception for details.", ex);
         }
     }
@@ -35,7 +34,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
         try {
             return serializer.Serialize(value, type);
         }
-        catch (YamlException ex) {
+        catch(YamlException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' or one of its members could not be serialized to YAML. See inner exception for details.", ex);
         }
     }
@@ -64,7 +63,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
         try {
             return deserializer.Deserialize<TValue>(data);
         }
-        catch (YamlException ex) {
+        catch(YamlException ex) {
             throw new DeserializationFormatException($"The input string is not a valid YAML representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -76,7 +75,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
         try {
             return deserializer.Deserialize(data, type);
         }
-        catch (YamlException ex) {
+        catch(YamlException ex) {
             throw new DeserializationFormatException($"The input string is not a valid YAML representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -121,7 +120,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
             result = DeserializeFromString<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -133,7 +132,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
             result = Deserialize<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -145,7 +144,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
             result = Deserialize<TValue>(in sequence);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -165,7 +164,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
             serializer.Serialize(writer, value);
             await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (YamlException ex) {
+        catch(YamlException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' could not be serialized to the stream as YAML.", ex);
         }
     }
@@ -182,7 +181,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
             serializer.Serialize(writer, value, type);
             await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (YamlException ex) {
+        catch(YamlException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' could not be serialized to the stream as YAML.", ex);
         }
     }
@@ -199,7 +198,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
             string content = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
             return DeserializeFromString<TValue>(content);
         }
-        catch (YamlException ex) // Catching exceptions from both ReadToEndAsync and DeserializeFromString
+        catch(YamlException ex) // Catching exceptions from both ReadToEndAsync and DeserializeFromString
         {
             throw new DeserializationFormatException($"The input stream does not contain a valid YAML representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
@@ -217,7 +216,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
             string content = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
             return DeserializeFromString(content, type);
         }
-        catch (YamlException ex) {
+        catch(YamlException ex) {
             throw new DeserializationFormatException($"The input stream does not contain a valid YAML representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -229,7 +228,7 @@ public sealed class YamlDotNetSerializer<TKey>(IYamlSerializer serializer, IYaml
             TValue? result = await DeserializeAsync<TValue>(stream, cancellationToken);
             return (true, result);
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             return (false, default);
         }
     }

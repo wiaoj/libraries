@@ -3,6 +3,9 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<RootNamespace>Wiaoj.Serialization.DependencyInjection</RootNamespace>
+		<AssemblyName>Wiaoj.Serialization.DependencyInjection</AssemblyName>
+		
 		<PackageId>Wiaoj.Serialization.DependencyInjection</PackageId>
 		<Version>0.0.1-alpha.1</Version>
 		<Authors>wiaoj</Authors>

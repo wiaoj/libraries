@@ -18,4 +18,4 @@ public class WiaojSecurityConfigurationException(string? message) : Exception(me
         this.Path = path;
     }
 
-} 
+}

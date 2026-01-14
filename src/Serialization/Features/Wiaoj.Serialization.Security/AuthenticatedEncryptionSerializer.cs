@@ -1,8 +1,7 @@
-﻿using System.Buffers;
+﻿using Microsoft.IO;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.IO;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.Security.Abstractions;
 
 namespace Wiaoj.Serialization.Security;
@@ -47,7 +46,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             byte[] decryptedBytes = encryptor.Decrypt(data);
             return innerSerializer.Deserialize<TValue>(decryptedBytes);
         }
-        catch (CryptographicException ex) {
+        catch(CryptographicException ex) {
             throw new DecryptionFailedException($"Decryption failed for the provided data. It might be corrupted, tampered with, or the encryption key is incorrect.", ex);
         }
     }
@@ -57,7 +56,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             byte[] decryptedBytes = encryptor.Decrypt(data);
             return innerSerializer.Deserialize(decryptedBytes, type);
         }
-        catch (CryptographicException ex) {
+        catch(CryptographicException ex) {
             throw new DecryptionFailedException($"Decryption failed for the provided data targeting type '{type.FullName}'. Data might be corrupted or key is incorrect.", ex);
         }
     }
@@ -67,7 +66,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             byte[] encryptedBytes = Convert.FromBase64String(data);
             return Deserialize<TValue>(encryptedBytes);
         }
-        catch (FormatException ex) // Catches invalid Base64
+        catch(FormatException ex) // Catches invalid Base64
         {
             throw new DecryptionFailedException($"The input string is not a valid Base64 encoded representation.", ex);
         }
@@ -78,7 +77,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             byte[] encryptedBytes = Convert.FromBase64String(data);
             return Deserialize(encryptedBytes, type);
         }
-        catch (FormatException ex) // Catches invalid Base64
+        catch(FormatException ex) // Catches invalid Base64
         {
             throw new DecryptionFailedException($"The input string is not a valid Base64 encoded representation.", ex);
         }
@@ -124,7 +123,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             await using CryptoStream cryptoStream = encryptor.CreateDecryptionStream(stream);
             return await innerSerializer.DeserializeAsync<TValue>(cryptoStream, cancellationToken);
         }
-        catch (Exception ex) when (ex is CryptographicException or IOException or NotSupportedException) {
+        catch(Exception ex) when(ex is CryptographicException or IOException or NotSupportedException) {
             throw new DecryptionFailedException($"Asynchronous decryption failed for the stream targeting type '{typeof(TValue).FullName}'. The stream might be corrupted or the key incorrect.", ex);
         }
     }
@@ -134,7 +133,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             await using CryptoStream cryptoStream = encryptor.CreateDecryptionStream(stream);
             return await innerSerializer.DeserializeAsync(cryptoStream, type, cancellationToken);
         }
-        catch (Exception ex) when (ex is CryptographicException or IOException or NotSupportedException) {
+        catch(Exception ex) when(ex is CryptographicException or IOException or NotSupportedException) {
             throw new DecryptionFailedException($"Asynchronous decryption failed for the stream targeting type '{type.FullName}'. The stream might be corrupted or the key incorrect.", ex);
         }
     }
@@ -146,7 +145,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             result = Deserialize<TValue>(data);
             return true;
         }
-        catch (WiaojSecurityException) // Catch our specific, wrapped exception
+        catch(WiaojSecurityException) // Catch our specific, wrapped exception
         {
             result = default;
             return false;
@@ -158,7 +157,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             result = DeserializeFromString<TValue>(data);
             return true;
         }
-        catch (WiaojSecurityException) {
+        catch(WiaojSecurityException) {
             result = default;
             return false;
         }
@@ -169,7 +168,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             result = Deserialize<TValue>(in sequence);
             return true;
         }
-        catch (WiaojSecurityException) {
+        catch(WiaojSecurityException) {
             result = default;
             return false;
         }
@@ -180,7 +179,7 @@ internal sealed class AuthenticatedEncryptionSerializer<TKey>(
             TValue? result = await DeserializeAsync<TValue>(stream, cancellationToken);
             return (true, result);
         }
-        catch (WiaojSecurityException) {
+        catch(WiaojSecurityException) {
             return (false, default);
         }
     }

@@ -1,8 +1,9 @@
 ﻿using System.Diagnostics;
 using System.Reflection;
 
-namespace Wiaoj.Serialization.Abstractions;
-internal static class WiaojActivitySource { 
+namespace Wiaoj.Serialization;
+
+internal static class WiaojActivitySource {
     public const string SourceName = "Wiaoj.Serialization";
     public static readonly string Version = GetAssemblyVersion();
     public static readonly ActivitySource Source = new(SourceName, Version);

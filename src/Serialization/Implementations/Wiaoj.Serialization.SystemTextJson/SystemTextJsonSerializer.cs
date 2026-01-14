@@ -1,7 +1,6 @@
 ﻿using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Wiaoj.Serialization.Abstractions;
 
 namespace Wiaoj.Serialization.SystemTextJson;
 
@@ -18,7 +17,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
             // Use value.GetType() to correctly handle polymorphism (e.g., serializing a derived type via a base type variable).
             return JsonSerializer.Serialize(value, value.GetType(), options);
         }
-        catch (NotSupportedException ex) {
+        catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not configured for JSON serialization.", ex);
         }
     }
@@ -30,7 +29,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             return JsonSerializer.Serialize(value, type, options);
         }
-        catch (NotSupportedException ex) {
+        catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' or one of its members is not configured for JSON serialization.", ex);
         }
     }
@@ -41,7 +40,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             return JsonSerializer.SerializeToUtf8Bytes(value, options);
         }
-        catch (NotSupportedException ex) {
+        catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not configured for JSON serialization.", ex);
         }
     }
@@ -54,7 +53,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
             using Utf8JsonWriter jsonWriter = new(writer);
             JsonSerializer.Serialize(jsonWriter, value, options);
         }
-        catch (NotSupportedException ex) {
+        catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not configured for JSON serialization.", ex);
         }
     }
@@ -65,7 +64,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             return JsonSerializer.Deserialize<TValue>(data, options);
         }
-        catch (JsonException ex) {
+        catch(JsonException ex) {
             throw new DeserializationFormatException($"The input string is not a valid JSON representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -77,7 +76,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             return JsonSerializer.Deserialize(data, type, options);
         }
-        catch (JsonException ex) {
+        catch(JsonException ex) {
             throw new DeserializationFormatException($"The input string is not a valid JSON representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -88,7 +87,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             return JsonSerializer.Deserialize<TValue>(data, options);
         }
-        catch (JsonException ex) {
+        catch(JsonException ex) {
             throw new DeserializationFormatException($"The input byte array is not a valid JSON representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -100,7 +99,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             return JsonSerializer.Deserialize(data, type, options);
         }
-        catch (JsonException ex) {
+        catch(JsonException ex) {
             throw new DeserializationFormatException($"The input byte array is not a valid JSON representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -111,7 +110,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
             Utf8JsonReader reader = new(sequence);
             return JsonSerializer.Deserialize<TValue>(ref reader, options);
         }
-        catch (JsonException ex) {
+        catch(JsonException ex) {
             throw new DeserializationFormatException($"The input byte sequence is not a valid JSON representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -123,7 +122,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
             Utf8JsonReader reader = new(sequence);
             return JsonSerializer.Deserialize(ref reader, type, options);
         }
-        catch (JsonException ex) {
+        catch(JsonException ex) {
             throw new DeserializationFormatException($"The input byte sequence is not a valid JSON representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -138,7 +137,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
             result = DeserializeFromString<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -151,7 +150,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
             result = Deserialize<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -163,7 +162,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
             result = Deserialize<TValue>(in sequence);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -176,7 +175,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             await JsonSerializer.SerializeAsync(stream, value, value.GetType(), options, cancellationToken);
         }
-        catch (NotSupportedException ex) {
+        catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' is not supported by the async JSON serializer.", ex);
         }
     }
@@ -189,7 +188,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             await JsonSerializer.SerializeAsync(stream, value, type, options, cancellationToken);
         }
-        catch (NotSupportedException ex) {
+        catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' is not supported by the async JSON serializer.", ex);
         }
     }
@@ -200,7 +199,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             return await JsonSerializer.DeserializeAsync<TValue>(stream, options, cancellationToken);
         }
-        catch (JsonException ex) {
+        catch(JsonException ex) {
             throw new DeserializationFormatException($"The input stream does not contain a valid JSON representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -212,10 +211,10 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             return await JsonSerializer.DeserializeAsync(stream, type, options, cancellationToken);
         }
-        catch (JsonException ex) {
+        catch(JsonException ex) {
             throw new DeserializationFormatException($"The input stream does not contain a valid JSON representation for the target type '{type.FullName}'.", ex);
         }
-        catch (NotSupportedException ex) {
+        catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' is not supported for async deserialization.", ex);
         }
     }
@@ -227,7 +226,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
             TValue? result = await DeserializeAsync<TValue>(stream, cancellationToken);
             return (true, result);
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             return (false, default);
         }
     }
@@ -239,7 +238,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             await JsonSerializer.SerializeAsync(stream, values, options, cancellationToken);
         }
-        catch (NotSupportedException ex) {
+        catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The async enumerable of type '{typeof(TValue).FullName}' is not supported by the JSON serializer.", ex);
         }
     }
@@ -252,18 +251,18 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         try {
             sourceEnumerable = JsonSerializer.DeserializeAsyncEnumerable<TValue>(stream, options, cancellationToken);
         }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException) {
+        catch(Exception ex) when(ex is JsonException or NotSupportedException) {
             throw new DeserializationFormatException("Failed to start deserializing the async JSON enumerable. The stream might be empty or malformed at the start.", ex);
         }
 
-        await using var enumerator = sourceEnumerable.GetAsyncEnumerator(cancellationToken);
-        while (true) {
+        await using IAsyncEnumerator<TValue?> enumerator = sourceEnumerable.GetAsyncEnumerator(cancellationToken);
+        while(true) {
             try {
-                if (!await enumerator.MoveNextAsync()) {
+                if(!await enumerator.MoveNextAsync()) {
                     break;
                 }
             }
-            catch (JsonException ex) {
+            catch(JsonException ex) {
                 throw new DeserializationFormatException($"The JSON stream became invalid while enumerating objects of type '{typeof(TValue).FullName}'.", ex);
             }
 

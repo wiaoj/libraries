@@ -1,12 +1,10 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Wiaoj.Preconditions.Exceptions;
-using Wiaoj.Serialization.Abstractions;
 
-namespace Wiaoj.Serialization.DependencyInjection;
-
+namespace Wiaoj.Serialization.DependencyInjection; 
 public static class ServiceCollectionExtensions {
     /// <summary>
     /// Adds Wiaoj serializer support to the service collection.
@@ -19,7 +17,7 @@ public static class ServiceCollectionExtensions {
         Preca.ThrowIfNull(configurationBuilder);
         WiaojSerializationBuilder builder = new(services);
         configurationBuilder(builder);
-        builder.AddSerializerProvider();                     
+        builder.AddSerializerProvider();
         builder.Build();
 
         return services;

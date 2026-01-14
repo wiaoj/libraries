@@ -1,5 +1,4 @@
 ﻿using System.Text.Json;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.SystemTextJson;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
@@ -89,5 +88,69 @@ public static class SystemTextJsonSerializerExtensions {
         JsonSerializerOptions options = new();
         configure(options);
         return builder.AddSerializer(sp => new SystemTextJsonSerializer<TKey>(options));
+    }
+
+    /// <summary>
+    /// Tries to register System.Text.Json as the default (keyless) serializer.
+    /// If a default serializer exists, this operation does nothing.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseSystemTextJson(this IWiaojSerializationBuilder builder) {
+        Preca.ThrowIfNull(builder);
+        return builder.TryUseSystemTextJson(_ => { });
+    }
+
+    /// <summary>
+    /// Tries to register System.Text.Json with specific options.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseSystemTextJson(this IWiaojSerializationBuilder builder,
+                                                              JsonSerializerOptions jsonSerializerOptions) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(jsonSerializerOptions);
+        return builder.TryAddSerializer(sp => new SystemTextJsonSerializer<KeylessRegistration>(jsonSerializerOptions));
+    }
+
+    /// <summary>
+    /// Tries to register System.Text.Json with configuration action.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseSystemTextJson(this IWiaojSerializationBuilder builder,
+                                                              Action<JsonSerializerOptions> configure) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+        JsonSerializerOptions options = new();
+        configure(options);
+        return builder.TryAddSerializer(sp => new SystemTextJsonSerializer<KeylessRegistration>(options));
+    }
+
+    /// <summary>
+    /// Tries to register System.Text.Json for a specific key.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseSystemTextJson<TKey>(this IWiaojSerializationBuilder builder)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        return builder.TryUseSystemTextJson<TKey>(_ => { });
+    }
+
+    /// <summary>
+    /// Tries to register System.Text.Json for a specific key with options.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseSystemTextJson<TKey>(this IWiaojSerializationBuilder builder,
+                                                                    JsonSerializerOptions jsonSerializerOptions)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(jsonSerializerOptions);
+        return builder.TryAddSerializer(sp => new SystemTextJsonSerializer<TKey>(jsonSerializerOptions));
+    }
+
+    /// <summary>
+    /// Tries to register System.Text.Json for a specific key with configuration action.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseSystemTextJson<TKey>(this IWiaojSerializationBuilder builder,
+                                                                    Action<JsonSerializerOptions> configure)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+        JsonSerializerOptions options = new();
+        configure(options);
+        return builder.TryAddSerializer(sp => new SystemTextJsonSerializer<TKey>(options));
     }
 }

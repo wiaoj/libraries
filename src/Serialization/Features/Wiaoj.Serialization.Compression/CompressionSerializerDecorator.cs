@@ -1,7 +1,6 @@
-﻿using System.Buffers;
+﻿using Microsoft.IO;
+using System.Buffers;
 using System.Text;
-using Microsoft.IO;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.Compression.Abstractions;
 
 namespace Wiaoj.Serialization.Compression;
@@ -54,7 +53,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             // Inner serializer will throw DeserializationFormatException if plainBytes are invalid for the target type.
             return this._innerSerializer.Deserialize<TValue>(plainBytes);
         }
-        catch (Exception ex) {
+        catch(Exception ex) {
             // Catch exceptions from the decompressor itself (e.g., invalid gzip header).
             throw new DeserializationFormatException($"Failed to decompress and deserialize data for type '{typeof(TValue).FullName}'. The data may be corrupt or in an unexpected format.", ex);
         }
@@ -65,7 +64,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             byte[] plainBytes = this._compressor.Decompress(data);
             return this._innerSerializer.Deserialize(plainBytes, type);
         }
-        catch (Exception ex) {
+        catch(Exception ex) {
             throw new DeserializationFormatException($"Failed to decompress and deserialize data for type '{type.FullName}'. See inner exception for details.", ex);
         }
     }
@@ -75,7 +74,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             byte[] compressedBytes = Convert.FromBase64String(data);
             return Deserialize<TValue>(compressedBytes);
         }
-        catch (FormatException ex) // Invalid Base64
+        catch(FormatException ex) // Invalid Base64
         {
             throw new DeserializationFormatException($"The input string is not a valid Base64 encoded representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
@@ -86,7 +85,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             byte[] compressedBytes = Convert.FromBase64String(data);
             return Deserialize(compressedBytes, type);
         }
-        catch (FormatException ex) // Invalid Base64
+        catch(FormatException ex) // Invalid Base64
         {
             throw new DeserializationFormatException($"The input string is not a valid Base64 encoded representation for the target type '{type.FullName}'.", ex);
         }
@@ -128,7 +127,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             await using Stream decompressionStream = this._compressor.CreateDecompressionStream(stream);
             return await this._innerSerializer.DeserializeAsync<TValue>(decompressionStream, cancellationToken);
         }
-        catch (Exception ex) // Catches errors from both decompression and inner deserialization
+        catch(Exception ex) // Catches errors from both decompression and inner deserialization
         {
             throw new DeserializationFormatException($"Failed to asynchronously decompress and deserialize stream for type '{typeof(TValue).FullName}'.", ex);
         }
@@ -139,7 +138,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             await using Stream decompressionStream = this._compressor.CreateDecompressionStream(stream);
             return await this._innerSerializer.DeserializeAsync(decompressionStream, type, cancellationToken);
         }
-        catch (Exception ex) {
+        catch(Exception ex) {
             throw new DeserializationFormatException($"Failed to asynchronously decompress and deserialize stream for type '{type.FullName}'.", ex);
         }
     }
@@ -151,7 +150,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             result = Deserialize<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) { // Catches our wrapped exceptions
+        catch(WiaojSerializationException) { // Catches our wrapped exceptions
             result = default;
             return false;
         }
@@ -162,7 +161,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             result = DeserializeFromString<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -173,7 +172,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             result = Deserialize<TValue>(in sequence);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -184,7 +183,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
             TValue? result = await DeserializeAsync<TValue>(stream, cancellationToken);
             return (true, result);
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             return (false, default);
         }
     }

@@ -4,7 +4,6 @@ using Microsoft.IO;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.Bson;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
@@ -20,7 +19,7 @@ public static class BsonSerializerExtensions {
             BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
             BsonSerializer.RegisterSerializer(new ObjectSerializer());
         }
-        catch (BsonSerializationException) {
+        catch(BsonSerializationException) {
         }
     }
     /// <summary>
@@ -85,5 +84,71 @@ public static class BsonSerializerExtensions {
         this IWiaojSerializationBuilder builder,
         BsonSerializationArgs serializationArgs) {
         return builder.UseBson<KeylessRegistration>(null, null, serializationArgs);
+    }
+
+    /// <summary>
+    /// Tries to register BSON as the default (keyless) serializer.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseBson(this IWiaojSerializationBuilder builder) {
+        Preca.ThrowIfNull(builder);
+        return builder.TryUseBson<KeylessRegistration>(_ => { }, _ => { });
+    }
+
+    /// <summary>
+    /// Tries to register BSON as the default (keyless) serializer with custom configuration.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseBson(
+         this IWiaojSerializationBuilder builder,
+         Action<BsonSerializationContext.Builder>? serializationConfigurator = null,
+         Action<BsonDeserializationContext.Builder>? deserializationConfigurator = null,
+         BsonSerializationArgs serializationArgs = default) {
+        return builder.TryUseBson<KeylessRegistration>(serializationConfigurator, deserializationConfigurator, serializationArgs);
+    }
+
+    /// <summary>
+    /// Tries to register BSON as a named serializer.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseBson<TKey>(this IWiaojSerializationBuilder builder)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        return builder.TryUseBson<TKey>(_ => { }, _ => { });
+    }
+
+    /// <summary>
+    /// Tries to register BSON as a named serializer with custom configuration.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseBson<TKey>(
+        this IWiaojSerializationBuilder builder,
+        Action<BsonSerializationContext.Builder>? serializationConfigurator = null,
+        Action<BsonDeserializationContext.Builder>? deserializationConfigurator = null,
+        BsonSerializationArgs serializationArgs = default)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+
+        Action<BsonSerializationContext.Builder> finalSerializationConfig = serializationConfigurator ?? (_ => { });
+        Action<BsonDeserializationContext.Builder> finalDeserializationConfig = deserializationConfigurator ?? (_ => { });
+        builder.ConfigureServices(services => services.TryAddSingleton<RecyclableMemoryStreamManager>());
+
+        // Use TryAddSerializer here
+        return builder.TryAddSerializer(sp =>
+            new BsonSerializer<TKey>(
+                finalSerializationConfig,
+                finalDeserializationConfig,
+                serializationArgs,
+                sp.GetRequiredService<RecyclableMemoryStreamManager>()
+            ));
+    }
+
+    public static ISerializerConfigurator<TKey> TryUseBson<TKey>(
+       this IWiaojSerializationBuilder builder,
+       BsonSerializationArgs serializationArgs)
+       where TKey : ISerializerKey {
+        return builder.TryUseBson<TKey>(null, null, serializationArgs);
+    }
+
+    public static ISerializerConfigurator<KeylessRegistration> TryUseBson(
+        this IWiaojSerializationBuilder builder,
+        BsonSerializationArgs serializationArgs) {
+        return builder.TryUseBson<KeylessRegistration>(null, null, serializationArgs);
     }
 }

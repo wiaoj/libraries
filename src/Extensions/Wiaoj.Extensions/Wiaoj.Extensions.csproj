@@ -5,8 +5,9 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>					  
-		<RootNamespace>Wiaoj.Extensions</RootNamespace>
-										   
+		<RootNamespace>Wiaoj.Extensions</RootNamespace> 
+		<AssemblyName>Wiaoj.Extensions</AssemblyName>
+		
 		<PackageId>Wiaoj.Extensions</PackageId>
 		<Version>0.0.1-alpha.1</Version>			   
 		<Authors>wiaoj</Authors>

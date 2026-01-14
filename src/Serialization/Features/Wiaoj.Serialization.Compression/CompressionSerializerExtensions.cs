@@ -1,9 +1,8 @@
-﻿using System.IO.Compression;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IO;
+using System.IO.Compression;
 using Wiaoj.Extensions.DependencyInjection;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.Compression;
 using Wiaoj.Serialization.Compression.Abstractions;
 using Wiaoj.Serialization.Compression.Compressors;
@@ -19,10 +18,10 @@ public static class CompressionSerializerExtensions {
         this ISerializerConfigurator<TKey> configurator,
         Func<IServiceProvider, ICompressor> compressorFactory) where TKey : ISerializerKey {
         Preca.ThrowIfNull(configurator);
-                                         
+
         configurator.Builder.ConfigureServices(services => {
             services.TryAddSingleton<RecyclableMemoryStreamManager>();
-            services.Decorate<ISerializer<TKey>>((innerSerializer, provider) => {     
+            services.Decorate<ISerializer<TKey>>((innerSerializer, provider) => {
                 return new CompressionSerializerDecorator<TKey>(
                     innerSerializer: innerSerializer,
                     compressor: compressorFactory(provider),

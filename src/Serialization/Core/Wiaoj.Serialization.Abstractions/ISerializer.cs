@@ -1,4 +1,5 @@
-﻿namespace Wiaoj.Serialization.Abstractions;
+﻿namespace Wiaoj.Serialization;
+
 public interface ISerializer : IAsyncSerializer, ISyncSerializer;
 
 /// <summary>

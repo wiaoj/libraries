@@ -1,5 +1,5 @@
-﻿using System.IO.Compression;
-using Microsoft.IO;
+﻿using Microsoft.IO;
+using System.IO.Compression;
 using Wiaoj.Serialization.Compression.Abstractions;
 
 namespace Wiaoj.Serialization.Compression.Compressors;
@@ -12,13 +12,13 @@ namespace Wiaoj.Serialization.Compression.Compressors;
 /// </remarks>
 /// <param name="compressionLevel">The desired trade-off between compression speed and size.</param>
 /// <param name="streamManager"></param>
-internal sealed class BrotliCompressor(CompressionLevel compressionLevel, RecyclableMemoryStreamManager streamManager) : ICompressor { 
+internal sealed class BrotliCompressor(CompressionLevel compressionLevel, RecyclableMemoryStreamManager streamManager) : ICompressor {
     /// <inheritdoc />
     public byte[] Compress(ReadOnlySpan<byte> plainBytes) {
         using MemoryStream outputStream = streamManager.GetStream();
-        using (BrotliStream brotliStream = new(outputStream, compressionLevel, leaveOpen: true)) {
+        using(BrotliStream brotliStream = new(outputStream, compressionLevel, leaveOpen: true)) {
             brotliStream.Write(plainBytes);
-        } 
+        }
         return outputStream.ToArray();
     }
 
@@ -26,7 +26,7 @@ internal sealed class BrotliCompressor(CompressionLevel compressionLevel, Recycl
     public byte[] Decompress(ReadOnlySpan<byte> compressedData) {
         using MemoryStream inputStream = streamManager.GetStream(compressedData);
         using MemoryStream outputStream = streamManager.GetStream();
-        using (BrotliStream brotliStream = new(inputStream, CompressionMode.Decompress)) {
+        using(BrotliStream brotliStream = new(inputStream, CompressionMode.Decompress)) {
             brotliStream.CopyTo(outputStream);
         }
         return outputStream.ToArray();

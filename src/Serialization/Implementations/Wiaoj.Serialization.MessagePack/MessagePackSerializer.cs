@@ -1,8 +1,8 @@
-﻿using System.Buffers;
-using MessagePack;
-using Wiaoj.Serialization.Abstractions;
+﻿using MessagePack;
+using System.Buffers;
 
-namespace Wiaoj.Serialization.MessagePack; 
+namespace Wiaoj.Serialization.MessagePack;
+
 public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions options) : ISerializer<TKey> where TKey : ISerializerKey {
     // --- Serialization Methods ---
 
@@ -13,7 +13,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
             byte[] bytes = MessagePackSerializer.Serialize(value, options);
             return Convert.ToBase64String(bytes);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not supported by the MessagePack serializer.", ex);
         }
     }
@@ -26,7 +26,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
             byte[] bytes = MessagePackSerializer.Serialize(type, value, options);
             return Convert.ToBase64String(bytes);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' or one of its members is not supported by the MessagePack serializer.", ex);
         }
     }
@@ -37,7 +37,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             return MessagePackSerializer.Serialize(value, options);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not supported by the MessagePack serializer.", ex);
         }
     }
@@ -49,7 +49,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             MessagePackSerializer.Serialize(writer, value, options);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not supported by the MessagePack serializer.", ex);
         }
     }
@@ -63,7 +63,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
             byte[] bytes = Convert.FromBase64String(data);
             return MessagePackSerializer.Deserialize<TValue>(bytes, options);
         }
-        catch (Exception ex) when (ex is MessagePackSerializationException or FormatException) {
+        catch(Exception ex) when(ex is MessagePackSerializationException or FormatException) {
             throw new DeserializationFormatException($"The input string is not a valid Base64 encoded MessagePack representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -76,7 +76,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
             byte[] bytes = Convert.FromBase64String(data);
             return MessagePackSerializer.Deserialize(type, bytes, options);
         }
-        catch (Exception ex) when (ex is MessagePackSerializationException or FormatException) {
+        catch(Exception ex) when(ex is MessagePackSerializationException or FormatException) {
             throw new DeserializationFormatException($"The input string is not a valid Base64 encoded MessagePack representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -87,7 +87,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             return MessagePackSerializer.Deserialize<TValue>(data, options);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new DeserializationFormatException($"The input byte array is not a valid MessagePack representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -99,7 +99,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             return MessagePackSerializer.Deserialize(type, data, options);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new DeserializationFormatException($"The input byte array is not a valid MessagePack representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -109,7 +109,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             return MessagePackSerializer.Deserialize<TValue>(sequence, options);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new DeserializationFormatException($"The input byte sequence is not a valid MessagePack representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -120,7 +120,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             return MessagePackSerializer.Deserialize(type, sequence, options);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new DeserializationFormatException($"The input byte sequence is not a valid MessagePack representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -134,7 +134,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
             result = DeserializeFromString<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -146,7 +146,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
             result = Deserialize<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -158,7 +158,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
             result = Deserialize<TValue>(in sequence);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -173,7 +173,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             await MessagePackSerializer.SerializeAsync(stream, value, options, cancellationToken);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' is not supported by the async MessagePack serializer.", ex);
         }
     }
@@ -186,7 +186,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             await MessagePackSerializer.SerializeAsync(type, stream, value, options, cancellationToken);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' is not supported by the async MessagePack serializer.", ex);
         }
     }
@@ -200,7 +200,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             await MessagePackSerializer.SerializeAsync(stream, values, options, cancellationToken);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new UnsupportedTypeException($"The async enumerable of type '{typeof(TValue).FullName}' is not supported by the MessagePack serializer.", ex);
         }
     }
@@ -211,7 +211,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             return await MessagePackSerializer.DeserializeAsync<TValue>(stream, options, cancellationToken);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new DeserializationFormatException($"The input stream does not contain a valid MessagePack representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -223,7 +223,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
         try {
             return await MessagePackSerializer.DeserializeAsync(type, stream, options, cancellationToken);
         }
-        catch (MessagePackSerializationException ex) {
+        catch(MessagePackSerializationException ex) {
             throw new DeserializationFormatException($"The input stream does not contain a valid MessagePack representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -235,7 +235,7 @@ public sealed class MessagePackSerializer<TKey>(MessagePackSerializerOptions opt
             TValue? value = await DeserializeAsync<TValue>(stream, cancellationToken);
             return (true, value);
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             return (false, default);
         }
     }

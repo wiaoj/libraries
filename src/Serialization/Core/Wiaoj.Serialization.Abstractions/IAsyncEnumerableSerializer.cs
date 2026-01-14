@@ -1,10 +1,11 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace Wiaoj.Serialization.Abstractions;
+namespace Wiaoj.Serialization;
+
 [Experimental("WS0001", UrlFormat = "This interface is experimental and may change in future versions.")]
 public interface IAsyncEnumerableSerializer<TKey> : IAsyncEnumerableSerializer where TKey : notnull, ISerializerKey;
 [Experimental("WS0001", UrlFormat = "This interface is experimental and may change in future versions.")]
-public interface IAsyncEnumerableSerializer  {
+public interface IAsyncEnumerableSerializer {
     /// <summary>
     /// Asynchronously serializes a sequence of values as a JSON array to a stream.
     /// This method is highly efficient as it streams the data without buffering the entire collection in memory.
@@ -15,7 +16,7 @@ public interface IAsyncEnumerableSerializer  {
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous write operation.</returns>
     Task SerializeAsync<TValue>(Stream stream, IAsyncEnumerable<TValue> values, CancellationToken cancellationToken = default);
-     
+
     /// <summary>
     /// Asynchronously deserializes a JSON array from a stream and returns each item as an <see cref="IAsyncEnumerable{TValue}"/> for immediate processing.
     /// </summary>

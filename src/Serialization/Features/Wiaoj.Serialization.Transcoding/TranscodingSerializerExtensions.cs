@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection.Extensions;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.Transcoding;
 using Wiaoj.Serialization.Transcoding.Abstractions;
 

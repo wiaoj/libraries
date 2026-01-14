@@ -1,6 +1,6 @@
 ﻿using System.Buffers;
 
-namespace Wiaoj.Serialization.Abstractions;
+namespace Wiaoj.Serialization;
 /// <summary>
 /// Defines the core methods for synchronous object serialization and deserialization.
 /// </summary>

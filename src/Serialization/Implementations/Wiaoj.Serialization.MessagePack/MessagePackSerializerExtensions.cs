@@ -1,6 +1,5 @@
 ﻿using MessagePack;
 using MessagePack.Resolvers;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.MessagePack;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
@@ -82,5 +81,68 @@ public static class MessagePackSerializerExtensions {
         MessagePackSerializerOptions options = DefaultOptions;
         configure(options);
         return builder.AddSerializer(sp => new MessagePackSerializer<TKey>(options));
+    }
+
+    /// <summary>
+    /// Tries to register MessagePack as the default (keyless) serializer.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this IWiaojSerializationBuilder builder) {
+        Preca.ThrowIfNull(builder);
+        return builder.TryUseMessagePack(_ => { });
+    }
+
+    /// <summary>
+    /// Tries to register MessagePack as the default (keyless) serializer with options.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this IWiaojSerializationBuilder builder,
+                                                           MessagePackSerializerOptions options) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(options);
+        return builder.TryAddSerializer(sp => new MessagePackSerializer<KeylessRegistration>(options));
+    }
+
+    /// <summary>
+    /// Tries to register MessagePack as the default (keyless) serializer with configuration.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this IWiaojSerializationBuilder builder,
+                                                           Action<MessagePackSerializerOptions> configure) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+        MessagePackSerializerOptions options = DefaultOptions;
+        configure(options);
+        return builder.TryAddSerializer(sp => new MessagePackSerializer<KeylessRegistration>(options));
+    }
+
+    /// <summary>
+    /// Tries to register MessagePack as a named serializer.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this IWiaojSerializationBuilder builder)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        return builder.TryUseMessagePack<TKey>(_ => { });
+    }
+
+    /// <summary>
+    /// Tries to register MessagePack as a named serializer with options.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this IWiaojSerializationBuilder builder,
+                                                                 MessagePackSerializerOptions options)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(options);
+        return builder.TryAddSerializer(sp => new MessagePackSerializer<TKey>(options));
+    }
+
+    /// <summary>
+    /// Tries to register MessagePack as a named serializer with configuration.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this IWiaojSerializationBuilder builder,
+                                                                 Action<MessagePackSerializerOptions> configure)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+        MessagePackSerializerOptions options = DefaultOptions;
+        configure(options);
+        return builder.TryAddSerializer(sp => new MessagePackSerializer<TKey>(options));
     }
 }

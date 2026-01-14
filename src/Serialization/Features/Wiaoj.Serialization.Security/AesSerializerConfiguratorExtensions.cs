@@ -1,16 +1,16 @@
-﻿using System.Runtime.Versioning;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IO;
+using System.Runtime.Versioning;
 using Wiaoj.Extensions.DependencyInjection;
 using Wiaoj.Primitives;
-using Wiaoj.Serialization.Abstractions;
 using Wiaoj.Serialization.DependencyInjection;
 using Wiaoj.Serialization.Security.Abstractions;
 using Wiaoj.Serialization.Security.Extensions;
 
-namespace Wiaoj.Serialization.Security;           
+namespace Wiaoj.Serialization.Security;
+
 public static class EncryptionSerializerExtensions {
     private static ISerializerConfigurator<TKey> AddAuthenticatedEncryption<TKey>(
         this ISerializerConfigurator<TKey> configurator,
@@ -80,7 +80,7 @@ public static class EncryptionSerializerExtensions {
             try {
                 base64Key = Base64String.Parse(rawValue);
             }
-            catch (FormatException) {
+            catch(FormatException) {
                 throw new WiaojSecurityConfigurationException("The provided key is not a valid Base64 string.", path: section.Path);
             }
 
@@ -110,7 +110,7 @@ public static class EncryptionSerializerExtensions {
         return configurator.AddAuthenticatedEncryption(provider => {
             Secret<byte> key = keyFactory(provider);
 
-            if (key.Length == 0) {
+            if(key.Length == 0) {
                 throw new ArgumentException("Encryption key cannot be empty.");
             }
 

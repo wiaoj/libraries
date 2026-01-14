@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Serialization.Abstractions;
+﻿namespace Wiaoj.Serialization;
 /// <summary>
 /// Configures a serializer registration for a specific key and provides methods for chaining.
 /// </summary>

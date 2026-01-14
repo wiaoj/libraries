@@ -1,10 +1,11 @@
-﻿using System.Runtime.Versioning;
+﻿using Microsoft.IO;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
-using Microsoft.IO;
 using Wiaoj.Primitives;
 using Wiaoj.Serialization.Security.Abstractions;
 
-namespace Wiaoj.Serialization.Security;   
+namespace Wiaoj.Serialization.Security;
+
 [UnsupportedOSPlatform("browser")]
 [UnsupportedOSPlatform("ios")]
 [UnsupportedOSPlatform("tvos")]
@@ -34,7 +35,7 @@ internal sealed class AesGcmEncryptor(Secret<byte> key, RecyclableMemoryStreamMa
 
     /// <inheritdoc />
     public byte[] Decrypt(ReadOnlySpan<byte> encryptedData) {
-        if (encryptedData.Length < NonceSize + TagSize) {
+        if(encryptedData.Length < NonceSize + TagSize) {
             throw new CryptographicException("Invalid encrypted data size.");
         }
 

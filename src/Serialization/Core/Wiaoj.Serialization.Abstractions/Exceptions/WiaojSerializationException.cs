@@ -3,7 +3,7 @@
 /// Represents errors that occur during Wiaoj serialization or deserialization operations.
 /// This exception wraps the underlying serializer-specific exception.
 /// </summary>
-public class WiaojSerializationException : Exception {  
+public class WiaojSerializationException : Exception {
     public WiaojSerializationException(string message) : base(message) { }
     public WiaojSerializationException(string message, Exception innerException) : base(message, innerException) { }
 }

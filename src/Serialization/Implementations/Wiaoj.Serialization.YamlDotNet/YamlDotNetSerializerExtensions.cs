@@ -1,5 +1,4 @@
-﻿using Wiaoj.Serialization.Abstractions;
-using Wiaoj.Serialization.YamlDotNet;
+﻿using Wiaoj.Serialization.YamlDotNet;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -47,5 +46,41 @@ public static class YamlDotNetSerializerExtensions {
         Action<SerializerBuilder>? configureSerializer = null,
         Action<DeserializerBuilder>? configureDeserializer = null) {
         return builder.UseYamlDotNet<KeylessRegistration>(configureSerializer, configureDeserializer);
+    }
+
+    /// <summary>
+    /// Tries to register YamlDotNet as a serializer for the given key type.
+    /// </summary>
+    public static ISerializerConfigurator<TKey> TryUseYamlDotNet<TKey>(
+        this IWiaojSerializationBuilder builder,
+        Action<SerializerBuilder>? configureSerializer = null,
+        Action<DeserializerBuilder>? configureDeserializer = null) where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+
+        return builder.TryAddSerializer(sp => {
+            SerializerBuilder serializerBuilder = new SerializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance);
+
+            DeserializerBuilder deserializerBuilder = new DeserializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance);
+
+            configureSerializer?.Invoke(serializerBuilder);
+            configureDeserializer?.Invoke(deserializerBuilder);
+
+            return new YamlDotNetSerializer<TKey>(
+                serializerBuilder.Build(),
+                deserializerBuilder.Build()
+            );
+        });
+    }
+
+    /// <summary>
+    /// Tries to register YamlDotNet as the default (keyless) serializer.
+    /// </summary>
+    public static ISerializerConfigurator<KeylessRegistration> TryUseYamlDotNet(
+        this IWiaojSerializationBuilder builder,
+        Action<SerializerBuilder>? configureSerializer = null,
+        Action<DeserializerBuilder>? configureDeserializer = null) {
+        return builder.TryUseYamlDotNet<KeylessRegistration>(configureSerializer, configureDeserializer);
     }
 }

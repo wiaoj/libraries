@@ -6,8 +6,10 @@
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<DefineConstants>$(DefineConstants);WIAOJ_PRIMITIVES</DefineConstants>
+		
 		<RootNamespace>Wiaoj.Primitives</RootNamespace>
-
+		<AssemblyName>Wiaoj.Primitives</AssemblyName>
+		
 		<PackageId>Wiaoj.Primitives</PackageId>
 		<Version>0.0.1-alpha.2</Version>
 		<Authors>wiaoj</Authors>

@@ -1,9 +1,8 @@
-﻿using System.Buffers;
-using Microsoft.IO;
+﻿using Microsoft.IO;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
-using Wiaoj.Serialization.Abstractions;
+using System.Buffers;
 
 namespace Wiaoj.Serialization.Bson;
 
@@ -20,7 +19,7 @@ public sealed class BsonSerializer<TKey>(
 
     /// <inheritdoc />
     public byte[] Serialize<TValue>(TValue value) {
-        if (value is null) return [];
+        if(value is null) return [];
         // Delegate to the private, type-aware Serialize method.
         return Serialize(value, typeof(TValue));
     }
@@ -29,18 +28,18 @@ public sealed class BsonSerializer<TKey>(
     /// Central private method for serialization to handle exceptions consistently.
     /// </summary>
     private byte[] Serialize(object? value, Type type) {
-        if (value is null) return [];
+        if(value is null) return [];
         Preca.ThrowIfNull(type);
 
         try {
             using RecyclableMemoryStream stream = streamManager.GetStream();
-            using (BsonBinaryWriter writer = new(stream)) {
+            using(BsonBinaryWriter writer = new(stream)) {
                 // CORRECTED: Pass the type and value in the correct order.
                 BsonSerializer.Serialize(writer, type, value, serializationConfigurator, defaultSerializationArgs);
             }
             return stream.ToArray();
         }
-        catch (Exception ex) when (ex is BsonException or InvalidOperationException) {
+        catch(Exception ex) when(ex is BsonException or InvalidOperationException) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' or one of its members could not be serialized to BSON.", ex);
         }
     }
@@ -65,13 +64,13 @@ public sealed class BsonSerializer<TKey>(
 
     /// <inheritdoc />
     public TValue? Deserialize<TValue>(byte[] data) {
-        if (data is null or { Length: 0 }) return default;
+        if(data is null or { Length: 0 }) return default;
         try {
             using RecyclableMemoryStream stream = streamManager.GetStream(data);
             using BsonBinaryReader reader = new(stream);
             return BsonSerializer.Deserialize<TValue>(reader, deserializationConfigurator);
         }
-        catch (Exception ex) when (ex is BsonException or FormatException or IndexOutOfRangeException or IOException) {
+        catch(Exception ex) when(ex is BsonException or FormatException or IndexOutOfRangeException or IOException) {
             throw new DeserializationFormatException($"The input byte array is not a valid BSON representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -79,13 +78,13 @@ public sealed class BsonSerializer<TKey>(
     /// <inheritdoc />
     public object? Deserialize(byte[] data, Type type) {
         Preca.ThrowIfNull(type);
-        if (data is null or { Length: 0 }) return null;
+        if(data is null or { Length: 0 }) return null;
         try {
             using RecyclableMemoryStream stream = streamManager.GetStream(data);
             using BsonBinaryReader reader = new(stream);
             return BsonSerializer.Deserialize(reader, type, deserializationConfigurator);
         }
-        catch (Exception ex) when (ex is BsonException or FormatException or IndexOutOfRangeException or IOException) {
+        catch(Exception ex) when(ex is BsonException or FormatException or IndexOutOfRangeException or IOException) {
             throw new DeserializationFormatException($"The input byte array is not a valid BSON representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -96,7 +95,7 @@ public sealed class BsonSerializer<TKey>(
         try {
             return Deserialize<TValue>(Convert.FromBase64String(data));
         }
-        catch (FormatException ex) // Catches invalid Base64 string
+        catch(FormatException ex) // Catches invalid Base64 string
         {
             throw new DeserializationFormatException($"The input string is not a valid Base64 encoded BSON representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
@@ -109,7 +108,7 @@ public sealed class BsonSerializer<TKey>(
         try {
             return Deserialize(Convert.FromBase64String(data), type);
         }
-        catch (FormatException ex) {
+        catch(FormatException ex) {
             throw new DeserializationFormatException($"The input string is not a valid Base64 encoded BSON representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -132,7 +131,7 @@ public sealed class BsonSerializer<TKey>(
             result = Deserialize<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -144,7 +143,7 @@ public sealed class BsonSerializer<TKey>(
             result = DeserializeFromString<TValue>(data);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -156,7 +155,7 @@ public sealed class BsonSerializer<TKey>(
             result = Deserialize<TValue>(in sequence);
             return true;
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             result = default;
             return false;
         }
@@ -168,18 +167,18 @@ public sealed class BsonSerializer<TKey>(
     public async Task SerializeAsync<TValue>(Stream stream, TValue value, CancellationToken cancellationToken) {
         Preca.ThrowIfNull(stream);
         cancellationToken.ThrowIfCancellationRequested();
-        if (value is null) return;
+        if(value is null) return;
 
         try {
             await using RecyclableMemoryStream tempStream = streamManager.GetStream();
-            using (BsonBinaryWriter writer = new(tempStream)) {
+            using(BsonBinaryWriter writer = new(tempStream)) {
                 // CORRECTED: Pass the type and value in the correct order.
                 BsonSerializer.Serialize(writer, typeof(TValue), value, serializationConfigurator, defaultSerializationArgs);
             }
             tempStream.Position = 0;
             await tempStream.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is BsonException or InvalidOperationException) {
+        catch(Exception ex) when(ex is BsonException or InvalidOperationException) {
             throw new UnsupportedTypeException($"The type '{value?.GetType().FullName ?? typeof(TValue).FullName}' could not be serialized to the stream as BSON.", ex);
         }
     }
@@ -205,7 +204,7 @@ public sealed class BsonSerializer<TKey>(
             TValue? result = BsonSerializer.Deserialize<TValue>(reader, deserializationConfigurator);
             return new ValueTask<TValue?>(result);
         }
-        catch (Exception ex) when (ex is BsonException or FormatException or IOException) {
+        catch(Exception ex) when(ex is BsonException or FormatException or IOException) {
             throw new DeserializationFormatException($"The input stream does not contain a valid BSON representation for the target type '{typeof(TValue).FullName}'.", ex);
         }
     }
@@ -220,7 +219,7 @@ public sealed class BsonSerializer<TKey>(
             object? result = BsonSerializer.Deserialize(reader, type, deserializationConfigurator);
             return new ValueTask<object?>(result);
         }
-        catch (Exception ex) when (ex is BsonException or FormatException or IOException) {
+        catch(Exception ex) when(ex is BsonException or FormatException or IOException) {
             throw new DeserializationFormatException($"The input stream does not contain a valid BSON representation for the target type '{type.FullName}'.", ex);
         }
     }
@@ -231,7 +230,7 @@ public sealed class BsonSerializer<TKey>(
             TValue? result = await DeserializeAsync<TValue>(stream, cancellationToken);
             return (true, result);
         }
-        catch (WiaojSerializationException) {
+        catch(WiaojSerializationException) {
             return (false, default);
         }
     }

@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Wiaoj.Serialization.Abstractions;
 
 namespace Wiaoj.Serialization.DependencyInjection;
 /// <inheritdoc /> 
@@ -15,7 +14,7 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder, IS
     public ISerializerConfigurator<TKey> AddSerializer<TKey>(Func<IServiceProvider, ISerializer<TKey>> factory) where TKey : ISerializerKey {
         Preca.ThrowIfNull(factory);
         Type serviceType = typeof(ISerializer<TKey>);
-        if (this.Services.Any(sd => sd.ServiceType == serviceType)) {
+        if(this.Services.Any(sd => sd.ServiceType == serviceType)) {
             Preca.ThrowIfTrue(
                 typeof(TKey) == typeof(KeylessRegistration),
                 () => new InvalidOperationException("A keyless (default) serializer has already been registered. Only one keyless registration is allowed."));
@@ -32,6 +31,26 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder, IS
         return AddSerializer<KeylessRegistration>(factory);
     }
 
+    /// <inheritdoc /> 
+    public ISerializerConfigurator<TKey> TryAddSerializer<TKey>(Func<IServiceProvider, ISerializer<TKey>> factory) where TKey : ISerializerKey {
+        Preca.ThrowIfNull(factory);
+        Type serviceType = typeof(ISerializer<TKey>);
+
+        // Kontrol et: Eğer bu Key tipiyle kayıtlı bir servis YOKSA ekle.
+        if(!this.Services.Any(sd => sd.ServiceType == serviceType)) {
+            this.Services.AddSingleton<ISerializer<TKey>>(factory);
+        }
+
+        // Varsa eklemiyoruz ama null dönmüyoruz. 
+        // Böylece kullanıcı .TryAddSerializer(...).Builder... diyerek zinciri kırmamış olur.
+        return new SerializerConfigurator<TKey>(this);
+    }
+
+    /// <inheritdoc /> 
+    public ISerializerConfigurator<KeylessRegistration> TryAddSerializer(Func<IServiceProvider, ISerializer<KeylessRegistration>> factory) {
+        return TryAddSerializer<KeylessRegistration>(factory);
+    }
+
     /// <summary>
     /// Finalizes the serializer configuration and registers a default <see cref="ISerializer"/> alias.
     /// </summary>
@@ -42,7 +61,7 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder, IS
         // Check for explicitly registered keyless (default) serializer
         bool hasKeyless = this.Services.Any(sd => sd.ServiceType == typeof(ISerializer<KeylessRegistration>));
 
-        if (hasKeyless) {
+        if(hasKeyless) {
             this.Services.AddSingleton<ISerializer>(sp => sp.GetRequiredService<ISerializer<KeylessRegistration>>());
             return;
         }
@@ -54,7 +73,7 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder, IS
                 sd.ServiceType.GetGenericTypeDefinition() == typeof(ISerializer<>))];
 
         // Use the only registered serializer as default if it exists and is valid
-        if (serializerRegistrations.Count is 1) {
+        if(serializerRegistrations.Count is 1) {
             Type genericArg = serializerRegistrations[0].ServiceType.GetGenericArguments()[0];
 
             Preca.ThrowIfFalse(
@@ -76,4 +95,4 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder, IS
         //    serializerRegistrations.Count == 0,
         //    () => new InvalidOperationException("No serializers have been registered. Please call AddSerializer(...) first.")); 
     }
-}      
+}

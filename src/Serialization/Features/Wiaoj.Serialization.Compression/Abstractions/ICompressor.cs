@@ -11,8 +11,8 @@ public interface ICompressor {
     /// <summary>
     /// Decompresses the provided compressed data.
     /// </summary>
-    byte[] Decompress(ReadOnlySpan<byte> compressedData); 
-    
+    byte[] Decompress(ReadOnlySpan<byte> compressedData);
+
     Stream CreateCompressionStream(Stream targetStream);
     Stream CreateDecompressionStream(Stream sourceStream);
 }

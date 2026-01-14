@@ -1,6 +1,5 @@
-﻿using Wiaoj.Serialization.Abstractions;
+﻿namespace Wiaoj.Serialization.Transcoding.Abstractions;
 
-namespace Wiaoj.Serialization.Transcoding.Abstractions;
 public interface ITranscodingContext {
     /// <summary>
     /// Completes the transcoding process by serializing the intermediate object to the destination format.
