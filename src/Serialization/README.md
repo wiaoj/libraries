@@ -1,233 +1,218 @@
-﻿### Schema
+﻿# Wiaoj.Serialization
 
-Orleans ile Schema Yönetimi ???
+[![NuGet](https://img.shields.io/badge/nuget-v1.0.0-blue.svg)](https://www.nuget.org/packages/Wiaoj.Serialization)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/download)
 
-bulut serileştir servisi
+**Wiaoj.Serialization** is a high-performance, unified abstraction layer for serialization in .NET. It decouples your application from specific serialization libraries, allowing you to manage multiple formats (JSON, MessagePack, BSON, YAML) and behaviors (Compression, Encryption) within a single project using a type-safe, key-based architecture.
 
-protobuf, avro, schema registry?
+## 🚀 Mission & Vision
+
+Modern applications often require different serialization strategies for different contexts:
+*   **Public APIs** need standard, readable JSON.
+*   **Distributed Caches** need compact, fast binary formats (like MessagePack).
+*   **Databases** might need BSON or specific JSON configurations.
+*   **Secure Logs** need encryption and PII masking.
+
+**Wiaoj.Serialization** solves this by treating serialization as a configurable pipeline. It provides a "Zero-Overhead" abstraction that focuses on streaming and asynchronous operations.
+
+## ✨ Key Features
+
+*   **Polyglot Serialization:** Use System.Text.Json, MessagePack, BSON, and YAML side-by-side.
+*   **Context-Aware Registry:** Register different configurations for different purposes using `ISerializerKey` (e.g., `ICacheSerializer`, `IApiSerializer`).
+*   **Pipeline Decorators:** Easily chain behaviors like **Gzip/Brotli Compression** and **AES-GCM Encryption** without changing your business logic.
+*   **Async-First:** Built from the ground up for `Stream` and `IAsyncEnumerable` efficiency.
+*   **Dependency Injection Friendly:** seamless integration with `Microsoft.Extensions.DependencyInjection`.
+
 ---
 
-# Wiaoj.Serialization
+## 📦 Installation
 
-## 👋 Kütüphane Vizyonumuz
+Install the core package and the providers you need:
 
-**Kütüphane Adı:** Wiaoj.Serialization
+```bash
+# Core Abstractions
+dotnet add package Wiaoj.Serialization
 
-**Misyonumuz:** .NET geliştiricilerinin, serileştirme süreçlerini merkezi, yönetilebilir, esnek ve yüksek performanslı iş akışları (workflows) halinde kurmalarını sağlayan, sınıfının en iyisi bir serileştirme yönetim çatısı (framework) olmak.
-
-**Temel Değer Teklifimiz:**
-*   **Mükemmel Esneklik:** Tek bir proje içinde birden fazla serileştirici ve politika (JSON, MessagePack, XML, CSV, YAML vb.) yönetimi.
-*   **Sıfır Overhead Soyutlama:** Kaynak Üreticileri (Source Generators) ve optimize edilmiş DI ile çalışma zamanında (runtime) soyutlamadan kaynaklanan performans kaybını ortadan kaldırma.
-*   **Merkezi Politika Yönetimi:** Serileştirme süreçlerine şifreleme, sıkıştırma, loglama, doğrulama, telemetri gibi kesişen ilgi alanlarını (cross-cutting concerns) kolayca entegre etme.
-*   **Basit ve Akıcı API:** Geliştiricinin karmaşık detaylarla uğraşmadan, tek satırda serileştirme politikalarını tanımlamasını sağlama.
-*   **Production Ready:** Güçlü test altyapısı, kapsamlı dokümantasyon ve modern .NET standartlarına tam uyumluluk.
-
----
-
-## 🚀 Başlarken (Getting Started)
-
-Bu bölüm, kütüphanemizin temel kullanımını ve kurulumunu en hızlı şekilde gösterir.
-
-### 1. Kurulum (NuGet Paketleri)
-
-```bash 
-dotnet add package Wiaoj.Serialization.SystemTextJson # veya Newtonsoft, MessagePack, vb.
- 
+# Providers (Choose what you need)
+dotnet add package Wiaoj.Serialization.SystemTextJson
+dotnet add package Wiaoj.Serialization.MessagePack
+dotnet add package Wiaoj.Serialization.Bson
+dotnet add package Wiaoj.Serialization.YamlDotNet
 ```
 
-### 2. Varsayılan Serileştiriciyi Kaydetme (Program.cs)
+---
+
+## 🏁 Quick Start
+
+### 1. Define Your Keys (Optional but Recommended)
+Instead of relying on a single global serializer, define "keys" to represent the *context* of serialization.
 
 ```csharp
-// Program.cs
+using Wiaoj.Serialization.Abstractions;
 
-var builder = WebApplication.CreateBuilder(args);
+// Marker interface for API responses
+public struct ApiKey : ISerializerKey;
 
-// 1. Wiaoj.Serialization'ı hizmetlere ekle
-builder.Services.AddWiaojSerializer(options =>
-{
-    // 2. Varsayılan serileştirici olarak System.Text.Json'ı SystemTextJson anahtarını kullanarak kaydet
-    options.UseSystemTextJson<DefaultSerializerKey>(stjOptions =>
-    {
-        stjOptions.WriteIndented = true;
-        stjOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    });
-
-    // İsteğe bağlı: Telemetriyi etkinleştir
-    // options.AddTelemetry(); // Eğer Wiaoj.Serialization.Observability.OpenTelemetry paketi yüklüyse
-});
- 
-var app = builder.Build();
-
-// ... diğer pipeline ayarları ...
-
-app.Run();
+// Marker interface for Redis/Caching
+public struct CacheKey : ISerializerKey;
 ```
 
-### 3. Controller'da Kullanım
+### 2. Configure Services
+In your `Program.cs`, register the serializers and configure their pipelines.
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddWiaojSerializer(config =>
+{
+    // 1. Default (Keyless) Serializer -> System.Text.Json
+    config.UseSystemTextJson(options => 
+    {
+        options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.WriteIndented = true;
+    });
+
+    // 2. Specific "Api" Serializer -> System.Text.Json (Optimized)
+    config.UseSystemTextJson<ApiKey>();
+
+    // 3. Specific "Cache" Serializer -> MessagePack + Brotli Compression
+    config.UseMessagePack<CacheKey>()
+          .WithBrotliCompression(System.IO.Compression.CompressionLevel.Fastest);
+});
+```
+
+### 3. Inject and Use
+Inject `ISerializer<TKey>` where needed. The correct implementation (with all compression/encryption logic applied) will be injected.
 
 ```csharp
 [ApiController]
-[Route("[controller]")]
-public class ProductsController : ControllerBase
+[Route("products")]
+public class ProductController : ControllerBase
 {
-    // Varsayılan serileştiriciyi enjekte et (TKey belirtmeden ISerializer<DefaultSerializerKey>)
-    private readonly ISerializer<DefaultSerializerKey> _serializer;
+    private readonly ISerializer<ApiKey> _apiSerializer;
+    private readonly ISerializer<CacheKey> _cacheSerializer;
 
-    public ProductsController(ISerializer<DefaultSerializerKey> serializer)
+    public ProductController(ISerializer<ApiKey> apiSerializer, ISerializer<CacheKey> cacheSerializer)
     {
-        _serializer = serializer;
+        _apiSerializer = apiSerializer;
+        _cacheSerializer = cacheSerializer;
     }
 
     [HttpGet]
-    public IActionResult GetAll()
+    public async Task<IActionResult> Get()
     {
-        var products = new List<Product> { new Product { Id = 1, Name = "Test" } };
+        var product = new { Id = 1, Name = "Laptop" };
 
-        // Serileştiriciyi doğrudan kullanabiliriz (byte[], string veya stream olarak)
-        var jsonString = _serializer.SerializeToString(products); // Varsayılan ayarlar JSON'a çevirir
+        // Use the Cache Serializer (Binary + Compressed)
+        byte[] cachedData = _cacheSerializer.Serialize(product);
+        await _distributedCache.SetAsync("product:1", cachedData);
 
-        return Ok(products); // ASP.NET Core, UseWiaojSerializerAsApiEngine sayesinde bizim serializer'ımızı kullanır
+        // Use the API Serializer (JSON)
+        // You can write directly to the HTTP Response Body Stream for max performance
+        Response.ContentType = "application/json";
+        await _apiSerializer.SerializeAsync(Response.Body, product);
+        
+        return Empty; 
     }
 }
 ```
 
 ---
 
-## 📚 İleri Seviye Kullanım ve Mimariler
+## 🛠 Advanced Scenarios
 
-Bu bölüm, kütüphanenin tam potansiyelini gösterir.
-
-### 1. Birden Fazla Serileştirici / Politika Tanımlama
+### 🔐 Authenticated Encryption (AES-GCM)
+Secure your sensitive data at rest or in transit transparently. The serializer handles encryption during serialization and decryption during deserialization.
 
 ```csharp
-services.AddWiaojSerializer(options =>
+// Define a key for secure data
+public struct SecureDataKey : ISerializerKey;
+
+// Generate a secure key (store this safely in KeyVault/Env Vars!)
+var secretKey = Secret.From(Base64String.Parse("...your-32-byte-base64-key..."));
+
+builder.Services.AddWiaojSerializer(config =>
 {
-    // API yanıtları için System.Text.Json
-    options.UseSystemTextJson<ApiResponsesKey>(stj => { /* API JSON ayarları */ });
-
-    // Redis Cache için MessagePack (sıkıştırmalı ve telemetrili)
-    options.UseMessagePack<CacheKey>(mpConfig =>
-    {
-        mpConfig.Pipeline
-            .Add<Lz4CompressionHandler>() // Varsayılan sıkıştırma
-            .AddTelemetry();                // Telemetriyi de ekle
-    });
-
-    // CSV raporları için
-    options.UseCsvHelper<ReportCsv>(csvConfig => { /* CSV ayarları */ });
+    config.UseSystemTextJson<SecureDataKey>()
+          .WithAesGcmEncryption(secretKey);
 });
 
-// Controller'da Kullanım
-public class MyService(ISerializer<ApiResponsesKey> apiSerializer, ISerializer<CacheKey> cacheSerializer)
+// Usage
+// _secureSerializer.Serialize(data) -> Returns Encrypted JSON bytes
+// _secureSerializer.Deserialize(bytes) -> Decrypts and returns Object
+```
+
+### 📄 YAML and BSON Support
+Easily handle configuration files or MongoDB documents.
+
+```csharp
+// YAML for Config Export
+config.UseYamlDotNet<ConfigKey>(serializer => 
 {
-    public void SaveToCache(object data) => cacheSerializer.Serialize("cache_key", data);
-    public string GetApiJson(object data) => apiSerializer.SerializeToString(data);
+    serializer.WithNamingConvention(CamelCaseNamingConvention.Instance);
+});
+
+// BSON for Binary Documents
+config.UseBson<MongoKey>();
+```
+
+### ⚡ Async Enumerable Streaming
+Efficiently process large datasets without loading everything into memory.
+
+```csharp
+public async Task ProcessLargeData(ISerializer serializer, Stream stream)
+{
+    // Reads items one by one from the stream (JSON Array)
+    IAsyncEnumerable<Product> products = serializer.DeserializeAsyncEnumerable<Product>(stream);
+
+    await foreach (var product in products)
+    {
+        // Process item immediately
+    }
 }
 ```
 
-### 2. Pipeline ile Davranış Ekleme
+---
 
-```csharp
-// Örnek Handler'lar (Örnek olması için namespace'leri farklı varsayalım)
-// using Wiaoj.Serialization.Handlers.Security;
-// using Wiaoj.Serialization.Handlers.Compression;
-// using Wiaoj.Serialization.Observability;
+## 🧩 Architecture
 
-services.AddWiaojSerializer(options =>
-{
-    options.UseSystemTextJson<SecureJson>(config =>
-    {
-        config.Pipeline
-            // Handler'ları istediğiniz sırada ekleyin
-            .Add<TelemetryHandler>()              // Önce telemetriyi kaydet
-            .Add<PiiScrubbingHandler>()           // Sonra hassas verileri maskele
-            .Add<AesEncryptionHandler>()          // Sonra şifrele
-            // Son olarak çekirdek serileştirme işlemi
-            // (Çekirdek handler otomatik olarak eklenir)
-    });
-});
-```
+### The `ISerializerKey` Pattern
+Traditional abstraction libraries often force a single global configuration (`IGlobalSerializer`). Wiaoj.Serialization uses **Marker Types** (`TKey`) to differentiate configurations in the Dependency Injection container.
 
-### 3. ASP.NET Core Entegrasyonu (API Controller & Minimal API)
+*   `ISerializer<KeylessRegistration>`: The default serializer.
+*   `ISerializer<TKey>`: A specific named serializer (e.g., `CacheKey`, `LogKey`).
 
-*   **API Controller'lar İçin:**
-    ```csharp
-    builder.Services.AddControllers()
-        .UseWiaojSerializerAsApiEngine<ApiResponsesKey>();
-    ```
+### The Pipeline (Decorators)
+Features like Compression and Encryption are implemented as **Decorators**. When you call `.WithGzipCompression()`, the library wraps your chosen serializer (e.g., Json) in a `CompressionSerializerDecorator`.
 
-*   **Minimal API'ler İçin:**
-    ```csharp
-    app.MapGet("/data", (ISerializer<ApiResponsesKey> serializer) =>
-    {
-        var data = new { Message = "Hello" };
-        // Açık kullanım
-        return Results.Stream(stream => serializer.SerializeAsync(stream, data), "application/json");
-    });
-
-    // Veya daha zarif özel Result ile:
-    app.MapGet("/data-elegant", (ISerializer<ApiResponsesKey> serializer) =>
-    {
-        var data = new { Message = "Hello" };
-        return WiaojResults.Json<ApiResponsesKey>(data);
-    });
-    ```
-
-### 4. Kaynak Üreticileri (Source Generators)
-
-*   **Vizyon:** Derleme zamanında, `ISerializer<TKey>` arayüzü kullanımlarını, doğrudan optimize edilmiş somut sınıf çağrılarına dönüştürmek. Bu, performans overhead'ini sıfırlar ve AOT/Trimming uyumluluğunu sağlar.
-*   **Mevcut Durum:** Bu, projemizin ilerleyen aşamalarında (v2.0 hedefi) tam olarak hayata geçirilecektir. README'de bu hedefin altı çizilmelidir.
+Flow:
+`Input Object` -> **Compressor** -> **Encryptor** -> **JsonSerializer** -> `Stream/Bytes`
 
 ---
 
-## 🚀 Performans ve Gözlemlenebilirlik
+## ❓ FAQ
 
-### 1. Performans: Neredeyse Sıfır Overhead
+**Q: Can I use this with Newtonsoft.Json?**
+A: Support is planned. Currently, we support System.Text.Json, MessagePack, YamlDotNet, and MongoDB.Bson.
 
-*   **Çıplak Kurulum:** Kullanıcı hiçbir handler eklemezse, `NakedSerializer` sayesinde doğrudan çekirdek motor çağrılır.
-*   **Pipeline Kullanımı:** Eklenen her handler için küçük bir maliyet olur.
-*   **Kaynak Üreticileri:** Derleme zamanında üretilen kod ile bu maliyet, çalışma zamanında **pratik olarak sıfıra indirilir.** Bu hedefin altı çizilmelidir.
-*   **Benchmark Verileri:** README'de, farklı senaryolardaki (boş pipeline vs dolu pipeline) benchmark sonuçları yayınlanacaktır.
+**Q: What is the performance overhead?**
+A: The abstraction layer is extremely thin. It is designed to delegate directly to the underlying library's `Stream` methods. When using Source Generators (planned for v2), the overhead will be effectively zero.
 
-### 2. Gözlemlenebilirlik (OpenTelemetry)
-
-*   **Otomatik Telemetri:** `Wiaoj.Serialization.Observability.OpenTelemetry` paketi ile, kullanıcılar pipeline'larına `AddTelemetry()` ekleyerek tüm serileştirme/deserileştirme işlemlerini (süre, boyut, hata, serializer tipi, anahtar vb.) otomatik olarak OpenTelemetry compatible trace'ler ve metrikler olarak izleyebilirler.
-*   **Tek Activity:** Kaynak Üreticisi sayesinde, pipeline'ın tamamı (tüm handler'lar dahil) tek bir ana Activity içinde izlenecektir.
+**Q: How do I handle Key collisions?**
+A: The builder throws an exception if you register the same Key twice to prevent accidental misconfiguration. Use `TryAddSerializer` or `ReplaceSerializer` (if available in extensions) for conditional logic.
 
 ---
 
-## 🛡️ Güvenlik ve Uyumluluk (Security & Compliance)
+## 🤝 Contributing
 
-*   **PII Maskeleme:** Loglama sırasında hassas verileri otomatik olarak maskelemek için `PiiScrubbingHandler` gibi handler'lar sunulabilir.
-*   **Merkezi Politika Uygulama:** Kurumsal güvenlik politikalarının (örn. belirli verilerin şifrelenmesi), pipeline'lar aracılığıyla zorunlu kılınması.
+We welcome contributions! Please follow these steps:
 
----
+1.  Fork the repository.
+2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
+3.  Commit your changes.
+4.  Open a Pull Request.
 
-## ❓ SSS (Sıkça Sorulan Sorular)
+## 📄 License
 
-*   **Neden `ISerializer<TKey>` yerine somut sınıfları kullanmıyoruz?**
-    *   Test edilebilirliği, esnekliği ve değiştirilebilirliği korumak için. Kaynak Üreticileri, bu soyutlamanın performans maliyetini ortadan kaldırır.
-*   **Pipeline'ın performansa etkisi nedir?**
-    *   Boş pipeline'da sıfır, dolu pipeline'da ise eklenen handler'ların maliyeti kadar. Kaynak Üreticileri ile bu maliyet minimuma iner.
-*   **Hangi serileştiricileri destekliyorsunuz?**
-    *   Önceliklerimiz: System.Text.Json, Newtonsoft.Json. Ardından MessagePack, XML, CSV, Protobuf, YAML gelecek.
-*   **OpenTelemetry entegrasyonu varsayılan olarak mı geliyor?**
-    *   Hayır, kullanıcı bilinçli olarak `AddTelemetry()`'yi çağırarak etkinleştirmelidir, ancak bu işlem çok kolaydır.
-
----
-
-## 🤝 Katkıda Bulunmak (Contributing)
-
-[Katkıda bulunma yönergeleri, kodlama standartları, test kılavuzları buraya eklenecek.]
-
----
-
-## ⚖️ Lisans
-
-[Lisans bilgisi buraya eklenecek (örn. MIT)]
-
----
-
-Bu README yapısı, kütüphanemizin ne olduğunu, neden değerli olduğunu, nasıl kullanılacağını ve hangi güçlü özelliklere sahip olduğunu kapsamlı bir şekilde anlatacaktır. Geliştiricilerin bizi anlamasını, güvenmesini ve kullanmaya başlamasını kolaylaştıracaktır.
-
-Şimdi bu planı hayata geçirme zamanı!
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
