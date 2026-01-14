@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Wiaoj.Serialization.DependencyInjection;
 /// <inheritdoc /> 
@@ -94,5 +95,18 @@ internal sealed class WiaojSerializationBuilder : IWiaojSerializationBuilder, IS
         //Preca.ThrowIf(
         //    serializerRegistrations.Count == 0,
         //    () => new InvalidOperationException("No serializers have been registered. Please call AddSerializer(...) first.")); 
+    }
+
+    public ISerializerConfigurator<TKey> ReplaceSerializer<TKey>(Func<IServiceProvider, ISerializer<TKey>> factory) where TKey : ISerializerKey {
+        Preca.ThrowIfNull(factory);
+        this.Services.RemoveAll<ISerializer<TKey>>();
+
+        this.Services.AddSingleton<ISerializer<TKey>>(factory);
+
+        return new SerializerConfigurator<TKey>(this);
+    }
+
+    public ISerializerConfigurator<KeylessRegistration> ReplaceSerializer(Func<IServiceProvider, ISerializer<KeylessRegistration>> factory) {
+        return ReplaceSerializer<KeylessRegistration>(factory);
     }
 }

@@ -39,4 +39,6 @@ public interface ISerializerProvider {
     ISerializer? GetSerializer([NotNull] Type keyType);
 
     ISerializer GetRequiredSerializer([NotNull] Type keyType);
+
+    ISerializer<TKey>? TryGetSerializer<TKey>() where TKey : notnull, ISerializerKey; 
 }

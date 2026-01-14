@@ -35,4 +35,12 @@ public interface IWiaojSerializationBuilder {
     /// If a default serializer is already registered, this operation does nothing.
     /// </summary>
     ISerializerConfigurator<KeylessRegistration> TryAddSerializer(Func<IServiceProvider, ISerializer<KeylessRegistration>> factory);
+
+    /// <summary>
+    /// Replaces an existing serializer registration for the specified key type.
+    /// If the serializer does not exist, it simply adds it.
+    /// </summary>
+    ISerializerConfigurator<TKey> ReplaceSerializer<TKey>(Func<IServiceProvider, ISerializer<TKey>> factory) where TKey : ISerializerKey;
+
+    ISerializerConfigurator<KeylessRegistration> ReplaceSerializer(Func<IServiceProvider, ISerializer<KeylessRegistration>> factory);
 }

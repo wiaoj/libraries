@@ -66,4 +66,8 @@ internal sealed class SerializerProvider(IServiceProvider sp) : ISerializerProvi
         Preca.ThrowIfNull(serializer, () => new InvalidOperationException($"Serializer for key '{keyType.Name}' not found."));
         return serializer;
     }
+
+    public ISerializer<TKey>? TryGetSerializer<TKey>() where TKey : notnull, ISerializerKey {
+        return sp.GetService<ISerializer<TKey>>(); 
+    }
 }
