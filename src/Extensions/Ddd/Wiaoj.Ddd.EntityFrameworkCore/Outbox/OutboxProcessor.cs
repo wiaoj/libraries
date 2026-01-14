@@ -12,7 +12,7 @@ using Wiaoj.Ddd.EntityFrameworkCore.Internal;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal.Loggers;
 using Wiaoj.Ddd.Extensions;
 using Wiaoj.Extensions;
-using Wiaoj.Serialization.Abstractions;
+using Wiaoj.Serialization;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.Outbox;
 internal sealed class OutboxProcessor<TContext>(

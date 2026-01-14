@@ -1,4 +1,4 @@
-﻿using Wiaoj.Serialization.Abstractions;
+﻿using Wiaoj.Serialization;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore;     
 /// <summary>

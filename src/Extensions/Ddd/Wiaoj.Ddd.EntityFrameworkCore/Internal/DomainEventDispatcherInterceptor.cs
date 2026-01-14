@@ -7,7 +7,7 @@ using System.Text;
 using Wiaoj.Ddd.DomainEvents;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
 using Wiaoj.Ddd.Extensions;
-using Wiaoj.Serialization.Abstractions;
+using Wiaoj.Serialization;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.Internal;
 /// <summary>

@@ -1,7 +1,7 @@
 ﻿using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
-using Wiaoj.Serialization.Abstractions;
+using Wiaoj.Serialization;
 using Wiaoj.Serialization.DependencyInjection;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore;
