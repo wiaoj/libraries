@@ -65,11 +65,11 @@ public readonly record struct UnixTimestamp :
     /// Gets the raw number of milliseconds since the Unix Epoch.
     /// </summary>
     /// <value>The milliseconds as a <see cref="long"/>.</value>
-    public long Milliseconds => _milliseconds;
+    public long Milliseconds => this._milliseconds;
 
     // Private constructor to enforce creation via static factory methods.
     private UnixTimestamp(long milliseconds) {
-        _milliseconds = milliseconds;
+        this._milliseconds = milliseconds;
     }
 
     // -------------------------------------------------------------------------
@@ -122,6 +122,19 @@ public readonly record struct UnixTimestamp :
         return new UnixTimestamp(((DateTimeOffset)dt).ToUnixTimeMilliseconds());
     }
 
+    /// <summary>
+    /// Creates a <see cref="UnixTimestamp"/> from a <see cref="TimeProvider"/>.
+    /// </summary>
+    /// <param name="timeProvider">The time provider to get the current UTC instant from.</param>
+    /// <returns>A new <see cref="UnixTimestamp"/> representing the current time in UTC.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="timeProvider"/> is null.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static UnixTimestamp From(TimeProvider timeProvider) {
+        Preca.ThrowIfNull(timeProvider);
+
+        return new UnixTimestamp(timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
+    }
+
     // -------------------------------------------------------------------------
     // CONVERSIONS (Instance Methods)
     // -------------------------------------------------------------------------
@@ -131,7 +144,7 @@ public readonly record struct UnixTimestamp :
     /// </summary>
     /// <returns>A UTC DateTimeOffset.</returns>
     public DateTimeOffset ToDateTimeOffset() {
-        return DateTimeOffset.FromUnixTimeMilliseconds(_milliseconds);
+        return DateTimeOffset.FromUnixTimeMilliseconds(this._milliseconds);
     }
 
     /// <summary>
@@ -155,49 +168,78 @@ public readonly record struct UnixTimestamp :
     // -------------------------------------------------------------------------
 
     /// <summary>Adds a <see cref="TimeSpan"/> to a <see cref="UnixTimestamp"/>, returning a new future timestamp.</summary>
-    public static UnixTimestamp operator +(UnixTimestamp left, TimeSpan right)
-        => new(left._milliseconds + (long)right.TotalMilliseconds);
+    public static UnixTimestamp operator +(UnixTimestamp left, TimeSpan right) {
+        return new(left._milliseconds + (long)right.TotalMilliseconds);
+    }
 
     /// <summary>Subtracts a <see cref="TimeSpan"/> from a <see cref="UnixTimestamp"/>, returning a past timestamp.</summary>
-    public static UnixTimestamp operator -(UnixTimestamp left, TimeSpan right)
-        => new(left._milliseconds - (long)right.TotalMilliseconds);
+    public static UnixTimestamp operator -(UnixTimestamp left, TimeSpan right) {
+        return new(left._milliseconds - (long)right.TotalMilliseconds);
+    }
 
     /// <summary>Calculates the time difference between two timestamps.</summary>
-    public static TimeSpan operator -(UnixTimestamp left, UnixTimestamp right)
-        => TimeSpan.FromMilliseconds(left._milliseconds - right._milliseconds);
+    public static TimeSpan operator -(UnixTimestamp left, UnixTimestamp right) {
+        return TimeSpan.FromMilliseconds(left._milliseconds - right._milliseconds);
+    }
 
     // Comparators
     /// <inheritdoc/>
-    public static bool operator >(UnixTimestamp left, UnixTimestamp right) => left._milliseconds > right._milliseconds;
+    public static bool operator >(UnixTimestamp left, UnixTimestamp right) {
+        return left._milliseconds > right._milliseconds;
+    }
+
     /// <inheritdoc/>
-    public static bool operator <(UnixTimestamp left, UnixTimestamp right) => left._milliseconds < right._milliseconds;
+    public static bool operator <(UnixTimestamp left, UnixTimestamp right) {
+        return left._milliseconds < right._milliseconds;
+    }
+
     /// <inheritdoc/>
-    public static bool operator >=(UnixTimestamp left, UnixTimestamp right) => left._milliseconds >= right._milliseconds;
+    public static bool operator >=(UnixTimestamp left, UnixTimestamp right) {
+        return left._milliseconds >= right._milliseconds;
+    }
+
     /// <inheritdoc/>
-    public static bool operator <=(UnixTimestamp left, UnixTimestamp right) => left._milliseconds <= right._milliseconds;
+    public static bool operator <=(UnixTimestamp left, UnixTimestamp right) {
+        return left._milliseconds <= right._milliseconds;
+    }
 
     // Equality with raw long (allows check like: timestamp == 0)
     /// <summary>Checks equality between a timestamp and raw milliseconds.</summary>
-    public static bool operator ==(UnixTimestamp left, long right) => left._milliseconds == right;
+    public static bool operator ==(UnixTimestamp left, long right) {
+        return left._milliseconds == right;
+    }
+
     /// <summary>Checks inequality between a timestamp and raw milliseconds.</summary>
-    public static bool operator !=(UnixTimestamp left, long right) => left._milliseconds != right;
+    public static bool operator !=(UnixTimestamp left, long right) {
+        return left._milliseconds != right;
+    }
 
     /// <inheritdoc/>
-    public int CompareTo(UnixTimestamp other) => _milliseconds.CompareTo(other._milliseconds);
+    public int CompareTo(UnixTimestamp other) {
+        return this._milliseconds.CompareTo(other._milliseconds);
+    }
 
     // Casting - Primitive
     /// <summary>Implicitly converts to <see cref="long"/> (milliseconds) to allow easy math operations if needed.</summary>
-    public static implicit operator long(UnixTimestamp ts) => ts._milliseconds;
+    public static implicit operator long(UnixTimestamp ts) {
+        return ts._milliseconds;
+    }
 
     /// <summary>Explicitly converts <see cref="long"/> (milliseconds) to <see cref="UnixTimestamp"/>.</summary>
-    public static explicit operator UnixTimestamp(long milliseconds) => new(milliseconds);
+    public static explicit operator UnixTimestamp(long milliseconds) {
+        return new(milliseconds);
+    }
 
     // Casting - DateTimeOffset
     /// <summary>Implicitly converts a <see cref="UnixTimestamp"/> to a <see cref="DateTimeOffset"/>.</summary>
-    public static implicit operator DateTimeOffset(UnixTimestamp ts) => ts.ToDateTimeOffset();
+    public static implicit operator DateTimeOffset(UnixTimestamp ts) {
+        return ts.ToDateTimeOffset();
+    }
 
     /// <summary>Explicitly converts a <see cref="DateTimeOffset"/> to a <see cref="UnixTimestamp"/>.</summary>
-    public static explicit operator UnixTimestamp(DateTimeOffset dto) => From(dto);
+    public static explicit operator UnixTimestamp(DateTimeOffset dto) {
+        return From(dto);
+    }
 
     // -------------------------------------------------------------------------
     // FORMATTING (Public Convenience & Explicit Interfaces)
@@ -208,22 +250,22 @@ public readonly record struct UnixTimestamp :
     /// </summary>
     /// <returns>A string containing the raw milliseconds (e.g., "1672531200000").</returns>
     public override string ToString() {
-        return _milliseconds.ToString(CultureInfo.InvariantCulture);
+        return this._milliseconds.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <inheritdoc/>
     string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
-        return _milliseconds.ToString(format, formatProvider);
+        return this._milliseconds.ToString(format, formatProvider);
     }
 
     /// <inheritdoc/>
     bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        return _milliseconds.TryFormat(destination, out charsWritten, format, provider);
+        return this._milliseconds.TryFormat(destination, out charsWritten, format, provider);
     }
 
     /// <inheritdoc/>
     bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        return _milliseconds.TryFormat(utf8Destination, out bytesWritten, format, provider);
+        return this._milliseconds.TryFormat(utf8Destination, out bytesWritten, format, provider);
     }
 
     // -------------------------------------------------------------------------
@@ -238,7 +280,7 @@ public readonly record struct UnixTimestamp :
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="s"/> is null.</exception>
     /// <exception cref="FormatException">Thrown if the string is not a valid integer.</exception>
     public static UnixTimestamp Parse(string s) {
-        Preca.ThrowIfNull(s); 
+        Preca.ThrowIfNull(s);
         return ParseInternal(s.AsSpan(), CultureInfo.InvariantCulture);
     }
 
