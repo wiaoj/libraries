@@ -151,6 +151,33 @@ public static class Atomic {
         return newValue;
     }
 
+    public static int Update(ref int location, Func<int, int> updateFunction) {
+        int initialValue, newValue;
+        do {
+            // Volatile.Read gerekmez, Interlocked zaten full fence sağlar ama 
+            // döngü başı okuması için güvenlidir. 
+            initialValue = Volatile.Read(ref location);
+            newValue = updateFunction(initialValue);
+        }
+        // Eğer location'daki değer hala initialValue ise, newValue yaz.
+        // Değilse (biri araya girdiyse), initialValue'yu güncelle ve döngüye devam et.
+        while(Interlocked.CompareExchange(ref location, newValue, initialValue) != initialValue);
+
+        return newValue;
+    }
+
+    // LONG için CAS Döngüsü
+    public static long Update(ref long location, Func<long, long> updateFunction) {
+        long initialValue, newValue;
+        do {
+            initialValue = Interlocked.Read(ref location); // 32-bit sistemlerde long okuma atomik değildir, Interlocked.Read şart.
+            newValue = updateFunction(initialValue);
+        }
+        while(Interlocked.CompareExchange(ref location, newValue, initialValue) != initialValue);
+
+        return newValue;
+    }
+
     #endregion
 
     #region Interlocked Operations for Integers

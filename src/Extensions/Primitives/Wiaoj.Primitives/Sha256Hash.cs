@@ -15,9 +15,9 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     private fixed byte _bytes[HashSizeInBytes];
 
     internal Sha256Hash(ReadOnlySpan<byte> source) {
-        if (source.Length != HashSizeInBytes) {
-            throw new ArgumentException("Source span must be exactly 32 bytes long.", nameof(source));
-        }
+        Preca.ThrowIf(
+            source.Length != HashSizeInBytes,
+            () => new ArgumentException("Source span must be exactly 32 bytes long.", nameof(source)));
 
         fixed (byte* p = this._bytes) {
             source.CopyTo(new Span<byte>(p, HashSizeInBytes));

@@ -48,4 +48,28 @@ public class AsyncLockTests {
         // Assert
         Assert.Equal(taskCount * incrementsPerTask, sharedCounter);
     }
+
+    [Fact]
+    public async Task LockAsync_ThrowOperationCanceledException_WhenCanceled() {
+        var asyncLock = new AsyncLock();
+        using CancellationTokenSource cts = new(); 
+
+        // 1. Kilit alınıyor ve bırakılmıyor (Simülasyon)
+        var lockerTask = Task.Run(async () => {
+            await asyncLock.LockAsync();
+            // Sonsuza kadar tutuyoruz, dispose etmiyoruz.
+        });
+
+        // Locker'ın kilidi aldığından emin olalım
+        await Task.Delay(50);
+
+        // 2. İkinci bir task kilidi almaya çalışıyor ama iptal edilecek
+        var waitingTask = asyncLock.LockAsync(cts.Token);
+
+        // 3. Bekleyen task'i iptal et
+        cts.Cancel();
+
+        // 4. Assert: OperationCanceledException fırlatmalı
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await waitingTask);
+    }
 }
