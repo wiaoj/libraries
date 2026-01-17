@@ -24,12 +24,7 @@ namespace Wiaoj.Concurrency;
 public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T> {
     private Func<CancellationToken, Task<T>>? _factory;
     private volatile Task<T>? _initializationTask;
-
-    // Using 'object' is the simplest and most efficient solution for this ultra-low-contention lock.
-    // The IDE0330 warning is suppressed as its general recommendation is not optimal for this specific algorithm.
-#pragma warning disable IDE0330
-    private readonly object _lock = new();
-#pragma warning restore IDE0330
+    private readonly Lock _lock = new();
 
     #region Constructors
 
@@ -100,7 +95,7 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     /// </summary>
     public ValueTask<T> GetValueAsync(CancellationToken cancellationToken = default) {
         Task<T>? task = this._initializationTask;
-        if (task is not null) {
+        if(task is not null) {
             return task.IsCompletedSuccessfully
                 ? new ValueTask<T>(task.Result)
                 : new ValueTask<T>(task);
@@ -123,9 +118,9 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     #region Private Implementation
 
     private Task<T> InitializeAndGetTaskAsync(CancellationToken cancellationToken) {
-        lock (this._lock) {
+        using(this._lock.EnterScope()) {
             Task<T>? task = this._initializationTask;
-            if (task is not null) return task;
+            if(task is not null) return task;
 
             task = InitializeCoreAsync(cancellationToken);
             this._initializationTask = task;
@@ -143,7 +138,7 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
             cancellationToken.ThrowIfCancellationRequested();
             return await factory(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception) {
+        catch(Exception) {
             throw;
         }
     }
@@ -170,11 +165,11 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     private DebuggerStatus Status {
         get {
             Task<T>? task = this._initializationTask;
-            if (task is null) return DebuggerStatus.NotStarted;
+            if(task is null) return DebuggerStatus.NotStarted;
 
-            if (task.IsCompletedSuccessfully) return DebuggerStatus.Succeeded;
-            if (task.IsCanceled) return DebuggerStatus.Canceled;
-            if (task.IsFaulted) return DebuggerStatus.Faulted;
+            if(task.IsCompletedSuccessfully) return DebuggerStatus.Succeeded;
+            if(task.IsCanceled) return DebuggerStatus.Canceled;
+            if(task.IsFaulted) return DebuggerStatus.Faulted;
 
             return DebuggerStatus.Executing;
         }

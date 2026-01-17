@@ -95,31 +95,31 @@ public readonly record struct UnixTimestamp :
     /// <summary>
     /// Creates a <see cref="UnixTimestamp"/> from a <see cref="DateTimeOffset"/>.
     /// </summary>
-    /// <param name="dto">The date time offset to convert.</param>
+    /// <param name="dateTimeOffset">The date time offset to convert.</param>
     /// <returns>A new <see cref="UnixTimestamp"/> corresponding to the UTC instant of the input.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static UnixTimestamp From(DateTimeOffset dto) {
-        return new UnixTimestamp(dto.ToUnixTimeMilliseconds());
+    public static UnixTimestamp From(DateTimeOffset dateTimeOffset) {
+        return new UnixTimestamp(dateTimeOffset.ToUnixTimeMilliseconds());
     }
 
     /// <summary>
     /// Creates a <see cref="UnixTimestamp"/> from a <see cref="DateTime"/>. 
     /// </summary>
-    /// <param name="dt">The date time to convert.</param>
+    /// <param name="dateTime">The date time to convert.</param>
     /// <returns>A new <see cref="UnixTimestamp"/>.</returns>
     /// <remarks>
     /// If the <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Local"/>, it is converted to UTC. 
     /// If <see cref="DateTimeKind.Unspecified"/>, it is assumed to be UTC.
     /// </remarks>
-    public static UnixTimestamp From(DateTime dt) {
-        if(dt.Kind == DateTimeKind.Local) {
-            dt = dt.ToUniversalTime();
+    public static UnixTimestamp From(DateTime dateTime) {
+        if(dateTime.Kind == DateTimeKind.Local) {
+            dateTime = dateTime.ToUniversalTime();
         }
-        else if(dt.Kind == DateTimeKind.Unspecified) {
-            dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+        else if(dateTime.Kind == DateTimeKind.Unspecified) {
+            dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
         }
 
-        return new UnixTimestamp(((DateTimeOffset)dt).ToUnixTimeMilliseconds());
+        return new UnixTimestamp(((DateTimeOffset)dateTime).ToUnixTimeMilliseconds());
     }
 
     /// <summary>
