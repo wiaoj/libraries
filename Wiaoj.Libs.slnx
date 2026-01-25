@@ -1,11 +1,16 @@
 <Solution>
   <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Wiaoj.Benchmarks.BloomFilter/Wiaoj.Benchmarks.BloomFilter.csproj" Id="f3eb7b68-751e-4bdc-acd4-b42d968726d6" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.Primitives/Wiaoj.Benchmarks.Primitives.csproj" Id="47a9018c-29c4-4747-8ef4-ffc2eacdaca2" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Wiaoj.Samples.Primitives/Wiaoj.Samples.Primitives.csproj" Id="7f7ef88f-3ab9-4333-a7cf-f493f9c04b58" />
   </Folder>
   <Folder Name="/src/" />
+  <Folder Name="/src/BloomFilter/">
+    <Project Path="src/BloomFilter/Wiaoj.BloomFilter.Abstractions/Wiaoj.BloomFilter.Abstractions.csproj" />
+    <Project Path="src/BloomFilter/Wiaoj.BloomFilter/Wiaoj.BloomFilter.csproj" />
+  </Folder>
   <Folder Name="/src/Extensions/">
     <Project Path="src/Extensions/Wiaoj.Extensions/Wiaoj.Extensions.csproj" />
   </Folder>
@@ -69,6 +74,7 @@
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.YamlDotNet/Wiaoj.Serialization.YamlDotNet.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Wiaoj.BloomFilter.Tests.Unit/Wiaoj.BloomFilter.Tests.Unit.csproj" Id="7e199388-2442-4420-844b-3cc58288d009" />
     <Project Path="tests/Wiaoj.Concurrency.Tests.Unit/Wiaoj.Concurrency.Tests.Unit.csproj" Id="c5b97f1f-96ca-4a9c-afba-5df78c91a236" />
     <Project Path="tests/Wiaoj.Extensions.DependencyInjection.Tests.Unit/Wiaoj.Extensions.DependencyInjection.Tests.Unit.csproj" Id="dba407f5-a6c7-4f26-8bf6-f330e9e0a649" />
     <Project Path="tests/Wiaoj.Primitives.Tests.Unit/Wiaoj.Primitives.Tests.Unit.csproj" Id="cef5fdb1-e581-46b4-964c-d5f75f7db1ff" />
