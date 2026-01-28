@@ -1,65 +1,92 @@
-﻿using System.Collections.Concurrent;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using Wiaoj.DistributedCounter;
 using Wiaoj.Primitives;
 
+// Console Ayarları
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+Console.Title = "Wiaoj Distributed Counter - Stress Test";
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-// --- LOGGING AYARLARI ---
+// --- 1. LOGGING (Sadece kritik hataları görelim, ekranı kirletmesin) ---
 builder.Logging.ClearProviders()
     .AddSimpleConsole(o => {
-        o.TimestampFormat = "mm:ss.fff "; // Dakika:Saniye.Milisaniye
+        o.TimestampFormat = "[HH:mm:ss] ";
         o.SingleLine = true;
-    });
+    })
+    .SetMinimumLevel(LogLevel.Warning);
 
-// --- 1. KÜTÜPHANE KURULUMU ---
+// --- 2. KÜTÜPHANE KURULUMU ---
 builder.Services.AddDistributedCounter(cfg => {
     cfg.Configure(options => {
-        options.GlobalKeyPrefix = "test_app:";
-        options.AutoFlushInterval = TimeSpan.FromSeconds(5); // 2 saniyede bir Redis'e flush
-        options.DefaultStrategy = CounterStrategy.Buffered;  // RAM'de biriktir
+        options.GlobalKeyPrefix = "app:stress_test:";
+        options.AutoFlushInterval = TimeSpan.FromSeconds(3); // 3 sn'de bir oto-flush
+        options.DefaultStrategy = CounterStrategy.Buffered;  // Varsayılan: Buffered
     });
 
-    //cfg.UseInMemory();
-    // Redis bağlantısı (Kendi connection string'ini yaz)
+    // Redis bağlantısı (Docker/Localhost varsayılanı)
     cfg.UseRedis("localhost:6379");
 });
 
-// --- 2. ORCHESTRATOR'I EKLEME ---
-// Bu servis, içeride birden fazla worker task'ı başlatacak.
+// --- 3. ORCHESTRATOR SERVİSİ ---
 builder.Services.AddHostedService<MultiWorkerOrchestrator>();
 
 IHost host = builder.Build();
-OperationTimeout operationTimeout = OperationTimeout.FromSeconds(60);
 
-CancellationToken token = operationTimeout.CreateCancellationTokenSource().Token;
+// Uygulamayı başlat
+try {
+    await host.RunAsync();
+}
+catch(OperationCanceledException) {
+    Console.WriteLine("🛑 Test sonlandırıldı.");
+}
 
-await host.RunAsync(token);
+// -------------------------------------------------------------------------
+// DOMAIN TYPES
+// -------------------------------------------------------------------------
 
-
-// --- 3. TEST SENARYOSU ---
-// Generic Tag
+// Sayaç Grubu (Tag)
 public class UserVisits { }
 
-public class WorkerStats {
-    public long TotalAdded; 
-    public long OpCount;   
-    public string Name = string.Empty;
+public enum WorkerType {
+    SteadyIncrementer, // Düzenli küçük artışlar
+    BurstSpiker,       // Arada bir devasa artışlar
+    QuotaLimiter,      // Limite takılmaya çalışan (TryIncrement)
+    Decreaser          // Arada azaltan (Stok iadesi gibi)
 }
+
+public class WorkerStats {
+    public string Name { get; set; } = string.Empty;
+    public WorkerType Type { get; set; }
+    public long TotalContribution;
+    public long SuccessOps;
+    public long FailedOps;
+    public string LastAction { get; set; } = "-";
+}
+
+// -------------------------------------------------------------------------
+// ORCHESTRATOR (TEST SENARYOSU)
+// -------------------------------------------------------------------------
 
 public class MultiWorkerOrchestrator(
     IDistributedCounter<UserVisits> counter,
+    IDistributedCounterService counterService,
     ILogger<MultiWorkerOrchestrator> logger)
     : BackgroundService {
 
-    private const int WORKER_COUNT = 4;
+    // Test Ayarları
+    private const int WORKER_COUNT = 5;
+    private const long GLOBAL_LIMIT = 5_000_000; // Quota worker için limit
+
     private readonly ConcurrentDictionary<int, WorkerStats> _workerRegistry = new();
     private readonly Stopwatch _stopwatch = new();
     private long _initialRedisValue = 0;
 
-    // ANSI Renk Kodları
+    // Renkler
     private const string Reset = "\x1b[0m";
     private const string Bold = "\x1b[1m";
     private const string Cyan = "\x1b[36m";
@@ -67,110 +94,260 @@ public class MultiWorkerOrchestrator(
     private const string Yellow = "\x1b[33m";
     private const string Red = "\x1b[31m";
     private const string Magenta = "\x1b[35m";
+    private const string Blue = "\x1b[34m";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
-        // Başlangıçta Redis değerini mühürle (Katkı hesaplamak için)
-        _initialRedisValue = (await counter.GetValueAsync(stoppingToken)).Value;
+        Console.WriteLine($"{Yellow}Bağlantı kontrol ediliyor...{Reset}");
+
+        // 1. Başlangıç Değerini Al (Global Key: app:stress_test:UserVisits)
+        try {
+            var initialVal = await counter.GetValueAsync(stoppingToken);
+            _initialRedisValue = initialVal.Value;
+        }
+        catch(Exception ex) {
+            Console.WriteLine($"{Red}Redis Bağlantı Hatası! Docker ayakta mı?{Reset}");
+            logger.LogError(ex, "Startup error");
+            return;
+        }
+
         _stopwatch.Start();
 
-        for(int i = 1; i <= WORKER_COUNT; i++) {
-            _workerRegistry[i] = new WorkerStats { Name = $"Worker-{i:00}" };
-            _ = RunWorkerAsync(i, stoppingToken);
+        // 2. Worker'ları Başlat
+        var tasks = new List<Task>();
+        for(int i = 0; i < WORKER_COUNT; i++) {
+            int id = i;
+            // Farklı roller dağıt
+            WorkerType type = (id % 4) switch {
+                0 => WorkerType.SteadyIncrementer,
+                1 => WorkerType.BurstSpiker,
+                2 => WorkerType.QuotaLimiter,
+                3 => WorkerType.Decreaser,
+                _ => WorkerType.SteadyIncrementer
+            };
+
+            _workerRegistry[id] = new WorkerStats {
+                Name = $"Worker-{id:00}",
+                Type = type
+            };
+
+            tasks.Add(RunWorkerLogicAsync(id, type, stoppingToken));
         }
 
-        await RunMonitorAsync(stoppingToken);
+        // 3. Klavye Dinleyici (Arka planda)
+        tasks.Add(InputListenerAsync(stoppingToken));
+
+        // 4. UI Monitor (Ana Thread bu döngüde kalacak)
+        await RunDashboardLoopAsync(stoppingToken);
+
+        await Task.WhenAll(tasks);
     }
 
-    private async Task RunWorkerAsync(int id, CancellationToken ct) {
+    private async Task RunWorkerLogicAsync(int id, WorkerType type, CancellationToken ct) {
         var stats = _workerRegistry[id];
+        var rnd = Random.Shared;
+
         while(!ct.IsCancellationRequested) {
             try {
-                long amount = Random.Shared.Next(1, 1000);
-                await counter.IncrementAsync(amount, cancellationToken: ct);
+                long amount = 0;
+                bool success = true;
 
-                Interlocked.Add(ref stats.TotalAdded, amount);
-                Interlocked.Increment(ref stats.OpCount);
+                switch(type) {
+                    case WorkerType.SteadyIncrementer:
+                    // Sürekli küçük artışlar (1-10 arası)
+                    amount = rnd.Next(1, 10);
+                    // Extension method kullanımı: (amount, ct) -> Expiry infinite
+                    await counter.IncrementAsync(amount, ct);
+                    stats.LastAction = $"Inc({amount})";
+                    break;
 
-                await Task.Delay(Random.Shared.Next(10, 200), ct);
+                    case WorkerType.BurstSpiker:
+                    // %5 ihtimalle büyük artış, genelde bekleme
+                    if(rnd.NextDouble() > 0.95) {
+                        amount = rnd.Next(500, 2000);
+                        await counter.IncrementAsync(amount, ct);
+                        stats.LastAction = $"{Red}BURST({amount}){Reset}";
+                        // Burst sonrası biraz dinlen
+                        await Task.Delay(500, ct);
+                    }
+                    else {
+                        await Task.Delay(50, ct);
+                        continue; // İstatistik güncelleme
+                    }
+                    break;
+
+                    case WorkerType.QuotaLimiter:
+                    // Limite kadar artırmaya çalış (TryIncrement Testi)
+                    amount = rnd.Next(100, 500);
+                    // Extension: (amount, limit, expiry, ct) -> Expiry infinite
+                    // ÖNEMLİ: Yeni interface sıralaması (Amount, Limit)
+                    var result = await counter.TryIncrementAsync(amount, GLOBAL_LIMIT, CounterExpiry.Infinite, ct);
+
+                    if(result.IsAllowed) {
+                        stats.LastAction = $"TryInc({amount}) OK";
+                    }
+                    else {
+                        success = false;
+                        amount = 0; // Katkı sağlanamadı
+                        stats.LastAction = $"{Red}LIMIT HIT!{Reset}";
+                        stats.FailedOps++;
+                    }
+                    break;
+
+                    case WorkerType.Decreaser:
+                    // %20 ihtimalle azaltma yapar
+                    amount = rnd.Next(1, 50);
+                    if(rnd.NextDouble() > 0.8) {
+                        // Decrement Extension
+                        await counter.DecrementAsync(amount, ct);
+                        amount = -amount; // Toplam katkı negatif
+                        stats.LastAction = $"{Blue}Dec({Math.Abs(amount)}){Reset}";
+                    }
+                    else {
+                        // Azaltıcı da bazen artırır ki dengelensin
+                        await counter.IncrementAsync(amount, ct);
+                        stats.LastAction = $"Inc({amount})";
+                    }
+                    break;
+                }
+
+                if(success) {
+                    Interlocked.Add(ref stats.TotalContribution, amount);
+                    Interlocked.Increment(ref stats.SuccessOps);
+                }
+
+                // Rastgele gecikme (Gerçekçilik için)
+                await Task.Delay(rnd.Next(10, 100), ct);
             }
             catch(Exception ex) when(ex is not OperationCanceledException) {
-                logger.LogError(ex, "Worker error");
+                stats.LastAction = $"{Red}ERR: {ex.GetType().Name}{Reset}";
             }
         }
     }
 
-    private async Task RunMonitorAsync(CancellationToken ct) {
+    private async Task RunDashboardLoopAsync(CancellationToken ct) {
         while(!ct.IsCancellationRequested) {
             try {
-                await Task.Delay(3000, ct); // 3 saniyede bir daha hızlı güncelleme
-
-                var currentVal = await counter.GetValueAsync(ct);
-                double elapsed = _stopwatch.Elapsed.TotalSeconds;
-
-                // Hesaplamalar
-                long grandTotalSession = _workerRegistry.Values.Sum(x => x.TotalAdded);
-                long grandTotalOps = _workerRegistry.Values.Sum(x => x.OpCount);
-                long currentRedisVal = currentVal.Value;
-                long totalRedisGrowth = currentRedisVal - _initialRedisValue;
-                long externalContribution = totalRedisGrowth - grandTotalSession;
-
-                Console.Clear(); // Ekranı temizle (Dashboard hissi)
-                Console.WriteLine($"{Bold}{Magenta}🚀 DISTRIBUTED COUNTER REAL-TIME DASHBOARD{Reset}");
-                Console.WriteLine($"{Cyan}Uptime: {Reset}{_stopwatch.Elapsed:hh\\:mm\\:ss} | {Cyan}Key: {Reset}{counter.Key}");
-                Console.WriteLine(new string('━', 75));
-
-                // GENEL DURUM KARTLARI
-                Console.WriteLine($"{Bold}📊 GENEL DURUM{Reset}");
-                Console.WriteLine($"  {Green}▶ Redis Global Değer  :{Reset} {currentRedisVal:N0}");
-                Console.WriteLine($"  {Green}▶ Bu Session Toplam   :{Reset} +{grandTotalSession:N0}");
-
-                string extColor = externalContribution >= 0 ? Green : Red;
-                Console.WriteLine($"  {extColor}▶ Dış Katkı/Sapma     :{Reset} {externalContribution:N0} (Diğer App/Manual)");
-
-                Console.WriteLine($"  {Yellow}▶ Toplam İşlem (Ops)  :{Reset} {grandTotalOps:N0}");
-                Console.WriteLine(new string('─', 75));
-
-                // TABLO BAŞLIĞI
-                Console.WriteLine($"{Bold}{Cyan}{"WORKER",-12} | {"OPS",-10} | {"CONTRIBUTION",-18} | {"SPEED",-15}{Reset}");
-                Console.WriteLine(new string('─', 75));
-
-                // WORKER SATIRLARI
-                foreach(var worker in _workerRegistry.Values.OrderBy(x => x.Name)) {
-                    double speed = worker.TotalAdded / elapsed;
-                    string speedBar = GetSpeedBar(speed);
-
-                    Console.WriteLine(
-                        $"{White(worker.Name),-12} | " +
-                        $"{worker.OpCount,10:N0} | " +
-                        $"{Green + "+" + worker.TotalAdded.ToString("N0"),-18}{Reset} | " +
-                        $"{Yellow + speed.ToString("N2"),8} Inc/s {speedBar}"
-                    );
-                }
-
-                Console.WriteLine(new string('━', 75));
-
-                // ALT BİLGİ (THROUGHPUT)
-                double totalThroughput = grandTotalSession / elapsed;
-                double opsPerSec = grandTotalOps / elapsed;
-
-                Console.WriteLine($"{Bold}📈 PERFORMANS ANALİZİ{Reset}");
-                Console.WriteLine($"  ⚡ {Cyan}Saniyede İşlem (TPS):{Reset} {opsPerSec:F2} ops/sec");
-                Console.WriteLine($"  🚀 {Cyan}Saniyede Artış     :{Reset} {totalThroughput:F2} inc/sec");
-
-                if(counter.Strategy == CounterStrategy.Buffered) {
-                    Console.WriteLine($"  💎 {Green}MOD: BUFFERED (Yüksek Verimlilik - Redis Dostu){Reset}");
-                }
-
+                // Ekranı her 500ms'de bir güncelle
+                RenderDashboard(ct);
+                await Task.Delay(500, ct);
             }
             catch(Exception ex) when(ex is not OperationCanceledException) {
-                Console.WriteLine($"{Red}Monitor Error: {ex.Message}{Reset}");
+                logger.LogError(ex, "Dashboard Error");
+                await Task.Delay(2000, ct);
             }
         }
     }
 
-    private string GetSpeedBar(double speed) {
-        int barLength = (int)Math.Min(speed / 10, 10); // Hıza göre bar boyutu
-        return new string('█', barLength).PadRight(10, '░');
+    private void RenderDashboard(CancellationToken ct) {
+        var currentRedisValTask = counter.GetValueAsync(ct);
+        if(!currentRedisValTask.IsCompleted) return;
+        long currentRedisVal = currentRedisValTask.Result.Value;
+
+        double elapsedSec = _stopwatch.Elapsed.TotalSeconds;
+        long localTotalContribution = _workerRegistry.Values.Sum(x => x.TotalContribution);
+        long localTotalOps = _workerRegistry.Values.Sum(x => x.SuccessOps + x.FailedOps);
+
+        long totalGrowthInRedis = currentRedisVal - _initialRedisValue;
+
+        // Hesaplama: (Benim RAM'de tuttuklarım + Gönderdiklerim) - (Redis'teki Artış)
+        // Sonuç Pozitifse (+): RAM'de flush bekleyen veri var (Henüz gitmemiş).
+        // Sonuç Negatifse (-): Başka biri (diğer konsollar) Redis'i şişirmiş.
+        long diff = localTotalContribution - totalGrowthInRedis;
+
+        Console.Clear();
+        Console.WriteLine($"{Bold}{Magenta}╔════════════════════════════════════════════════════════════════════╗{Reset}");
+        Console.WriteLine($"{Bold}{Magenta}║   WIAOJ DISTRIBUTED COUNTER - REAL-TIME ORCHESTRATOR               ║{Reset}");
+        Console.WriteLine($"{Bold}{Magenta}╚════════════════════════════════════════════════════════════════════╝{Reset}");
+
+        Console.WriteLine($" {Cyan}Strategy:{Reset} {counter.Strategy} | {Cyan}Key:{Reset} {counter.Key}");
+        Console.WriteLine($" {Yellow}Controls:{Reset} [F]lush Force | [R]eset Global | [Q]uit");
+        Console.WriteLine(new string('-', 70));
+
+        // GLOBAL STATS
+        Console.WriteLine($"{Bold}📊 GLOBAL STATUS{Reset}");
+        Console.WriteLine($"  🌍 {Green}Redis Live Value :{Reset} {currentRedisVal,15:N0}");
+        Console.WriteLine($"  💾 {Blue}Local Contribution :{Reset} {localTotalContribution,15:N0} (Bu pencerenin katkısı)");
+
+        // --- MANTIK DÜZELTMESİ BURADA ---
+        if(diff > 0) {
+            // Pozitif fark: Bizim RAM'de verimiz var, henüz gitmemiş.
+            Console.WriteLine($"  ⏳ {Yellow}Pending / Buffer :{Reset} {diff,15:N0} (Flush Bekleniyor)");
+        }
+        else if(diff < 0) {
+            // Negatif fark: Bizden daha fazla artış olmuş (Diğer konsollar çalışıyor).
+            long externalWrites = Math.Abs(diff);
+            Console.WriteLine($"  🚀 {Magenta}External Writes  :{Reset} {externalWrites,15:N0} (Diğer App'lerden Gelen)");
+        }
+        else {
+            Console.WriteLine($"  ✅ {Green}Synchronized     :{Reset} {0,15}");
+        }
+
+        double tps = localTotalOps / elapsedSec;
+        Console.WriteLine($"  ⚡ {Cyan}Throughput (TPS) :{Reset} {tps,15:F1} ops/sec");
+
+        Console.WriteLine(new string('-', 70));
+
+        // WORKER TABLE
+        Console.WriteLine($"{Bold}{"WORKER",-12} | {"TYPE",-16} | {"OPS",-8} | {"CONTRIB.",-12} | {"ACTION",-20}{Reset}");
+        Console.WriteLine(new string('─', 78));
+
+        foreach(var worker in _workerRegistry.Values.OrderBy(x => x.Name)) {
+            string typeColor = worker.Type switch {
+                WorkerType.SteadyIncrementer => Green,
+                WorkerType.BurstSpiker => Red,
+                WorkerType.QuotaLimiter => Yellow,
+                WorkerType.Decreaser => Blue,
+                _ => Reset
+            };
+
+            Console.WriteLine(
+                $"{worker.Name,-12} | " +
+                $"{typeColor}{worker.Type,-16}{Reset} | " +
+                $"{worker.SuccessOps + worker.FailedOps,8:N0} | " +
+                $"{White(worker.TotalContribution.ToString("N0")),-12} | " +
+                $"{worker.LastAction,-20}"
+            );
+        }
+        Console.WriteLine(new string('─', 78));
+
+        if(diff > 0) {
+            Console.WriteLine($"{Yellow}⚠️  RAM'de birikmiş {diff:N0} veri var. Flush bekleniyor...{Reset}");
+        }
+        else {
+            Console.WriteLine($"{Green}✔  Sistem senkronize veya dış veri akışı var.{Reset}");
+        }
+    }
+
+    private async Task InputListenerAsync(CancellationToken ct) {
+        while(!ct.IsCancellationRequested) {
+            if(Console.KeyAvailable) {
+                var key = Console.ReadKey(true).Key;
+                if(key == ConsoleKey.F) {
+                    Console.WriteLine($"\n{Yellow}>>> MANUAL FLUSH TRIGGERED...{Reset}");
+                    // Service üzerinden tüm bufferları boşalt
+                    await counterService.FlushAllAsync(ct);
+                }
+                else if(key == ConsoleKey.R) {
+                    Console.WriteLine($"\n{Red}>>> GLOBAL RESET TRIGGERED...{Reset}");
+                    // Her şeyi sıfırla
+                    await counterService.ResetAllAsync(ct);
+                    // Local istatistikleri de temizle
+                    foreach(var w in _workerRegistry.Values) {
+                        w.TotalContribution = 0;
+                        w.SuccessOps = 0;
+                        w.FailedOps = 0;
+                    }
+                    // Redis başlangıç değerini 0 kabul et
+                    _initialRedisValue = 0;
+                }
+                else if(key == ConsoleKey.Q) {
+                    // ApplicationLifetime üzerinden kapatmak daha şık olur ama burada basitçe exception fırlatmayalım
+                    Console.WriteLine($"\n{Red}>>> Çıkış yapılıyor...{Reset}");
+                    Environment.Exit(0);
+                }
+            }
+            await Task.Delay(100, ct);
+        }
     }
 
     private string White(string text) => $"\x1b[37m{text}{Reset}";
