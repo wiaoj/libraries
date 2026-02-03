@@ -24,7 +24,7 @@ namespace Wiaoj.Primitives;
 [JsonConverter(typeof(NanoIdJsonConverter))]
 [StructLayout(LayoutKind.Auto)]
 [SkipLocalsInit]
-public readonly record struct NanoId :
+public readonly partial record struct NanoId :
     IEquatable<NanoId>,
     IComparable<NanoId>,
     IComparable,
@@ -34,14 +34,14 @@ public readonly record struct NanoId :
     // -------------------------------------------------------------------------
     // CONSTANTS & CONFIG
     // -------------------------------------------------------------------------
-    private const string DefaultAlphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-";
+    //private const string DefaultAlphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-";
     private const int DefaultLength = 21;
-    internal const int MaxAllowedLength = 128; // Stackalloc için güvenlik limiti
+    internal const int MaxAllowedLength = 128;
 
     // SIMD Optimized Validator (.NET 8+)
-    private static readonly SearchValues<char> ValidChars = SearchValues.Create(DefaultAlphabet);
+    private static readonly SearchValues<char> ValidChars = SearchValues.Create(Alphabets.UrlSafe);
 
-    private static ReadOnlySpan<char> Alphabet => DefaultAlphabet;
+    private static ReadOnlySpan<char> Alphabet => Alphabets.NoVowels;
 
     private readonly string _value;
 
@@ -73,18 +73,22 @@ public readonly record struct NanoId :
     public static NanoId NewId(int length) {
         Preca.ThrowIfNonValidNanoIdLength(length);
 
+        //string result = string.Create(length, length, (span, len) => {
+        //    // 1. Stack Allocation
+        //    Span<byte> randomBytes = stackalloc byte[len];
+
+        //    // 2. Secure Randomness
+        //    RandomNumberGenerator.Fill(randomBytes);
+
+        //    // 3. Bitwise Optimization (Alphabet size 64 = 2^6)
+        //    ReadOnlySpan<char> alphabet = Alphabet;
+        //    for (int i = 0; i < len; i++) {
+        //        span[i] = alphabet[randomBytes[i] & 0x3F];
+        //    }
+        //});
+
         string result = string.Create(length, length, (span, len) => {
-            // 1. Stack Allocation
-            Span<byte> randomBytes = stackalloc byte[len];
-
-            // 2. Secure Randomness
-            RandomNumberGenerator.Fill(randomBytes);
-
-            // 3. Bitwise Optimization (Alphabet size 64 = 2^6)
-            ReadOnlySpan<char> alphabet = Alphabet;
-            for (int i = 0; i < len; i++) {
-                span[i] = alphabet[randomBytes[i] & 0x3F];
-            }
+            RandomNumberGenerator.GetItems(Alphabet, span);
         });
 
         return new NanoId(result);
@@ -207,9 +211,15 @@ public readonly record struct NanoId :
 
 public static class PrecaExtensions {
     extension(Preca) {
+        /// <summary>
+        /// Throws an <see cref="ArgumentOutOfRangeException"/> if the specified NanoId length is not valid.
+        /// Valid lengths are between 1 and <see cref="NanoId.MaxAllowedLength"/>.
+        /// </summary>
+        /// <param name="length">The NanoId length to validate.</param>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="length"/> is less than 1 or greater than <see cref="NanoId.MaxAllowedLength"/>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ThrowIfNonValidNanoIdLength(int length) {
-            if (length <= 0 || length > NanoId.MaxAllowedLength) {
+            if(length <= 0 || length > NanoId.MaxAllowedLength) {
                 throw new ArgumentOutOfRangeException(nameof(length), $"Length must be between 1 and {NanoId.MaxAllowedLength}.");
             }
         }
