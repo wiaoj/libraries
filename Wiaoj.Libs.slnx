@@ -4,6 +4,7 @@
     <Project Path="benchmarks/Wiaoj.Benchmarks.Primitives/Wiaoj.Benchmarks.Primitives.csproj" Id="47a9018c-29c4-4747-8ef4-ffc2eacdaca2" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/Wiaoj.Samples.DistributedCounter/Wiaoj.Samples.DistributedCounter.csproj" />
     <Project Path="samples/Wiaoj.Samples.Primitives/Wiaoj.Samples.Primitives.csproj" Id="7f7ef88f-3ab9-4333-a7cf-f493f9c04b58" />
   </Folder>
   <Folder Name="/src/" />

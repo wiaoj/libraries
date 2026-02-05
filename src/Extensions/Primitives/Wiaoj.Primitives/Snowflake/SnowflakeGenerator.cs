@@ -87,7 +87,8 @@ public class SnowflakeGenerator {
         // MONOTONIC CLOCK INITIALIZATION
         // -------------------------------------------------------------------
         if (this._isSystemTime) {
-            this._anchorSystemTimeMs = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+            //this._anchorSystemTimeMs = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+            this._anchorSystemTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             this._anchorStopwatchTicks = Stopwatch.GetTimestamp();
 
             // OPTİMİZASYON: Bölme yerine çarpma kullanmak için katsayıyı önceden hesapla.
@@ -160,6 +161,13 @@ public class SnowflakeGenerator {
 
             spin.SpinOnce();
         }
+    }
+
+    public UnixTimestamp ExtractUnixTimestamp(long id) {
+        // Timestamp bitlerini çek (Örn: 22 bit shift)
+        long timestampDelta = id >> _timestampShift;
+        // Epoch ile topla ve UnixTimestamp tipinde dön
+        return UnixTimestamp.From(_epochTicks + timestampDelta);
     }
 
     /// <summary>

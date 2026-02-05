@@ -140,6 +140,14 @@ public readonly struct SnowflakeId :
         return TryParseInternal(utf8Text, out result);
     }
 
+    /// <summary>
+    /// Extract the timestamp portion of the ID as a <see cref="UnixTimestamp"/>.
+    /// Uses the global shared configuration to determine the Epoch.
+    /// </summary>
+    public UnixTimestamp ToUnixTimestamp() { 
+        return _sharedGenerator.ExtractUnixTimestamp(this);
+    }
+    public static explicit operator UnixTimestamp(SnowflakeId id) => id.ToUnixTimestamp();
     // --- Internal Logic ---
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
