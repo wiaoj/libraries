@@ -67,6 +67,11 @@ public readonly record struct UnixTimestamp :
     /// <value>The milliseconds as a <see cref="long"/>.</value>
     public long Milliseconds => this._milliseconds;
 
+    /// <summary>
+    /// Gets the number of seconds since the Unix Epoch.
+    /// </summary>
+    public long Seconds => this._milliseconds / 1000;
+        
     // Private constructor to enforce creation via static factory methods.
     private UnixTimestamp(long milliseconds) {
         this._milliseconds = milliseconds;
