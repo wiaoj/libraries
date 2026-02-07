@@ -9,26 +9,26 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void Epoch_ShouldBeZero() {
-        Assert.Equal(0, UnixTimestamp.Epoch.Milliseconds);
+        Assert.Equal(0, UnixTimestamp.Epoch.TotalMilliseconds);
     }
 
     [Fact]
     public void MinMaxValues_ShouldMatchInt64() {
-        Assert.Equal(long.MinValue, UnixTimestamp.MinValue.Milliseconds);
-        Assert.Equal(long.MaxValue, UnixTimestamp.MaxValue.Milliseconds);
+        Assert.Equal(long.MinValue, UnixTimestamp.MinValue.TotalMilliseconds);
+        Assert.Equal(long.MaxValue, UnixTimestamp.MaxValue.TotalMilliseconds);
     }
 
     [Fact]
     public void From_Long_ShouldStoreValue() {
         long val = 123456789;
         // Static factory method testi
-        UnixTimestamp ts = UnixTimestamp.From(val);
-        Assert.Equal(val, ts.Milliseconds);
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(val);
+        Assert.Equal(val, ts.TotalMilliseconds);
     }
 
     [Fact]
     public void ImplicitOperator_ToLong_ShouldWork() {
-        UnixTimestamp ts = UnixTimestamp.From(100);
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(100);
         long val = ts; // Implicit cast
         Assert.Equal(100, val);
     }
@@ -37,7 +37,7 @@ public sealed class UnixTimestampTests {
     public void ExplicitOperator_FromLong_ShouldWork() {
         long val = 500;
         UnixTimestamp ts = (UnixTimestamp)val; // Explicit cast
-        Assert.Equal(500, ts.Milliseconds);
+        Assert.Equal(500, ts.TotalMilliseconds);
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class UnixTimestampTests {
         UnixTimestamp now = UnixTimestamp.Now;
 
         // Toleranslı kontrol (test çalışırken geçen süre için)
-        long diff = Math.Abs(now.Milliseconds - systemMs);
+        long diff = Math.Abs(now.TotalMilliseconds - systemMs);
         Assert.True(diff < 100, "UnixTimestamp.Now is too far from system time.");
     }
 
@@ -60,7 +60,7 @@ public sealed class UnixTimestampTests {
         DateTimeOffset dto = new(2023, 1, 1, 0, 0, 0, TimeSpan.Zero);
         UnixTimestamp ts = UnixTimestamp.From(dto);
 
-        Assert.Equal(dto.ToUnixTimeMilliseconds(), ts.Milliseconds);
+        Assert.Equal(dto.ToUnixTimeMilliseconds(), ts.TotalMilliseconds);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public sealed class UnixTimestampTests {
 
         // DateTimeOffset conversion for verification
         long expected = new DateTimeOffset(dt).ToUnixTimeMilliseconds();
-        Assert.Equal(expected, ts.Milliseconds);
+        Assert.Equal(expected, ts.TotalMilliseconds);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public sealed class UnixTimestampTests {
 
         // Verification: Convert local back to UTC manually and check ms
         long expected = new DateTimeOffset(dtLocal.ToUniversalTime()).ToUnixTimeMilliseconds();
-        Assert.Equal(expected, ts.Milliseconds);
+        Assert.Equal(expected, ts.TotalMilliseconds);
     }
 
     [Fact]
@@ -94,12 +94,12 @@ public sealed class UnixTimestampTests {
         DateTime dtUtc = new(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         long expected = new DateTimeOffset(dtUtc).ToUnixTimeMilliseconds();
 
-        Assert.Equal(expected, ts.Milliseconds);
+        Assert.Equal(expected, ts.TotalMilliseconds);
     }
 
     [Fact]
     public void ToDateTimeUtc_ShouldReturnUtcKind() {
-        UnixTimestamp ts = UnixTimestamp.From(1672531200000); // 2023-01-01
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(1672531200000); // 2023-01-01
         DateTime dt = ts.ToDateTimeUtc();
 
         Assert.Equal(DateTimeKind.Utc, dt.Kind);
@@ -108,7 +108,7 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void ToDateTimeLocal_ShouldReturnLocalKind() {
-        UnixTimestamp ts = UnixTimestamp.From(1672531200000);
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(1672531200000);
         DateTime dt = ts.ToDateTimeLocal();
 
         Assert.Equal(DateTimeKind.Local, dt.Kind);
@@ -116,7 +116,7 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void ToDateTimeOffset_ShouldReturnOffsetZero() {
-        UnixTimestamp ts = UnixTimestamp.From(1000);
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(1000);
         DateTimeOffset dto = ts.ToDateTimeOffset();
 
         Assert.Equal(TimeSpan.Zero, dto.Offset);
@@ -141,24 +141,24 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void Operator_Plus_TimeSpan_ShouldAdd() {
-        UnixTimestamp start = UnixTimestamp.From(1000);
+        UnixTimestamp start = UnixTimestamp.FromMilliseconds(1000);
         UnixTimestamp result = start + TimeSpan.FromMilliseconds(500);
 
-        Assert.Equal(1500, result.Milliseconds);
+        Assert.Equal(1500, result.TotalMilliseconds);
     }
 
     [Fact]
     public void Operator_Minus_TimeSpan_ShouldSubtract() {
-        UnixTimestamp start = UnixTimestamp.From(1000);
+        UnixTimestamp start = UnixTimestamp.FromMilliseconds(1000);
         UnixTimestamp result = start - TimeSpan.FromMilliseconds(500);
 
-        Assert.Equal(500, result.Milliseconds);
+        Assert.Equal(500, result.TotalMilliseconds);
     }
 
     [Fact]
     public void Operator_Minus_UnixTimestamp_ShouldReturnTimeSpan() {
-        UnixTimestamp end = UnixTimestamp.From(1500);
-        UnixTimestamp start = UnixTimestamp.From(1000);
+        UnixTimestamp end = UnixTimestamp.FromMilliseconds(1500);
+        UnixTimestamp start = UnixTimestamp.FromMilliseconds(1000);
 
         TimeSpan diff = end - start;
 
@@ -171,9 +171,9 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void Comparison_Operators_ShouldWork() {
-        UnixTimestamp small = UnixTimestamp.From(100);
-        UnixTimestamp big = UnixTimestamp.From(200);
-        UnixTimestamp small2 = UnixTimestamp.From(100);
+        UnixTimestamp small = UnixTimestamp.FromMilliseconds(100);
+        UnixTimestamp big = UnixTimestamp.FromMilliseconds(200);
+        UnixTimestamp small2 = UnixTimestamp.FromMilliseconds(100);
 
         Assert.True(small < big);
         Assert.True(big > small);
@@ -183,9 +183,9 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void Equality_With_UnixTimestamp() {
-        UnixTimestamp t1 = UnixTimestamp.From(123);
-        UnixTimestamp t2 = UnixTimestamp.From(123);
-        UnixTimestamp t3 = UnixTimestamp.From(456);
+        UnixTimestamp t1 = UnixTimestamp.FromMilliseconds(123);
+        UnixTimestamp t2 = UnixTimestamp.FromMilliseconds(123);
+        UnixTimestamp t3 = UnixTimestamp.FromMilliseconds(456);
 
         Assert.True(t1 == t2);
         Assert.False(t1 == t3);
@@ -195,7 +195,7 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void Equality_With_Long() {
-        UnixTimestamp t1 = UnixTimestamp.From(1000);
+        UnixTimestamp t1 = UnixTimestamp.FromMilliseconds(1000);
 
         Assert.Equal(1000L, t1);
         Assert.NotEqual(2000L, t1);
@@ -204,16 +204,16 @@ public sealed class UnixTimestampTests {
     [Fact]
     public void CompareTo_ShouldSortCorrectly() {
         List<UnixTimestamp> list = [
-            UnixTimestamp.From(300),
-            UnixTimestamp.From(100),
-            UnixTimestamp.From(200)
+            UnixTimestamp.FromMilliseconds(300),
+            UnixTimestamp.FromMilliseconds(100),
+            UnixTimestamp.FromMilliseconds(200)
         ];
 
         list.Sort();
 
-        Assert.Equal(100, list[0].Milliseconds);
-        Assert.Equal(200, list[1].Milliseconds);
-        Assert.Equal(300, list[2].Milliseconds);
+        Assert.Equal(100, list[0].TotalMilliseconds);
+        Assert.Equal(200, list[1].TotalMilliseconds);
+        Assert.Equal(300, list[2].TotalMilliseconds);
     }
 
     #endregion
@@ -227,7 +227,7 @@ public sealed class UnixTimestampTests {
     public void Parse_String_Valid_ShouldWork(string input, long expected) {
         // Public convenience method (no provider needed)
         UnixTimestamp result = UnixTimestamp.Parse(input);
-        Assert.Equal(expected, result.Milliseconds);
+        Assert.Equal(expected, result.TotalMilliseconds);
     }
 
     [Theory]
@@ -246,7 +246,7 @@ public sealed class UnixTimestampTests {
     public void TryParse_String_ShouldWork() {
         // Public convenience method
         Assert.True(UnixTimestamp.TryParse("100", out UnixTimestamp ts));
-        Assert.Equal(100, ts.Milliseconds);
+        Assert.Equal(100, ts.TotalMilliseconds);
 
         Assert.False(UnixTimestamp.TryParse("invalid", out _));
         Assert.False(UnixTimestamp.TryParse(null, out _));
@@ -258,7 +258,7 @@ public sealed class UnixTimestampTests {
 
         // Public convenience method
         Assert.True(UnixTimestamp.TryParse(span, out UnixTimestamp ts));
-        Assert.Equal(999, ts.Milliseconds);
+        Assert.Equal(999, ts.TotalMilliseconds);
     }
 
     [Fact]
@@ -266,7 +266,7 @@ public sealed class UnixTimestampTests {
         // Test strict interface implementation
         string input = "555";
         UnixTimestamp result = ParseHelper<UnixTimestamp>(input, null);
-        Assert.Equal(555, result.Milliseconds);
+        Assert.Equal(555, result.TotalMilliseconds);
     }
 
     #endregion
@@ -279,7 +279,7 @@ public sealed class UnixTimestampTests {
 
         // Test via helper that calls the explicit interface method
         UnixTimestamp ts = ParseUtf8Helper<UnixTimestamp>(bytes, null);
-        Assert.Equal(12345, ts.Milliseconds);
+        Assert.Equal(12345, ts.TotalMilliseconds);
     }
 
     [Fact]
@@ -294,7 +294,7 @@ public sealed class UnixTimestampTests {
         byte[] invalid = Encoding.UTF8.GetBytes("xyz");
 
         Assert.True(TryParseUtf8Helper<UnixTimestamp>(valid, null, out UnixTimestamp t1));
-        Assert.Equal(500, t1.Milliseconds);
+        Assert.Equal(500, t1.TotalMilliseconds);
 
         Assert.False(TryParseUtf8Helper<UnixTimestamp>(invalid, null, out _));
     }
@@ -305,13 +305,13 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void ToString_ShouldReturnNumberString() {
-        UnixTimestamp ts = UnixTimestamp.From(12345);
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(12345);
         Assert.Equal("12345", ts.ToString());
     }
 
     [Fact]
     public void Explicit_ISpanFormattable_TryFormat_ShouldWork() {
-        UnixTimestamp ts = UnixTimestamp.From(123);
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(123);
         Span<char> buffer = stackalloc char[10];
 
         // Call explicit interface implementation via casting
@@ -323,7 +323,7 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void Explicit_IUtf8SpanFormattable_TryFormat_ShouldWork() {
-        UnixTimestamp ts = UnixTimestamp.From(987);
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(987);
         Span<byte> buffer = stackalloc byte[10];
 
         // Call explicit interface implementation via casting
@@ -344,7 +344,7 @@ public sealed class UnixTimestampTests {
 
     [Fact]
     public void Json_Serialize_ShouldWriteNumber() {
-        TestModel model = new() { Ts = UnixTimestamp.From(123456) };
+        TestModel model = new() { Ts = UnixTimestamp.FromMilliseconds(123456) };
         string json = JsonSerializer.Serialize(model);
 
         // Expected format: {"Ts":123456} (no quotes around number)
@@ -356,7 +356,7 @@ public sealed class UnixTimestampTests {
         string json = "{\"Ts\": 999}";
         TestModel? model = JsonSerializer.Deserialize<TestModel>(json);
 
-        Assert.Equal(999, model!.Ts.Milliseconds);
+        Assert.Equal(999, model!.Ts.TotalMilliseconds);
     }
 
     [Fact]
@@ -365,7 +365,7 @@ public sealed class UnixTimestampTests {
         string json = "{\"Ts\": \"888\"}";
         TestModel? model = JsonSerializer.Deserialize<TestModel>(json);
 
-        Assert.Equal(888, model!.Ts.Milliseconds);
+        Assert.Equal(888, model!.Ts.TotalMilliseconds);
     }
 
     [Fact]
@@ -378,7 +378,7 @@ public sealed class UnixTimestampTests {
     public void Json_DictionaryKey_ShouldWork() {
         // Tests ReadAsPropertyName and WriteAsPropertyName
         Dictionary<UnixTimestamp, string> dict = new() {
-            { UnixTimestamp.From(100), "Value1" }
+            { UnixTimestamp.FromMilliseconds(100), "Value1" }
         };
 
         string json = JsonSerializer.Serialize(dict);
@@ -387,8 +387,8 @@ public sealed class UnixTimestampTests {
 
         Dictionary<UnixTimestamp, string>? deserialized = JsonSerializer.Deserialize<Dictionary<UnixTimestamp, string>>(json);
         Assert.NotNull(deserialized);
-        Assert.True(deserialized.ContainsKey(UnixTimestamp.From(100)));
-        Assert.Equal("Value1", deserialized[UnixTimestamp.From(100)]);
+        Assert.True(deserialized.ContainsKey(UnixTimestamp.FromMilliseconds(100)));
+        Assert.Equal("Value1", deserialized[UnixTimestamp.FromMilliseconds(100)]);
     }
 
     #endregion

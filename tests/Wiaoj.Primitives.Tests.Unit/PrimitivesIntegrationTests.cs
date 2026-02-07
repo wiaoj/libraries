@@ -10,7 +10,7 @@ public class PrimitivesIntegrationTests {
         var base64Key = Base64String.FromBytes(Encoding.UTF8.GetBytes(rawKey));
 
         // 2. Act
-        // Secret.From(Base64) bize Secret<byte> döner.
+        // Secret.FromMilliseconds(Base64) bize Secret<byte> döner.
         using var secret = Secret.From(base64Key);
 
         // DÜZELTME: Encoding parametresi kaldırıldı.
@@ -27,7 +27,7 @@ public class PrimitivesIntegrationTests {
         var rawData = Encoding.ASCII.GetBytes("Hello");
         var base32 = Base32String.FromBytes(rawData);
 
-        // Secret.From(Base32) bize Secret<byte> döner.
+        // Secret.FromMilliseconds(Base32) bize Secret<byte> döner.
         using var secret = Secret.From(base32);
 
         // DÜZELTME: Encoding parametresi kaldırıldı.

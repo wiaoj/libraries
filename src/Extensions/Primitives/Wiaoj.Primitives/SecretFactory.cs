@@ -5,7 +5,7 @@ using System.Text;
 namespace Wiaoj.Primitives;
 /// <summary>
 /// Provides static factory methods for creating and operating on <see cref="Secret{T}"/> instances.
-/// Using these methods allows for type inference, enabling cleaner syntax (e.g., `Secret.From(bytes)`).
+/// Using these methods allows for type inference, enabling cleaner syntax (e.g., `Secret.FromMilliseconds(bytes)`).
 /// </summary>
 public static class Secret {
     /// <inheritdoc cref="Secret{T}.From(ReadOnlySpan{T})"/>

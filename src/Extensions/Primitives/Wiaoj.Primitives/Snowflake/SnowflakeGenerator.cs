@@ -167,7 +167,7 @@ public class SnowflakeGenerator {
         // Timestamp bitlerini çek (Örn: 22 bit shift)
         long timestampDelta = id >> _timestampShift;
         // Epoch ile topla ve UnixTimestamp tipinde dön
-        return UnixTimestamp.From(_epochTicks + timestampDelta);
+        return UnixTimestamp.FromMilliseconds(_epochTicks + timestampDelta);
     }
 
     /// <summary>

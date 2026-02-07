@@ -16,7 +16,7 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
         // 1. Optimization: Try reading as a number first (most common and fastest case)
         if(reader.TokenType == JsonTokenType.Number) {
             if(reader.TryGetInt64(out long milliseconds)) {
-                return UnixTimestamp.From(milliseconds);
+                return UnixTimestamp.FromMilliseconds(milliseconds);
             }
         }
 
@@ -27,7 +27,7 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
 
             // Direct usage of Utf8Parser is faster than casting to IUtf8SpanParsable
             if(Utf8Parser.TryParse(span, out long milliseconds, out int bytesConsumed) && bytesConsumed == span.Length) {
-                return UnixTimestamp.From(milliseconds);
+                return UnixTimestamp.FromMilliseconds(milliseconds);
             }
         }
 
@@ -37,7 +37,7 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, UnixTimestamp value, JsonSerializerOptions options) {
         // Standard practice is writing timestamps as numbers (integers).
-        writer.WriteNumberValue(value.Milliseconds);
+        writer.WriteNumberValue(value.TotalMilliseconds);
     }
 
     /// <inheritdoc/>
@@ -47,7 +47,7 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
         ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
 
         if(Utf8Parser.TryParse(span, out long milliseconds, out int bytesConsumed) && bytesConsumed == span.Length) {
-            return UnixTimestamp.From(milliseconds);
+            return UnixTimestamp.FromMilliseconds(milliseconds);
         }
 
         throw new JsonException($"Invalid property name format for UnixTimestamp. Expected an integer string.");

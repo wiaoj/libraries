@@ -40,7 +40,7 @@ Console.WriteLine($"ID'nin içindeki zaman: {gercekZaman}");
 //Stopwatch sw1 = Stopwatch.StartNew(); // KRONOMETREYİ BAŞLAT
 //try {
 //    // Kural: Maksimum 3 saniye sürsün.
-//    OperationTimeout timeout = OperationTimeout.From(TimeSpan.FromSeconds(3));
+//    OperationTimeout timeout = OperationTimeout.FromMilliseconds(TimeSpan.FromSeconds(3));
 
 //    await Controller_Wrong_PassStruct(timeout);
 
@@ -75,7 +75,7 @@ Console.WriteLine($"ID'nin içindeki zaman: {gercekZaman}");
 
 //Stopwatch sw2 = Stopwatch.StartNew();
 //try {
-//    OperationTimeout timeout = OperationTimeout.From(TimeSpan.FromSeconds(3));
+//    OperationTimeout timeout = OperationTimeout.FromMilliseconds(TimeSpan.FromSeconds(3));
 //    await Controller_Correct_PassToken(timeout);
 
 //    sw2.Stop();
@@ -95,14 +95,14 @@ Console.WriteLine($"ID'nin içindeki zaman: {gercekZaman}");
 //Console.WriteLine("\n---------------------------------------------------------\n");
 
 //// ---------------------------------------------------------
-//// SENARYO 3: DOĞRU KULLANIM (Wrapper - From(token))
+//// SENARYO 3: DOĞRU KULLANIM (Wrapper - FromMilliseconds(token))
 //// Beklenti: Yine 3. saniyede PATLAMALI.
 //// ---------------------------------------------------------
-//Log("TEST 3 BAŞLIYOR: Doğru Kullanım (Wrapper - From(token))", ConsoleColor.Cyan);
+//Log("TEST 3 BAŞLIYOR: Doğru Kullanım (Wrapper - FromMilliseconds(token))", ConsoleColor.Cyan);
 
 //Stopwatch sw3 = Stopwatch.StartNew();
 //try {
-//    OperationTimeout timeout = OperationTimeout.From(TimeSpan.FromSeconds(3));
+//    OperationTimeout timeout = OperationTimeout.FromMilliseconds(TimeSpan.FromSeconds(3));
 //    await Controller_Correct_PassWrapper(timeout);
 
 //    sw3.Stop();
@@ -171,8 +171,8 @@ Console.WriteLine($"ID'nin içindeki zaman: {gercekZaman}");
 //    await timeout.ExecuteAsync(async (token) => {
 //        await Task.Delay(2000, token);
 
-//        Log($"[Controller] Bitti. Service çağrılıyor (From(token) ile sarıldı)...");
-//        OperationTimeout childTimeout = OperationTimeout.From(token);
+//        Log($"[Controller] Bitti. Service çağrılıyor (FromMilliseconds(token) ile sarıldı)...");
+//        OperationTimeout childTimeout = OperationTimeout.FromMilliseconds(token);
 //        await Service_Correct_ReceivesWrapper(childTimeout);
 //    });
 //}

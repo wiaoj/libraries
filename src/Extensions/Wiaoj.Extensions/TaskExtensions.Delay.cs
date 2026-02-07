@@ -23,7 +23,7 @@ public static class TaskDelayExtensions {
     /// await OperationTimeout.FromSeconds(5).DelayAsync();
     ///
     /// // Wait for 30 seconds or until a token is cancelled
-    /// await OperationTimeout.From(30.Seconds(), myToken).DelayAsync();
+    /// await OperationTimeout.FromMilliseconds(30.TotalSeconds(), myToken).DelayAsync();
     /// </code>
     /// </example>
     /// </remarks>

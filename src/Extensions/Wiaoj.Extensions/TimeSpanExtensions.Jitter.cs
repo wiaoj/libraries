@@ -17,7 +17,7 @@ public static partial class TimeSpanExtensions {
         /// <remarks>
         /// This method is useful for preventing multiple concurrent operations from executing at the exact same time
         /// by introducing a small, random variance in their delay. 
-        /// Example: `5.Seconds().WithJitter(Jitter.Medium)` will return a TimeSpan between 4.5 and 5.5 seconds.
+        /// Example: `5.TotalSeconds().WithJitter(Jitter.Medium)` will return a TimeSpan between 4.5 and 5.5 seconds.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public TimeSpan WithJitter(Percentage percentage) {

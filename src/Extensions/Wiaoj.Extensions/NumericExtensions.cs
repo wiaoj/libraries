@@ -28,6 +28,6 @@ public static class NumericExtensions {
     /// <param name="milliseconds">The number of milliseconds that have elapsed since 1970-01-01T00:00:00Z.</param>
     /// <returns>A strongly-typed <see cref="UnixTimestamp"/>.</returns>
     public static UnixTimestamp ToUnixTimestamp(this long milliseconds) {
-        return UnixTimestamp.From(milliseconds);
+        return UnixTimestamp.FromMilliseconds(milliseconds);
     }
 }

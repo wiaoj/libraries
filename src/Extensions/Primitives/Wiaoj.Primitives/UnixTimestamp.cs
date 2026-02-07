@@ -65,12 +65,12 @@ public readonly record struct UnixTimestamp :
     /// Gets the raw number of milliseconds since the Unix Epoch.
     /// </summary>
     /// <value>The milliseconds as a <see cref="long"/>.</value>
-    public long Milliseconds => this._milliseconds;
+    public long TotalMilliseconds => this._milliseconds;
 
     /// <summary>
     /// Gets the number of seconds since the Unix Epoch.
     /// </summary>
-    public long Seconds => this._milliseconds / 1000;
+    public long TotalSeconds => this._milliseconds / 1000;
         
     // Private constructor to enforce creation via static factory methods.
     private UnixTimestamp(long milliseconds) {
@@ -98,7 +98,7 @@ public readonly record struct UnixTimestamp :
     /// <param name="milliseconds">The milliseconds elapsed since Epoch.</param>
     /// <returns>A new <see cref="UnixTimestamp"/> instance.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static UnixTimestamp From(long milliseconds) {
+    public static UnixTimestamp FromMilliseconds(long milliseconds) {
         return new UnixTimestamp(milliseconds);
     }
 
