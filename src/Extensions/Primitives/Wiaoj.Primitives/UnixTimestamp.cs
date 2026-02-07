@@ -88,6 +88,11 @@ public readonly record struct UnixTimestamp :
     public static UnixTimestamp Now => From(DateTimeOffset.UtcNow);
 
     /// <summary>
+    /// Creates a <see cref="UnixTimestamp"/> from raw seconds.
+    /// </summary>
+    public static UnixTimestamp FromSeconds(long seconds) => new(seconds * 1000);
+        
+    /// <summary>
     /// Creates a <see cref="UnixTimestamp"/> from raw milliseconds.
     /// </summary>
     /// <param name="milliseconds">The milliseconds elapsed since Epoch.</param>
