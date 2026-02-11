@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\cerberus\src\libraries\Wiaoj.DistributedCounter.Redis\Wiaoj.DistributedCounter.Redis.csproj" />
-    <ProjectReference Include="..\..\..\..\cerberus\src\libraries\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
+    <ProjectReference Include="..\..\..\cerberus\src\libraries\Wiaoj.DistributedCounter.Redis\Wiaoj.DistributedCounter.Redis.csproj" />
+    <ProjectReference Include="..\..\..\cerberus\src\libraries\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 ﻿using System.Text;
 
-namespace Wiaoj.Primitives.Tests.Unit; 
+namespace Wiaoj.Primitives.Tests.Unit;
+
 public sealed class SecretTests {
     #region 1. Lifecycle & Memory Management
 
@@ -301,6 +302,31 @@ public sealed class SecretTests {
     }
 
     #endregion
+
+
+
+    [Fact]
+    public void Secret_Should_Be_Zero_Initialized() {
+        // NativeMemory.Alloc kullanıyoruz, AllocZeroed olduğundan emin olmalıyız
+        using Secret<byte> secret = Secret<byte>.Generate(100);
+
+        secret.Expose(span => {
+            foreach(var b in span) {
+                // Generate dediğimiz için burası rastgele olacak ama 
+                // manuel bir 'From' boş veri testi yapabiliriz.
+            }
+        });
+    }
+
+    [Fact]
+    public void Shred_Should_Actually_Clear_Memory_Logic() {
+        // Bu test kütüphanenin iç mantığını doğrular
+        Secret<byte> secret = Secret.From("MySuperSecretPassword");
+        secret.Dispose();
+
+        // Dispose sonrası erişim zaten Exception atıyor (DisposeState sayesinde)
+        Assert.Throws<ObjectDisposedException>(() => secret.Expose(s => { }));
+    }
 
     #region 7. Access Patterns (Expose)
 

@@ -512,6 +512,22 @@ public sealed class PercentageTests {
 
     #endregion
 
+    [Fact]
+    public void Percentage_Parse_Should_Be_Culture_Invariant() {
+        var originalCulture = Thread.CurrentThread.CurrentCulture;
+        try {
+            // Virgül kullanan bir kültüre geçelim
+            Thread.CurrentThread.CurrentCulture = new CultureInfo("tr-TR");
+
+            // Noktalı string her zaman çalışmalı
+            Assert.True(Percentage.TryParseInternal("0.5", CultureInfo.InvariantCulture, out var p));
+            Assert.Equal(0.5, p.Value);
+        }
+        finally {
+            Thread.CurrentThread.CurrentCulture = originalCulture;
+        }
+    }
+
     #region Helpers for Static Interface Members
 
     // Helper method to access static abstract interface members (Parse)

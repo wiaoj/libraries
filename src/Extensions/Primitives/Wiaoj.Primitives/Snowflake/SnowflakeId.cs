@@ -211,7 +211,7 @@ public readonly struct SnowflakeId :
 
     #endregion
 
-    #region Formatting
+    #region Formatting 
 
     /// <inheritdoc/>
     public override string ToString() {
