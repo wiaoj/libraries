@@ -57,6 +57,6 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
     public override void WriteAsPropertyName(Utf8JsonWriter writer, UnixTimestamp value, JsonSerializerOptions options) {
         // Property keys in JSON must always be strings.
         // We format the long to string.
-        writer.WritePropertyName(value.ToString());
+        writer.WritePropertyName(value.ToString("R"));
     }
 }

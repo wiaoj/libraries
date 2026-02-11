@@ -24,11 +24,12 @@ namespace Wiaoj.Primitives;
 /// Stores precision up to milliseconds.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("{ToString()} ({ToDateTimeUtc(),nq})")]
+[DebuggerDisplay("{ToString(),nq}")]
 [JsonConverter(typeof(UnixTimestampJsonConverter))]
 public readonly record struct UnixTimestamp :
     IComparable<UnixTimestamp>,
     ISpanParsable<UnixTimestamp>,
+    IFormattable,
     ISpanFormattable,
     IUtf8SpanParsable<UnixTimestamp>,
     IUtf8SpanFormattable,
@@ -43,6 +44,8 @@ public readonly record struct UnixTimestamp :
     // -------------------------------------------------------------------------
 
     private readonly long _milliseconds;
+    private const long MinUnixMillis = -62135596800000; // 0001-01-01
+    private const long MaxUnixMillis = 253402300799999; // 9999-12-31
 
     /// <summary>
     /// Represents the Unix Epoch (1970-01-01T00:00:00Z). Value is 0.
@@ -50,16 +53,16 @@ public readonly record struct UnixTimestamp :
     public static UnixTimestamp Epoch { get; } = new(0);
 
     /// <summary>
-    /// Represents the minimum representable timestamp (MinValue of Int64).
-    /// Roughly 292 million years in the past.
+    /// Represents the minimum representable timestamp (0001-01-01T00:00:00.000Z).
+    /// Matches <see cref="DateTimeOffset.MinValue"/>.
     /// </summary>
-    public static UnixTimestamp MinValue { get; } = new(long.MinValue);
+    public static UnixTimestamp MinValue { get; } = new(MinUnixMillis);
 
     /// <summary>
-    /// Represents the maximum representable timestamp (MaxValue of Int64).
-    /// Roughly 292 million years in the future.
+    /// Represents the maximum representable timestamp (9999-12-31T23:59:59.999Z).
+    /// Matches <see cref="DateTimeOffset.MaxValue"/>.
     /// </summary>
-    public static UnixTimestamp MaxValue { get; } = new(long.MaxValue);
+    public static UnixTimestamp MaxValue { get; } = new(MaxUnixMillis);
 
     /// <summary>
     /// Gets the raw number of milliseconds since the Unix Epoch.
@@ -71,7 +74,7 @@ public readonly record struct UnixTimestamp :
     /// Gets the number of seconds since the Unix Epoch.
     /// </summary>
     public long TotalSeconds => this._milliseconds / 1000;
-        
+
     // Private constructor to enforce creation via static factory methods.
     private UnixTimestamp(long milliseconds) {
         this._milliseconds = milliseconds;
@@ -90,8 +93,10 @@ public readonly record struct UnixTimestamp :
     /// <summary>
     /// Creates a <see cref="UnixTimestamp"/> from raw seconds.
     /// </summary>
-    public static UnixTimestamp FromSeconds(long seconds) => new(seconds * 1000);
-        
+    public static UnixTimestamp FromSeconds(long seconds) {
+        return new(seconds * 1000);
+    }
+
     /// <summary>
     /// Creates a <see cref="UnixTimestamp"/> from raw milliseconds.
     /// </summary>
@@ -256,26 +261,83 @@ public readonly record struct UnixTimestamp :
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Returns the string representation of the timestamp (milliseconds) using <see cref="CultureInfo.InvariantCulture"/>.
+    /// Returns a string representation of the timestamp in ISO 8601 UTC format.
     /// </summary>
-    /// <returns>A string containing the raw milliseconds (e.g., "1672531200000").</returns>
+    /// <returns>A string like "2024-02-11T22:43:00.000Z".</returns>
     public override string ToString() {
-        return this._milliseconds.ToString(CultureInfo.InvariantCulture);
+        return ToStringInternal(null, CultureInfo.InvariantCulture);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns a string representation of the timestamp using the specified format.
+    /// </summary>
+    /// <param name="format">
+    /// The format to use. 
+    /// <list type="bullet">
+    ///   <item><term>null or empty</term><description>ISO 8601 UTC format (e.g., "2024-02-11T22:43:00.000Z")</description></item>
+    ///   <item><term>"R" or "N"</term><description>Raw milliseconds as a string (e.g., "1707689241000")</description></item>
+    ///   <item><term>Custom</term><description>Any valid DateTime format (e.g., "yyyy-MM-dd")</description></item>
+    /// </list>
+    /// </param>
+    /// <returns>A formatted string representation of the timestamp.</returns>
+    public string ToString(string? format) {
+        return ToStringInternal(format, CultureInfo.InvariantCulture);
+    }
+
+    /// <inheritdoc cref="ToString(string?)"/>
     string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
-        return this._milliseconds.ToString(format, formatProvider);
+        return ToStringInternal(format, formatProvider);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Core formatting logic shared by all ToString overloads.
+    /// </summary>
+    private string ToStringInternal(string? format, IFormatProvider? formatProvider) {
+        bool isRawRequest = format is "R" or "r" or "N" or "n";
+        bool isOutOfRange = _milliseconds < MinUnixMillis || _milliseconds > MaxUnixMillis;
+
+        if(isRawRequest || isOutOfRange) {
+            return this._milliseconds.ToString(formatProvider);
+        }
+
+        if(string.IsNullOrEmpty(format)) {
+            return ToDateTimeOffset().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", formatProvider);
+        }
+
+        return ToDateTimeOffset().ToString(format, formatProvider);
+    }
+
+    /// <inheritdoc cref="ToString(string?)"/>
     bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        return this._milliseconds.TryFormat(destination, out charsWritten, format, provider);
+        bool isRawRequest = format.Equals("R", StringComparison.OrdinalIgnoreCase) || format.Equals("N", StringComparison.OrdinalIgnoreCase);
+        bool isOutOfRange = _milliseconds < MinUnixMillis || _milliseconds > MaxUnixMillis;
+
+        if(isRawRequest || isOutOfRange) {
+            return this._milliseconds.TryFormat(destination, out charsWritten, format, provider);
+        }
+
+        if(format.IsEmpty) {
+            return ToDateTimeOffset().TryFormat(destination, out charsWritten, "yyyy-MM-ddTHH:mm:ss.fffZ", provider);
+        }
+
+        return ToDateTimeOffset().TryFormat(destination, out charsWritten, format, provider);
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc cref="ToString(string?)"/>
     bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        return this._milliseconds.TryFormat(utf8Destination, out bytesWritten, format, provider);
+        bool isRawRequest = format.Equals("R", StringComparison.OrdinalIgnoreCase) || format.Equals("N", StringComparison.OrdinalIgnoreCase);
+        bool isOutOfRange = _milliseconds < MinUnixMillis || _milliseconds > MaxUnixMillis;
+
+        if(isRawRequest || isOutOfRange) {
+            return this._milliseconds.TryFormat(utf8Destination, out bytesWritten, format, provider);
+        }
+
+        // DateTimeOffset UTF8 desteği sürüme göre değişebilir, ToDateTimeUtc() garantidir.
+        if(format.IsEmpty) {
+            return ToDateTimeUtc().TryFormat(utf8Destination, out bytesWritten, "yyyy-MM-ddTHH:mm:ss.fffZ", provider);
+        }
+
+        return ToDateTimeUtc().TryFormat(utf8Destination, out bytesWritten, format, provider);
     }
 
     // -------------------------------------------------------------------------
