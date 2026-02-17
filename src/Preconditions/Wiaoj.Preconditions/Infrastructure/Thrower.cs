@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel;
-using Wiaoj.Preconditions.Exceptions;
 
 namespace Wiaoj.Preconditions;
 /// <summary>
@@ -94,6 +93,13 @@ internal static class Thrower {
         throw new PrecaArgumentValueException(paramName, message);
     }
 
+    [DebuggerHidden, StackTraceHidden, DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    internal static void ThrowContains(string value, char invalidChar, string? paramName) {
+        throw new PrecaArgumentException($"The value '{value}' cannot contain the separator character '{invalidChar}'.", paramName);
+    }
+
     [DoesNotReturn]
     [StackTraceHidden]
     internal static void ThrowPrecaInvalidTypeException<TExpected>(object? argument, string? paramName) {
@@ -120,7 +126,7 @@ internal static class Thrower {
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal static void ThrowFromFactory<TException>([NotNull] Func<TException> exceptionFactory) where TException : notnull, Exception {
         TException? exception = exceptionFactory();
-        if (exception is null) {
+        if(exception is null) {
             Thrower.ThrowPrecaArgumentNullException(nameof(exceptionFactory), PrecaMessages.Core.ExceptionFactoryReturnedNull);
         }
 
@@ -135,7 +141,7 @@ internal static class Thrower {
         [NotNull] TState state) where TException : notnull, Exception {
         TException? exception = exceptionFactory(state);
 
-        if (exception is null) {
+        if(exception is null) {
             Thrower.ThrowPrecaArgumentNullException(nameof(exceptionFactory), PrecaMessages.Core.ExceptionFactoryReturnedNull);
         }
 

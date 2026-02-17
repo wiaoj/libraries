@@ -52,7 +52,7 @@ public readonly record struct HexString {
     /// <returns>A new <see cref="HexString"/> instance containing the encoded data.</returns>
     [SkipLocalsInit]
     public static HexString FromBytes(ReadOnlySpan<byte> bytes) {
-        if (bytes.IsEmpty)
+        if(bytes.IsEmpty)
             return Empty;
 
         // string.Create allows us to write directly into the string memory, avoiding intermediate allocations.
@@ -68,7 +68,7 @@ public readonly record struct HexString {
     /// <param name="text">The text to encode.</param>
     /// <returns>A hex string representing the UTF-8 bytes of the input text.</returns>
     public static HexString FromUtf8(string text) {
-        if (string.IsNullOrEmpty(text))
+        if(string.IsNullOrEmpty(text))
             return Empty;
         return FromBytes(Encoding.UTF8.GetBytes(text));
     }
@@ -80,7 +80,7 @@ public readonly record struct HexString {
     /// <param name="encoding">The encoding to use.</param>
     /// <returns>A hex string representing the bytes of the input text.</returns>
     public static HexString From(string text, Encoding encoding) {
-        if (string.IsNullOrEmpty(text))
+        if(string.IsNullOrEmpty(text))
             return Empty;
         ArgumentNullException.ThrowIfNull(encoding);
         return FromBytes(encoding.GetBytes(text));
@@ -95,10 +95,10 @@ public readonly record struct HexString {
     /// </summary>
     /// <param name="writer">The buffer writer to write to.</param>
     public void WriteTo(IBufferWriter<byte> writer) {
-        if (string.IsNullOrEmpty(_value))
+        if(string.IsNullOrEmpty(this._value))
             return;
 
-        ReadOnlySpan<char> chars = _value.AsSpan();
+        ReadOnlySpan<char> chars = this._value.AsSpan();
         // Hex string contains only ASCII, so byte count == char count
         int byteCount = chars.Length;
 
@@ -116,7 +116,7 @@ public readonly record struct HexString {
     /// <exception cref="FormatException">The input string is not a valid hexadecimal string.</exception>
     public static HexString Parse(string s) {
         ArgumentNullException.ThrowIfNull(s);
-        if (TryParse(s.AsSpan(), out HexString result))
+        if(TryParse(s.AsSpan(), out HexString result))
             return result;
         throw new FormatException("The input string is not a valid hexadecimal string.");
     }
@@ -128,7 +128,7 @@ public readonly record struct HexString {
     /// <param name="result">When this method returns, contains the parsed <see cref="HexString"/> if parsing succeeded, or a default value if it failed.</param>
     /// <returns><see langword="true"/> if <paramref name="s"/> was parsed successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse([NotNullWhen(true)] string? s, out HexString result) {
-        if (s is null) {
+        if(s is null) {
             result = default;
             return false;
         }
@@ -142,7 +142,7 @@ public readonly record struct HexString {
     /// <returns>A new <see cref="HexString"/> instance.</returns>
     /// <exception cref="FormatException">The input is not a valid hexadecimal string.</exception>
     public static HexString Parse(ReadOnlySpan<char> s) {
-        if (TryParse(s, out HexString result))
+        if(TryParse(s, out HexString result))
             return result;
         throw new FormatException("The input is not a valid hexadecimal string.");
     }
@@ -154,17 +154,17 @@ public readonly record struct HexString {
     /// <param name="result">When this method returns, contains the parsed <see cref="HexString"/> if parsing succeeded, or a default value if it failed.</param>
     /// <returns><see langword="true"/> if <paramref name="s"/> was parsed successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, out HexString result) {
-        if (s.Length % 2 != 0) {
+        if(s.Length % 2 != 0) {
             result = default;
             return false;
         }
-        if (s.IsEmpty) {
+        if(s.IsEmpty) {
             result = Empty;
             return true;
         }
 
         // Optimized check: Uses vectorized instructions to find any invalid char instantly.
-        if (s.IndexOfAnyExcept(HexChars) >= 0) {
+        if(s.IndexOfAnyExcept(HexChars) >= 0) {
             result = default;
             return false;
         }
@@ -180,7 +180,7 @@ public readonly record struct HexString {
     /// <returns>A new <see cref="HexString"/> instance.</returns>
     /// <exception cref="FormatException">The input is not a valid hexadecimal string.</exception>
     public static HexString Parse(ReadOnlySpan<byte> utf8Text) {
-        if (TryParse(utf8Text, out HexString result))
+        if(TryParse(utf8Text, out HexString result))
             return result;
         throw new FormatException("The input is not a valid hexadecimal string.");
     }
@@ -192,18 +192,18 @@ public readonly record struct HexString {
     /// <param name="result">When this method returns, contains the parsed <see cref="HexString"/> if parsing succeeded, or a default value if it failed.</param>
     /// <returns><see langword="true"/> if <paramref name="utf8Text"/> was parsed successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, out HexString result) {
-        if (utf8Text.Length % 2 != 0) {
+        if(utf8Text.Length % 2 != 0) {
             result = default;
             return false;
         }
-        if (utf8Text.IsEmpty) {
+        if(utf8Text.IsEmpty) {
             result = Empty;
             return true;
         }
 
         // Optimized check: Uses vectorized instructions to find any invalid byte instantly.
         // Replaces the older foreach loop.
-        if (utf8Text.IndexOfAnyExcept(HexBytes) >= 0) {
+        if(utf8Text.IndexOfAnyExcept(HexBytes) >= 0) {
             result = default;
             return false;
         }
@@ -223,7 +223,7 @@ public readonly record struct HexString {
     [SkipLocalsInit]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[] ToBytes() {
-        if (this.Value.Length == 0) {
+        if(this.Value.Length == 0) {
             return [];
         }
         byte[] bytes = new byte[GetDecodedLength()];
@@ -238,17 +238,41 @@ public readonly record struct HexString {
     /// <param name="bytesWritten">The number of bytes written to the buffer.</param>
     /// <returns><see langword="true"/> if decoding was successful; otherwise, <see langword="false"/>.</returns>
     public bool TryDecode(Span<byte> destination, out int bytesWritten) {
+        //int requiredLength = GetDecodedLength();
+        //if (destination.Length < requiredLength) {
+        //    bytesWritten = 0;
+        //    return false;
+        //} 
+        //ReadOnlySpan<char> source = this.Value.AsSpan();
+
+        //for (int i = 0; i < requiredLength; i++) {
+        //    int hi = HexCharToValue(source[i * 2]);
+        //    int lo = HexCharToValue(source[i * 2 + 1]);
+        //    destination[i] = (byte)((hi << 4) | lo);
+        //}
+
+        //bytesWritten = requiredLength;
+        //return true;
+
         int requiredLength = GetDecodedLength();
-        if (destination.Length < requiredLength) {
+        if(destination.Length < requiredLength) {
             bytesWritten = 0;
             return false;
         }
 
         ReadOnlySpan<char> source = this.Value.AsSpan();
 
-        for (int i = 0; i < requiredLength; i++) {
+        for(int i = 0; i < requiredLength; i++) {
+            // İki karakteri de alıp kontrol ediyoruz
             int hi = HexCharToValue(source[i * 2]);
             int lo = HexCharToValue(source[i * 2 + 1]);
+
+            // Eğer karakterlerden biri bile -1 dönerse (geçersiz hex)
+            if((hi | lo) < 0) {
+                bytesWritten = 0;
+                return false;
+            }
+
             destination[i] = (byte)((hi << 4) | lo);
         }
 
@@ -276,15 +300,15 @@ public readonly record struct HexString {
     /// </returns>
     public HexString ToUpper() {
         // Optimization: Quick check using SearchValues to see if any work is needed.
-        if (this.Value.AsSpan().IndexOfAny(LowerHexLetters) < 0) {
+        if(this.Value.AsSpan().IndexOfAny(LowerHexLetters) < 0) {
             return this;
         }
 
         return new HexString(string.Create(this.Value.Length, this.Value, (destination, source) => {
-            for (int i = 0; i < source.Length; i++) {
+            for(int i = 0; i < source.Length; i++) {
                 char c = source[i];
                 // Convert 'a'-'f' to 'A'-'F' efficiently.
-                destination[i] = (c >= 'a' && c <= 'f') ? (char)(c - 32) : c;
+                destination[i] = (c is >= 'a' and <= 'f') ? (char)(c - 32) : c;
             }
         }));
     }
@@ -297,15 +321,15 @@ public readonly record struct HexString {
     /// </returns>
     public HexString ToLower() {
         // Optimization: Quick check using SearchValues to see if any work is needed.
-        if (this.Value.AsSpan().IndexOfAny(UpperHexLetters) < 0) {
+        if(this.Value.AsSpan().IndexOfAny(UpperHexLetters) < 0) {
             return this;
         }
 
         return new HexString(string.Create(this.Value.Length, this.Value, (destination, source) => {
-            for (int i = 0; i < source.Length; i++) {
+            for(int i = 0; i < source.Length; i++) {
                 char c = source[i];
                 // Convert 'A'-'F' to 'a'-'f' efficiently.
-                destination[i] = (c >= 'A' && c <= 'F') ? (char)(c + 32) : c;
+                destination[i] = (c is >= 'A' and <= 'F') ? (char)(c + 32) : c;
             }
         }));
     }
@@ -348,13 +372,11 @@ public readonly record struct HexString {
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int HexCharToValue(char c) {
-        if (c is >= '0' and <= '9')
-            return c - '0';
-        if (c is >= 'a' and <= 'f')
-            return c - 'a' + 10;
-        if (c is >= 'A' and <= 'F')
-            return c - 'A' + 10;
-        return 0; // Should be unreachable for a valid HexString.
+        int val = c;
+        if(val is >= '0' and <= '9') return val - '0';
+        if(val is >= 'a' and <= 'f') return val - 'a' + 10;
+        if(val is >= 'A' and <= 'F') return val - 'A' + 10;
+        return -1;
     }
 
     #endregion
@@ -366,15 +388,15 @@ public readonly record struct HexString {
 public sealed class HexStringJsonConverter : JsonConverter<HexString> {
     /// <inheritdoc/>
     public override HexString Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if (reader.TokenType == JsonTokenType.String) {
-            if (reader.HasValueSequence) {
+        if(reader.TokenType == JsonTokenType.String) {
+            if(reader.HasValueSequence) {
                 long len = reader.ValueSequence.Length;
-                if (len <= 256) {
+                if(len <= 256) {
                     Span<byte> stackSpan = stackalloc byte[(int)len];
                     reader.ValueSequence.CopyTo(stackSpan);
                     return HexString.Parse(stackSpan);
                 }
-                else { 
+                else {
                     byte[] rented = ArrayPool<byte>.Shared.Rent((int)len);
                     try {
                         Span<byte> span = rented.AsSpan(0, (int)len);

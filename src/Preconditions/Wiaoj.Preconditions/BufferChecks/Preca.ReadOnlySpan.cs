@@ -69,4 +69,16 @@ public static partial class Preca {
             Thrower.ThrowPrecaArgumentException(PrecaMessages.Buffer.ReadOnlySpanCannotBeEmptyOrWhiteSpace, paramName);
         }
     }
+
+    /// <summary>
+    /// Throws if the span contains the specified character.
+    /// Optimized using Span to avoid string allocations during check.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfContains(in ReadOnlySpan<char> span, char invalidChar, [CallerArgumentExpression(nameof(span))] string? paramName = null) {
+        // IndexOf is vectorized and heavily optimized in modern .NET
+        if(span.IndexOf(invalidChar) >= 0) {
+            Thrower.ThrowContains(span.ToString(), invalidChar, paramName);
+        }
+    }
 }

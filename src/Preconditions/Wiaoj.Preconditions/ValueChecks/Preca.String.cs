@@ -127,4 +127,21 @@ public static partial class Preca {
             Thrower.ThrowException<TException>();
         }
     }
+
+    /// <summary>
+    /// Throws if the argument contains the specified character.
+    /// Optimized using Span to avoid string allocations during check.
+    /// </summary>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfContains([NotNull] string? argument, char invalidChar, [CallerArgumentExpression(nameof(argument))] string? paramName = null) {
+
+        if(argument is null) {
+            Thrower.ThrowPrecaArgumentNullException(paramName);
+        }
+
+        if(argument.Contains(invalidChar)) {
+            Thrower.ThrowContains(argument, invalidChar, paramName);
+        }
+    }
 }

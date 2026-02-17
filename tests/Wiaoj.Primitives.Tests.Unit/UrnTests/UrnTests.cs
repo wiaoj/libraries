@@ -1,7 +1,7 @@
 ﻿using Wiaoj.Primitives.Snowflake;
 
 namespace Wiaoj.Primitives.Tests.Unit.UrnTests;
-public class UrnTests {
+public sealed class UrnTests {
     [Fact]
     public void Should_Create_Valid_Urn() {
         Urn urn = Urn.Create("user", "12345");

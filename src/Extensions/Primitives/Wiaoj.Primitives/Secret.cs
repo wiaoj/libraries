@@ -245,7 +245,7 @@ public readonly unsafe struct Secret<T> :
     /// <typeparam name="TState">The type of the state object.</typeparam>
     /// <param name="state">The state object to pass to the action.</param>
     /// <param name="action">The action to execute, receiving the state and the secret span.</param>
-    public void Expose<TState>(TState state, Action<TState, ReadOnlySpan<T>> action) {
+    public void Expose<TState>(TState state, Action<TState, ReadOnlySpan<T>> action) where TState : allows ref struct {
         if(this._ptr is not null) {
             this._disposeState?.ThrowIfDisposingOrDisposed(nameof(Secret<>));
         }
@@ -264,10 +264,11 @@ public readonly unsafe struct Secret<T> :
         return func(this._ptr is null ? [] : new ReadOnlySpan<T>(this._ptr, this._length));
     }
 
+
     /// <summary>
     /// Provides safe, scoped access to the secret data with a state object and returns a result, preventing closure allocations.
     /// </summary>
-    public TResult Expose<TState, TResult>(TState state, Func<TState, ReadOnlySpan<T>, TResult> func) {
+    public TResult Expose<TState, TResult>(TState state, Func<TState, ReadOnlySpan<T>, TResult> func) where TState : allows ref struct {
 
         if(this._ptr is not null) {
             this._disposeState?.ThrowIfDisposingOrDisposed(nameof(Secret<>));
