@@ -2,12 +2,10 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
-using Wiaoj.Preconditions; // Preca sınıfının olduğu namespace
 using Wiaoj.Primitives.JsonConverters;
 using Wiaoj.Primitives.Snowflake;
 
-namespace Wiaoj.Primitives;
-
+namespace Wiaoj.Primitives; 
 /// <summary>
 /// Represents a Uniform Resource Name (URN) conforming to RFC 8141.
 /// <para>
@@ -52,10 +50,10 @@ public readonly record struct Urn :
     /// <summary>
     /// Gets the full URN string value.
     /// </summary>
-    public string Value => _value ?? string.Empty;
+    public string Value => this._value ?? string.Empty;
 
     private Urn(string value) {
-        _value = value;
+        this._value = value;
     }
 
     /// <summary>
@@ -64,8 +62,8 @@ public readonly record struct Urn :
     /// <param name="nid">The Namespace Identifier (NID) part of the URN.</param>
     /// <param name="nss">The Namespace Specific String (NSS) part of the URN.</param>
     public void Deconstruct(out ReadOnlySpan<char> nid, out ReadOnlySpan<char> nss) {
-        nid = Namespace;
-        nss = Identity;
+        nid = this.Namespace;
+        nss = this.Identity;
     }
 
     #region Factory Methods (Zero-Allocation & Optimized)
@@ -103,7 +101,7 @@ public readonly record struct Urn :
         int length = PrefixLength + nid.Length + 1 + 36;
 
         string urnString = string.Create(length, (nid, id), (span, state) => {
-            var (n, g) = state;
+            (string? n, Guid g) = state;
 
             // 1. Write "urn:"
             "urn:".AsSpan().CopyTo(span);
@@ -207,7 +205,7 @@ public readonly record struct Urn :
 
         // -- Phase 2: Direct Write (Single Allocation) --
         string urnString = string.Create(totalLength, (nid, segments), (span, state) => {
-            var (id, segs) = state;
+            (string? id, string[]? segs) = state;
 
             // Write "urn:"
             "urn:".AsSpan().CopyTo(span);
@@ -223,7 +221,7 @@ public readonly record struct Urn :
 
             // Write Segments
             for(int i = 0; i < segs.Length; i++) {
-                var currentSeg = segs[i].AsSpan();
+                ReadOnlySpan<char> currentSeg = segs[i].AsSpan();
                 currentSeg.CopyTo(span);
                 span = span[currentSeg.Length..];
 
@@ -248,8 +246,9 @@ public readonly record struct Urn :
     /// <param name="provider">Format provider (optional).</param>
     /// <returns>The parsed Urn.</returns>
     /// <exception cref="FormatException">Thrown if the format is invalid.</exception>
-    public static Urn Parse(string s, IFormatProvider? provider = null) =>
-        TryParse(s, provider, out var result) ? result : throw new FormatException($"Invalid URN format: '{s}'. Expected 'urn:<nid>:<nss>'.");
+    public static Urn Parse(string s, IFormatProvider? provider = null) {
+        return TryParse(s, provider, out Urn result) ? result : throw new FormatException($"Invalid URN format: '{s}'. Expected 'urn:<nid>:<nss>'.");
+    }
 
     /// <summary>
     /// Tries to parse a string into a <see cref="Urn"/>.
@@ -262,8 +261,9 @@ public readonly record struct Urn :
     /// <summary>
     /// Parses a ReadOnlySpan into a <see cref="Urn"/>.
     /// </summary>
-    public static Urn Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null) =>
-        TryParse(s, provider, out var result) ? result : throw new FormatException($"Invalid URN format: '{s}'.");
+    public static Urn Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null) {
+        return TryParse(s, provider, out Urn result) ? result : throw new FormatException($"Invalid URN format: '{s}'.");
+    }
 
     /// <summary>
     /// Tries to parse a ReadOnlySpan into a <see cref="Urn"/>.
@@ -312,19 +312,19 @@ public readonly record struct Urn :
 
     // Internal helper to get span slices without allocation
     private ReadOnlySpan<char> ParseSegment(int segmentIndex) {
-        if(string.IsNullOrEmpty(_value)) return [];
+        if(string.IsNullOrEmpty(this._value)) return [];
 
         int firstColon = 3;
-        int secondColon = _value.IndexOf(Separator, firstColon + 1);
+        int secondColon = this._value.IndexOf(Separator, firstColon + 1);
 
         // Should catch invalid internal state, though factory prevents it.
         if(secondColon == -1) return [];
 
         if(segmentIndex == 0) // NID
-            return _value.AsSpan(firstColon + 1, secondColon - (firstColon + 1));
+            return this._value.AsSpan(firstColon + 1, secondColon - (firstColon + 1));
 
         if(segmentIndex == 1) // NSS (Rest of the string)
-            return _value.AsSpan(secondColon + 1);
+            return this._value.AsSpan(secondColon + 1);
 
         return [];
     }
@@ -338,50 +338,60 @@ public readonly record struct Urn :
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsAlphaNumericOrHyphen(char c) {
-        return (c >= 'a' && c <= 'z') ||
-               (c >= 'A' && c <= 'Z') ||
-               (c >= '0' && c <= '9') ||
-               c == '-';
+        return c is >= 'a' and <= 'z' or
+               >= 'A' and <= 'Z' or
+               >= '0' and <= '9' or
+               '-';
     }
 
     /// <summary>
     /// Returns the string representation of the URN.
     /// </summary>
-    public override string ToString() => Value;
+    public override string ToString() {
+        return this.Value;
+    }
 
     /// <summary>
     /// Returns the string representation using the specified format.
     /// </summary>
-    public string ToString(string? format, IFormatProvider? formatProvider) => Value;
+    public string ToString(string? format, IFormatProvider? formatProvider) {
+        return this.Value;
+    }
 
     /// <summary>
     /// Tries to format the value of the current instance into the provided span of characters.
     /// </summary>
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        if(_value is null) {
+        if(this._value is null) {
             charsWritten = 0;
             return false;
         }
 
-        if(destination.Length < _value.Length) {
+        if(destination.Length < this._value.Length) {
             charsWritten = 0;
             return false;
         }
 
-        _value.CopyTo(destination);
-        charsWritten = _value.Length;
+        this._value.CopyTo(destination);
+        charsWritten = this._value.Length;
         return true;
     }
 
     /// <summary>
     /// Implicitly converts a <see cref="Urn"/> to a <see cref="string"/>.
     /// </summary>
-    public static implicit operator string(Urn urn) => urn.Value;
+    public static implicit operator string(Urn urn) {
+        return urn.Value;
+    }
 
     /// <inheritdoc/>
-    public bool Equals(Urn other) => string.Equals(Value, other.Value, StringComparison.Ordinal);
-     
+    public bool Equals(Urn other) {
+        return string.Equals(this.Value, other.Value, StringComparison.Ordinal);
+    }
+
     /// <inheritdoc/>
-    override public int GetHashCode() => Value.GetHashCode(StringComparison.Ordinal);
+    public override int GetHashCode() {
+        return this.Value.GetHashCode(StringComparison.Ordinal);
+    }
     #endregion
 }

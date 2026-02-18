@@ -1,195 +1,176 @@
-﻿using System.Diagnostics;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Wiaoj.Primitives.Snowflake;
-using Wiaoj.Primitives.Obfuscation;
-using Wiaoj.Primitives;
+﻿using System.Buffers;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Wiaoj.Primitives.Buffers;
 
-// ----------------------------------------------------------------------------------
-// KONFİGÜRASYON
-// ----------------------------------------------------------------------------------
-var epoch = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
-SnowflakeId.Configure(new SnowflakeOptions {
-    NodeId = 42, // Makine ID: 42
-    Epoch = epoch
-});
+//Console.WriteLine("====================================================");
+//Console.WriteLine("    HUGE DATA TEST: SpanSplitter vs String.Split    ");
+//Console.WriteLine("    (50,000 Segments / 1MB+ String)                 ");
+//Console.WriteLine("====================================================");
 
-const string SecretSeed = "Wiaoj_Secure_Identity_2025_System";
-PublicId.Configure(SecretSeed);
+//// 1. Devasa veriyi hazırla (Yaklaşık 1.2 MB string)
+//Console.WriteLine("Preparing huge data...");
+//StringBuilder sb = new();
+//for(int i = 0; i < 50_000; i++) {
+//    sb.Append(i.ToString("D6")); // "000001", "000002" ...
+//    if(i < 49_999) sb.Append(',');
+//}
+//string hugeData = sb.ToString();
+//const int Iterations = 500; // Toplamda 25 Milyon segment işlenecek
 
-PrintHeader("WIAOJ PRIMITIVES: DEEP INTEGRITY VERIFICATION");
+//Console.WriteLine($"Huge Data Length: {hugeData.Length:N0} chars");
+//Console.WriteLine($"Total Segments to process: {(Iterations * 50_000):N0}\n");
 
-// ----------------------------------------------------------------------------------
-// TEST 1: SNOWFLAKE BİLEŞEN ANALİZİ (RAW DATA CHECK)
-// ----------------------------------------------------------------------------------
-Section("TEST 1: Snowflake Component Extraction");
-var originalId = SnowflakeId.NewId();
-var timestamp = originalId.ToUnixTimestamp(); // SnowflakeId içinden zamanı çek
+//// --- TEST 1: Standard String.Split ---
+//GC.Collect();
+//GC.WaitForPendingFinalizers();
+//GC.Collect();
+//long memBeforeSplit = GC.GetTotalAllocatedBytes(true);
+//Stopwatch swSplit = Stopwatch.StartNew();
 
-Console.WriteLine($"Generated ID: {originalId.Value}");
-Console.WriteLine($"Timestamp:    {timestamp.ToDateTimeOffset():yyyy-MM-dd HH:mm:ss.fff}");
-Console.WriteLine($"Machine ID:   Checking internal structure...");
+//long totalLength1 = 0;
+//for(int i = 0; i < Iterations; i++) {
+//    // HER DÖNGÜDE: 1 Dizi + 50.000 yeni string nesnesi! (GC FELAKETİ)
+//    string[] parts = hugeData.Split(',');
+//    foreach(var p in parts) {
+//        totalLength1 += p.Length;
+//    }
+//}
 
-// Doğrulama: Yeni üretilen ID'nin zamanı şu anki zamana yakın olmalı
-var drift = DateTimeOffset.UtcNow - timestamp.ToDateTimeOffset();
-if(drift.TotalSeconds < 5)
-    Pass("Timestamp extraction is accurate (within 5s drift).");
-else
-    Fail($"Timestamp drift too high: {drift.TotalSeconds}s");
+//swSplit.Stop();
+//long memAfterSplit = GC.GetTotalAllocatedBytes(true);
 
+//// --- TEST 2: Wiaoj SpanSplitter ---
+//GC.Collect();
+//GC.WaitForPendingFinalizers();
+//GC.Collect();
+//long memBeforeSpan = GC.GetTotalAllocatedBytes(true);
+//Stopwatch swSpan = Stopwatch.StartNew();
 
-// ----------------------------------------------------------------------------------
-// TEST 2: 64-BIT OBFUSCATION (SCRAMBLE/DESCRAMBLE)
-// ----------------------------------------------------------------------------------
-Section("TEST 2: 64-Bit Scrambling Integrity (Snowflake)");
-SnowflakeId raw64 = 859403294850239485; // Sabit bir rakam
-PublicId pid64 = raw64;
+//long totalLength2 = 0;
+//// SearchValues'ı bir kere oluştur (Best Practice)
+//SearchValues<char> sv = SearchValues.Create([',']);
 
-string encoded64 = pid64.ToString();
-PublicId decodedPid64 = PublicId.Parse(encoded64);
-SnowflakeId recovered64 = (SnowflakeId)decodedPid64;
+//for(int i = 0; i < Iterations; i++) {
+//    // 0 ALLOCATION: Sadece pointer kaydırarak ilerler
+//    foreach(var part in hugeData.AsSpan().SplitValue(sv)) {
+//        totalLength2 += part.Length;
+//    }
+//}
 
-Console.WriteLine($"Original (Raw):   {raw64.Value}");
-Console.WriteLine($"Obfuscated (B62): {encoded64}");
-Console.WriteLine($"Recovered:        {recovered64.Value}");
+//swSpan.Stop();
+//long memAfterSpan = GC.GetTotalAllocatedBytes(true);
 
-Verify(raw64 == recovered64, "64-bit Scramble/Descramble loop matches perfectly.");
+//// --- RAPOR ---
+//Console.WriteLine($"\n[Standard String.Split]");
+//Console.WriteLine($"  Time      : {swSplit.ElapsedMilliseconds} ms");
+//Console.WriteLine($"  Allocated : {FormatBytes(memAfterSplit - memBeforeSplit)}");
 
+//Console.WriteLine($"\n[Wiaoj SpanSplitter]");
+//Console.WriteLine($"  Time      : {swSpan.ElapsedMilliseconds} ms");
+//Console.WriteLine($"  Allocated : {FormatBytes(memAfterSpan - memBeforeSpan)} (TRUE ZERO)");
 
-// ----------------------------------------------------------------------------------
-// TEST 3: 128-BIT OBFUSCATION (GUID)
-// ----------------------------------------------------------------------------------
-Section("TEST 3: 128-Bit Scrambling Integrity (Guid)");
-Guid rawGuid = Guid.NewGuid();
-PublicId pid128 = rawGuid;
+//Console.WriteLine("\n----------------------------------------");
+//Console.ForegroundColor = ConsoleColor.Green;
+//if(swSpan.ElapsedMilliseconds < swSplit.ElapsedMilliseconds) {
+//    double speedup = (double)swSplit.ElapsedMilliseconds / swSpan.ElapsedMilliseconds;
+//    Console.WriteLine($"SpanSplitter is {speedup:F2}x FASTER!");
+//}
+//else {
+//    Console.WriteLine("String.Split is still faster in raw time, but look at the memory!");
+//}
 
-string encoded128 = pid128.ToString();
-PublicId decodedPid128 = PublicId.Parse(encoded128);
-Guid recoveredGuid = (Guid)decodedPid128;
+//double memSaved = (double)(memAfterSplit - memBeforeSplit) / (memAfterSpan - memBeforeSpan + 1);
+//Console.WriteLine($"SpanSplitter saved {FormatBytes(memAfterSplit - memBeforeSplit)} of RAM!");
+//Console.WriteLine($"SpanSplitter is {memSaved:N0}x more memory efficient!");
+//Console.ResetColor();
 
-Console.WriteLine($"Original Guid:    {rawGuid}");
-Console.WriteLine($"Obfuscated (B62): {encoded128}");
-Console.WriteLine($"Recovered Guid:   {recoveredGuid}");
+//Console.WriteLine("\nPress any key to exit.");
+//Console.ReadKey();
 
-Verify(rawGuid == recoveredGuid, "128-bit Scramble/Descramble loop matches perfectly.");
-
-
-// ----------------------------------------------------------------------------------
-// TEST 4: SINIR DURUMLAR (EDGE CASES)
-// ----------------------------------------------------------------------------------
-Section("TEST 4: Boundary Values");
-PublicId emptyId = PublicId.Empty;
-Verify(emptyId.ToString() == "0", "Empty ID (0) handles as '0'.");
-
-PublicId max64 = new PublicId(long.MaxValue);
-string max64Str = max64.ToString();
-Verify(PublicId.Parse(max64Str).AsSnowflake() == long.MaxValue, "Max 64-bit integer integrity preserved.");
-
-
-// ----------------------------------------------------------------------------------
-// TEST 5: JSON SERİALİZASYON VE TYPE-SAFETY
-// ----------------------------------------------------------------------------------
-Section("TEST 5: JSON Deep Serialization Check");
-var originalDto = new UserProfileDto {
-    UserId = SnowflakeId.NewId(),
-    SessionToken = Guid.NewGuid(),
-    Tags = new Dictionary<PublicId, string> {
-        { SnowflakeId.NewId(), "Primary" }
-    }
-};
-
-string jsonOutput = JsonSerializer.Serialize(originalDto, new JsonSerializerOptions { WriteIndented = true });
-Console.WriteLine("Serialized JSON Payload:");
-Console.WriteLine(jsonOutput);
-
-var deserializedDto = JsonSerializer.Deserialize<UserProfileDto>(jsonOutput);
-
-bool userIdMatch = originalDto.UserId == deserializedDto?.UserId;
-bool sessionMatch = originalDto.SessionToken == deserializedDto?.SessionToken;
-bool dictMatch = originalDto.Tags.Keys.First() == deserializedDto?.Tags.Keys.First();
-
-Verify(userIdMatch && sessionMatch && dictMatch, "JSON Round-trip (Property & Dictionary Key) successful.");
+//static string FormatBytes(long bytes) {
+//    string[] Suffix = { "B", "KB", "MB", "GB", "TB" };
+//    int i;
+//    double dblSByte = bytes;
+//    for(i = 0; i < Suffix.Length && bytes >= 1024; i++, bytes /= 1024) {
+//        dblSByte = bytes / 1024.0;
+//    }
+//    return $"{dblSByte:N2} {Suffix[i]}";
+//}
 
 
-// ----------------------------------------------------------------------------------
-// TEST 6: ÇAKIŞMA (COLLISION) VE DETERMINIZM TESTİ
-// ----------------------------------------------------------------------------------
-Section("TEST 6: Collision & Determinism");
-// Aynı ID, aynı seed ile her zaman aynı çıktıyı vermeli
-string firstRun = pid64.ToString();
-string secondRun = pid64.ToString();
-Verify(firstRun == secondRun, "Determinism: Same ID + Same Seed = Same String.");
+Console.WriteLine("========================================");
+Console.WriteLine("    ValueList vs System.Collections.List");
+Console.WriteLine("========================================");
 
-// 10,000 ID üretildiğinde hiçbiri çakışmamalı
-HashSet<string> seenOutputs = new();
-bool collisionDetected = false;
-for(int i = 0; i < 10000; i++) {
-    string output = new PublicId(SnowflakeId.NewId()).ToString();
-    if(!seenOutputs.Add(output)) {
-        collisionDetected = true;
-        break;
+const int OuterLoop = 10_000;
+const int InnerCount = 100_000;
+
+// --- TEST 2: Wiaoj ValueList<int> ---
+GC.Collect();
+GC.WaitForPendingFinalizers();
+GC.Collect();
+long memBeforeValue = GC.GetTotalAllocatedBytes(true);
+Stopwatch swValue = Stopwatch.StartNew();
+
+Span<GameEntity> storage = new GameEntity[16];
+
+
+
+for(var i = 0; i < OuterLoop; i++) {
+    using var vList = new ValueList<GameEntity>(storage);
+
+    for(var j = 0; j < InnerCount; j++) {
+        vList.Add(new GameEntity { Id = j, Health = 100f });
+        //vList.AddAlloc() = new GameEntity { Id = j, Health = 100f };
     }
 }
-Verify(!collisionDetected, "Uniqueness: 10,000 unique SnowflakeIds produced 10,000 unique PublicIds.");
 
-PrintFooter();
+swValue.Stop();
+long memAfterValue = GC.GetTotalAllocatedBytes(true);
 
-// ----------------------------------------------------------------------------------
-// TEST YARDIMCILARI
-// ----------------------------------------------------------------------------------
-
-static void Section(string name) {
-    Console.ForegroundColor = ConsoleColor.Magenta;
-    Console.WriteLine($"\n>> {name}");
-    Console.ResetColor();
-    Console.WriteLine(new string('-', 40));
+// --- TEST 1: Standard List<int> ---
+GC.Collect();
+GC.WaitForPendingFinalizers();
+GC.Collect();
+long memBeforeList = GC.GetTotalAllocatedBytes(true);
+Stopwatch swList = Stopwatch.StartNew();
+ 
+for(int i = 0; i < OuterLoop; i++) {
+    // HER SEFERİNDE HEAP ALLOCATION
+    List<GameEntity> list = [];
+    for(var j = 0; j < InnerCount; j++) 
+        list.Add(new GameEntity { Id = j, Health = 100f }); 
 }
 
-static void Verify(bool condition, string message) {
-    if(condition) Pass(message); else Fail(message);
-}
+swList.Stop();
+long memAfterList = GC.GetTotalAllocatedBytes(true);
 
-static void Pass(string msg) {
-    Console.ForegroundColor = ConsoleColor.Green;
-    Console.WriteLine($" [PASS] {msg}");
-    Console.ResetColor();
-}
 
-static void Fail(string msg) {
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine($" [FAIL] {msg}");
-    Console.ResetColor();
-    // Debugger.Break(); // Hata anında durmak isterseniz açın
-}
 
-static void PrintHeader(string title) {
-    Console.Clear();
-    Console.BackgroundColor = ConsoleColor.DarkBlue;
-    Console.ForegroundColor = ConsoleColor.White;
-    Console.WriteLine(new string(' ', 60));
-    Console.WriteLine(title.PadLeft(title.Length + (60 - title.Length) / 2).PadRight(60));
-    Console.WriteLine(new string(' ', 60));
-    Console.ResetColor();
-}
+// --- SONUÇLAR ---
+Console.WriteLine($"\n[List<int>]");
+Console.WriteLine($"  Time      : {swList.ElapsedMilliseconds} ms");
+Console.WriteLine($"  Allocated : {FormatBytes(memAfterList - memBeforeList)}");
 
-static void PrintFooter() {
-    Console.WriteLine("\n" + new string('=', 60));
-    Console.WriteLine("VERIFICATION COMPLETED SUCCESSFULLY.");
-    Console.WriteLine(new string('=', 60));
-    Console.ReadLine();
-}
+Console.WriteLine($"\n[ValueList<int>]");
+Console.WriteLine($"  Time      : {swValue.ElapsedMilliseconds} ms");
+Console.WriteLine($"  Allocated : {FormatBytes(memAfterValue - memBeforeValue)} (TRUE ZERO)");
 
-// ----------------------------------------------------------------------------------
-// DATA TRANSFER OBJECTS
-// ----------------------------------------------------------------------------------
+Console.WriteLine("\n----------------------------------------");
+double speedRatio = (double)swList.ElapsedMilliseconds / swValue.ElapsedMilliseconds;
+Console.ForegroundColor = ConsoleColor.Green;
+Console.WriteLine($"ValueList is {speedRatio:F2}x faster!");
+Console.WriteLine($"Memory used is {((double)(memAfterList - memBeforeList) / (memAfterValue - memBeforeValue + 1)):N0}x less!");
+Console.ResetColor();
 
-public class UserProfileDto {
-    // SnowflakeId -> PublicId dönüşümü otomatik (Implicit conversion & JsonConverter)
-    public PublicId UserId { get; set; }
+Console.ReadKey();
 
-    // Guid -> PublicId dönüşümü otomatik
-    public PublicId SessionToken { get; set; }
-
-    // Dictionary Key olarak PublicId desteği (PublicIdJsonConverter.ReadAsPropertyName)
-    public Dictionary<PublicId, string> Tags { get; set; } = new();
+static string FormatBytes(long bytes) => $"{bytes / 1024.0 / 1024.0:N2} MB";
+ 
+public class GameEntity {
+    public int Id;
+    public float Health;
+    public float X, Y, Z;
 }
