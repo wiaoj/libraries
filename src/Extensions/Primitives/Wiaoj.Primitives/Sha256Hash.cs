@@ -195,18 +195,20 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     }
 
     /// <summary>
-    /// Returns the hash as a type-safe hexadecimal string.
+    /// Encodes the hash bytes into a type-safe <see cref="HexString"/>.
     /// </summary>
+    /// <returns>A <see cref="HexString"/> representation of the SHA256 hash.</returns>
     public HexString ToHexString() {
         return HexString.FromBytes(AsSpan());
     }
 
     /// <summary>
-    /// Returns the hash as a type-safe Base64String.
+    /// Encodes the hash bytes into a type-safe <see cref="Base64String"/>.
     /// </summary>
+    /// <returns>A <see cref="Base64String"/> representation of the SHA256 hash.</returns>
     public Base64String ToBase64String() {
         return Base64String.FromBytes(AsSpan());
-    }
+    } 
 
     /// <summary>
     /// Returns the hash as a hexadecimal string.

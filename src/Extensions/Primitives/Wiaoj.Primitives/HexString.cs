@@ -343,6 +343,13 @@ public readonly record struct HexString {
         return this.Value;
     }
 
+    /// <summary>
+    /// Converts the hex string back to a <see cref="Sha256Hash"/>.
+    /// </summary>
+    public Sha256Hash ToSha256Hash() {
+        return Sha256Hash.From(this);
+    }
+
     // `record struct` handles Equals and GetHashCode automatically.
 
     /// <summary>

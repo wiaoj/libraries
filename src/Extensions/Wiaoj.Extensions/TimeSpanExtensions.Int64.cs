@@ -14,8 +14,7 @@ public static partial class TimeSpanExtensions {
         /// <returns>A <see cref="TimeSpan"/> that represents the specified number of ticks.</returns>
         /// <exception cref="PrecaArgumentOutOfRangeException" />
         public TimeSpan Ticks() {
-            Preca.ThrowIfNegative(value, () => new PrecaArgumentOutOfRangeException(nameof(value), "Ticks value cannot be negative."));
-            double a = Percentage.Half / Percentage.Full;
+            Preca.ThrowIfNegative(value, () => new PrecaArgumentOutOfRangeException(nameof(value), "Ticks value cannot be negative.")); 
             return TimeSpan.FromTicks(value);
         }
     }

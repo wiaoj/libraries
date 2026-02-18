@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Extensions;
+﻿using Wiaoj.Primitives.Buffers;
+
+namespace Wiaoj.Extensions;
 
 public static class CollectionExtensions {
     public static void AddRange<T>(this ICollection<T> target, params IEnumerable<T>[] collections) {
@@ -29,5 +31,9 @@ public static class CollectionExtensions {
                     target.Add(item); 
             }
         }
+    }
+
+    public static void CopyToValueList<T>(this IEnumerable<T> source, ref ValueList<T> target) {
+
     }
 }

@@ -65,17 +65,44 @@ public readonly record struct UnixTimestamp :
     public static UnixTimestamp MaxValue { get; } = new(MaxUnixMillis);
 
     /// <summary>
+    /// Gets the number of seconds since the Unix Epoch.
+    /// </summary>
+    public long TotalSeconds => this._milliseconds / 1000;
+
+    /// <summary>
     /// Gets the raw number of milliseconds since the Unix Epoch.
     /// </summary>
     /// <value>The milliseconds as a <see cref="long"/>.</value>
     public long TotalMilliseconds => this._milliseconds;
 
     /// <summary>
-    /// Gets the number of seconds since the Unix Epoch.
+    /// Gets the absolute number of ticks that represent the date and time of this instance 
+    /// based on the .NET <see cref="DateTime"/> standard (starting from January 1, 0001).
     /// </summary>
-    public long TotalSeconds => this._milliseconds / 1000;
+    /// <remarks>
+    /// This property is fully compatible with the <see cref="DateTime(long)"/> constructor. 
+    /// It effectively bridges the gap between the Unix Epoch (1970) and the .NET Zero-point (0001).
+    /// </remarks>
+    /// <value>The number of ticks from the year 0001 to the current timestamp.</value>
+    public long Ticks => ToDateTimeOffset().Ticks;
 
-    // Private constructor to enforce creation via static factory methods.
+    /// <summary>
+    /// Gets the total number of ticks (100-nanosecond intervals) elapsed since the 
+    /// Unix Epoch (January 1, 1970 00:00:00 UTC).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Warning:</strong> This value is NOT compatible with the <see cref="DateTime(long)"/> constructor, 
+    /// as .NET expects ticks to start from the year 0001. Using this value directly in a <see cref="DateTime"/> 
+    /// will result in a date relative to the year 0001 (e.g., the year 0057 for current dates).
+    /// </para>
+    /// <para>
+    /// This property has millisecond precision, meaning the last four digits will always be zero.
+    /// </para>
+    /// </remarks>
+    /// <value>The number of ticks since the 1970-01-01 epoch.</value>
+    public long UnixTicks => _milliseconds * TimeSpan.TicksPerMillisecond;
+
     private UnixTimestamp(long milliseconds) {
         this._milliseconds = milliseconds;
     }

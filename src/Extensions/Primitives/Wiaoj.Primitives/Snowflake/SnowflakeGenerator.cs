@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Wiaoj.Concurrency;
 
 namespace Wiaoj.Primitives.Snowflake;
@@ -8,45 +9,74 @@ namespace Wiaoj.Primitives.Snowflake;
 /// Optimized with Cache Line Padding to prevent False Sharing.
 /// Uses a Monotonic Clock (Stopwatch) to prevent issues with system clock rollback (NTP adjustments).
 /// </summary>
-public class SnowflakeGenerator {
+[System.Diagnostics.DebuggerDisplay("NodeId = {_nodeId}, SequenceBits = {_sequenceBits}, MaxDrift = {_maxDriftMs}ms")]
+[StructLayout(LayoutKind.Explicit)]
+public class SnowflakeGenerator : ISnowflakeGenerator {
     // -----------------------------------------------------------------------
     // COLD DATA (Read-Only configuration)
+    // Sık erişilen ama değişmeyen verileri başlangıça topluyoruz.
     // -----------------------------------------------------------------------
-    private readonly long _nodeId;
-    private readonly long _epochTicks; // Custom Epoch (e.g. 2024-01-01)
 
-    private readonly int _sequenceBits;
-    private readonly int _timestampShift;
-    private readonly int _nodeIdShift;
+    // Reference types (GC referansları) genellikle en başta hizalanır.
+    [FieldOffset(0)]
+    private readonly TimeProvider _timeProvider;
+
+    [FieldOffset(8)]
+    private readonly long _nodeId;
+
+    [FieldOffset(16)]
+    private readonly long _epochTicks;
+
+    [FieldOffset(24)]
     private readonly long _sequenceMask;
 
+    [FieldOffset(32)]
     private readonly long _maxDriftMs;
 
-    private readonly TimeProvider _timeProvider;
+    // Monotonic Clock Anchors
+    [FieldOffset(40)]
+    private readonly long _anchorSystemTimeMs;
+
+    [FieldOffset(48)]
+    private readonly long _anchorStopwatchTicks;
+
+    [FieldOffset(56)]
+    private readonly double _stopwatchToMsMultiplier;
+
+    [FieldOffset(64)]
+    private readonly int _sequenceBits;
+
+    [FieldOffset(68)]
+    private readonly int _timestampShift;
+
+    [FieldOffset(72)]
+    private readonly int _nodeIdShift;
+
+    [FieldOffset(76)]
     private readonly bool _isSystemTime;
 
     // -----------------------------------------------------------------------
-    // MONOTONIC CLOCK ANCHORS (For Stopwatch Logic)
+    // PADDING GAP
+    // Offset 77'den 128'e kadar olan kısım boş bırakıldı.
+    // Bu, manuel "_p0..._p6" değişkenlerinin yaptığı işi yapar.
+    // İşlemci önbellek satırını (Cache Line - genelde 64 byte) kirletmemek için
+    // Hot Data'yı en az 128. byte'a (veya 64'ün katına) atıyoruz.
     // -----------------------------------------------------------------------
-    private readonly long _anchorSystemTimeMs;
-    private readonly long _anchorStopwatchTicks;
-    private readonly double _stopwatchToMsMultiplier;
-    // -----------------------------------------------------------------------
-    // PADDING (Prevent False Sharing)
-    // -----------------------------------------------------------------------
-#pragma warning disable CS0169
-    private readonly long _p0, _p1, _p2, _p3, _p4, _p5, _p6;
-#pragma warning restore CS0169
 
     // -----------------------------------------------------------------------
     // HOT DATA (Frequently modified)
+    // Sadece bu alan Interlocked ile değiştirilir.
     // -----------------------------------------------------------------------
+    [FieldOffset(128)]
     private long _currentState;
 
     /// <summary>
     /// The default <see cref="SnowflakeGenerator"/> instance with NodeId = 0.
     /// </summary>
     public static readonly SnowflakeGenerator Default = new(new SnowflakeOptions { NodeId = 0 });
+
+    public long NodeId => _nodeId;
+    public int SequenceBits => _sequenceBits;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SnowflakeGenerator"/> class with the specified options.
@@ -63,19 +93,19 @@ public class SnowflakeGenerator {
 
         // Node ID Validation
         long maxNodeId = -1L ^ (-1L << nodeIdBits);
-        if (options.NodeId > maxNodeId || options.NodeId < 0) {
+        if(options.NodeId > maxNodeId || options.NodeId < 0) {
             throw new ArgumentOutOfRangeException(nameof(options.NodeId),
                 $"NodeId must be between 0 and {maxNodeId} for sequence size {this._sequenceBits}.");
         }
         this._nodeId = options.NodeId;
 
         // Epoch Validation
-        if (options.Epoch > DateTimeOffset.UtcNow) {
+        if(options.Epoch > DateTimeOffset.UtcNow) {
             throw new ArgumentOutOfRangeException(nameof(options.Epoch), "Epoch cannot be in the future.");
         }
 
         // MaxDrift Validation
-        if (options.MaxDriftMs < 0) {
+        if(options.MaxDriftMs < 0) {
             throw new ArgumentOutOfRangeException(nameof(options.MaxDriftMs), "MaxDriftMs cannot be negative.");
         }
         this._maxDriftMs = options.MaxDriftMs;
@@ -86,7 +116,7 @@ public class SnowflakeGenerator {
         // -------------------------------------------------------------------
         // MONOTONIC CLOCK INITIALIZATION
         // -------------------------------------------------------------------
-        if (this._isSystemTime) {
+        if(this._isSystemTime) {
             //this._anchorSystemTimeMs = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
             this._anchorSystemTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             this._anchorStopwatchTicks = Stopwatch.GetTimestamp();
@@ -113,7 +143,7 @@ public class SnowflakeGenerator {
     public SnowflakeId NextId() {
         SpinWait spin = new();
 
-        while (true) {
+        while(true) {
             long current = Atomic.Read(ref this._currentState);
 
             long currentTimestamp = current >> this._sequenceBits;
@@ -144,14 +174,14 @@ public class SnowflakeGenerator {
             // 5. ADIM: Drift (Sapma) Kontrolü
             // Bu 'if' bloğu kalmak zorunda çünkü "Spin" işlemi bir akış kontrolüdür, veri hesaplaması değildir.
             // Ancak bu durum 'Exception' gibi nadir olduğu için Branch Predictor bunu iyi yönetir.
-            if (nextTimestamp - now > this._maxDriftMs) {
+            if(nextTimestamp - now > this._maxDriftMs) {
                 spin.SpinOnce();
                 continue;
             }
 
             long nextState = (nextTimestamp << this._sequenceBits) | nextSequence;
 
-            if (Atomic.CompareExchange(ref this._currentState, nextState, current)) {
+            if(Atomic.CompareExchange(ref this._currentState, nextState, current)) {
                 long id = ((nextTimestamp - this._epochTicks) << this._timestampShift) |
                           (this._nodeId << this._nodeIdShift) |
                           nextSequence;
@@ -163,11 +193,28 @@ public class SnowflakeGenerator {
         }
     }
 
-    public UnixTimestamp ExtractUnixTimestamp(long id) {
-        // Timestamp bitlerini çek (Örn: 22 bit shift)
-        long timestampDelta = id >> _timestampShift;
-        // Epoch ile topla ve UnixTimestamp tipinde dön
-        return UnixTimestamp.FromMilliseconds(_epochTicks + timestampDelta);
+    /// <summary>
+    /// Extracts the timestamp from a <see cref="SnowflakeId"/> using the internal configuration.
+    /// </summary>
+    public UnixTimestamp ExtractUnixTimestamp(SnowflakeId id) { 
+        long timestampDelta = id.Value >> this._timestampShift; 
+        return UnixTimestamp.FromMilliseconds(this._epochTicks + timestampDelta);
+    }
+
+    /// <summary>
+    /// Creates a placeholder Snowflake ID from a given timestamp.
+    /// Useful for searching: "Give me all IDs created after 2024-05-01".
+    /// </summary>
+    public SnowflakeId CreateIdFromTimestamp(UnixTimestamp timestamp) {
+        long totalMs = timestamp.TotalMilliseconds;
+        long delta = totalMs - this._epochTicks;
+
+        Preca.ThrowIfNegativeOrZero(
+            delta,
+            () => new ArgumentOutOfRangeException(nameof(timestamp), "Timestamp cannot be earlier than the generator's epoch."));
+
+        long id = delta << this._timestampShift;
+        return new SnowflakeId(id);
     }
 
     /// <summary>
@@ -176,7 +223,7 @@ public class SnowflakeGenerator {
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private long GetCurrentTimestamp() {
-        if (this._isSystemTime) {  
+        if(this._isSystemTime) {
             long elapsedTicks = Stopwatch.GetTimestamp() - this._anchorStopwatchTicks;
             long elapsedMs = (long)(elapsedTicks * this._stopwatchToMsMultiplier);
 
@@ -185,4 +232,18 @@ public class SnowflakeGenerator {
 
         return this._timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
     }
+
+    public SnowflakeMetadata Decode(SnowflakeId id) {
+        long val = (long)id;
+
+        // Dinamik bit kaydırmalar (Constructor'da hesapladığın shift değerlerini kullan)
+        long sequence = val & this._sequenceMask;
+        long nodeId = (val >> this._nodeIdShift) & ((-1L ^ (-1L << (this._timestampShift - this._nodeIdShift))));
+        long timestampDelta = val >> this._timestampShift;
+
+        var dt = DateTimeOffset.FromUnixTimeMilliseconds(this._epochTicks + timestampDelta);
+
+        return new SnowflakeMetadata(dt, nodeId, sequence);
+    }
 }
+public record struct SnowflakeMetadata(DateTimeOffset Timestamp, long NodeId, long Sequence);

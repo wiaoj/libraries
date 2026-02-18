@@ -50,5 +50,15 @@ public static class RandomExtensions {
         public double NextDouble(double minValue, double maxValue) {
             return random.NextDouble() * (maxValue - minValue) + minValue;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int Next(Range<int> range) {
+            return random.Next(range.Min, range.Max + 1);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public double Next(Range<double> range) {
+            return random.NextDouble(range.Min, range.Max + 1);
+        }
     }
 }

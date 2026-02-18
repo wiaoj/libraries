@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Wiaoj.Ddd.Abstractions;
-using Wiaoj.Ddd.Abstractions.DomainEvents;
+using Wiaoj.Ddd.DomainEvents;
 using Wiaoj.Ddd.Internal;
 
 namespace Wiaoj.Ddd.Tests.Unit;

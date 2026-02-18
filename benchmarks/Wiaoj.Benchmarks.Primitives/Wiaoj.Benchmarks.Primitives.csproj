@@ -21,4 +21,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="BenchmarkDotNet.Artifacts\results\" />
+  </ItemGroup>
 </Project>

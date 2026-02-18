@@ -67,7 +67,7 @@ public readonly record struct Urn :
     }
 
     #region Factory Methods (Zero-Allocation & Optimized)
-
+    
     /// <summary>
     /// Creates a URN from a namespace and a string identifier.
     /// </summary>
