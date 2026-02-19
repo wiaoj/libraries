@@ -219,10 +219,12 @@
 // --- START OF FILE RaftEngine.cs (EKSİKSIZ VE SNAPSHOT DESTEKLİ VERSİYON) ---
 
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Wiaoj.Concurrency;
 using Wiaoj.Consensus.Raft.Abstractions;
 using Wiaoj.Consensus.Raft.Roles;
+using Wiaoj.Primitives;
 using Wiaoj.Results;
 using Wiaoj.Threading.Channels;
 
@@ -239,7 +241,7 @@ public sealed class RaftEngine : IRaftEngine, IAsyncDisposable {
     private readonly IStateMachine _stateMachine;
     private readonly RaftNodeOptions _options;
     private readonly IReadOnlyDictionary<NodeState, IRaftRole> _roles;
-    private readonly AsyncChannel<IRaftCommand> _commandChannel;
+    private readonly Channel<IRaftCommand> _commandChannel;
     private readonly CancellationTokenSource _engineCts = new();
     private readonly AsyncLock _transitionLock = new();
     private readonly DisposeState _disposeState = new();
@@ -267,7 +269,7 @@ public sealed class RaftEngine : IRaftEngine, IAsyncDisposable {
         _raftLog = raftLog;
         _stateMachine = stateMachine;
         _options = options;
-        _commandChannel = AsyncChannel<IRaftCommand>.CreateUnbounded();
+        _commandChannel = Channel<IRaftCommand>.CreateUnbounded();
 
         // Başlangıç durumunu kalıcılık katmanından yükle
         _lastSnapshotIndex = _raftLog.LastSnapshotIndex;
@@ -440,7 +442,7 @@ public sealed class RaftEngine : IRaftEngine, IAsyncDisposable {
         var tcs = new TaskCompletionSource<Result<CommandPayload>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var proposal = new ProcessClientProposal(command, tcs);
         if (!_commandChannel.Writer.TryWrite(proposal)) {
-            tcs.TrySetResult(Error.ServiceUnavailable("Raft.EngineShutdown", "Raft motoru kapanıyor."));
+            tcs.TrySetResult(Error.Failure("Raft.EngineShutdown", "Raft motoru kapanıyor."));
         }
         return tcs.Task;
     }

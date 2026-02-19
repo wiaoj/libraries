@@ -1,5 +1,6 @@
 ﻿using Microsoft.IO;
 using System.Buffers;
+using System.Buffers.Text;
 using System.Text;
 using Wiaoj.Serialization.Compression.Abstractions;
 
@@ -36,7 +37,7 @@ internal sealed class CompressionSerializerDecorator<TKey> : ISerializer<TKey> w
     public string SerializeToString<TValue>(TValue value, Type type) {
         string plainText = this._innerSerializer.SerializeToString(value, type);
         byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
-        byte[] compressedBytes = this._compressor.Compress(plainBytes);
+        byte[] compressedBytes = this._compressor.Compress(plainBytes); 
         return Convert.ToBase64String(compressedBytes);
     }
 

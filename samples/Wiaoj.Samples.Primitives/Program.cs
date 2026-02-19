@@ -182,7 +182,7 @@ using Wiaoj.Primitives.Snowflake;
 
 
 
-
+//ForceAllStripesTest();
 Console.WriteLine("=== SNOWFLAKE VS STRIPED SHOWDOWN ===");
 
 SnowflakeOptions options = new() { NodeId = 1, SequenceBits = 12 };
@@ -244,4 +244,41 @@ static void PrintResult(string name, long ms, int total, long[] results) {
     double throughput = total / sec;
     Console.WriteLine($"{name} Tamamlandı: {ms} ms");
     Console.WriteLine($"{name} Hız: {throughput:N0} ID/saniye");
+}
+ 
+static void ForceAllStripesTest() {
+    Console.WriteLine("\n=== 16 ŞERİDİ ZORLAMA TESTİ (Az ID ile) ===");
+
+    var options = new SnowflakeOptions { NodeId = 1 };
+    var stripedGen = new StripedSnowflakeGenerator(options, stripeCount: 16);
+
+    // Sadece 160.000 ID (RAM'i yormaz)
+    int totalIds = 5_000_000;
+    long[] results = new long[totalIds];
+
+    // --- HİLE 1: ThreadPool'a "en az 16 işçi hazırla" diyoruz ---
+    ThreadPool.SetMinThreads(16, 16);
+
+    Stopwatch sw = Stopwatch.StartNew();
+
+    // --- HİLE 2: Thread'leri meşgul ediyoruz ---
+    Parallel.For(0, totalIds, new ParallelOptions { MaxDegreeOfParallelism = 16 }, i => {
+        results[i] = (long)stripedGen.NextId(); 
+    });
+
+    sw.Stop();
+
+    // Analiz
+    var stats = results
+        .Select(val => (val >> 12) & 1023)
+        .GroupBy(node => node)
+        .OrderBy(g => g.Key);
+
+    Console.WriteLine($"\nToplam Çalışan Şerit Sayısı: {stats.Count()}");
+    Console.WriteLine("------------------------------------------");
+    foreach(var stat in stats) {
+        Console.WriteLine($"NodeId: {stat.Key,-3} | Üretilen ID: {stat.Count():N0}");
+    }
+
+    Console.WriteLine("Toplam: " + results.Count().ToString("N0"));
 }
