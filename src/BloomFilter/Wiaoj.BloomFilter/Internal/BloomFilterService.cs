@@ -23,9 +23,9 @@ internal sealed class BloomFilterService : IBloomFilterService {
     }
 
     public async ValueTask<IReadOnlyDictionary<FilterName, BloomFilterStats>> GetAllStatsAsync(CancellationToken ct = default) {
-        Dictionary<FilterName, BloomFilterStats> statsMap = new();
+        Dictionary<FilterName, BloomFilterStats> statsMap = [];
 
-        foreach(var key in this._options.Filters.Keys) {
+        foreach(string key in this._options.Filters.Keys) {
             FilterName name = FilterName.Parse(key);
             var definition = this._options.Filters[key];
 

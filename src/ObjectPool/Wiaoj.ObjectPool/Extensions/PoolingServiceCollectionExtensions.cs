@@ -14,6 +14,14 @@ public static class PoolingServiceCollectionExtensions {
     /// <summary>
     /// Ensures the core provider is registered.
     /// </summary>
+    public static IServiceCollection TryAddObjectPoolProvider(this IServiceCollection services) {
+        services.TryAddSingleton<ObjectPoolProvider, DefaultObjectPoolProvider>();
+        return services;
+    }
+
+    /// <summary>
+    /// Ensures the core provider is registered.
+    /// </summary>
     public static IServiceCollection AddObjectPoolProvider(this IServiceCollection services) {
         services.TryAddSingleton<ObjectPoolProvider, DefaultObjectPoolProvider>();
         return services;
@@ -145,7 +153,7 @@ public static class PoolingServiceCollectionExtensions {
         where TObject : class
         where TPolicy : class, IPoolPolicy<TObject> {
 
-        services.AddObjectPoolProvider();
+        services.TryAddObjectPoolProvider();
 
         services.TryAddSingleton<IObjectPool<TObject>>(sp => {
             // ActivatorUtilities, TPolicy'yi oluştururken constructor'ındaki 
@@ -171,7 +179,7 @@ public static class PoolingServiceCollectionExtensions {
         where TObject : class
         where TPolicy : class, IAsyncPoolPolicy<TObject> {
 
-        services.AddObjectPoolProvider();
+        services.TryAddObjectPoolProvider();
 
         services.TryAddSingleton<IAsyncObjectPool<TObject>>(sp => {
             // Policy oluşturulurken DI servisleri enjekte edilir.
@@ -192,7 +200,7 @@ public static class PoolingServiceCollectionExtensions {
 
     private static IServiceCollection RegisterPool<T>(this IServiceCollection services, IPoolPolicy<T> policy, Action<ObjectPoolOptions>? configure)
         where T : class {
-        services.AddObjectPoolProvider();
+        services.TryAddObjectPoolProvider();
         services.TryAddSingleton<IObjectPool<T>>(sp => {
             var options = new ObjectPoolOptions();
             configure?.Invoke(options);
@@ -203,7 +211,7 @@ public static class PoolingServiceCollectionExtensions {
 
     private static IServiceCollection RegisterAsyncPool<T>(this IServiceCollection services, IAsyncPoolPolicy<T> policy, Action<ObjectPoolOptions>? configure)
         where T : class {
-        services.AddObjectPoolProvider();
+        services.TryAddObjectPoolProvider();
         services.TryAddSingleton<IAsyncObjectPool<T>>(sp => {
             var options = new ObjectPoolOptions();
             configure?.Invoke(options);
@@ -214,7 +222,7 @@ public static class PoolingServiceCollectionExtensions {
 
     private static IServiceCollection AddAsyncFactoryPoolInternal<T>(this IServiceCollection services, Func<T, ValueTask<bool>> resetter, Action<ObjectPoolOptions>? configure)
         where T : class {
-        services.AddObjectPoolProvider();
+        services.TryAddObjectPoolProvider();
         services.TryAddSingleton<IAsyncObjectPool<T>>(sp => {
             var factory = sp.GetService<IAsyncFactory<T>>()
                           ?? throw new InvalidOperationException($"No 'IAsyncFactory<{typeof(T).Name}>' found in DI.");

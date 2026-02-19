@@ -4,7 +4,9 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Concurrency;
+using Wiaoj.ObjectPool;
 using Wiaoj.Primitives;
+using Wiaoj.Serialization;
 using DisposeState = Wiaoj.Primitives.DisposeState;
 
 namespace Wiaoj.BloomFilter.Internal;
@@ -15,12 +17,14 @@ namespace Wiaoj.BloomFilter.Internal;
 /// </summary>  
 internal class BloomFilterProvider : IBloomFilterProvider, IBloomFilterLifecycleManager, IDisposable, IAsyncDisposable {
     private readonly IBloomFilterStorage? _storage;
+    private readonly IObjectPool<MemoryStream> _memoryStreamPool;
     private readonly IOptionsMonitor<BloomFilterOptions> _optionsMonitor;
     private readonly ILogger<BloomFilterProvider> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IEnumerable<IAutoBloomFilterSeeder> _autoSeeders;
     private readonly DisposeState _disposeState = new();
     private readonly TimeProvider _timeProvider;
+    private readonly ISerializer<InMemorySerializerKey> _serializer;
     private readonly CancellationTokenSource _shutdownCts = new();
 
     private readonly ConcurrentDictionary<FilterName, AsyncLazy<IPersistentBloomFilter>> _filters = new();
@@ -31,6 +35,8 @@ internal class BloomFilterProvider : IBloomFilterProvider, IBloomFilterLifecycle
         ILoggerFactory loggerFactory,
         IEnumerable<IAutoBloomFilterSeeder> autoSeeders,
         TimeProvider timeProvider,
+        IObjectPool<MemoryStream> memoryStreamPool,
+        ISerializer<InMemorySerializerKey> serializer,
         IBloomFilterStorage? storage = null) {
 
         this._storage = storage;
@@ -39,6 +45,8 @@ internal class BloomFilterProvider : IBloomFilterProvider, IBloomFilterLifecycle
         this._optionsMonitor = optionsMonitor;
         this._autoSeeders = autoSeeders;
         this._timeProvider = timeProvider;
+        this._memoryStreamPool = memoryStreamPool;
+        this._serializer = serializer;
     }
 
     public ValueTask<IPersistentBloomFilter> GetAsync(FilterName name) {
@@ -90,17 +98,23 @@ internal class BloomFilterProvider : IBloomFilterProvider, IBloomFilterLifecycle
         BloomFilterConfiguration finalConfig = config.WithShardCount(calculatedShards);
         IPersistentBloomFilter filter;
 
+        BloomFilterContext context = new(
+              this._storage,
+              this._memoryStreamPool,
+              this._serializer,
+              this._loggerFactory.CreateLogger(filterName.Value),
+              currentOptions,
+              this._timeProvider
+          );
+
+
         // --- B. Factory (Nesne Oluşturma) ---
         if(calculatedShards > 1) {
             this._logger.LogInformation("Creating Sharded Filter '{Name}' with {Count} shards.", filterName, calculatedShards);
-            filter = new ShardedBloomFilter(finalConfig, this._storage, this._loggerFactory, currentOptions, this._timeProvider);
+            filter = new ShardedBloomFilter(finalConfig, context);
         }
         else {
-            filter = new InMemoryBloomFilter(finalConfig,
-                                             this._storage,
-                                             this._loggerFactory.CreateLogger<InMemoryBloomFilter>(),
-                                             currentOptions,
-                                             this._timeProvider);
+            filter = new InMemoryBloomFilter(finalConfig, context);
         }
 
         // --- C. Yükleme ve Hata Yönetimi ---

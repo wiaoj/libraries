@@ -150,7 +150,7 @@ internal sealed class PooledBitArray : IDisposable {
         }
     }
 
-    internal sealed class UlongToByteMemoryManager(ulong[] array) : MemoryManager<byte> {
+    private sealed class UlongToByteMemoryManager(ulong[] array) : MemoryManager<byte> {
         public override Span<byte> GetSpan() {
             return MemoryMarshal.AsBytes(array.AsSpan());
         }

@@ -2,8 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Wiaoj.Primitives.Extensions;
-
+namespace Wiaoj.Primitives.Extensions; 
 public static class SecurityExtensions {
 
     extension(int byteCount) {

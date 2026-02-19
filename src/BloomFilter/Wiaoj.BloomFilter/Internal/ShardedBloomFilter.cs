@@ -1,8 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.IO.Hashing;
 using System.Text;
+using Wiaoj.Concurrency;
+using Wiaoj.ObjectPool;
+using Wiaoj.Serialization;
 
-namespace Wiaoj.BloomFilter.Internal; 
+namespace Wiaoj.BloomFilter.Internal;
+
 internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
     private readonly InMemoryBloomFilter[] _shards;
     private readonly int _shardCount;
@@ -10,14 +14,11 @@ internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
 
     public string Name => this.Configuration.Name;
     public bool IsDirty => this._shards.Any(s => s.IsDirty);
+    private readonly StripedLock<int> _stripedIoLock = new(stripes: 128);
 
     public BloomFilterConfiguration Configuration { get; }
 
-    public ShardedBloomFilter(BloomFilterConfiguration config,
-                              IBloomFilterStorage? storage,
-                              ILoggerFactory loggerFactory,
-                              BloomFilterOptions options,
-                              TimeProvider timeProvider) {
+    public ShardedBloomFilter(BloomFilterConfiguration config, BloomFilterContext context) {
 
         this.Configuration = config;
         this._shardCount = config.ShardCount;
@@ -25,36 +26,32 @@ internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
         // Shard sayısı 2'nin kuvveti olduğu için (örn: 16 -> 10000)
         // Maske 1 eksiğidir (örn: 15 -> 01111)
         // hash % 16 yerine hash & 15 yapabiliriz. Bu işlemcide çok daha hızlıdır.
-        this._shardMask = _shardCount - 1;
+        this._shardMask = this._shardCount - 1;
 
-        this._shards = new InMemoryBloomFilter[_shardCount];
-        long itemsPerShard = (long)Math.Ceiling((double)config.ExpectedItems / _shardCount);
+        this._shards = new InMemoryBloomFilter[this._shardCount];
+        long itemsPerShard = (long)Math.Ceiling((double)config.ExpectedItems / this._shardCount);
 
-        for(int i = 0; i < _shardCount; i++) {
-            var shardName = $"{config.Name}_s{i}";
+        for(int i = 0; i < this._shardCount; i++) {
+            string shardName = $"{config.Name}_s{i}";
             var shardConfig = new BloomFilterConfiguration(shardName, itemsPerShard, config.ErrorRate, config.HashSeed);
 
-            _shards[i] = new InMemoryBloomFilter(shardConfig,
-                                                 storage,
-                                                 loggerFactory.CreateLogger<InMemoryBloomFilter>(),
-                                                 options,
-                                                 timeProvider);
+            this._shards[i] = new InMemoryBloomFilter(shardConfig, context);
         }
     }
 
     public bool Add(ReadOnlySpan<byte> item) {
-        ulong hash = XxHash3.HashToUInt64(item, Configuration.HashSeed);
+        ulong hash = XxHash3.HashToUInt64(item, this.Configuration.HashSeed);
 
         // DİNAMİK VE HIZLI SHARD SEÇİMİ
         // (hash % count) yerine (hash & mask) kullanıyoruz.
         // Örnek: ShardCount=8, Mask=7 (111).
-        uint shardIndex = (uint)(hash & (ulong)_shardMask);
+        uint shardIndex = (uint)(hash & (ulong)this._shardMask);
         return this._shards[shardIndex].Add(item);
     }
 
     public bool Contains(ReadOnlySpan<byte> item) {
-        ulong hash = XxHash3.HashToUInt64(item, Configuration.HashSeed);
-        uint shardIndex = (uint)(hash & (ulong)_shardMask);
+        ulong hash = XxHash3.HashToUInt64(item, this.Configuration.HashSeed);
+        uint shardIndex = (uint)(hash & (ulong)this._shardMask);
         return this._shards[shardIndex].Contains(item);
     }
 
@@ -62,33 +59,27 @@ internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
         return this._shards.Sum(s => s.GetPopCount());
     }
 
-    public async ValueTask SaveAsync(CancellationToken ct = default) {
-        if(!IsDirty) return;
+    public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
+        if(!this.IsDirty) return;
 
         // Sadece kirli olan shard'ları bul
-        var dirtyShards = _shards.Where(s => s.IsDirty).ToList();
+        var dirtyShards = this._shards.Where(s => s.IsDirty).Select((s, idx) => (s, idx));
 
-        // Aynı anda en fazla 4 dosya yaz (Disk I/O darboğazını engeller)
-        var parallelOptions = new ParallelOptions {
-            MaxDegreeOfParallelism = 4, // Disk hızına göre artırılabilir (SSD ise 8-16)
-            CancellationToken = ct
-        };
-
-        await Parallel.ForEachAsync(dirtyShards, parallelOptions, async (shard, token) => {
-            await shard.SaveAsync(token);
+        await Parallel.ForEachAsync(dirtyShards, cancellationToken, async (shard, token) => {
+            using(await this._stripedIoLock.LockAsync(shard.idx, token)) {
+                await shard.s.SaveAsync(token);
+            }
         });
     }
 
-    public async ValueTask ReloadAsync(CancellationToken ct = default) {
-        var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct };
-
-        await Parallel.ForEachAsync(_shards, parallelOptions, async (shard, token) => {
+    public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
+        await Parallel.ForEachAsync(this._shards, cancellationToken, async (shard, token) => {
             await shard.ReloadAsync(token);
         });
     }
 
     public void Dispose() {
-        foreach(var shard in _shards) shard.Dispose();
+        foreach(var shard in this._shards) shard.Dispose();
     }
 
     public bool Add(ReadOnlySpan<char> item) {

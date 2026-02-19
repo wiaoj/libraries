@@ -10,7 +10,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Wiaoj.Primitives;
-
 /// <summary>
 /// Represents a URL-friendly, unique string identifier (NanoID).
 /// Optimized for high-performance generation using stack allocation, bitwise masking, and SIMD validation.

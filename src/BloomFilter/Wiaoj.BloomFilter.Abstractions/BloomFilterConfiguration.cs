@@ -8,7 +8,7 @@ namespace Wiaoj.BloomFilter;
 /// Represents the immutable configuration parameters for a Bloom Filter.
 /// Calculates the optimal bit size and hash function count based on desired capacity and error rate.
 /// </summary>
-public sealed record BloomFilterConfiguration : IShallowCloneable<BloomFilterConfiguration> {
+public sealed record BloomFilterConfiguration {
     /// <summary>
     /// Gets the unique name of the filter.
     /// </summary>
@@ -84,9 +84,5 @@ public sealed record BloomFilterConfiguration : IShallowCloneable<BloomFilterCon
 
     public BloomFilterConfiguration WithShardCount(int count) {
         return this with { ShardCount = count };
-    } 
-
-    public BloomFilterConfiguration ShallowClone() {
-        return this with {  };
-    }
+    }  
 }

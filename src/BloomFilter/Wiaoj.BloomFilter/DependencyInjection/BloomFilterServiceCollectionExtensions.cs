@@ -5,6 +5,8 @@ using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Internal;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
+using Wiaoj.ObjectPool.Extensions;
+using Wiaoj.Serialization.DependencyInjection;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Microsoft.Extensions.DependencyInjection;
@@ -25,15 +27,15 @@ public static class BloomFilterServiceCollectionExtensions {
         // Nuget Paketi Gerekli: Microsoft.Extensions.Options.ConfigurationExtensions
         services.AddOptions<BloomFilterOptions>()
                 .BindConfiguration("BloomFilter");
-                //.ValidateDataAnnotations()
-                //.ValidateOnStart();
+        //.ValidateDataAnnotations()
+        //.ValidateOnStart();
 
         // 2. Create Builder & Execute User Code
-        var builder = new BloomFilterBuilder(services);
+        BloomFilterBuilder builder = new(services);
         setupAction?.Invoke(builder);
 
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
-        
+
         // 3. Register Core Services
         services.TryAddSingleton<BloomFilterProvider>();
         services.TryAddSingleton<IBloomFilterProvider>(sp =>
@@ -50,7 +52,17 @@ public static class BloomFilterServiceCollectionExtensions {
         // 5. Background Services
         services.AddHostedService<BloomFilterAutoSaveService>();
         services.AddHostedService<BloomFilterWarmUpService>();
+        services.AddObjectPool<MemoryStream>(
+            factory: () => new MemoryStream(),
+            resetter: ms => {
+                ms.SetLength(0);
+                return true;
+            }
+        );
 
+        services.AddWiaojSerializer(serializer => {
+            serializer.UseMessagePack<InMemorySerializerKey>();
+        });
         return services;
     }
 }

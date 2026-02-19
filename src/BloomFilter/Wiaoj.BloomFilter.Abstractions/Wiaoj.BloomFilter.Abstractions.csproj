@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Wiaoj.Concurrency" Version="0.0.1-alpha.22" />
-    <PackageReference Include="Wiaoj.Primitives" Version="0.0.1-alpha.22" />
+	  <ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
   </ItemGroup>
 
 </Project>

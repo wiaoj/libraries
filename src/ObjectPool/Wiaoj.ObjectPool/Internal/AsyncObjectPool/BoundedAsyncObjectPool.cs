@@ -12,7 +12,7 @@ internal sealed class BoundedAsyncObjectPool<T> : IAsyncObjectPool<T>, IObjectPo
         this._policy = policy;
         this._options = options; // Sakla
         this._maxCapacity = options.MaximumRetained;
-        this._semaphore = new SemaphoreSlim(options.MaximumRetained, options.MaximumRetained);
+        this._semaphore = new SemaphoreSlim(_options.MaximumRetained, _options.MaximumRetained);
     }
 
     public async ValueTask<T> GetAsync(CancellationToken cancellationToken = default) {

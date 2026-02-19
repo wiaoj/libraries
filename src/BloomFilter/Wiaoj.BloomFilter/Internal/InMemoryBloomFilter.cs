@@ -1,13 +1,15 @@
 ﻿using Microsoft.Extensions.Logging;
-using System;
 using System.Buffers;
 using System.IO.Hashing;
 using System.Runtime.Intrinsics;
 using System.Text;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.BloomFilter.Extensions;
-using Wiaoj.Concurrency; 
-
+using Wiaoj.Concurrency;
+using Wiaoj.ObjectPool;
+using Wiaoj.Primitives;
+using Wiaoj.Primitives.Buffers;
+using Wiaoj.Serialization;
 using DisposeState = Wiaoj.Primitives.DisposeState;
 
 namespace Wiaoj.BloomFilter.Internal;
@@ -26,6 +28,8 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     private readonly IBloomFilterStorage? _storage;
     private readonly ILogger _logger;
     private readonly BloomFilterOptions _options;
+    private readonly IObjectPool<MemoryStream> _memoryStreamPool;
+    private readonly ISerializer<InMemorySerializerKey> _serializer;
 
     // Lock for Storage I/O (Serialization/Deserialization)
     private readonly AsyncLock _ioLock = new();
@@ -35,8 +39,8 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     // while blocking everything during Reload (WriteLock).
     private readonly ReaderWriterLockSlim _memoryLock = new();
 
-    private readonly DisposeState _disposeState = new(); 
-    private readonly TimeProvider _timeProvider; 
+    private readonly DisposeState _disposeState = new();
+    private readonly TimeProvider _timeProvider;
     public DateTimeOffset LastSavedAt { get; private set; }
 
     /// <summary>
@@ -44,23 +48,22 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     /// </summary>
     public InMemoryBloomFilter(
         BloomFilterConfiguration config,
-        IBloomFilterStorage? storage,
-        ILogger logger,
-        BloomFilterOptions options,
-        TimeProvider timeProvider) {
+        BloomFilterContext context) {
 
         this.Configuration = config;
-        this._storage = storage;
-        this._logger = logger;
-        this._options = options;
+        this._storage = context.Storage;
+        this._memoryStreamPool = context.MemoryStreamPool;
+        this._logger = context.Logger;
+        this._options = context.Options;
 
         // Allocate memory from pool
         this._bits = new PooledBitArray(config.SizeInBits);
 
-        this._logger.LogFilterInitialized(this.Name, config.ExpectedItems, config.ErrorRate.Value, config.SizeInBits); 
-        
-        _timeProvider = timeProvider;
-        LastSavedAt = _timeProvider.GetUtcNow();
+        this._logger.LogFilterInitialized(this.Name, config.ExpectedItems, config.ErrorRate.Value, config.SizeInBits);
+
+        this._timeProvider = context.TimeProvider;
+        this.LastSavedAt = this._timeProvider.GetUtcNow();
+        this._serializer = context.Serializer;
     }
 
     /// <inheritdoc/>
@@ -156,20 +159,15 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
         finally { this._memoryLock.ExitReadLock(); }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc/>  
     public bool Add(ReadOnlySpan<char> item) {
         int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-        if(maxBytes <= 256) {
-            Span<byte> buffer = stackalloc byte[maxBytes];
-            int written = Encoding.UTF8.GetBytes(item, buffer);
-            return Add(buffer[..written]);
-        }
-        byte[] rented = ArrayPool<byte>.Shared.Rent(maxBytes);
-        try {
-            int written = Encoding.UTF8.GetBytes(item, rented);
-            return Add(rented.AsSpan(0, written));
-        }
-        finally { ArrayPool<byte>.Shared.Return(rented); }
+
+        // 256 byte'a kadar stackalloc kullan, fazlası için pool'a git
+        using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
+
+        int written = Encoding.UTF8.GetBytes(item, buffer.Span);
+        return Add(buffer.Span[..written]);
     }
 
     /// <inheritdoc/>
@@ -200,38 +198,35 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
             this._logger.LogSaveStarted(this.Name);
 
             try {
-                using MemoryStream snapshotStream = new();
+                using var memoryStreamPool = this._memoryStreamPool.Lease();
+                MemoryStream snapshotStream = memoryStreamPool.Item;
+                snapshotStream.SetLength(0);
+
                 ulong checksum = 0;
 
                 // 2. Memory Kilidi: RAM'deki veriyi dondur (Snapshot al)
-                this._memoryLock.EnterReadLock();
+                this._memoryLock.EnterWriteLock();
                 try {
                     // a. Checksum hesapla (Anlık durum)
                     checksum = this._bits.CalculateChecksum();
-
+  
                     // b. Header'ı stream'e yaz
                     BloomFilterHeader.WriteHeader(snapshotStream, checksum, this.Configuration, Encoding.UTF8);
-
+                      
                     // c. Veriyi stream'e yaz (Hala kilitli, veri değişemez)
                     await this._bits.WriteToStreamAsync(snapshotStream, cancellationToken);
+                    this._isDirty = false;
                 }
                 finally {
-                    // Kilit burada kalkar. Artık RAM'deki filtreye yeni veri eklenebilir.
-                    // Bizim elimizde verinin o anki "fotoğrafı" (snapshotStream) var.
-                    this._memoryLock.ExitReadLock();
+                    this._memoryLock.ExitWriteLock();
                 }
 
                 // 3. Disk Yazma (Yavaş işlem kilit dışındadır, Add işlemlerini bloklamaz)
                 snapshotStream.Position = 0;
                 await this._storage.SaveAsync(this.Name, this.Configuration, snapshotStream, cancellationToken);
 
-                LastSavedAt = _timeProvider.GetUtcNow();
+                this.LastSavedAt = this._timeProvider.GetUtcNow();
                 this._logger.LogSaveSuccess(this.Name, checksum, (int)snapshotStream.Length);
-
-                // Burası optimistic bir yaklaşım. Save sırasında yeni veri geldiyse isDirty true kalmalıydı.
-                // Ama basitlik adına save bittiği an false çekiyoruz. 
-                // Çok kritik sistemlerde snapshot alındığı andaki dirty durumu saklanıp o kontrol edilir ama bu yeterli.
-                this._isDirty = false;
             }
             catch(Exception ex) {
                 this._logger.LogSaveFailed(ex, this.Name);
@@ -321,14 +316,14 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
                     newBits = null;
 
                     // Veri diskten taze geldiği için 'Kirli' değildir
-                    _isDirty = false;
+                    this._isDirty = false;
 
                     // D. Artık kullanılmayan eski belleği temizle.
                     // Bunu burada yapmak güvenlidir çünkü WriteLock içindeyiz, kimse okuyamaz.
                     oldBits?.Dispose();
                 }
                 finally {
-                    this._memoryLock.ExitWriteLock(); 
+                    this._memoryLock.ExitWriteLock();
                     newBits?.Dispose();
                 }
             }
@@ -379,15 +374,12 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     /// </summary>
     internal static async Task<InMemoryBloomFilter> CreateFromStreamAsync(BloomFilterConfiguration config,
                                                                           Stream sourceStream,
-                                                                          IBloomFilterStorage? storage,
-                                                                          ILogger logger,
-                                                                          BloomFilterOptions options,
-                                                                          TimeProvider timeProvider,
+                                                                          BloomFilterContext context,
                                                                           CancellationToken cancellationToken) {
 
         using(sourceStream) {
-            logger.LogHydratingFromStream(config.Name);
-            InMemoryBloomFilter filter = new(config, storage, logger, options, timeProvider);
+            context.Logger.LogHydratingFromStream(config.Name);
+            InMemoryBloomFilter filter = new(config, context);
 
             try {
                 if(BloomFilterHeader.TryReadHeader(sourceStream,
@@ -398,9 +390,9 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
                                                     Encoding.UTF8)) {
                     // Fingerprint kontrolü
                     if(storedFingerprint != config.GetFingerprint()) {
-                        if(options.Lifecycle.AutoResetOnMismatch) {
-                            logger.LogWarning("Fingerprint mismatch...");
-                            return new InMemoryBloomFilter(config, storage, logger, options, timeProvider);
+                        if(context.Options.Lifecycle.AutoResetOnMismatch) {
+                            context.Logger.LogWarning("Fingerprint mismatch...");
+                            return new InMemoryBloomFilter(config, context);
                         }
                         throw new DataIntegrityException("Fingerprint mismatch!");
                     }
@@ -413,10 +405,10 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
 
                 ulong actual = await filter._bits.LoadFromStreamAsync(sourceStream, cancellationToken);
 
-                if(options.Lifecycle.EnableIntegrityCheck && actual != expectedChecksum)
+                if(context.Options.Lifecycle.EnableIntegrityCheck && actual != expectedChecksum)
                     throw new DataIntegrityException("Checksum mismatch!");
 
-                logger.LogHydrationSuccess(config.Name);
+                context.Logger.LogHydrationSuccess(config.Name);
                 return filter;
             }
             catch {

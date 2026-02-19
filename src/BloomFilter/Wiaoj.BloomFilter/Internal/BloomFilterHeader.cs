@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Wiaoj.BloomFilter.Extensions;
+using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter.Internal;
 
@@ -83,3 +84,11 @@ public static class BloomFilterHeader {
         return true;
     }
 }
+
+public sealed record BloomFilterHeaderDto(
+    ulong Checksum,
+    long SizeInBits,
+    int HashCount,
+    ulong Fingerprint,
+    UnixTimestamp CreatedAt
+);

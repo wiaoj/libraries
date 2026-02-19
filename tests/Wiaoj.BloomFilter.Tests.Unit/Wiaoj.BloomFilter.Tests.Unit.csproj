@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BloomFilter\Wiaoj.BloomFilter\Wiaoj.BloomFilter.csproj" />
+    <ProjectReference Include="..\..\src\ObjectPool\Wiaoj.ObjectPool.Testing\Wiaoj.ObjectPool.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>
