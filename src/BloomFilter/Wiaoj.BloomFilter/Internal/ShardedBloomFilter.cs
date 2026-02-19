@@ -1,12 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
-using System.IO.Hashing;
+﻿using System.IO.Hashing;
 using System.Text;
 using Wiaoj.Concurrency;
-using Wiaoj.ObjectPool;
-using Wiaoj.Serialization;
 
 namespace Wiaoj.BloomFilter.Internal;
-
 internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
     private readonly InMemoryBloomFilter[] _shards;
     private readonly int _shardCount;
@@ -33,7 +29,7 @@ internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
 
         for(int i = 0; i < this._shardCount; i++) {
             string shardName = $"{config.Name}_s{i}";
-            var shardConfig = new BloomFilterConfiguration(shardName, itemsPerShard, config.ErrorRate, config.HashSeed);
+            BloomFilterConfiguration shardConfig = new(shardName, itemsPerShard, config.ErrorRate, config.HashSeed);
 
             this._shards[i] = new InMemoryBloomFilter(shardConfig, context);
         }

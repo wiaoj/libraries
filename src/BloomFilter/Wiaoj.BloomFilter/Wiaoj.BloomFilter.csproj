@@ -28,8 +28,6 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\..\ObjectPool\Wiaoj.ObjectPool\Wiaoj.ObjectPool.csproj" />
-	  <ProjectReference Include="..\..\Serialization\Core\Wiaoj.Serialization.DependencyInjection\Wiaoj.Serialization.DependencyInjection.csproj" />
-	  <ProjectReference Include="..\..\Serialization\Implementations\Wiaoj.Serialization.MessagePack\Wiaoj.Serialization.MessagePack.csproj" />
 	  <ProjectReference Include="..\Wiaoj.BloomFilter.Abstractions\Wiaoj.BloomFilter.Abstractions.csproj" />
 	</ItemGroup>
 

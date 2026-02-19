@@ -6,7 +6,6 @@ using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Concurrency;
 using Wiaoj.ObjectPool;
 using Wiaoj.Primitives;
-using Wiaoj.Serialization;
 using DisposeState = Wiaoj.Primitives.DisposeState;
 
 namespace Wiaoj.BloomFilter.Internal;
@@ -24,7 +23,6 @@ internal class BloomFilterProvider : IBloomFilterProvider, IBloomFilterLifecycle
     private readonly IEnumerable<IAutoBloomFilterSeeder> _autoSeeders;
     private readonly DisposeState _disposeState = new();
     private readonly TimeProvider _timeProvider;
-    private readonly ISerializer<InMemorySerializerKey> _serializer;
     private readonly CancellationTokenSource _shutdownCts = new();
 
     private readonly ConcurrentDictionary<FilterName, AsyncLazy<IPersistentBloomFilter>> _filters = new();
@@ -36,7 +34,6 @@ internal class BloomFilterProvider : IBloomFilterProvider, IBloomFilterLifecycle
         IEnumerable<IAutoBloomFilterSeeder> autoSeeders,
         TimeProvider timeProvider,
         IObjectPool<MemoryStream> memoryStreamPool,
-        ISerializer<InMemorySerializerKey> serializer,
         IBloomFilterStorage? storage = null) {
 
         this._storage = storage;
@@ -46,7 +43,6 @@ internal class BloomFilterProvider : IBloomFilterProvider, IBloomFilterLifecycle
         this._autoSeeders = autoSeeders;
         this._timeProvider = timeProvider;
         this._memoryStreamPool = memoryStreamPool;
-        this._serializer = serializer;
     }
 
     public ValueTask<IPersistentBloomFilter> GetAsync(FilterName name) {
@@ -101,7 +97,6 @@ internal class BloomFilterProvider : IBloomFilterProvider, IBloomFilterLifecycle
         BloomFilterContext context = new(
               this._storage,
               this._memoryStreamPool,
-              this._serializer,
               this._loggerFactory.CreateLogger(filterName.Value),
               currentOptions,
               this._timeProvider

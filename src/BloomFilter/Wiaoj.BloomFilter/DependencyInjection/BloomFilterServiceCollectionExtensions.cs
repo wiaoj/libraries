@@ -6,7 +6,6 @@ using Wiaoj.BloomFilter.Internal;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
 using Wiaoj.ObjectPool.Extensions;
-using Wiaoj.Serialization.DependencyInjection;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Microsoft.Extensions.DependencyInjection;
@@ -60,9 +59,6 @@ public static class BloomFilterServiceCollectionExtensions {
             }
         );
 
-        services.AddWiaojSerializer(serializer => {
-            serializer.UseMessagePack<InMemorySerializerKey>();
-        });
         return services;
     }
 }

@@ -9,7 +9,6 @@ using Wiaoj.Concurrency;
 using Wiaoj.ObjectPool;
 using Wiaoj.Primitives;
 using Wiaoj.Primitives.Buffers;
-using Wiaoj.Serialization;
 using DisposeState = Wiaoj.Primitives.DisposeState;
 
 namespace Wiaoj.BloomFilter.Internal;
@@ -29,7 +28,6 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     private readonly ILogger _logger;
     private readonly BloomFilterOptions _options;
     private readonly IObjectPool<MemoryStream> _memoryStreamPool;
-    private readonly ISerializer<InMemorySerializerKey> _serializer;
 
     // Lock for Storage I/O (Serialization/Deserialization)
     private readonly AsyncLock _ioLock = new();
@@ -63,7 +61,6 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
 
         this._timeProvider = context.TimeProvider;
         this.LastSavedAt = this._timeProvider.GetUtcNow();
-        this._serializer = context.Serializer;
     }
 
     /// <inheritdoc/>
