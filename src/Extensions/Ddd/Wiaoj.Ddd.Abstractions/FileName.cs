@@ -10,7 +10,7 @@ public interface IConcurrencySafe {
     /// <summary>
     /// The version token from the database.
     /// </summary>
-    RowVersion Version { get; set; }
+    RowVersion Version { get; }
 }
 
 /// <summary>

@@ -2,8 +2,7 @@
 using Wiaoj.Ddd.Exceptions;
 using Wiaoj.Ddd.ValueObjects;
 
-namespace Wiaoj.Ddd;
-
+namespace Wiaoj.Ddd; 
 public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnull, IId {
     public DateTimeOffset CreatedAt { get; protected set; }
     public DateTimeOffset? UpdatedAt { get; protected set; }
@@ -13,7 +12,7 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnu
     protected readonly List<IDomainEvent> domainEvents = [];
     public IReadOnlyList<IDomainEvent> DomainEvents => this.domainEvents.AsReadOnly();
 
-    public RowVersion Version { get; set; }
+    public RowVersion Version { get; protected set; }
 
     protected Aggregate() { }
     protected Aggregate(TId id) : base(id) { }
@@ -37,13 +36,7 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnu
         Preca.ThrowIfDefault(updatedAt);
         this.UpdatedAt = updatedAt;
     }
-
-    [Obsolete("Removed latest versions")]
-    public void RaiseDomainEvent(IDomainEvent @event) {
-        Preca.ThrowIfNull(@event);
-        this.domainEvents.Add(@event);
-    }
-
+      
     public void RaiseDomainEvent<TEvent>(TEvent @event) where TEvent : IDomainEvent {
         Preca.ThrowIfNull(@event);
         this.domainEvents.Add(@event);

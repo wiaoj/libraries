@@ -9,7 +9,7 @@ namespace Wiaoj.Primitives;
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Size = 1)]
 [JsonConverter(typeof(EmptyJsonConverter))]
-public readonly record struct Empty : IEquatable<Empty> {
+public readonly struct Empty : IEquatable<Empty> {
     /// <summary>
     /// The default and only instance of <see cref="Empty"/>.
     /// </summary>
@@ -20,7 +20,14 @@ public readonly record struct Empty : IEquatable<Empty> {
     /// </summary>
     public bool Equals(Empty other) {
         return true;
-    } 
+    }
+
+    /// <summary>
+    /// Always returns true because all instances of <see cref="Empty"/> are equal.
+    /// </summary>
+    public override bool Equals(object? obj) {
+        return obj is Empty;
+    }
 
     /// <inheritdoc/>
     public override int GetHashCode() {
@@ -30,5 +37,15 @@ public readonly record struct Empty : IEquatable<Empty> {
     /// <inheritdoc/>
     public override string ToString() {
         return nameof(Empty);
-    } 
+    }
+
+    /// <inheritdoc/>
+    public static bool operator ==(Empty left, Empty right) {
+        return left.Equals(right);
+    }
+
+    /// <inheritdoc/>
+    public static bool operator !=(Empty left, Empty right) {
+        return !(left == right);
+    }
 }

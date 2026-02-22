@@ -118,7 +118,6 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash> {
 
         return secret.Expose(chars => {
             int maxByteCount = encoding.GetMaxByteCount(chars.Length);
-            // Use stack if small enough, otherwise rent from pool to avoid LOH/GC pressure
             byte[]? rented = null;
             Span<byte> byteSpan = maxByteCount <= 512
                 ? stackalloc byte[maxByteCount]
@@ -129,7 +128,10 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash> {
                 return Compute(byteSpan[..bytesWritten]);
             }
             finally {
-                if(rented != null) ArrayPool<byte>.Shared.Return(rented);
+                if(rented != null) {
+                    CryptographicOperations.ZeroMemory(rented.AsSpan(0, maxByteCount));
+                    ArrayPool<byte>.Shared.Return(rented);
+                }
             }
         });
     }

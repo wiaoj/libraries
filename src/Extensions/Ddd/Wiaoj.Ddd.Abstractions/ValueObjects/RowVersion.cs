@@ -1,11 +1,9 @@
-﻿using System.Collections;
-
-namespace Wiaoj.Ddd.ValueObjects;
+﻿namespace Wiaoj.Ddd.ValueObjects;
 /// <summary>
 /// Represents a database concurrency token (Optimistic Concurrency Control).
 /// Replaces raw byte[] to prevent primitive obsession.
 /// </summary>
-public readonly struct RowVersion : IEquatable<RowVersion>, IStructuralEquatable {
+public readonly struct RowVersion : IEquatable<RowVersion> {
     private readonly byte[] _value;
 
     public static RowVersion Empty { get; } = new([]);
@@ -26,7 +24,7 @@ public readonly struct RowVersion : IEquatable<RowVersion>, IStructuralEquatable
 
     // --- Equality ---
     public bool Equals(RowVersion other) {
-        return StructuralComparisons.StructuralEqualityComparer.Equals(this.Value, other.Value);
+        return this.Value.AsSpan().SequenceEqual(other.Value.AsSpan());
     }
 
     public override bool Equals(object? obj) {
@@ -34,7 +32,9 @@ public readonly struct RowVersion : IEquatable<RowVersion>, IStructuralEquatable
     }
 
     public override int GetHashCode() {
-        return StructuralComparisons.StructuralEqualityComparer.GetHashCode(this.Value);
+        HashCode hash = new(); 
+        hash.AddBytes(this.Value.AsSpan());
+        return hash.ToHashCode();
     }
 
     public static bool operator ==(RowVersion left, RowVersion right) {
@@ -43,18 +43,6 @@ public readonly struct RowVersion : IEquatable<RowVersion>, IStructuralEquatable
 
     public static bool operator !=(RowVersion left, RowVersion right) {
         return !left.Equals(right);
-    }
-
-    // --- Interface for Structural Equality (Array comparison) ---
-    bool IStructuralEquatable.Equals(object? other, IEqualityComparer comparer) {
-        if(other is RowVersion rv) {
-            return comparer.Equals(this.Value, rv.Value);
-        }
-        return false;
-    }
-
-    int IStructuralEquatable.GetHashCode(IEqualityComparer comparer) {
-        return comparer.GetHashCode(this.Value);
     }
 
     public override string ToString() {
