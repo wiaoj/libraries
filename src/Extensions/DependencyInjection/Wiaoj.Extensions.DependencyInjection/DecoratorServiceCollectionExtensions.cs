@@ -79,6 +79,7 @@ public static class DecoratorServiceCollectionExtensions {
             var index = services.IndexOf(descriptor);
 
             if(serviceType.IsGenericTypeDefinition) {
+                //TODO: @wiaoj
                 // NOT: Open Generic dekorasyonu (örn: IRepository<> -> CachedRepository<>) 
                 // .NET DI container'da basitçe yapılamaz çünkü araya giren decorator'ın
                 // generic argümanları çalışma zamanında çözümlemesi gerekir.

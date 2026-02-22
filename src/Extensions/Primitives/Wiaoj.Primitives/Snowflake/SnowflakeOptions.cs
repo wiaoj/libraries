@@ -5,9 +5,9 @@
 public record SnowflakeOptions {
     /// <summary>
     /// Gets or sets the custom epoch (start date) for the ID generation.
-    /// Defaults to January 1, 2024.
+    /// Defaults to January 1, 2026.
     /// </summary>
-    public DateTimeOffset Epoch { get; set; } = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    public DateTimeOffset Epoch { get; set; } = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>
     /// Gets or sets the unique ID of the node (machine/pod) generating the IDs.

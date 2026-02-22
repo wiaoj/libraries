@@ -21,7 +21,7 @@ namespace Wiaoj.Concurrency;
 /// </remarks>
 /// <typeparam name="T">The type of the object that is being asynchronously initialized.</typeparam>
 [DebuggerDisplay("Status = {Status,nq}")]
-public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T> {
+public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T> : IAsyncDisposable {
     private Func<CancellationToken, Task<T>>? _factory;
     private volatile Task<T>? _initializationTask;
     private readonly Lock _lock = new();
@@ -154,6 +154,30 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     }
 
     #endregion
+
+    public async ValueTask DisposeAsync() {
+        // Önce referansı yerel bir değişkene alıyoruz (Thread-safety için)
+        Task<T>? task = _initializationTask;
+
+        if(task is not null) {
+            try {
+                // Değerin oluşturulup tamamlandığından emin oluyoruz
+                T value = await task.ConfigureAwait(false);
+
+                if(value is IAsyncDisposable asyncDisp) {
+                    await asyncDisp.DisposeAsync().ConfigureAwait(false);
+                }
+                else if(value is IDisposable disp) {
+                    disp.Dispose();
+                }
+            }
+            catch(Exception ex) {
+                // Disposal hataları genellikle yutulur veya loglanır, 
+                // ama uygulamanın ana akışını bozmamalıdır.
+                Debug.WriteLine($"AsyncLazy disposal failed: {ex.Message}");
+            }
+        }
+    }
 
     #region Debugger Support
     /// <summary>
