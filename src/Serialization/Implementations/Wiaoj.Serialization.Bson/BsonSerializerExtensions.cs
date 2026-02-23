@@ -151,4 +151,20 @@ public static class BsonSerializerExtensions {
         BsonSerializationArgs serializationArgs) {
         return builder.TryUseBson<KeylessRegistration>(null, null, serializationArgs);
     }
+
+    public static ISerializerConfigurator<TKey> UseBson<TKey>(
+    this ISerializerConfigurator<TKey> configurator,
+    Action<BsonSerializationContext.Builder>? serializationConfigurator = null,
+    Action<BsonDeserializationContext.Builder>? deserializationConfigurator = null,
+    BsonSerializationArgs serializationArgs = default) where TKey : ISerializerKey {
+        configurator.Builder.ConfigureServices(services => services.TryAddSingleton<RecyclableMemoryStreamManager>());
+
+        return configurator.Builder.ReplaceSerializer<TKey>(sp =>
+            new BsonSerializer<TKey>(
+                serializationConfigurator ?? (_ => { }),
+                deserializationConfigurator ?? (_ => { }),
+                serializationArgs,
+                sp.GetRequiredService<RecyclableMemoryStreamManager>()
+            ));
+    }
 }

@@ -16,5 +16,12 @@ public static class WiaojBuilderExtensions {
 
             return builder;
         }
+
+        /// <summary>
+        /// Belirli bir Key için var olan kaydı geçersiz kılmak (override) için bir giriş noktası sağlar.
+        /// </summary>
+        public ISerializerConfigurator<TKey> Override<TKey>() where TKey : ISerializerKey {
+            return new SerializerConfigurator<TKey>(builder);
+        }
     }
 }

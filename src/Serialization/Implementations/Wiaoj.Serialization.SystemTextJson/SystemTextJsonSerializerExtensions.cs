@@ -153,4 +153,15 @@ public static class SystemTextJsonSerializerExtensions {
         configure(options);
         return builder.TryAddSerializer(sp => new SystemTextJsonSerializer<TKey>(options));
     }
+
+    public static ISerializerConfigurator<TKey> UseSystemTextJson<TKey>(this ISerializerConfigurator<TKey> configurator,
+                                                                        Action<JsonSerializerOptions> configure) 
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(configurator);
+        Preca.ThrowIfNull(configure);
+        JsonSerializerOptions options = new();
+        configure(options);
+         
+        return configurator.Builder.ReplaceSerializer<TKey>(sp => new SystemTextJsonSerializer<TKey>(options));
+    }
 }

@@ -83,4 +83,17 @@ public static class YamlDotNetSerializerExtensions {
         Action<DeserializerBuilder>? configureDeserializer = null) {
         return builder.TryUseYamlDotNet<KeylessRegistration>(configureSerializer, configureDeserializer);
     }
+
+    public static ISerializerConfigurator<TKey> UseYamlDotNet<TKey>(
+    this ISerializerConfigurator<TKey> configurator,
+    Action<SerializerBuilder>? configureSerializer = null,
+    Action<DeserializerBuilder>? configureDeserializer = null) where TKey : ISerializerKey {
+        return configurator.Builder.ReplaceSerializer<TKey>(sp => {
+            var sb = new SerializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance);
+            var db = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance);
+            configureSerializer?.Invoke(sb);
+            configureDeserializer?.Invoke(db);
+            return new YamlDotNetSerializer<TKey>(sb.Build(), db.Build());
+        });
+    }
 }

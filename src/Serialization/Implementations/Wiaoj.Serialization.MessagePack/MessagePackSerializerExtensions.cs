@@ -145,4 +145,12 @@ public static class MessagePackSerializerExtensions {
         configure(options);
         return builder.TryAddSerializer(sp => new MessagePackSerializer<TKey>(options));
     }
+
+    public static ISerializerConfigurator<TKey> UseMessagePack<TKey>(
+    this ISerializerConfigurator<TKey> configurator,
+    Action<MessagePackSerializerOptions>? configure = null) where TKey : ISerializerKey {
+        MessagePackSerializerOptions options = DefaultOptions;
+        configure?.Invoke(options);
+        return configurator.Builder.ReplaceSerializer<TKey>(sp => new MessagePackSerializer<TKey>(options));
+    }
 }
