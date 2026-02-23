@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Wiaoj.Benchmarks.BloomFilter/Wiaoj.Benchmarks.BloomFilter.csproj" Id="f3eb7b68-751e-4bdc-acd4-b42d968726d6" />
+    <Project Path="benchmarks/Wiaoj.Benchmarks.DistributedCounter/Wiaoj.Benchmarks.DistributedCounter.csproj" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.Primitives/Wiaoj.Benchmarks.Primitives.csproj" Id="47a9018c-29c4-4747-8ef4-ffc2eacdaca2" />
   </Folder>
   <Folder Name="/samples/">
@@ -11,6 +12,11 @@
   <Folder Name="/src/BloomFilter/">
     <Project Path="src/BloomFilter/Wiaoj.BloomFilter.Abstractions/Wiaoj.BloomFilter.Abstractions.csproj" />
     <Project Path="src/BloomFilter/Wiaoj.BloomFilter/Wiaoj.BloomFilter.csproj" />
+  </Folder>
+  <Folder Name="/src/DistributedCounter/">
+    <Project Path="src/DistributedCounter/Wiaoj.DistributedCounter.Abstractions/Wiaoj.DistributedCounter.Abstractions.csproj" />
+    <Project Path="src/DistributedCounter/Wiaoj.DistributedCounter.Redis/Wiaoj.DistributedCounter.Redis.csproj" />
+    <Project Path="src/DistributedCounter/Wiaoj.DistributedCounter/Wiaoj.DistributedCounter.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/">
     <Project Path="src/Extensions/Wiaoj.Extensions/Wiaoj.Extensions.csproj" />
