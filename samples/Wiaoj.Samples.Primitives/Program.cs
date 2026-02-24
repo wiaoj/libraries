@@ -383,7 +383,7 @@ using System.Diagnostics;
 using Wiaoj.Primitives;
 using Wiaoj.Primitives.Snowflake; // Senin kütüphanen
 
-//var snowflake = new SnowflakeGenerator(new());
+var snowflake = new SnowflakeGenerator(new());
 
 //Console.WriteLine("--- Snowflake Doğruluk Testi ---");
 //for(int i = 0; i < 5; i++) {
@@ -437,3 +437,25 @@ using Wiaoj.Primitives.Snowflake; // Senin kütüphanen
 
 //Console.WriteLine($"Toplam Üretilen: {totalCount:N0}");
 //Console.WriteLine($"Saniye Başına Kapasite: {totalCount / (sw.Elapsed.TotalSeconds):N0} ID/sn");
+
+
+var options = new SnowflakeOptions { NodeId = 1, MaxDriftMs = 100_000 };
+var stripedGenerator = new StripedSnowflakeGenerator(options, 128);
+
+const int count = 1_000_000_000; // 1 MİLYAR
+Console.WriteLine($"--- 1 MİLYAR ID SAF ÜRETİM TESTİ ---");
+Console.WriteLine("Dizi tahsis edilmiyor, sadece CPU hızı ölçülüyor...");
+
+Stopwatch sw = Stopwatch.StartNew();
+
+Parallel.For(0, count, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, i => {
+    // Üretiyoruz ama hiçbir yere kaydetmiyoruz. 
+    // JIT derleyicisi bu satırı silmesin diye sonucunu kullanıyormuş gibi yapabiliriz
+    var id = stripedGenerator.NextId();
+});
+
+sw.Stop();
+
+double totalSeconds = sw.Elapsed.TotalSeconds;
+Console.WriteLine($"\n>> 1 Milyar ID Üretim Süresi: {totalSeconds:F2} saniye");
+Console.WriteLine($">> Saf Teorik Hız: {count / totalSeconds:N0} ID/sn");
