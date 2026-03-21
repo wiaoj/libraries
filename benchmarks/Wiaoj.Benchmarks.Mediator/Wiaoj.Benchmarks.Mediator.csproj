@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\ows\src\LocalizationServer\Wiaoj.Mediator\Wiaoj.Mediator.csproj" />
+    <!--<ProjectReference Include="..\..\..\ows\src\LocalizationServer\Wiaoj.Mediator\Wiaoj.Mediator.csproj" />-->
+    <ProjectReference Include="..\..\src\Mediator\Wiaoj.Mediator\Wiaoj.Mediator.csproj" />
   </ItemGroup>
 </Project>

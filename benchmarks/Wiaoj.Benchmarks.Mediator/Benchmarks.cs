@@ -164,13 +164,13 @@ public struct WiaojUnit { }
 
 // Handlers
 public class PingHandler : Wiaoj.Mediator.IRequestHandler<Ping, string> {
-    public Task<string> HandleAsync(Ping request, CancellationToken cancellationToken) {
+    public Task<string> Handle(Ping request, CancellationToken cancellationToken) {
         return Task.FromResult("Pong");
     }
 }
 
 public class PolyPingHandler : Wiaoj.Mediator.IRequestHandler<PolyBase, string> {
-    public Task<string> HandleAsync(PolyBase request, CancellationToken cancellationToken) {
+    public Task<string> Handle(PolyBase request, CancellationToken cancellationToken) {
         return Task.FromResult("PolyPong");
     }
 }
@@ -183,7 +183,7 @@ public class StreamPingHandler : Wiaoj.Mediator.IStreamRequestHandler<StreamPing
 }
 
 public class ErrorPingHandler : Wiaoj.Mediator.IRequestHandler<ErrorPing, WiaojUnit> {
-    public Task<WiaojUnit> HandleAsync(ErrorPing request, CancellationToken cancellationToken) {
+    public Task<WiaojUnit> Handle(ErrorPing request, CancellationToken cancellationToken) {
         throw new InvalidOperationException("Boom");
     }
 }

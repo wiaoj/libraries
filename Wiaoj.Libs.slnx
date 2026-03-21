@@ -2,6 +2,7 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Wiaoj.Benchmarks.BloomFilter/Wiaoj.Benchmarks.BloomFilter.csproj" Id="f3eb7b68-751e-4bdc-acd4-b42d968726d6" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.DistributedCounter/Wiaoj.Benchmarks.DistributedCounter.csproj" />
+    <Project Path="benchmarks/Wiaoj.Benchmarks.Mediator/Wiaoj.Benchmarks.Mediator.csproj" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.Primitives/Wiaoj.Benchmarks.Primitives.csproj" Id="47a9018c-29c4-4747-8ef4-ffc2eacdaca2" />
   </Folder>
   <Folder Name="/samples/">
@@ -61,7 +62,6 @@
     <Project Path="src/Mediator/Wiaoj.Mediator/Wiaoj.Mediator.csproj" />
   </Folder>
   <Folder Name="/src/Modulith/">
-    <File Path="src/Modulith/README.md" />
     <Project Path="src/Modulith/Wiaoj.Modulith.AspNetCore/Wiaoj.Modulith.AspNetCore.csproj" Id="541c255e-af0d-4b69-92cf-0a283efc24cc" />
     <Project Path="src/Modulith/Wiaoj.Modulith/Wiaoj.Modulith.csproj" Id="515b964c-4d4c-4580-9f74-0de1a6148b95" />
   </Folder>
