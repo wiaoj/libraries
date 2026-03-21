@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+﻿using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -18,7 +19,13 @@ namespace Wiaoj.Primitives;
 /// </remarks>
 [DebuggerDisplay("{ToString(),nq}")]
 [JsonConverter(typeof(Base32StringJsonConverter))]
-public readonly record struct Base32String : IEquatable<Base32String> {
+public readonly record struct Base32String :
+    IEquatable<Base32String>,
+    ISpanParsable<Base32String>,
+    IUtf8SpanParsable<Base32String>,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IFormattable {
 
     // 1. Valid characters for input (Case-insensitive + Padding)
     private static readonly SearchValues<char> InputBase32Chars =
@@ -81,7 +88,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     /// <returns>A new <see cref="Base32String"/> instance.</returns>
     [SkipLocalsInit]
     public static Base32String FromBytes(ReadOnlySpan<byte> bytes) {
-        if (bytes.IsEmpty)
+        if(bytes.IsEmpty)
             return Empty;
 
         int charCount = (bytes.Length * 8 + 4) / 5;
@@ -94,17 +101,17 @@ public readonly record struct Base32String : IEquatable<Base32String> {
             int inputBitLength = data.Length * 8;
             int outputIndex = 0;
 
-            while (bitIndex < inputBitLength) {
+            while(bitIndex < inputBitLength) {
                 int byteIndex = bitIndex / 8;
                 int bitOffset = bitIndex % 8;
                 int b = data[byteIndex];
                 int val;
 
-                if (bitOffset <= 3)
+                if(bitOffset <= 3)
                     val = (b >> (3 - bitOffset)) & 0x1F;
                 else {
                     val = (b << (bitOffset - 3)) & 0x1F;
-                    if (byteIndex + 1 < data.Length)
+                    if(byteIndex + 1 < data.Length)
                         val |= data[byteIndex + 1] >> (11 - bitOffset);
                 }
 
@@ -113,7 +120,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
             }
 
             // Apply padding
-            while (outputIndex < chars.Length)
+            while(outputIndex < chars.Length)
                 chars[outputIndex++] = '=';
         }));
     }
@@ -123,7 +130,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     /// Example: FromUtf8("hello") -> "NBSWY3DP"
     /// </summary>
     public static Base32String FromUtf8(string text) {
-        if (string.IsNullOrEmpty(text))
+        if(string.IsNullOrEmpty(text))
             return Empty;
         return FromBytes(Encoding.UTF8.GetBytes(text));
     }
@@ -132,7 +139,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     /// Encodes a string using the specified encoding into a Base32String.
     /// </summary>
     public static Base32String From(string text, Encoding encoding) {
-        if (string.IsNullOrEmpty(text))
+        if(string.IsNullOrEmpty(text))
             return Empty;
         ArgumentNullException.ThrowIfNull(encoding);
         return FromBytes(encoding.GetBytes(text));
@@ -148,33 +155,33 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     /// <exception cref="FormatException">Thrown if the string contains invalid Base32 characters.</exception>
     public static Base32String Parse(string s) {
         Preca.ThrowIfNull(s);
-        if (TryParse(s.AsSpan(), out Base32String result))
+        if(TryParse(s.AsSpan(), out Base32String result))
             return result;
         throw new FormatException("The input string is not a valid Base32 string.");
     }
 
     /// <inheritdoc cref="IParsable{TSelf}.TryParse(string?, IFormatProvider?, out TSelf)"/>
     public static bool TryParse([NotNullWhen(true)] string? s, out Base32String result) {
-        if (s is null) { result = default; return false; }
+        if(s is null) { result = default; return false; }
         return TryParse(s.AsSpan(), out result);
     }
 
     /// <inheritdoc cref="ISpanParsable{TSelf}.Parse(ReadOnlySpan{char}, IFormatProvider?)"/>
     public static Base32String Parse(ReadOnlySpan<char> s) {
-        if (TryParse(s, out Base32String result))
+        if(TryParse(s, out Base32String result))
             return result;
         throw new FormatException("The input is not a valid Base32 string.");
     }
 
     /// <inheritdoc cref="ISpanParsable{TSelf}.TryParse(ReadOnlySpan{char}, IFormatProvider?, out TSelf)"/>
     public static bool TryParse(ReadOnlySpan<char> s, out Base32String result) {
-        if (s.IsEmpty) {
+        if(s.IsEmpty) {
             result = Empty;
             return true;
         }
 
         // Optimization 1: Use Vectorized SearchValues to instantly reject invalid chars (garbage, symbols)
-        if (s.IndexOfAnyExcept(InputBase32Chars) >= 0) {
+        if(s.IndexOfAnyExcept(InputBase32Chars) >= 0) {
             result = default;
             return false;
         }
@@ -183,11 +190,11 @@ public readonly record struct Base32String : IEquatable<Base32String> {
         // Padding '=' must only appear at the end.
         // We find the index of the first padding char.
         int paddingIndex = s.IndexOf('=');
-        if (paddingIndex >= 0) {
+        if(paddingIndex >= 0) {
             // If padding exists, everything after it MUST also be padding.
             ReadOnlySpan<char> tail = s[paddingIndex..];
-            foreach (char c in tail) {
-                if (c != '=') {
+            foreach(char c in tail) {
+                if(c != '=') {
                     result = default;
                     return false;
                 }
@@ -202,7 +209,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
 
         // Optimization 2: Check if we need to convert to UpperCase.
         // If not, we can avoid allocating a new string.
-        if (s.IndexOfAny(LowerCaseLetters) < 0) {
+        if(s.IndexOfAny(LowerCaseLetters) < 0) {
             result = new Base32String(s.ToString());
             return true;
         }
@@ -214,20 +221,20 @@ public readonly record struct Base32String : IEquatable<Base32String> {
 
     /// <inheritdoc cref="IUtf8SpanParsable{TSelf}.Parse(ReadOnlySpan{byte}, IFormatProvider?)"/>
     public static Base32String Parse(ReadOnlySpan<byte> utf8Text) {
-        if (TryParse(utf8Text, out Base32String result))
+        if(TryParse(utf8Text, out Base32String result))
             return result;
         throw new FormatException("The input is not a valid Base32 string.");
     }
 
     /// <inheritdoc cref="IUtf8SpanParsable{TSelf}.TryParse(ReadOnlySpan{byte}, IFormatProvider?, out TSelf)"/>
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, out Base32String result) {
-        if (utf8Text.IsEmpty) {
+        if(utf8Text.IsEmpty) {
             result = Empty;
             return true;
         }
 
         // Optimization: Validate bytes directly without converting to string first
-        if (utf8Text.IndexOfAnyExcept(InputBase32Bytes) >= 0) {
+        if(utf8Text.IndexOfAnyExcept(InputBase32Bytes) >= 0) {
             result = default;
             return false;
         }
@@ -249,7 +256,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     /// <returns>A byte array containing the decoded binary data.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[] ToBytes() {
-        if (this.Value.Length == 0)
+        if(this.Value.Length == 0)
             return [];
         byte[] bytes = new byte[GetDecodedLength()];
         TryDecode(bytes, out _);
@@ -267,8 +274,8 @@ public readonly record struct Base32String : IEquatable<Base32String> {
 
         // Count padding to determine actual data length
         int padding = 0;
-        for (int i = input.Length - 1; i >= 0; i--) {
-            if (input[i] == '=')
+        for(int i = input.Length - 1; i >= 0; i--) {
+            if(input[i] == '=')
                 padding++;
             else
                 break;
@@ -277,7 +284,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
         int unpaddedLength = input.Length - padding;
         int outputLength = unpaddedLength * 5 / 8;
 
-        if (destination.Length < outputLength) {
+        if(destination.Length < outputLength) {
             bytesWritten = 0;
             return false;
         }
@@ -286,7 +293,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
         int bitCount = 0;
         int outputIndex = 0;
 
-        for (int i = 0; i < unpaddedLength; i++) {
+        for(int i = 0; i < unpaddedLength; i++) {
             char c = input[i];
             int val = DecodeTable[c];
 
@@ -294,7 +301,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
             bitBuffer = (bitBuffer << 5) | (uint)val;
             bitCount += 5;
 
-            if (bitCount >= 8) {
+            if(bitCount >= 8) {
                 destination[outputIndex++] = (byte)((bitBuffer >> (bitCount - 8)) & 0xFF);
                 bitCount -= 8;
             }
@@ -309,16 +316,52 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     /// </summary>
     /// <returns>The number of bytes.</returns>
     public int GetDecodedLength() {
-        if (this.Value.Length == 0)
+        if(this.Value.Length == 0)
             return 0;
         int padding = 0;
-        for (int i = this.Value.Length - 1; i >= 0; i--) {
-            if (this.Value[i] == '=')
+        for(int i = this.Value.Length - 1; i >= 0; i--) {
+            if(this.Value[i] == '=')
                 padding++;
             else
                 break;
         }
         return (this.Value.Length - padding) * 5 / 8;
+    }
+
+    #endregion
+
+    #region Explicit Interface Implementations (ISpanParsable, IUtf8SpanParsable, ISpanFormattable, IUtf8SpanFormattable, IFormattable)
+
+    // IParsable
+    static Base32String IParsable<Base32String>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<Base32String>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Base32String result) => TryParse(s, out result);
+
+    // ISpanParsable
+    static Base32String ISpanParsable<Base32String>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<Base32String>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Base32String result) => TryParse(s, out result);
+
+    // IUtf8SpanParsable
+    static Base32String IUtf8SpanParsable<Base32String>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<Base32String>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Base32String result) => TryParse(utf8Text, out result);
+
+    // IFormattable — culture-invariant, format ignored
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) => this.Value;
+
+    // ISpanFormattable
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        ReadOnlySpan<char> src = this.Value.AsSpan();
+        if(destination.Length < src.Length) { charsWritten = 0; return false; }
+        src.CopyTo(destination);
+        charsWritten = src.Length;
+        return true;
+    }
+
+    // IUtf8SpanFormattable — Base32 is ASCII subset so byte count == char count
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        if(string.IsNullOrEmpty(this._encodedValue)) { bytesWritten = 0; return true; }
+        if(utf8Destination.Length < this._encodedValue.Length) { bytesWritten = 0; return false; }
+        bytesWritten = Encoding.UTF8.GetBytes(this._encodedValue.AsSpan(), utf8Destination);
+        return true;
     }
 
     #endregion
@@ -329,7 +372,7 @@ public readonly record struct Base32String : IEquatable<Base32String> {
     /// Writes the UTF-8 representation of the Base32 string to the provided buffer writer.
     /// </summary>
     public void WriteTo(IBufferWriter<byte> writer) {
-        if (string.IsNullOrEmpty(_encodedValue))
+        if(string.IsNullOrEmpty(_encodedValue))
             return;
 
         ReadOnlySpan<char> chars = _encodedValue.AsSpan();

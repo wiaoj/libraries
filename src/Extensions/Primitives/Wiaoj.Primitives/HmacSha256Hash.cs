@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.JsonConverters;
 
@@ -18,7 +19,7 @@ namespace Wiaoj.Primitives;
 [DebuggerDisplay("{ToString(),nq}")]
 [JsonConverter(typeof(HmacSha256HashJsonConverter))]
 [StructLayout(LayoutKind.Sequential)]
-public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash> {
+public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattable, IUtf8SpanFormattable {
 
     /// <summary>The size of the HMAC-SHA256 hash in bytes (32 bytes).</summary>
     internal const int HashSizeInBytes = 32;
@@ -107,6 +108,32 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash> {
     /// <summary>Returns the hexadecimal string representation of the hash.</summary>
     /// <returns>An uppercase hexadecimal string.</returns>
     public override string ToString() => Convert.ToHexString(AsSpan());
+
+    // IFormattable — "x" = lowercase hex, default = uppercase
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) =>
+        format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+
+    // ISpanFormattable
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        int required = HashSizeInBytes * 2;
+        if(destination.Length < required) { charsWritten = 0; return false; }
+        return format.Equals("x", StringComparison.Ordinal)
+            ? Convert.TryToHexStringLower(AsSpan(), destination, out charsWritten)
+            : Convert.TryToHexString(AsSpan(), destination, out charsWritten);
+    }
+
+    // IUtf8SpanFormattable
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        int required = HashSizeInBytes * 2;
+        if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
+        Span<char> charBuf = stackalloc char[required];
+        bool ok = format.Equals("x", StringComparison.Ordinal)
+            ? Convert.TryToHexStringLower(AsSpan(), charBuf, out _)
+            : Convert.TryToHexString(AsSpan(), charBuf, out _);
+        if(!ok) { bytesWritten = 0; return false; }
+        bytesWritten = Encoding.UTF8.GetBytes(charBuf, utf8Destination);
+        return true;
+    }
 
     #endregion
 

@@ -1,10 +1,11 @@
-﻿using System.Buffers;
+﻿using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.JsonConverters;
 
 namespace Wiaoj.Primitives;
 /// <summary>
@@ -17,7 +18,13 @@ namespace Wiaoj.Primitives;
 /// </remarks>
 [DebuggerDisplay("{ToString(),nq}")]
 [JsonConverter(typeof(HexStringJsonConverter))]
-public readonly record struct HexString {
+public readonly record struct HexString :
+    IEquatable<HexString>,
+    ISpanParsable<HexString>,
+    IUtf8SpanParsable<HexString>,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IFormattable {
 
     // Optimized search sets for validation and case checking.
     private static readonly SearchValues<char> HexChars = SearchValues.Create("0123456789abcdefABCDEF");
@@ -336,6 +343,46 @@ public readonly record struct HexString {
 
     #endregion
 
+    #region Explicit Interface Implementations (ISpanParsable, IUtf8SpanParsable, ISpanFormattable, IUtf8SpanFormattable, IFormattable)
+
+    // IParsable
+    static HexString IParsable<HexString>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<HexString>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out HexString result) => TryParse(s, out result);
+
+    // ISpanParsable
+    static HexString ISpanParsable<HexString>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<HexString>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out HexString result) => TryParse(s, out result);
+
+    // IUtf8SpanParsable
+    static HexString IUtf8SpanParsable<HexString>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<HexString>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out HexString result) => TryParse(utf8Text, out result);
+
+    // IFormattable — format supports "x" (lowercase), anything else = uppercase (default)
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) =>
+        format is "x" or "X2" ? this.ToLower().Value : this.Value;
+
+    // ISpanFormattable
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        // format "x" = lowercase
+        HexString src = format.Equals("x", StringComparison.Ordinal) ? this.ToLower() : this;
+        ReadOnlySpan<char> span = src.Value.AsSpan();
+        if(destination.Length < span.Length) { charsWritten = 0; return false; }
+        span.CopyTo(destination);
+        charsWritten = span.Length;
+        return true;
+    }
+
+    // IUtf8SpanFormattable — Hex is ASCII subset so byte count == char count
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        HexString src = format.Equals("x", StringComparison.Ordinal) ? this.ToLower() : this;
+        if(string.IsNullOrEmpty(src._value)) { bytesWritten = 0; return true; }
+        if(utf8Destination.Length < src._value.Length) { bytesWritten = 0; return false; }
+        bytesWritten = Encoding.UTF8.GetBytes(src._value.AsSpan(), utf8Destination);
+        return true;
+    }
+
+    #endregion
+
     #region Helpers, Formatting, Equality & Operators
 
     /// <inheritdoc/>
@@ -387,45 +434,4 @@ public readonly record struct HexString {
     }
 
     #endregion
-}
-
-/// <summary>
-/// A custom <see cref="JsonConverter"/> for serializing and deserializing the <see cref="HexString"/> struct.
-/// </summary>
-public sealed class HexStringJsonConverter : JsonConverter<HexString> {
-    /// <inheritdoc/>
-    public override HexString Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if(reader.TokenType == JsonTokenType.String) {
-            if(reader.HasValueSequence) {
-                long len = reader.ValueSequence.Length;
-                if(len <= 256) {
-                    Span<byte> stackSpan = stackalloc byte[(int)len];
-                    reader.ValueSequence.CopyTo(stackSpan);
-                    return HexString.Parse(stackSpan);
-                }
-                else {
-                    byte[] rented = ArrayPool<byte>.Shared.Rent((int)len);
-                    try {
-                        Span<byte> span = rented.AsSpan(0, (int)len);
-                        reader.ValueSequence.CopyTo(span);
-                        return HexString.Parse(span);
-                    }
-                    finally {
-                        ArrayPool<byte>.Shared.Return(rented);
-                    }
-                }
-            }
-
-            return HexString.Parse(reader.ValueSpan);
-        }
-
-        // Fallback for non-string or null tokens.
-        string? value = reader.GetString();
-        return value is null ? HexString.Empty : HexString.Parse(value);
-    }
-
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, HexString value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value.Value);
-    }
 }

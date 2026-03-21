@@ -9,7 +9,6 @@ using System.Text.Json.Serialization;
 using Wiaoj.Primitives.Snowflake;
 
 namespace Wiaoj.Primitives.Obfuscation;
-
 public class PublicIdJsonConverter : JsonConverter<PublicId> {
     public override PublicId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if(reader.TokenType == JsonTokenType.String) {

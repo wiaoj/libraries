@@ -282,7 +282,7 @@ public readonly record struct Percentage :
     public override string ToString() => this.Value.ToString("P0", CultureInfo.CurrentCulture);
 
     /// <inheritdoc/>
-    public string ToString(string? format, IFormatProvider? formatProvider) => this.Value.ToString(format, formatProvider);
+    public string ToString(string? format, IFormatProvider? formatProvider) => this.Value.ToString(format, formatProvider); 
 
     /// <inheritdoc/>
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider)

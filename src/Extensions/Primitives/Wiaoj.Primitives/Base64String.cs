@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+﻿using System;
+using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -21,7 +22,10 @@ namespace Wiaoj.Primitives;
 public readonly record struct Base64String :
     IEquatable<Base64String>,
     ISpanParsable<Base64String>,
-    IUtf8SpanParsable<Base64String> {
+    IUtf8SpanParsable<Base64String>,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IFormattable {
 
     private readonly string _encodedValue;
 
@@ -114,8 +118,8 @@ public readonly record struct Base64String :
     /// <param name="s">The string to parse.</param>
     /// <exception cref="ArgumentNullException">Thrown if s is null.</exception>
     /// <exception cref="FormatException">Thrown if the input is not valid Base64.</exception>
-    public static Base64String Parse(string s) { 
-        Preca.ThrowIfNull(s); 
+    public static Base64String Parse(string s) {
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 
@@ -257,6 +261,31 @@ public readonly record struct Base64String :
 
         result = default;
         return false;
+    }
+
+    #endregion
+
+    #region Formatting (ISpanFormattable, IUtf8SpanFormattable, IFormattable)
+
+    // IFormattable — format/provider ignored, Base64 is culture-invariant
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) => this.Value;
+
+    // ISpanFormattable — zero-alloc write to char span
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        ReadOnlySpan<char> src = this.Value.AsSpan();
+        if(destination.Length < src.Length) { charsWritten = 0; return false; }
+        src.CopyTo(destination);
+        charsWritten = src.Length;
+        return true;
+    }
+
+    // IUtf8SpanFormattable — zero-alloc write to UTF-8 byte span
+    // Base64 is ASCII subset so byte count == char count
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        if(string.IsNullOrEmpty(this._encodedValue)) { bytesWritten = 0; return true; }
+        if(utf8Destination.Length < this._encodedValue.Length) { bytesWritten = 0; return false; }
+        bytesWritten = Encoding.UTF8.GetBytes(this._encodedValue.AsSpan(), utf8Destination);
+        return true;
     }
 
     #endregion

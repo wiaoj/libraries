@@ -4,14 +4,15 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Wiaoj.Primitives; 
+namespace Wiaoj.Primitives;
+
 /// <summary>
 /// Represents a 16-byte MD5 hash. 
 /// This struct guarantees the correct size and provides high-performance, 
 /// allocation-free operations for computing and comparing hashes.
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
-public unsafe struct Md5Hash : IEquatable<Md5Hash> {
+public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanFormattable {
     internal const int HashSizeInBytes = 16; // MD5 is 128 bits = 16 bytes
     private fixed byte _bytes[HashSizeInBytes];
 
@@ -220,6 +221,32 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash> {
     /// </summary>
     public override string ToString() {
         return Convert.ToHexString(AsSpan());
+    }
+
+    // IFormattable — "x" = lowercase hex, default = uppercase
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) =>
+        format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+
+    // ISpanFormattable
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        int required = HashSizeInBytes * 2;
+        if(destination.Length < required) { charsWritten = 0; return false; }
+        return format.Equals("x", StringComparison.Ordinal)
+            ? Convert.TryToHexStringLower(AsSpan(), destination, out charsWritten)
+            : Convert.TryToHexString(AsSpan(), destination, out charsWritten);
+    }
+
+    // IUtf8SpanFormattable
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        int required = HashSizeInBytes * 2;
+        if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
+        Span<char> charBuf = stackalloc char[required];
+        bool ok = format.Equals("x", StringComparison.Ordinal)
+            ? Convert.TryToHexStringLower(AsSpan(), charBuf, out _)
+            : Convert.TryToHexString(AsSpan(), charBuf, out _);
+        if(!ok) { bytesWritten = 0; return false; }
+        bytesWritten = Encoding.UTF8.GetBytes(charBuf, utf8Destination);
+        return true;
     }
 
     #endregion

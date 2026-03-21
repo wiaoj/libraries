@@ -24,7 +24,7 @@ public readonly unsafe struct Secret<T> :
     IEquatable<Secret<T>>,
     IEquatable<ReadOnlySpan<T>>
     where T : unmanaged {
-    private readonly T* _ptr;
+    private readonly T?* _ptr;
     private readonly int _length;
     private readonly DisposeState _disposeState;
 
@@ -60,7 +60,7 @@ public readonly unsafe struct Secret<T> :
     public int Length => this._length;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Secret(T* pointer, int length) {
+    private Secret(T?* pointer, int length) {
         this._ptr = pointer;
         this._length = length;
         this._disposeState = new DisposeState();
@@ -77,7 +77,7 @@ public readonly unsafe struct Secret<T> :
     public static Secret<byte> Generate(int byteCount) {
         Preca.ThrowIfNegativeOrZero(byteCount);
 
-        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)byteCount);
+        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)byteCount);
         try {
             RandomNumberGenerator.Fill(new Span<byte>(ptr, byteCount));
             return new Secret<byte>(ptr, byteCount);
@@ -95,7 +95,7 @@ public readonly unsafe struct Secret<T> :
         if(source.IsEmpty) return Empty;
 
         int byteCount = source.Length * sizeof(T);
-        T* ptr = (T*)NativeMemory.AllocZeroed((nuint)byteCount);
+        T?* ptr = (T?*)NativeMemory.AllocZeroed((nuint)byteCount);
 
         try {
             Span<T> destinationSpan = new(ptr, source.Length);
@@ -127,7 +127,7 @@ public readonly unsafe struct Secret<T> :
         int requiredLength = base64.GetDecodedLength();
         if(requiredLength is 0) return Secret<byte>.Empty;
 
-        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)requiredLength);
+        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)requiredLength);
         try {
             if(base64.TryDecode(new Span<byte>(ptr, requiredLength), out int bytesWritten) && bytesWritten == requiredLength) {
                 return new Secret<byte>(ptr, requiredLength);
@@ -148,7 +148,7 @@ public readonly unsafe struct Secret<T> :
         int requiredLength = hex.GetDecodedLength();
         if(requiredLength is 0) return Secret<byte>.Empty;
 
-        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)requiredLength);
+        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)requiredLength);
         try {
             if(hex.TryDecode(new Span<byte>(ptr, requiredLength), out int bytesWritten) && bytesWritten == requiredLength) {
                 return new Secret<byte>(ptr, requiredLength);
@@ -171,7 +171,7 @@ public readonly unsafe struct Secret<T> :
         if(requiredLength is 0)
             return Secret<byte>.Empty;
 
-        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)requiredLength);
+        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)requiredLength);
         try {
             if(base32.TryDecode(new Span<byte>(ptr, requiredLength), out int bytesWritten) && bytesWritten == requiredLength) {
                 return new Secret<byte>(ptr, requiredLength);
@@ -314,7 +314,7 @@ public readonly unsafe struct Secret<T> :
 
         ReadOnlySpan<char> charSpan = new((char*)this._ptr, this._length);
         int byteCount = encoding.GetByteCount(charSpan);
-        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)byteCount);
+        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)byteCount);
         try {
             encoding.GetBytes(charSpan, new Span<byte>(ptr, byteCount));
             return new Secret<byte>(ptr, byteCount);
@@ -504,7 +504,7 @@ public readonly unsafe struct Secret<T> :
         if(ifOne.Length is 0) return Empty;
 
         int byteLength = ifOne.Length * sizeof(T);
-        T* ptr = (T*)NativeMemory.AllocZeroed((nuint)byteLength);
+        T?* ptr = (T?*)NativeMemory.AllocZeroed((nuint)byteLength);
         Secret<T> result = new(ptr, ifOne.Length);
 
         byte* p1 = (byte*)ifOne._ptr;

@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 using Wiaoj.Primitives.JsonConverters;
 using Wiaoj.Primitives.Snowflake;
 
-namespace Wiaoj.Primitives; 
+namespace Wiaoj.Primitives;
 /// <summary>
 /// Represents a Uniform Resource Name (URN) conforming to RFC 8141.
 /// <para>
@@ -21,7 +21,8 @@ namespace Wiaoj.Primitives;
 public readonly record struct Urn :
     IEquatable<Urn>,
     ISpanParsable<Urn>,
-    ISpanFormattable {
+    ISpanFormattable,
+    IUtf8SpanFormattable {
 
     private const string Prefix = "urn";
     private const char Separator = ':';
@@ -67,7 +68,7 @@ public readonly record struct Urn :
     }
 
     #region Factory Methods (Zero-Allocation & Optimized)
-    
+
     /// <summary>
     /// Creates a URN from a namespace and a string identifier.
     /// </summary>
@@ -374,6 +375,14 @@ public readonly record struct Urn :
 
         this._value.CopyTo(destination);
         charsWritten = this._value.Length;
+        return true;
+    }
+
+    // IUtf8SpanFormattable — URN is ASCII-safe, byte count == char count
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        if(string.IsNullOrEmpty(this._value)) { bytesWritten = 0; return true; }
+        if(utf8Destination.Length < this._value.Length) { bytesWritten = 0; return false; }
+        bytesWritten = System.Text.Encoding.UTF8.GetBytes(this._value.AsSpan(), utf8Destination);
         return true;
     }
 

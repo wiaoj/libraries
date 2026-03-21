@@ -14,12 +14,13 @@ namespace Wiaoj.Primitives;
 /// It implements <see cref="ISpanParsable{TSelf}"/> and <see cref="ISpanFormattable"/> for zero-ish GC pressure
 /// and supports the full precedence and comparison rules of the SemVer 2.0.0 standard.
 /// </remarks>
-[DebuggerDisplay("{ToString(),nq}")]   
+[DebuggerDisplay("{ToString(),nq}")]
 public readonly record struct SemVer :
     IComparable<SemVer>,
     IComparable,
     ISpanParsable<SemVer>,
     ISpanFormattable,
+    IUtf8SpanFormattable,
     IComparisonOperators<SemVer, SemVer, bool>,
     IMinMaxValue<SemVer> {
 
@@ -88,15 +89,15 @@ public readonly record struct SemVer :
     /// Initializes a new instance of the <see cref="SemVer"/> struct with all components.
     /// </summary>
     public SemVer(int major, int minor, int patch, string preRelease, string buildMetadata) {
-        if (major < 0) {
+        if(major < 0) {
             throw new ArgumentOutOfRangeException(nameof(major), "Major version cannot be negative.");
         }
 
-        if (minor < 0) {
+        if(minor < 0) {
             throw new ArgumentOutOfRangeException(nameof(minor), "Minor version cannot be negative.");
         }
 
-        if (patch < 0) {
+        if(patch < 0) {
             throw new ArgumentOutOfRangeException(nameof(patch), "Patch version cannot be negative.");
         }
 
@@ -142,7 +143,7 @@ public readonly record struct SemVer :
     /// Parses a span of characters into a <see cref="SemVer"/>.
     /// </summary>
     public static SemVer Parse(ReadOnlySpan<char> s) {
-        if (TryParseInternal(s, out SemVer result)) {
+        if(TryParseInternal(s, out SemVer result)) {
             return result;
         }
         throw new FormatException($"'{s}' is not a valid semantic version string.");
@@ -152,7 +153,7 @@ public readonly record struct SemVer :
     /// Tries to parse a string into a <see cref="SemVer"/>.
     /// </summary>
     public static bool TryParse([NotNullWhen(true)] string? s, out SemVer result) {
-        if (s is null) {
+        if(s is null) {
             result = default;
             return false;
         }
@@ -193,9 +194,9 @@ public readonly record struct SemVer :
 
         int plusIndex = s.IndexOf('+');
         ReadOnlySpan<char> buildMetadata = default;
-        if (plusIndex != -1) {
+        if(plusIndex != -1) {
             buildMetadata = s[(plusIndex + 1)..];
-            if (buildMetadata.IsEmpty) {
+            if(buildMetadata.IsEmpty) {
                 return false;
             }
 
@@ -204,26 +205,26 @@ public readonly record struct SemVer :
 
         int hyphenIndex = s.IndexOf('-');
         ReadOnlySpan<char> preRelease = default;
-        if (hyphenIndex != -1) {
+        if(hyphenIndex != -1) {
             preRelease = s[(hyphenIndex + 1)..];
-            if (preRelease.IsEmpty) {
+            if(preRelease.IsEmpty) {
                 return false;
             }
 
             s = s[..hyphenIndex];
         }
 
-        if (!TryParseInt(ref s, '.', out int major) ||
+        if(!TryParseInt(ref s, '.', out int major) ||
             !TryParseInt(ref s, '.', out int minor) ||
             !TryParseInt(ref s, char.MinValue, out int patch)) {
             return false;
         }
 
-        if (!s.IsEmpty) {
+        if(!s.IsEmpty) {
             return false;
         }
 
-        if (!AreIdentifiersValid(preRelease) || !AreIdentifiersValid(buildMetadata)) {
+        if(!AreIdentifiersValid(preRelease) || !AreIdentifiersValid(buildMetadata)) {
             return false;
         }
 
@@ -233,14 +234,14 @@ public readonly record struct SemVer :
         static bool TryParseInt(ref ReadOnlySpan<char> span, char separator, out int value) {
             value = 0;
             int separatorIndex = separator == char.MinValue ? span.Length : span.IndexOf(separator);
-            if (separatorIndex == -1) {
+            if(separatorIndex == -1) {
                 return false;
             }
 
             ReadOnlySpan<char> part = span[..separatorIndex];
             span = separator == char.MinValue ? [] : span[(separatorIndex + 1)..];
 
-            if (part.Length > 1 && part[0] == '0') {
+            if(part.Length > 1 && part[0] == '0') {
                 return false;
             }
 
@@ -248,13 +249,13 @@ public readonly record struct SemVer :
         }
 
         static bool AreIdentifiersValid(ReadOnlySpan<char> identifiers) {
-            if (identifiers.IsEmpty) {
+            if(identifiers.IsEmpty) {
                 return true;
             }
 
             SpanSplitEnumerator enumerator = new(identifiers, '.');
-            foreach (ReadOnlySpan<char> identifier in enumerator) {
-                if (identifier.IsEmpty) {
+            foreach(ReadOnlySpan<char> identifier in enumerator) {
+                if(identifier.IsEmpty) {
                     return false;
                 }
             }
@@ -269,29 +270,29 @@ public readonly record struct SemVer :
     /// <inheritdoc/>
     public int CompareTo(SemVer other) {
         int comparison = this.Major.CompareTo(other.Major);
-        if (comparison != 0) {
+        if(comparison != 0) {
             return comparison;
         }
 
         comparison = this.Minor.CompareTo(other.Minor);
-        if (comparison != 0) {
+        if(comparison != 0) {
             return comparison;
         }
 
         comparison = this.Patch.CompareTo(other.Patch);
-        if (comparison != 0) {
+        if(comparison != 0) {
             return comparison;
         }
 
-        if (this.IsPreRelease && !other.IsPreRelease) {
+        if(this.IsPreRelease && !other.IsPreRelease) {
             return -1;
         }
 
-        if (!this.IsPreRelease && other.IsPreRelease) {
+        if(!this.IsPreRelease && other.IsPreRelease) {
             return 1;
         }
 
-        if (!this.IsPreRelease && !other.IsPreRelease) {
+        if(!this.IsPreRelease && !other.IsPreRelease) {
             return 0;
         }
 
@@ -301,19 +302,19 @@ public readonly record struct SemVer :
         SpanSplitEnumerator thisEnumerator = new(thisPreReleaseSpan, '.');
         SpanSplitEnumerator otherEnumerator = new(otherPreReleaseSpan, '.');
 
-        while (true) {
+        while(true) {
             bool thisHasNext = thisEnumerator.MoveNext();
             bool otherHasNext = otherEnumerator.MoveNext();
 
-            if (!thisHasNext && !otherHasNext) {
+            if(!thisHasNext && !otherHasNext) {
                 return 0; // Both finished, equal.
             }
 
-            if (!thisHasNext) {
+            if(!thisHasNext) {
                 return -1; // This one is shorter, so it has lower precedence.
             }
 
-            if (!otherHasNext) {
+            if(!otherHasNext) {
                 return 1;  // The other one is shorter, so this one has higher precedence.
             }
 
@@ -323,23 +324,23 @@ public readonly record struct SemVer :
             bool thisIsNum = int.TryParse(thisId, NumberStyles.None, CultureInfo.InvariantCulture, out int thisNum);
             bool otherIsNum = int.TryParse(otherId, NumberStyles.None, CultureInfo.InvariantCulture, out int otherNum);
 
-            if (thisIsNum && otherIsNum) {
+            if(thisIsNum && otherIsNum) {
                 comparison = thisNum.CompareTo(otherNum);
-                if (comparison != 0) {
+                if(comparison != 0) {
                     return comparison;
                 }
             }
             else {
-                if (thisIsNum) {
+                if(thisIsNum) {
                     return -1;
                 }
 
-                if (otherIsNum) {
+                if(otherIsNum) {
                     return 1;
                 }
 
                 comparison = thisId.CompareTo(otherId, StringComparison.Ordinal);
-                if (comparison != 0) {
+                if(comparison != 0) {
                     return comparison;
                 }
             }
@@ -348,7 +349,7 @@ public readonly record struct SemVer :
 
     /// <inheritdoc/>
     public int CompareTo(object? obj) {
-        if (obj is SemVer other) {
+        if(obj is SemVer other) {
             return CompareTo(other);
         }
 
@@ -390,7 +391,7 @@ public readonly record struct SemVer :
         // Mantığı buraya taşıdık.
         // Stackalloc ile allocation yapmadan küçük buffer deniyoruz.
         Span<char> buffer = stackalloc char[128];
-        if (TryFormatInternal(buffer, out int charsWritten, format.AsSpan())) {
+        if(TryFormatInternal(buffer, out int charsWritten, format.AsSpan())) {
             return buffer[..charsWritten].ToString();
         }
 
@@ -413,6 +414,24 @@ public readonly record struct SemVer :
         return TryFormatInternal(destination, out charsWritten, format);
     }
 
+    // IUtf8SpanFormattable — write formatted semver as UTF-8 bytes
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        int required = GetRequiredLength(format.IsEmpty ? "G".AsSpan() : format);
+        if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
+        Span<char> charBuf = stackalloc char[required <= 128 ? required : 128];
+        // fallback for large versions
+        char[]? rented = required > 128 ? System.Buffers.ArrayPool<char>.Shared.Rent(required) : null;
+        Span<char> buf = rented is not null ? rented.AsSpan(0, required) : charBuf;
+        try {
+            if(!TryFormatInternal(buf, out int charsWritten, format)) { bytesWritten = 0; return false; }
+            bytesWritten = System.Text.Encoding.UTF8.GetBytes(buf[..charsWritten], utf8Destination);
+            return true;
+        }
+        finally {
+            if(rented is not null) System.Buffers.ArrayPool<char>.Shared.Return(rented);
+        }
+    }
+
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
         return TryFormatInternal(destination, out charsWritten, format);
     }
@@ -420,17 +439,17 @@ public readonly record struct SemVer :
     // --- Internal Formatting Logic ---
 
     private bool TryFormatInternal(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
-        if (format.IsEmpty) {
+        if(format.IsEmpty) {
             format = "G";
         }
 
-        if (format.Length != 1) {
+        if(format.Length != 1) {
             charsWritten = 0;
             return false;
         }
 
         int requiredLength = GetRequiredLength(format);
-        if (destination.Length < requiredLength) {
+        if(destination.Length < requiredLength) {
             charsWritten = 0;
             return false;
         }
@@ -438,29 +457,29 @@ public readonly record struct SemVer :
         charsWritten = 0;
         char specifier = format[0];
 
-        if (specifier is 'G' or 'f' or 's' or 'm' or 'M') {
+        if(specifier is 'G' or 'f' or 's' or 'm' or 'M') {
             this.Major.TryFormat(destination[charsWritten..], out int written);
             charsWritten += written;
         }
-        if (specifier is 'G' or 'f' or 's' or 'm') {
+        if(specifier is 'G' or 'f' or 's' or 'm') {
             destination[charsWritten++] = '.';
             this.Minor.TryFormat(destination[charsWritten..], out int written);
             charsWritten += written;
         }
-        if (specifier is 'G' or 'f' or 's') {
+        if(specifier is 'G' or 'f' or 's') {
             destination[charsWritten++] = '.';
             this.Patch.TryFormat(destination[charsWritten..], out int written);
             charsWritten += written;
         }
-        if (specifier is 'G' or 'f') {
-            if (this.IsPreRelease) {
+        if(specifier is 'G' or 'f') {
+            if(this.IsPreRelease) {
                 destination[charsWritten++] = '-';
                 this.PreRelease.AsSpan().CopyTo(destination[charsWritten..]);
                 charsWritten += this.PreRelease.Length;
             }
         }
-        if (specifier is 'G') {
-            if (!string.IsNullOrEmpty(this.BuildMetadata)) {
+        if(specifier is 'G') {
+            if(!string.IsNullOrEmpty(this.BuildMetadata)) {
                 destination[charsWritten++] = '+';
                 this.BuildMetadata.AsSpan().CopyTo(destination[charsWritten..]);
                 charsWritten += this.BuildMetadata.Length;
@@ -474,25 +493,25 @@ public readonly record struct SemVer :
         char specifier = format.IsEmpty ? 'G' : format[0];
 
         int length = 0;
-        if (specifier is 'G' or 'f' or 's' or 'm' or 'M') {
+        if(specifier is 'G' or 'f' or 's' or 'm' or 'M') {
             length += GetDigitCount(this.Major);
         }
 
-        if (specifier is 'G' or 'f' or 's' or 'm') {
+        if(specifier is 'G' or 'f' or 's' or 'm') {
             length += 1 + GetDigitCount(this.Minor);
         }
 
-        if (specifier is 'G' or 'f' or 's') {
+        if(specifier is 'G' or 'f' or 's') {
             length += 1 + GetDigitCount(this.Patch);
         }
 
-        if (specifier is 'G' or 'f') {
-            if (this.IsPreRelease) {
+        if(specifier is 'G' or 'f') {
+            if(this.IsPreRelease) {
                 length += 1 + this.PreRelease.Length;
             }
         }
-        if (specifier is 'G') {
-            if (!string.IsNullOrEmpty(this.BuildMetadata)) {
+        if(specifier is 'G') {
+            if(!string.IsNullOrEmpty(this.BuildMetadata)) {
                 length += 1 + this.BuildMetadata.Length;
             }
         }
@@ -500,7 +519,7 @@ public readonly record struct SemVer :
         return length;
 
         static int GetDigitCount(int n) {
-            if (n < 0) {
+            if(n < 0) {
                 return n.ToString().Length;
             }
 
@@ -535,12 +554,12 @@ public readonly record struct SemVer :
         public ReadOnlySpan<char> Current { get; private set; }
 
         public bool MoveNext() {
-            if (this._span.IsEmpty) {
+            if(this._span.IsEmpty) {
                 return false;
             }
 
             int separatorIndex = this._span.IndexOf(this._separator);
-            if (separatorIndex == -1) {
+            if(separatorIndex == -1) {
                 this.Current = this._span;
                 this._span = [];
             }

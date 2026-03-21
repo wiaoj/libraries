@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
-using System.Text;         
+using System.Text;
 
 namespace Wiaoj.Primitives;
 /// <summary>
@@ -10,7 +10,7 @@ namespace Wiaoj.Primitives;
 /// and provides high-performance, allocation-free operations for computing and comparing hashes.
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
-public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
+public unsafe struct Sha256Hash : IEquatable<Sha256Hash>, ISpanFormattable, IUtf8SpanFormattable {
     internal const int HashSizeInBytes = 32;
     private fixed byte _bytes[HashSizeInBytes];
 
@@ -19,7 +19,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
             source.Length != HashSizeInBytes,
             () => new ArgumentException("Source span must be exactly 32 bytes long.", nameof(source)));
 
-        fixed (byte* p = this._bytes) {
+        fixed(byte* p = this._bytes) {
             source.CopyTo(new Span<byte>(p, HashSizeInBytes));
         }
     }
@@ -36,7 +36,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// This is the primary public entry point for creating a hash from existing bytes.
     /// </summary>
     /// <exception cref="ArgumentException">Thrown if source is not exactly 32 bytes long.</exception>
-    public static Sha256Hash FromBytes(ReadOnlySpan<byte> source) { 
+    public static Sha256Hash FromBytes(ReadOnlySpan<byte> source) {
         return new Sha256Hash(source);
     }
 
@@ -45,12 +45,12 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// </summary>
     /// <exception cref="FormatException">The input is not a valid 64-character hexadecimal string.</exception>
     public static Sha256Hash From(HexString hex) {
-        if (hex.GetDecodedLength() != HashSizeInBytes) {
+        if(hex.GetDecodedLength() != HashSizeInBytes) {
             throw new FormatException("Source HexString must represent exactly 32 bytes (64 hex characters).");
         }
 
         Span<byte> buffer = stackalloc byte[HashSizeInBytes];
-        hex.TryDecode(buffer, out _); 
+        hex.TryDecode(buffer, out _);
         return new Sha256Hash(buffer);
     }
 
@@ -58,12 +58,12 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Creates a Sha256Hash instance from a Base64String.
     /// </summary>
     public static Sha256Hash From(Base64String base64) {
-        if (base64.GetDecodedLength() != HashSizeInBytes) {
+        if(base64.GetDecodedLength() != HashSizeInBytes) {
             throw new FormatException("Source Base64String must represent exactly 32 bytes.");
         }
 
         Span<byte> buffer = stackalloc byte[HashSizeInBytes];
-        if (!base64.TryDecode(buffer, out int written) || written != HashSizeInBytes) {
+        if(!base64.TryDecode(buffer, out int written) || written != HashSizeInBytes) {
             throw new FormatException("Failed to decode Base64 into Hash.");
         }
         return new Sha256Hash(buffer);
@@ -73,7 +73,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Tries to create a Sha256Hash instance from a hexadecimal string representation.
     /// </summary>
     public static bool TryParse(HexString hex, out Sha256Hash result) {
-        if (hex.GetDecodedLength() != HashSizeInBytes) {
+        if(hex.GetDecodedLength() != HashSizeInBytes) {
             result = default;
             return false;
         }
@@ -91,7 +91,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Since the secret is already binary, no encoding is needed.
     /// </summary>
     public static Sha256Hash Compute(Secret<byte> secret) {
-        Preca.ThrowIfNull(secret);                      
+        Preca.ThrowIfNull(secret);
         return secret.Expose(span => Compute(span));
     }
 
@@ -150,7 +150,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// <summary>
     /// Computes the SHA256 hash of a string using UTF-8 encoding by default.
     /// </summary>
-    public static Sha256Hash Compute(string text) { 
+    public static Sha256Hash Compute(string text) {
         return Compute(text, Encoding.UTF8);
     }
 
@@ -162,7 +162,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Provides safe, scoped access to the hash bytes as a <see cref="ReadOnlySpan{Byte}"/>.
     /// </summary>
     public void Expose(Action<ReadOnlySpan<byte>> action) {
-        fixed (byte* p = this._bytes) {
+        fixed(byte* p = this._bytes) {
             action(new ReadOnlySpan<byte>(p, HashSizeInBytes));
         }
     }
@@ -171,7 +171,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Provides safe, scoped access to the hash bytes and returns a result.
     /// </summary>
     public TResult Expose<TResult>(Func<ReadOnlySpan<byte>, TResult> func) {
-        fixed (byte* p = this._bytes) {
+        fixed(byte* p = this._bytes) {
             return func(new ReadOnlySpan<byte>(p, HashSizeInBytes));
         }
     }
@@ -180,7 +180,7 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// Copies the hash bytes to a destination span.
     /// </summary>
     public void CopyTo(Span<byte> destination) {
-        if (destination.Length < HashSizeInBytes) {
+        if(destination.Length < HashSizeInBytes) {
             throw new ArgumentException("Destination span must be at least 32 bytes long.", nameof(destination));
         }
         AsSpan().CopyTo(destination);
@@ -208,13 +208,42 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash> {
     /// <returns>A <see cref="Base64String"/> representation of the SHA256 hash.</returns>
     public Base64String ToBase64String() {
         return Base64String.FromBytes(AsSpan());
-    } 
+    }
 
     /// <summary>
     /// Returns the hash as a hexadecimal string.
     /// </summary>
     public override string ToString() {
         return Convert.ToHexString(AsSpan());
+    }
+
+    // IFormattable — format "x" = lowercase hex, default = uppercase
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) =>
+        format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+
+    // ISpanFormattable — zero-alloc hex write
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        int required = HashSizeInBytes * 2;
+        if(destination.Length < required) { charsWritten = 0; return false; }
+        bool lower = format.Equals("x", StringComparison.Ordinal);
+        bool ok = lower
+            ? Convert.TryToHexStringLower(AsSpan(), destination, out charsWritten)
+            : Convert.TryToHexString(AsSpan(), destination, out charsWritten);
+        return ok;
+    }
+
+    // IUtf8SpanFormattable — write hex as UTF-8 bytes (ASCII)
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        int required = HashSizeInBytes * 2;
+        if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
+        Span<char> charBuf = stackalloc char[required];
+        bool lower = format.Equals("x", StringComparison.Ordinal);
+        bool ok = lower
+            ? Convert.TryToHexStringLower(AsSpan(), charBuf, out _)
+            : Convert.TryToHexString(AsSpan(), charBuf, out _);
+        if(!ok) { bytesWritten = 0; return false; }
+        bytesWritten = Encoding.UTF8.GetBytes(charBuf, utf8Destination);
+        return true;
     }
 
     #endregion
