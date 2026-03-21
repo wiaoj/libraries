@@ -6,6 +6,7 @@
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Wiaoj.Samples.DistributedCounter/Wiaoj.Samples.DistributedCounter.csproj" />
+    <Project Path="samples/Wiaoj.Samples.Mediator/Wiaoj.Samples.Mediator.csproj" Id="6c3fda77-a127-4686-b656-9f2a21a27964" />
     <Project Path="samples/Wiaoj.Samples.Primitives/Wiaoj.Samples.Primitives.csproj" Id="7f7ef88f-3ab9-4333-a7cf-f493f9c04b58" />
   </Folder>
   <Folder Name="/src/" />
@@ -17,6 +18,9 @@
     <Project Path="src/DistributedCounter/Wiaoj.DistributedCounter.Abstractions/Wiaoj.DistributedCounter.Abstractions.csproj" />
     <Project Path="src/DistributedCounter/Wiaoj.DistributedCounter.Redis/Wiaoj.DistributedCounter.Redis.csproj" />
     <Project Path="src/DistributedCounter/Wiaoj.DistributedCounter/Wiaoj.DistributedCounter.csproj" />
+  </Folder>
+  <Folder Name="/src/Endpoints/">
+    <Project Path="src/Endpoints/Wiaoj.Endpoints/Wiaoj.Endpoints.csproj" Id="05c2f73d-a18d-4609-90ab-4d239701f666" />
   </Folder>
   <Folder Name="/src/Extensions/">
     <Project Path="src/Extensions/Wiaoj.Extensions/Wiaoj.Extensions.csproj" />
@@ -53,6 +57,14 @@
   <Folder Name="/src/Extensions/Wiaoj.Threading/">
     <Project Path="src/Extensions/Wiaoj.Threading/Wiaoj.Concurrency.csproj" />
   </Folder>
+  <Folder Name="/src/Mediator/">
+    <Project Path="src/Mediator/Wiaoj.Mediator/Wiaoj.Mediator.csproj" />
+  </Folder>
+  <Folder Name="/src/Modulith/">
+    <File Path="src/Modulith/README.md" />
+    <Project Path="src/Modulith/Wiaoj.Modulith.AspNetCore/Wiaoj.Modulith.AspNetCore.csproj" Id="541c255e-af0d-4b69-92cf-0a283efc24cc" />
+    <Project Path="src/Modulith/Wiaoj.Modulith/Wiaoj.Modulith.csproj" Id="515b964c-4d4c-4580-9f74-0de1a6148b95" />
+  </Folder>
   <Folder Name="/src/ObjectPool/">
     <File Path="src/ObjectPool/README.md" />
     <Project Path="src/ObjectPool/Wiaoj.ObjectPool.Testing/Wiaoj.ObjectPool.Testing.csproj" Id="b0577e50-04b2-427b-bb9d-be52fe1aefbf" />
@@ -83,8 +95,11 @@
   <Folder Name="/tests/">
     <Project Path="tests/Wiaoj.BloomFilter.Tests.Unit/Wiaoj.BloomFilter.Tests.Unit.csproj" Id="7e199388-2442-4420-844b-3cc58288d009" />
     <Project Path="tests/Wiaoj.Concurrency.Tests.Unit/Wiaoj.Concurrency.Tests.Unit.csproj" Id="c5b97f1f-96ca-4a9c-afba-5df78c91a236" />
+    <Project Path="tests/Wiaoj.Endpoints.Tests.Unit/Wiaoj.Endpoints.Tests.Unit.csproj" Id="bd191de3-32fc-470d-be1c-b855f0730c68" />
     <Project Path="tests/Wiaoj.Extensions.DependencyInjection.Tests.Unit/Wiaoj.Extensions.DependencyInjection.Tests.Unit.csproj" Id="dba407f5-a6c7-4f26-8bf6-f330e9e0a649" />
+    <Project Path="tests/Wiaoj.Modulith.Tests.Unit/Wiaoj.Modulith.Tests.Unit.csproj" Id="9f4c2996-1708-4765-950a-b19ff6a0f078" />
     <Project Path="tests/Wiaoj.Primitives.Tests.Unit/Wiaoj.Primitives.Tests.Unit.csproj" Id="cef5fdb1-e581-46b4-964c-d5f75f7db1ff" />
+    <Project Path="tests/Wiaoj.Results.Tests.Unit/Wiaoj.Results.Tests.Unit.csproj" Id="57cc275f-70ef-4c5e-a3bc-d4c305628b04" />
   </Folder>
   <Folder Name="/tests/Ddd/">
     <Project Path="tests/Ddd/Wiaoj.Ddd.Tests.Unit/Wiaoj.Ddd.Tests.Unit.csproj" Id="ac985ecb-c629-44c3-b5a7-3ee827cbffe6" />

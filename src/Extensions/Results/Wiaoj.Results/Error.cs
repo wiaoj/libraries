@@ -1,27 +1,19 @@
-﻿namespace Wiaoj.Results;    
+﻿namespace Wiaoj.Results;
 /// <summary>
-/// Represents a rich, structured error object indicating the reason for an operation's failure.
-/// This structure is immutable and features value-based equality.
+/// Represents a rich, structured, immutable error.
 /// </summary>
 public readonly record struct Error {
-    /// <summary>
-    /// Gets the unique machine-readable code for the error (e.g., "User.NotFound").
-    /// </summary>
+
+    /// <summary>Machine-readable code, e.g. <c>"User.NotFound"</c>.</summary>
     public string Code { get; }
 
-    /// <summary>
-    /// Gets the human-readable description of the error.
-    /// </summary>
+    /// <summary>Human-readable description.</summary>
     public string Description { get; }
 
-    /// <summary>
-    /// Gets the <see cref="ErrorType"/> that categorizes the error (e.g., Validation, NotFound).
-    /// </summary>
+    /// <summary>Category of the error — see <see cref="ErrorType"/> for built-ins or define custom types.</summary>
     public ErrorType Type { get; }
 
-    /// <summary>
-    /// Gets the optional dictionary containing additional contextual data about the error.
-    /// </summary>
+    /// <summary>Optional contextual metadata. <c>null</c> when no metadata has been attached.</summary>
     public IReadOnlyDictionary<string, object>? Metadata { get; }
 
     private Error(string code, string description, ErrorType type, IReadOnlyDictionary<string, object>? metadata) {
@@ -31,91 +23,236 @@ public readonly record struct Error {
         this.Metadata = metadata;
     }
 
-    /// <summary>
-    /// Creates a general failure error.
-    /// </summary>
-    /// <param name="code">The error code (default: "General.Failure").</param>
-    /// <param name="description">The error description (default: "A failure has occurred.").</param>
-    public static Error Failure(string code = "General.Failure", string description = "A failure has occurred.") {
+    // ── Built-in factory methods ──────────────────────────────────────────────
+
+    /// <summary>A general failure error.</summary>
+    public static Error Failure(
+        string code = "General.Failure",
+        string description = "A failure has occurred.") {
         return new(code, description, ErrorType.Failure, null);
     }
 
-    /// <summary>
-    /// Creates an unexpected error. Use this for unhandled exceptions or system faults.
-    /// </summary>
-    /// <param name="code">The error code (default: "General.Unexpected").</param>
-    /// <param name="description">The error description (default: "An unexpected error occurred.").</param>
-    public static Error Unexpected(string code = "General.Unexpected", string description = "An unexpected error occurred.") {
+    /// <summary>An unexpected system error. Use for unhandled exceptions or system faults.</summary>
+    public static Error Unexpected(
+        string code = "General.Unexpected",
+        string description = "An unexpected error occurred.") {
         return new(code, description, ErrorType.Unexpected, null);
     }
 
-    /// <summary>
-    /// Creates a validation error (e.g., invalid input format).
-    /// </summary>
-    /// <param name="code">The error code.</param>
-    /// <param name="description">The error description.</param>
+    /// <summary>A validation error, e.g., invalid input format.</summary>
     public static Error Validation(string code, string description) {
         return new(code, description, ErrorType.Validation, null);
     }
 
-    /// <summary>
-    /// Creates a Not Found error.
-    /// </summary>
-    /// <param name="code">The error code (default: "Resource.NotFound").</param>
-    /// <param name="description">The error description (default: "Resource not found.").</param>
-    public static Error NotFound(string code = "Resource.NotFound", string description = "Resource not found.") {
+    /// <summary>A not-found error.</summary>
+    public static Error NotFound(
+        string code = "Resource.NotFound",
+        string description = "Resource not found.") {
         return new(code, description, ErrorType.NotFound, null);
     }
 
-    /// <summary>
-    /// Creates a Not Found error for a specific resource and identifier.
-    /// </summary>
-    /// <param name="resourceName">The name of the resource (e.g., "User").</param>
-    /// <param name="id">The identifier of the missing resource.</param>
+    /// <summary>A not-found error with a specific resource name and identifier.</summary>
     public static Error NotFound(string resourceName, object id) {
-        return new($"{resourceName}.NotFound", $"{resourceName} with id '{id}' was not found.", ErrorType.NotFound, null);
+        return new($"{resourceName}.NotFound",
+                                                                                $"{resourceName} with id '{id}' was not found.",
+                                                                                ErrorType.NotFound,
+                                                                                null);
     }
 
-    /// <summary>
-    /// Creates a Conflict error (e.g., duplicate unique key).
-    /// </summary>
-    /// <param name="code">The error code (default: "Resource.Conflict").</param>
-    /// <param name="description">The error description (default: "A conflict has occurred.").</param>
-    public static Error Conflict(string code = "Resource.Conflict", string description = "A conflict has occurred.") {
+    /// <summary>A conflict error, e.g., duplicate unique key (HTTP 409).</summary>
+    public static Error Conflict(
+        string code = "Resource.Conflict",
+        string description = "A conflict has occurred.") {
         return new(code, description, ErrorType.Conflict, null);
     }
 
-    /// <summary>
-    /// Creates an Unauthorized error (e.g., user is not logged in).
-    /// </summary>
-    /// <param name="code">The error code (default: "Auth.Unauthorized").</param>
-    /// <param name="description">The error description (default: "Unauthorized access.").</param>
-    public static Error Unauthorized(string code = "Auth.Unauthorized", string description = "Unauthorized access.") {
+    /// <summary>An unauthorized error — authentication required (HTTP 401).</summary>
+    public static Error Unauthorized(
+        string code = "Auth.Unauthorized",
+        string description = "Unauthorized access.") {
         return new(code, description, ErrorType.Unauthorized, null);
     }
 
-    /// <summary>
-    /// Creates a Forbidden error (e.g., user is logged in but lacks permissions).
-    /// </summary>
-    /// <param name="code">The error code (default: "Auth.Forbidden").</param>
-    /// <param name="description">The error description (default: "Access forbidden.").</param>
-    public static Error Forbidden(string code = "Auth.Forbidden", string description = "Access forbidden.") {
+    /// <summary>A forbidden error — authenticated but lacks permission (HTTP 403).</summary>
+    public static Error Forbidden(
+        string code = "Auth.Forbidden",
+        string description = "Access forbidden.") {
         return new(code, description, ErrorType.Forbidden, null);
     }
 
     /// <summary>
-    /// Creates a new copy of this error with additional metadata attached.
+    /// Creates a rate limit exceeded error (HTTP 429).
+    /// Use when a caller has sent too many requests in a given time window.
     /// </summary>
-    /// <param name="key">The metadata key.</param>
-    /// <param name="value">The metadata value.</param>
-    /// <returns>A new <see cref="Error"/> instance with the added metadata.</returns>
+    public static Error RateLimitExceeded(
+        string code = "RateLimit.Exceeded",
+        string description = "Too many requests. Please try again later.") {
+        return new(code, description, ErrorType.RateLimit, null);
+    }
+
+    /// <summary>
+    /// Creates a timeout error (HTTP 408 / 504).
+    /// Use when an operation did not complete within the allowed time.
+    /// </summary>
+    public static Error Timeout(
+        string code = "Request.Timeout",
+        string description = "The operation timed out.") {
+        return new(code, description, ErrorType.Timeout, null);
+    }
+
+    /// <summary>
+    /// Creates a service unavailable error (HTTP 503).
+    /// Use when a downstream dependency is temporarily unreachable.
+    /// </summary>
+    public static Error ServiceUnavailable(
+        string code = "Service.Unavailable",
+        string description = "The service is temporarily unavailable.") {
+        return new(code, description, ErrorType.Unavailable, null);
+    }
+
+    /// <summary>
+    /// Creates a gone error (HTTP 410).
+    /// Use when a resource has been permanently removed.
+    /// Unlike <see cref="NotFound(string, string)"/>, Gone signals the resource
+    /// will never return.
+    /// </summary>
+    public static Error Gone(
+        string code = "Resource.Gone",
+        string description = "The resource has been permanently removed.") {
+        return new(code, description, ErrorType.Gone, null);
+    }
+
+    /// <summary>
+    /// Creates an unprocessable entity error (HTTP 422).
+    /// Use for domain rule violations where the request is syntactically valid
+    /// but semantically incorrect.
+    /// Unlike <see cref="Validation(string, string)"/> which covers format/schema
+    /// errors, this covers business rule violations.
+    /// </summary>
+    public static Error UnprocessableEntity(string code, string description) {
+        return new(code, description, ErrorType.UnprocessableEntity, null);
+    }
+
+    /// <summary>
+    /// Converts an <see cref="Exception"/> to an <see cref="Error"/>.
+    /// <para>
+    /// This is the default exception handler used by
+    /// <see cref="Result.Try{T}(Func{T}, Func{Exception, Error}?)"/> and
+    /// <see cref="Result.TryAsync{T}(Func{CancellationToken, Task{T}}, Func{Exception, Error}?, CancellationToken)"/>.
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description><see cref="TimeoutException"/> → <see cref="ErrorType.Timeout"/></description></item>
+    ///   <item><description><see cref="UnauthorizedAccessException"/> → <see cref="ErrorType.Unauthorized"/></description></item>
+    ///   <item><description><see cref="ArgumentException"/> → <see cref="ErrorType.Validation"/></description></item>
+    ///   <item><description>All others → <see cref="ErrorType.Unexpected"/></description></item>
+    /// </list>
+    /// </summary>
+    public static Error FromException(Exception exception) {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        return exception switch {
+            TimeoutException => Timeout("Exception.Timeout", exception.Message),
+            UnauthorizedAccessException => Unauthorized("Exception.Unauthorized", exception.Message),
+            ArgumentException => Validation("Exception.Argument", exception.Message),
+            _ => Unexpected($"Exception.{exception.GetType().Name}", exception.Message)
+        };
+    }
+
+    /// <summary>
+    /// Converts an <see cref="Exception"/> to an <see cref="Error"/> and optionally
+    /// attaches the exception type name as metadata under the key
+    /// <c>"ExceptionType"</c>. Use when you want to preserve the exception type
+    /// for diagnostics without exposing the full stack trace.
+    /// </summary>
+    public static Error FromException(Exception exception, bool includeType) {
+        Error error = FromException(exception);
+        return includeType
+            ? error.WithMetadata("ExceptionType",
+                exception.GetType().FullName ?? exception.GetType().Name)
+            : error;
+    }
+
+    /// <summary>
+    /// Creates an error with a custom <see cref="ErrorType"/>.
+    /// Use this when the built-in factory methods do not cover your domain.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// public static class AppErrorTypes {
+    ///     public static readonly ErrorType RateLimit = new("RateLimit");
+    /// }
+    ///
+    /// Error.Custom(AppErrorTypes.RateLimit, "RateLimit.Exceeded", "Too many requests.");
+    /// </code>
+    /// </example>
+    public static Error Custom(ErrorType type, string code, string description) {
+        return new(code, description, type, null);
+    }
+
+    // ── Compound factory ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a <see cref="Result{Success}"/> that carries multiple errors at once.
+    /// Useful when a validation or batch operation produces more than one error.
+    /// </summary>
+    /// <param name="errors">At least one error. An empty collection throws <see cref="ArgumentException"/>.</param>
+    /// <returns>A failed <see cref="Result{Success}"/>.</returns>
+    /// <example>
+    /// <code>
+    /// List&lt;Error&gt; validationErrors = [
+    ///     Error.Validation("Name.Required",  "Name is required."),
+    ///     Error.Validation("Email.Invalid",  "Email format is invalid."),
+    /// ];
+    ///
+    /// return Error.Multiple(validationErrors);
+    /// </code>
+    /// </example>
+    public static Result<Success> Multiple(IEnumerable<Error> errors) {
+        List<Error> list = errors as List<Error> ?? errors.ToList();
+        if(list.Count == 0)
+            throw new ArgumentException(
+                "At least one error is required.", nameof(errors));
+        return list;
+    }
+
+    /// <inheritdoc cref="Multiple(IEnumerable{Error})"/>
+    public static Result<T> Multiple<T>(IEnumerable<Error> errors) {
+        List<Error> list = errors as List<Error> ?? errors.ToList();
+        if(list.Count == 0)
+            throw new ArgumentException(
+                "At least one error is required.", nameof(errors));
+        return list;
+    }
+
+    // ── No-op sentinel ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A sentinel "no error" value.
+    /// <para>
+    /// <b>Do not use <see cref="None"/> to represent success.</b>
+    /// Use <see cref="Result{TValue}"/> for that. <see cref="None"/> is intended
+    /// for scenarios where an <see cref="Error"/> slot must be filled but there is
+    /// nothing meaningful to report — e.g., a default field in a struct, a placeholder
+    /// in a collection before errors are populated, or a test fixture.
+    /// </para>
+    /// </summary>
+    public static readonly Error None = new(
+        code: "None",
+        description: "No error.",
+        type: ErrorType.Failure,
+        metadata: null);
+
+    // ── Fluent metadata ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns a new <see cref="Error"/> with an additional metadata entry.
+    /// Does not mutate the current instance.
+    /// </summary>
     public Error WithMetadata(string key, object value) {
-        Dictionary<string, object> newMeta = this.Metadata == null
-            ? []
-            : new Dictionary<string, object>(this.Metadata);
-
+        Dictionary<string, object> newMeta = this.Metadata is null
+            ? new(1)
+            : new(this.Metadata);
         newMeta[key] = value;
-
         return new Error(this.Code, this.Description, this.Type, newMeta);
     }
 }

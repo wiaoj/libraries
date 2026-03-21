@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<RootNamespace>Wiaoj.Modulith</RootNamespace>
+		<AssemblyName>Wiaoj.Modulith</AssemblyName>
+		<PackageId>Wiaoj.Modulith</PackageId>
+		<Description>
+			Modular monolith infrastructure for .NET.
+			Pure generic host — no ASP.NET Core dependency.
+			For web (IApplicationBuilder / WebApplication) support, add Wiaoj.Modulith.AspNetCore.
+		</Description>
+
+		<Optimize>true</Optimize>
+		<Deterministic>true</Deterministic>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup> 
+	
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Options" Version="10.0.2" />
+	</ItemGroup>
+
+</Project>

@@ -2,76 +2,86 @@
 
 namespace Wiaoj.Mediator;
 /// <summary>
-/// Defines a builder for configuring the Mediator, including handlers, behaviors, and diagnostic options.
+/// Defines a builder for configuring the Mediator, including handlers, behaviors,
+/// processors, and diagnostic options.
 /// </summary>
 public interface IMediatorBuilder {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Lifetime &amp; Diagnostics
+    // ─────────────────────────────────────────────────────────────────────────
+
     /// <summary>
-    /// Sets the default service lifetime for registered handlers.
-    /// <br/>
-    /// The default value is <see cref="ServiceLifetime.Scoped"/>.
+    /// Sets the default service lifetime for registered handlers and processors.
+    /// <br/>Default: <see cref="ServiceLifetime.Scoped"/>.
     /// </summary>
     IMediatorBuilder WithDefaultLifetime(ServiceLifetime lifetime);
 
     /// <summary>
     /// Enables OpenTelemetry tracing via <see cref="System.Diagnostics.ActivitySource"/>.
+    /// Registers <c>TracingMediator</c> instead of the default <c>Mediator</c> (zero overhead when disabled).
     /// </summary>
     IMediatorBuilder WithOpenTelemetry();
 
-    // --- HANDLER REGISTRATION ---
+    // ─────────────────────────────────────────────────────────────────────────
+    // Handler Registration
+    // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Scans the assembly containing the specified marker type for implementations of <see cref="IRequestHandler{TRequest,TResponse}"/> 
-    /// and <see cref="IStreamRequestHandler{TRequest,TResponse}"/>, and registers them.
+    /// Scans the assembly containing <typeparamref name="TMarker"/> for all
+    /// <see cref="IRequestHandler{TRequest,TResponse}"/>, <see cref="IStreamRequestHandler{TRequest,TResponse}"/>,
+    /// <see cref="IRequestPreProcessor{TRequest,TResponse}"/>, and
+    /// <see cref="IRequestPostProcessor{TRequest,TResponse}"/> implementations and registers them.
     /// </summary>
     IMediatorBuilder RegisterHandlersFromAssemblyContaining<TMarker>();
 
-    /// <summary>
-    /// Manually registers a specific handler type. 
-    /// </summary>
+    /// <summary>Manually registers a specific handler type.</summary>
     IMediatorBuilder RegisterHandler<THandler>();
 
-    // --- BEHAVIOR REGISTRATION ---
+    // ─────────────────────────────────────────────────────────────────────────
+    // Processor Registration (manual, for when assembly scanning is not used)
+    // ─────────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Adds a pipeline behavior that applies to ALL request types (Command, Query, Stream), provided generic constraints are met.
-    /// </summary>
+    /// <summary>Manually registers a specific pre-processor type.</summary>
+    IMediatorBuilder RegisterPreProcessor<TPreProcessor>();
+
+    /// <summary>Manually registers a specific post-processor type.</summary>
+    IMediatorBuilder RegisterPostProcessor<TPostProcessor>();
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Behavior Registration
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Adds a behavior that applies to ALL request types (Command, Query, Stream).</summary>
     IMediatorBuilder AddOpenBehavior(Type behaviorType, ServiceLifetime lifetime = ServiceLifetime.Scoped);
 
-    /// <summary>
-    /// Adds a pipeline behavior that applies to ALL request types (Command, Query, Stream).
-    /// </summary>
+    /// <inheritdoc cref="AddOpenBehavior(Type, ServiceLifetime)"/>
     IMediatorBuilder AddOpenBehavior<TBehavior>(ServiceLifetime lifetime = ServiceLifetime.Scoped);
 
-    /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="ICommand{TResponse}"/> types.
-    /// </summary>
+    /// <summary>Adds a behavior that applies ONLY to <see cref="ICommand{TResponse}"/> types.</summary>
     IMediatorBuilder AddCommandBehavior(Type behaviorType, ServiceLifetime lifetime = ServiceLifetime.Scoped);
 
-    /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="ICommand{TResponse}"/> types.
-    /// </summary>
+    /// <inheritdoc cref="AddCommandBehavior(Type, ServiceLifetime)"/>
     IMediatorBuilder AddCommandBehavior<TBehavior>(ServiceLifetime lifetime = ServiceLifetime.Scoped);
 
-    /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="IQuery{TResponse}"/> types.
-    /// </summary>
+    /// <summary>Adds a behavior that applies ONLY to <see cref="IQuery{TResponse}"/> types.</summary>
     IMediatorBuilder AddQueryBehavior(Type behaviorType, ServiceLifetime lifetime = ServiceLifetime.Scoped);
 
-    /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="IQuery{TResponse}"/> types.
-    /// </summary>
+    /// <inheritdoc cref="AddQueryBehavior(Type, ServiceLifetime)"/>
     IMediatorBuilder AddQueryBehavior<TBehavior>(ServiceLifetime lifetime = ServiceLifetime.Scoped);
 
-    /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="IStreamRequest{TResponse}"/> types.
-    /// </summary>
+    /// <summary>Adds a behavior that applies ONLY to <see cref="IStreamRequest{TResponse}"/> types.</summary>
     IMediatorBuilder AddStreamBehavior(Type behaviorType, ServiceLifetime lifetime = ServiceLifetime.Scoped);
 
-    /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="IStreamRequest{TResponse}"/> types.
-    /// </summary>
+    /// <inheritdoc cref="AddStreamBehavior(Type, ServiceLifetime)"/>
     IMediatorBuilder AddStreamBehavior<TBehavior>(ServiceLifetime lifetime = ServiceLifetime.Scoped);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Introspection (used by TryAdd extension methods)
+    // ─────────────────────────────────────────────────────────────────────────
 
     bool HasBehavior(Type behaviorType);
     bool HasHandler(Type handlerType);
+    bool HasPreProcessor(Type processorType);
+    bool HasPostProcessor(Type processorType);
 }

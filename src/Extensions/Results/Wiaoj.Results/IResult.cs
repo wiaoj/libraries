@@ -1,40 +1,34 @@
-﻿namespace Wiaoj.Results;
+﻿namespace Wiaoj.Results; 
 /// <summary>
-/// Defines a common contract for operation results, allowing polymorphic access to success/failure states.
-/// This interface is particularly useful for middleware or pipeline behaviors (e.g., MediatR) 
-/// where the generic type of the result is not known at compile time.
+/// Defines a common contract for operation results, allowing polymorphic access
+/// to success/failure states without knowing the generic value type at compile time.
+/// <para>
+/// Particularly useful in pipeline behaviors or middleware where
+/// the concrete <see cref="Result{TValue}"/>. type is not known.
+/// </para>
 /// </summary>
-public interface IResult : IDisposable {
+public interface IResult {
     /// <summary>
     /// Gets a value indicating whether the result represents a failure.
     /// </summary>
-    /// <value>
-    /// <c>true</c> if the operation failed and contains errors; otherwise, <c>false</c>.
-    /// </value>
     bool IsError { get; }
 
     /// <summary>
     /// Gets a value indicating whether the result represents a success.
     /// </summary>
-    /// <value>
-    /// <c>true</c> if the operation succeeded; otherwise, <c>false</c>.
-    /// </value>
     bool IsSuccess { get; }
 
     /// <summary>
     /// Gets the first error of a failed operation.
     /// </summary>
-    /// <value>The first <see cref="Error"/> in the error list.</value>
     /// <exception cref="InvalidOperationException">
     /// Thrown if accessed when <see cref="IsSuccess"/> is <c>true</c>.
     /// </exception>
     Error FirstError { get; }
 
     /// <summary>
-    /// Gets the list of errors. 
+    /// Gets the list of errors.
+    /// Returns an empty list if the result is successful.
     /// </summary>
-    /// <value>
-    /// A read-only list of <see cref="Error"/> objects. Returns an empty list if the result is successful.
-    /// </value>
     IReadOnlyList<Error> Errors { get; }
 }

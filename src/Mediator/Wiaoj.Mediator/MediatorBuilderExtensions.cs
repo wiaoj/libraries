@@ -2,132 +2,102 @@
 
 namespace Wiaoj.Mediator;
 /// <summary>
-/// Extension methods for safely adding behaviors and handlers to the Mediator builder.
+/// Extension methods for safely registering behaviors, handlers, and processors
+/// without creating duplicates (useful in modular monolith / library scenarios).
 /// </summary>
 public static class MediatorBuilderExtensions {
-
-    // =================================================================================================
-    // OPEN BEHAVIORS (ALL REQUESTS)
-    // =================================================================================================
+    // ═════════════════════════════════════════════════════════════════════════
+    // OPEN BEHAVIORS (all requests)
+    // ═════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Adds a pipeline behavior that applies to ALL request types (Command, Query, Stream), 
-    /// only if it hasn't been registered yet.
+    /// Adds an open behavior only if it has not been registered yet.
     /// </summary>
-    /// <typeparam name="TBehavior">The type of the behavior to add.</typeparam>
-    /// <param name="builder">The mediator builder.</param>
-    /// <param name="lifetime">The service lifetime for the behavior.</param>
-    /// <returns>The builder instance.</returns>
-    public static IMediatorBuilder TryAddOpenBehavior<TBehavior>(this IMediatorBuilder builder, ServiceLifetime lifetime) {
-        if(!builder.HasBehavior(typeof(TBehavior))) {
+    public static IMediatorBuilder TryAddOpenBehavior<TBehavior>(
+        this IMediatorBuilder builder, ServiceLifetime lifetime = ServiceLifetime.Scoped) {
+        if(!builder.HasBehavior(typeof(TBehavior)))
             builder.AddOpenBehavior<TBehavior>(lifetime);
-        }
         return builder;
     }
 
-    /// <inheritdoc cref="TryAddOpenBehavior{TBehavior}(IMediatorBuilder, ServiceLifetime)"/>
-    /// <remarks>
-    /// Registers with <see cref="ServiceLifetime.Scoped"/> by default.
-    /// </remarks>
-    public static IMediatorBuilder TryAddOpenBehavior<TBehavior>(this IMediatorBuilder builder) {
-        return builder.TryAddOpenBehavior<TBehavior>(ServiceLifetime.Scoped);
-    }
-
-    // =================================================================================================
+    // ═════════════════════════════════════════════════════════════════════════
     // COMMAND BEHAVIORS
-    // =================================================================================================
+    // ═════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="ICommand{TResponse}"/> types,
-    /// only if it hasn't been registered yet.
+    /// Adds a command behavior only if it has not been registered yet.
     /// </summary>
-    /// <typeparam name="TBehavior">The type of the behavior to add.</typeparam>
-    /// <param name="builder">The mediator builder.</param>
-    /// <param name="lifetime">The service lifetime for the behavior.</param>
-    /// <returns>The builder instance.</returns>
-    public static IMediatorBuilder TryAddCommandBehavior<TBehavior>(this IMediatorBuilder builder, ServiceLifetime lifetime) {
-        if(!builder.HasBehavior(typeof(TBehavior))) {
+    public static IMediatorBuilder TryAddCommandBehavior<TBehavior>(
+        this IMediatorBuilder builder, ServiceLifetime lifetime = ServiceLifetime.Scoped) {
+        if(!builder.HasBehavior(typeof(TBehavior)))
             builder.AddCommandBehavior<TBehavior>(lifetime);
-        }
         return builder;
     }
 
-    /// <inheritdoc cref="TryAddCommandBehavior{TBehavior}(IMediatorBuilder, ServiceLifetime)"/>
-    /// <remarks>
-    /// Registers with <see cref="ServiceLifetime.Scoped"/> by default.
-    /// </remarks>
-    public static IMediatorBuilder TryAddCommandBehavior<TBehavior>(this IMediatorBuilder builder) {
-        return builder.TryAddCommandBehavior<TBehavior>(ServiceLifetime.Scoped);
-    }
-
-    // =================================================================================================
+    // ═════════════════════════════════════════════════════════════════════════
     // QUERY BEHAVIORS
-    // =================================================================================================
+    // ═════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="IQuery{TResponse}"/> types,
-    /// only if it hasn't been registered yet.
+    /// Adds a query behavior only if it has not been registered yet.
     /// </summary>
-    /// <typeparam name="TBehavior">The type of the behavior to add.</typeparam>
-    /// <param name="builder">The mediator builder.</param>
-    /// <param name="lifetime">The service lifetime for the behavior.</param>
-    /// <returns>The builder instance.</returns>
-    public static IMediatorBuilder TryAddQueryBehavior<TBehavior>(this IMediatorBuilder builder, ServiceLifetime lifetime) {
-        if(!builder.HasBehavior(typeof(TBehavior))) {
+    public static IMediatorBuilder TryAddQueryBehavior<TBehavior>(
+        this IMediatorBuilder builder, ServiceLifetime lifetime = ServiceLifetime.Scoped) {
+        if(!builder.HasBehavior(typeof(TBehavior)))
             builder.AddQueryBehavior<TBehavior>(lifetime);
-        }
         return builder;
     }
 
-    /// <inheritdoc cref="TryAddQueryBehavior{TBehavior}(IMediatorBuilder, ServiceLifetime)"/>
-    /// <remarks>
-    /// Registers with <see cref="ServiceLifetime.Scoped"/> by default.
-    /// </remarks>
-    public static IMediatorBuilder TryAddQueryBehavior<TBehavior>(this IMediatorBuilder builder) {
-        return builder.TryAddQueryBehavior<TBehavior>(ServiceLifetime.Scoped);
-    }
-
-    // =================================================================================================
+    // ═════════════════════════════════════════════════════════════════════════
     // STREAM BEHAVIORS
-    // =================================================================================================
+    // ═════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Adds a pipeline behavior that applies ONLY to <see cref="IStreamRequest{TResponse}"/> types,
-    /// only if it hasn't been registered yet.
+    /// Adds a stream behavior only if it has not been registered yet.
     /// </summary>
-    /// <typeparam name="TBehavior">The type of the behavior to add.</typeparam>
-    /// <param name="builder">The mediator builder.</param>
-    /// <param name="lifetime">The service lifetime for the behavior.</param>
-    /// <returns>The builder instance.</returns>
-    public static IMediatorBuilder TryAddStreamBehavior<TBehavior>(this IMediatorBuilder builder, ServiceLifetime lifetime) {
-        if(!builder.HasBehavior(typeof(TBehavior))) {
+    public static IMediatorBuilder TryAddStreamBehavior<TBehavior>(
+        this IMediatorBuilder builder, ServiceLifetime lifetime = ServiceLifetime.Scoped) {
+        if(!builder.HasBehavior(typeof(TBehavior)))
             builder.AddStreamBehavior<TBehavior>(lifetime);
-        }
         return builder;
     }
 
-    /// <inheritdoc cref="TryAddStreamBehavior{TBehavior}(IMediatorBuilder, ServiceLifetime)"/>
-    /// <remarks>
-    /// Registers with <see cref="ServiceLifetime.Scoped"/> by default.
-    /// </remarks>
-    public static IMediatorBuilder TryAddStreamBehavior<TBehavior>(this IMediatorBuilder builder) {
-        return builder.TryAddStreamBehavior<TBehavior>(ServiceLifetime.Scoped);
-    }
-
-    // =================================================================================================
-    // HANDLER REGISTRATION
-    // =================================================================================================
+    // ═════════════════════════════════════════════════════════════════════════
+    // HANDLERS
+    // ═════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Registers the handler manually only if it hasn't been registered yet.
+    /// Registers a handler only if it has not been registered yet.
     /// </summary>
-    /// <typeparam name="THandler">The type of the handler to register.</typeparam>
-    /// <param name="builder">The mediator builder.</param>
-    /// <returns>The builder instance.</returns>
     public static IMediatorBuilder TryRegisterHandler<THandler>(this IMediatorBuilder builder) {
-        if(!builder.HasHandler(typeof(THandler))) {
+        if(!builder.HasHandler(typeof(THandler)))
             builder.RegisterHandler<THandler>();
-        }
+        return builder;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // PRE-PROCESSORS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Registers a pre-processor only if it has not been registered yet.
+    /// </summary>
+    public static IMediatorBuilder TryRegisterPreProcessor<TPreProcessor>(this IMediatorBuilder builder) {
+        if(!builder.HasPreProcessor(typeof(TPreProcessor)))
+            builder.RegisterPreProcessor<TPreProcessor>();
+        return builder;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // POST-PROCESSORS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Registers a post-processor only if it has not been registered yet.
+    /// </summary>
+    public static IMediatorBuilder TryRegisterPostProcessor<TPostProcessor>(this IMediatorBuilder builder) {
+        if(!builder.HasPostProcessor(typeof(TPostProcessor)))
+            builder.RegisterPostProcessor<TPostProcessor>();
         return builder;
     }
 }

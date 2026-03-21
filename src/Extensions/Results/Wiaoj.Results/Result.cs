@@ -1,43 +1,56 @@
-﻿namespace Wiaoj.Results;     
+﻿namespace Wiaoj.Results; 
 /// <summary>
 /// Provides static factory methods to create <see cref="Result{TValue}"/> instances.
-/// Useful for creating results without explicitly specifying the generic type.
+/// <para>
+/// Extended by:
+/// <list type="bullet">
+///   <item><description><c>Result.Try.cs</c> — wrapping exceptions as <see cref="Result{TValue}"/>.</description></item>
+///   <item><description><c>Result.Combine.cs</c> — aggregating multiple results.</description></item>
+/// </list>
+/// </para>
 /// </summary>
-public static class Result {
+public static partial class Result {
     /// <summary>
-    /// Creates a successful result for an operation that does not return a value.
+    /// Creates a successful <see cref="Result{TValue}"/> of <see cref="Success"/>
+    /// for operations that return no value.
     /// </summary>
-    /// <returns>A <see cref="Result{Success}"/> representing success.</returns>
-    public static Result<Success> Success() => Wiaoj.Results.Success.Default;
+    public static Result<Success> Success() {
+        return Wiaoj.Results.Success.Default;
+    }
 
     /// <summary>
-    /// Creates a successful result containing the specified value.
+    /// Creates a successful <see cref="Result{TValue}"/> containing
+    /// <paramref name="value"/>.
     /// </summary>
-    /// <typeparam name="T">The type of the value.</typeparam>
+    /// <typeparam name="T">The value type.</typeparam>
     /// <param name="value">The value to wrap.</param>
-    /// <returns>A <see cref="Result{T}"/> containing the value.</returns>
-    public static Result<T> Success<T>(T value) => value;
+    public static Result<T> Success<T>(T value) {
+        return value;
+    }
 
     /// <summary>
-    /// Creates a failed result from a single error.
+    /// Creates a failed <see cref="Result{TValue}"/> of <see cref="Success"/>
+    /// from a single <paramref name="error"/>.
     /// </summary>
-    /// <param name="error">The error.</param>
-    /// <returns>A <see cref="Result{Success}"/> containing the error.</returns>
-    public static Result<Success> Failure(Error error) => error;
+    public static Result<Success> Failure(Error error) {
+        return error;
+    }
 
     /// <summary>
-    /// Creates a failed result from a list of errors.
+    /// Creates a failed <see cref="Result{TValue}"/> of <see cref="Success"/>
+    /// from a list of errors.
     /// </summary>
-    /// <param name="errors">The list of errors.</param>
-    /// <returns>A <see cref="Result{Success}"/> containing the errors.</returns>
-    public static Result<Success> Failure(List<Error> errors) => errors;
+    public static Result<Success> Failure(List<Error> errors) {
+        return errors;
+    }
 
     /// <summary>
-    /// Creates a failed result for a specific generic type.
-    /// Useful when you need to return a <see cref="Result{T}"/> from a method that failed.
+    /// Creates a failed <see cref="Result{TValue}"/> of <typeparamref name="T"/>
+    /// from a single <paramref name="error"/>.
+    /// Useful when a method returns <see cref="Result{TValue}"/> but needs to
+    /// propagate an error without having a value to return.
     /// </summary>
-    /// <typeparam name="T">The expected value type of the result.</typeparam>
-    /// <param name="error">The error.</param>
-    /// <returns>A <see cref="Result{T}"/> containing the error.</returns>
-    public static Result<T> Failure<T>(Error error) => error;
+    public static Result<T> Failure<T>(Error error) {
+        return error;
+    }
 }
