@@ -42,6 +42,15 @@ public interface IModuleLifecycle {
     /// </summary>
     Task OnStarting(CancellationToken cancellationToken = default);
 
+    /*Module base sınıf oluşturulacak ve override mantığı olacak
+     public async Task OnStarting(IServiceProvider sp, CancellationToken ct) // Eğer sp geliyorsa
+        { 
+            using var scope = sp.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<VexilDbContext>();
+            await dbContext.Database.MigrateAsync(ct);
+        }
+     */
+
     /// <summary>
     /// Called after the host has fully started and is accepting requests.
     /// Ideal for fire-and-forget warm-up tasks or diagnostic logging.

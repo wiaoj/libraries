@@ -10,8 +10,7 @@ namespace Microsoft.AspNetCore.Builder;
 /// Extension methods for configuring the Modulith middleware pipeline
 /// in an ASP.NET Core application.
 /// </summary>
-public static class ModulithApplicationBuilderExtensions {
-
+public static class ModulithApplicationBuilderExtensions { 
     /// <summary>
     /// Invokes <c>Configure(IApplicationBuilder)</c> on all active
     /// <see cref="Wiaoj.Modulith.AspNetCore.IWebModule"/> implementations

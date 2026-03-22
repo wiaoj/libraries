@@ -378,7 +378,7 @@ public sealed class GuidV7Tests {
     [Fact]
     public void Conversion_ToHexString_RoundTrips() {
         GuidV7 id = GuidV7.NewId();
-        Assert.Equal(id.Value, new Guid(id.ToHexString().ToBytes()));
+        Assert.Equal(id.Value, new Guid(id.ToHexString().ToBytes(), bigEndian: true));
     }
 
     [Fact]
@@ -391,7 +391,7 @@ public sealed class GuidV7Tests {
         GuidV7 id = GuidV7.NewId();
         Span<byte> decoded = stackalloc byte[16];
         id.ToBase64Url().TryDecode(decoded, out _);
-        Assert.Equal(id.Value, new Guid(decoded));
+        Assert.Equal(id.Value, new Guid(decoded, bigEndian: true));
     }
 
     [Fact]

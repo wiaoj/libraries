@@ -5,7 +5,8 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Wiaoj.Primitives; 
+namespace Wiaoj.Primitives;
+
 /// <summary>
 /// Represents a strongly-typed UUID version 7 identifier.
 /// </summary>
@@ -123,7 +124,7 @@ public readonly record struct GuidV7 :
     /// </summary>
     public Base64UrlString ToBase64Url() {
         Span<byte> bytes = stackalloc byte[16];
-        this._value.TryWriteBytes(bytes);
+        this._value.TryWriteBytes(bytes, bigEndian: true, out _);
         return Base64UrlString.FromBytes(bytes);
     }
 
@@ -132,8 +133,23 @@ public readonly record struct GuidV7 :
     /// </summary>
     public HexString ToHexString() {
         Span<byte> bytes = stackalloc byte[16];
-        this._value.TryWriteBytes(bytes);
+        this._value.TryWriteBytes(bytes, bigEndian: true, out _);
         return HexString.FromBytes(bytes);
+    }
+
+    /// <summary>
+    /// Tries to write the 16 bytes of the UUID v7 to the specified span.
+    /// </summary>
+    /// <param name="destination">The span to which the 16 bytes should be written.</param>
+    /// <param name="bigEndian">
+    /// <see langword="true"/> to write the bytes in big-endian order (RFC 9562 standard); 
+    /// <see langword="false"/> for little-endian (legacy Windows GUID format).
+    /// </param>
+    /// <param name="bytesWritten">The number of bytes written to the <paramref name="destination"/> (always 16 on success).</param>
+    /// <returns><see langword="true"/> if the span is large enough (at least 16 bytes); otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryWriteBytes(Span<byte> destination, bool bigEndian, out int bytesWritten) {
+        return this._value.TryWriteBytes(destination, bigEndian, out bytesWritten);
     }
 
     #endregion
@@ -207,6 +223,18 @@ public readonly record struct GuidV7 :
     /// </summary>
     public string ToString(string? format) {
         return this._value.ToString(format ?? "D");
+    }
+
+    /// <summary>
+    /// Tries to format the value of the current <see cref="GuidV7"/> instance into the provided span of characters.
+    /// </summary>
+    /// <param name="destination">The span in which to write this instance's value formatted as a span of characters.</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters that were written in <paramref name="destination"/>.</param>
+    /// <param name="format">A read-only span that contains the character format string (e.g., "D", "N", "B", "P", "X").</param>
+    /// <returns><see langword="true"/> if the formatting was successful; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default) {
+        return this._value.TryFormat(destination, out charsWritten, format);
     }
 
     string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
@@ -296,7 +324,7 @@ public sealed class GuidV7JsonConverter : JsonConverter<GuidV7> {
         if(reader.TokenType != JsonTokenType.String)
             throw new JsonException("Expected string token for GuidV7.");
         string? s = reader.GetString();
-        if(s is not null && GuidV7.TryParse(s, out GuidV7 result))
+        if(GuidV7.TryParse(s, out GuidV7 result))
             return result;
         throw new JsonException($"'{s}' is not a valid GuidV7.");
     }
@@ -304,7 +332,7 @@ public sealed class GuidV7JsonConverter : JsonConverter<GuidV7> {
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, GuidV7 value, JsonSerializerOptions options) {
         Span<char> buffer = stackalloc char[36]; // "D" format = 36 chars
-        value.ToGuid().TryFormat(buffer, out _, "D");
+        value.TryFormat(buffer, out _, "D");
         writer.WriteStringValue(buffer);
     }
 }
