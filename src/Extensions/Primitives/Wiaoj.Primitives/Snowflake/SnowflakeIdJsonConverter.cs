@@ -9,7 +9,7 @@ namespace Wiaoj.Primitives.Snowflake;
 /// Custom JSON converter for <see cref="SnowflakeId"/>.
 /// Handles serialization to String (to preserve precision in JS) and deserialization from String/Number/Guid.
 /// </summary>
-public class SnowflakeIdJsonConverter : JsonConverter<SnowflakeId> {
+public sealed class SnowflakeIdJsonConverter : JsonConverter<SnowflakeId> {
     /// <inheritdoc/>
     public override SnowflakeId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType == JsonTokenType.Number) {

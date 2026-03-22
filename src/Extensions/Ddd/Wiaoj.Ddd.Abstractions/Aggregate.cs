@@ -47,14 +47,6 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnu
     }
 }
 
-public static class Ex {
-    extension<TAggregate>(TAggregate aggregate) where TAggregate : IHasDomainEvent {
-        public void RaiseDomainEvent<TDomainEvent>(Func<TAggregate, TDomainEvent> factory) where TDomainEvent : IDomainEvent {
-            aggregate.RaiseDomainEvent(factory(aggregate));
-        }
-    }
-}
-
 //public abstract class Entity<TId> where TId : class, IId {
 //    public TId Id { get; private set; }
 

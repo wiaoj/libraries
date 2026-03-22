@@ -4,13 +4,13 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.JsonConverters;
 using Wiaoj.Primitives.Obfuscation;
 using Wiaoj.Primitives.Snowflake;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Wiaoj.Primitives;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
-
 /// <summary>
 /// Represents an obfuscated, URL-friendly identifier wrapper for 64-bit (Snowflake) or 128-bit (Guid) IDs.
 /// <para>

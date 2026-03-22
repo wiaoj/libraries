@@ -1,17 +1,26 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json.Serialization;
+using Wiaoj.Primitives.JsonConverters;
 
-namespace Wiaoj.Primitives; 
+namespace Wiaoj.Primitives;
 /// <summary>
 /// Represents a structurally valid Base64Url string (RFC 4648).
 /// Immutable and guaranteed to contain only valid Base64Url characters (A-Z, a-z, 0-9, -, _).
 /// </summary>
-[DebuggerDisplay("{Value}")]
-public readonly record struct Base64UrlString : ISpanParsable<Base64UrlString>, ISpanFormattable, IUtf8SpanParsable<Base64UrlString>, IUtf8SpanFormattable {
+[DebuggerDisplay("{ToString(),nq}")]
+[JsonConverter(typeof(Base64UrlStringJsonConverter))]
+public readonly record struct Base64UrlString :
+    IEquatable<Base64UrlString>,
+    ISpanParsable<Base64UrlString>,
+    IUtf8SpanParsable<Base64UrlString>,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IFormattable {
     // .NET 8 SearchValues ile ultra-hızlı validasyon
     private static readonly SearchValues<char> ValidBase64UrlChars =
         SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_");
@@ -157,6 +166,18 @@ public readonly record struct Base64UrlString : ISpanParsable<Base64UrlString>, 
         return TryParseInternal(s, out result);
     }
 
+    public static bool TryParse(ReadOnlySpan<byte> s, out Base64UrlString result) {
+        // Önce byte seviyesinde karakter kontrolü yapılabilir 
+        // veya basitçe char span'e çevrilip yukarıdaki çağrılabilir (stackalloc ile).
+        Span<char> chars = stackalloc char[s.Length];
+        if(System.Text.Encoding.UTF8.TryGetChars(s, chars, out int charsWritten)) {
+            return TryParse(chars.Slice(0, charsWritten), out result);
+        }
+
+        result = default;
+        return false;
+    }
+
     // Gerçek validasyon burada yapılır
     private static bool TryParseInternal(ReadOnlySpan<char> s, out Base64UrlString result) {
         if(s.IsEmpty) {
@@ -242,6 +263,56 @@ public readonly record struct Base64UrlString : ISpanParsable<Base64UrlString>, 
         if(utf8Destination.Length < this._value.Length) { bytesWritten = 0; return false; }
         bytesWritten = Encoding.UTF8.GetBytes(this._value, utf8Destination);
         return true;
+    }
+
+    #endregion
+
+    #region Operators & Utilities
+
+    /// <summary>Implicitly converts a <see cref="Base64UrlString"/> to a <see cref="string"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator string(Base64UrlString s) {
+        return s.Value;
+    }
+
+    /// <summary>Implicitly converts a <see cref="Base64UrlString"/> to a <see cref="ReadOnlySpan{Char}"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator ReadOnlySpan<char>(Base64UrlString s) {
+        return s.Value.AsSpan();
+    }
+
+    /// <summary>Explicitly converts a <see cref="string"/> to a <see cref="Base64UrlString"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator Base64UrlString(string s) {
+        return Parse(s);
+    }
+
+    /// <summary>
+    /// Gets the exact number of bytes that the decoded Base64Url string represents.
+    /// </summary>
+    /// <returns>The length of the decoded data in bytes.</returns>
+    public int GetDecodedLength() {
+        int len = this.Value.Length;
+        if(len == 0) return 0;
+        // Base64Url has no padding; reconstruct padded length for calculation.
+        int padded = len + ((4 - len % 4) % 4);
+        return (padded / 4) * 3 - ((4 - len % 4) % 4 == 0 ? 0 : (4 - len % 4) % 4);
+    }
+
+    /// <summary>
+    /// Writes the UTF-8 representation of the Base64Url string to the provided buffer writer.
+    /// </summary>
+    /// <param name="writer">The buffer writer to write to.</param>
+    public void WriteTo(IBufferWriter<byte> writer) {
+        if(string.IsNullOrEmpty(this._value))
+            return;
+
+        ReadOnlySpan<char> chars = this._value.AsSpan();
+        int byteCount = chars.Length; // Base64Url is ASCII: byte count == char count
+
+        Span<byte> buffer = writer.GetSpan(byteCount);
+        Encoding.UTF8.GetBytes(chars, buffer);
+        writer.Advance(byteCount);
     }
 
     #endregion

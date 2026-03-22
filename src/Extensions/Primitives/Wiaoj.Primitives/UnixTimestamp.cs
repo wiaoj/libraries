@@ -28,6 +28,7 @@ namespace Wiaoj.Primitives;
 [JsonConverter(typeof(UnixTimestampJsonConverter))]
 public readonly record struct UnixTimestamp :
     IComparable<UnixTimestamp>,
+    IComparable,
     ISpanParsable<UnixTimestamp>,
     IFormattable,
     ISpanFormattable,
@@ -259,6 +260,13 @@ public readonly record struct UnixTimestamp :
     /// <inheritdoc/>
     public int CompareTo(UnixTimestamp other) {
         return this._milliseconds.CompareTo(other._milliseconds);
+    }
+
+    /// <inheritdoc/>
+    int IComparable.CompareTo(object? obj) {
+        if(obj is null) return 1;
+        if(obj is UnixTimestamp other) return CompareTo(other);
+        throw new ArgumentException($"Object must be of type {nameof(UnixTimestamp)}.", nameof(obj));
     }
 
     // Casting - Primitive

@@ -13,61 +13,6 @@ public interface IConcurrencySafe {
     RowVersion Version { get; }
 }
 
-/// <summary>
-/// Represents a strongly-typed enum class that allows behavior/logic unlike standard enums.
-/// </summary>
-public abstract record Enumeration<TId> : IComparable<Enumeration<TId>> where TId : notnull {
-    public TId Id { get; }
-    public string Name { get; }
-
-    protected Enumeration(TId id, string name) {
-        this.Id = id;
-        this.Name = name;
-    }
-
-    public override string ToString() {
-        return this.Name;
-    }
-
-    public int CompareTo(Enumeration<TId>? other) {
-        return other is null ? 1 : Comparer<TId>.Default.Compare(this.Id, other.Id);
-    }
-
-    public static IEnumerable<T> GetAll<T>() where T : Enumeration<TId> {
-        return Cache<T>.Items;
-    }
-
-    private static class Cache<T> where T : Enumeration<TId> {
-        public static readonly T[] Items;
-
-        static Cache() {
-            FieldInfo[] fields = typeof(T).GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
-
-            Items = [.. fields.Select(f => f.GetValue(null)).Cast<T>()];
-        }
-    }
-    public static bool operator <(Enumeration<TId> left, Enumeration<TId> right) {
-        return left.CompareTo(right) < 0;
-    }
-
-    public static bool operator <=(Enumeration<TId> left, Enumeration<TId> right) {
-        return left.CompareTo(right) <= 0;
-    }
-
-    public static bool operator >(Enumeration<TId> left, Enumeration<TId> right) {
-        return left.CompareTo(right) > 0;
-    }
-
-    public static bool operator >=(Enumeration<TId> left, Enumeration<TId> right) {
-        return left.CompareTo(right) >= 0;
-    }
-}
-
-// Helper for integer-based enumerations (Most common)
-public abstract record Enumeration : Enumeration<int> {
-    protected Enumeration(int id, string name) : base(id, name) { }
-}
-
 public interface IRepositoryMarker;
 
 public interface IRepository<TAggregate, TId>

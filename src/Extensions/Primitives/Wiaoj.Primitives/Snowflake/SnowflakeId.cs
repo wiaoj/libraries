@@ -184,8 +184,10 @@ public readonly struct SnowflakeId :
             return true;
         }
 
-        // We don't support Guid parsing from raw UTF-8 bytes here for simplicity and speed,
-        // but it could be added if necessary.
+        // UTF-8 parsing only supports the raw long (decimal) format.
+        // Guid-format strings (e.g. "550e8400-e29b-41d4-a716-446655440000") are NOT supported here
+        // because they require string allocation. Use Parse(string) / TryParse(string, out) instead
+        // when the input is a Guid-encoded SnowflakeId.
         result = Empty;
         return false;
     }

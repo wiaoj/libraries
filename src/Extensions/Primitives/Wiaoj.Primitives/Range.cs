@@ -81,7 +81,7 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
     /// <summary>Determines whether the specified range is entirely contained within this range.</summary>
     public bool Contains(Range<T> other) => other.Min.CompareTo(this.Min) >= 0 && other.Max.CompareTo(this.Max) <= 0;
 
-    /// <summary>Checks if this arange overlaps with another range.</summary>
+    /// <summary>Checks if this range overlaps with another range.</summary>
     public bool Overlaps(Range<T> other) => this.Min.CompareTo(other.Max) <= 0 && this.Max.CompareTo(other.Min) >= 0;
 
     /// <summary>Returns the intersection of two ranges, or <see langword="null"/> if they do not overlap.</summary>
@@ -109,7 +109,7 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
 }
 
 // --- JSON Converter Factory for Generics ---
-public class RangeJsonConverterFactory : JsonConverterFactory {
+public sealed class RangeJsonConverterFactory : JsonConverterFactory {
     public override bool CanConvert(Type typeToConvert) {
         return typeToConvert.IsGenericType && typeToConvert.GetGenericTypeDefinition() == typeof(Range<>);
     }
@@ -121,7 +121,7 @@ public class RangeJsonConverterFactory : JsonConverterFactory {
     }
 }
 
-public class RangeJsonConverter<T> : JsonConverter<Range<T>> where T : IComparable<T> {
+public sealed class RangeJsonConverter<T> : JsonConverter<Range<T>> where T : IComparable<T> {
     public override Range<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if(reader.TokenType != JsonTokenType.StartObject) throw new JsonException();
 

@@ -115,8 +115,9 @@ public class IdGenerationBenchmark {
     // =========================================================================
 
     [BenchmarkCategory("Binary"), Benchmark]
-    public bool Wiaoj_Snowflake_TryWrite() {
-        return _wiaojSnowflakeExistingId.TryWriteBytes(_byteBuffer);
+    public void Wiaoj_Snowflake_TryWrite() {
+        bool result = _wiaojSnowflakeExistingId.TryWriteBytes(_byteBuffer);
+        _ = result; 
     }
 
     // YENİ: NanoId String'ini UTF8 byte olarak yazma maliyeti

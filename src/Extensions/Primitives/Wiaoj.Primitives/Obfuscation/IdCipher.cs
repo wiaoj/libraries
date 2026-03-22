@@ -2,8 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Wiaoj.Primitives.Obfuscation;
-
+namespace Wiaoj.Primitives.Obfuscation; 
 /// <summary>
 /// A generalized, stateless Feistel Cipher implementation for 64-bit and 128-bit integers.
 /// Used to scramble sequential IDs into random-looking numbers while preserving their bit length.

@@ -24,6 +24,7 @@ namespace Wiaoj.Primitives;
 public readonly record struct GuidV7 :
     IEquatable<GuidV7>,
     IComparable<GuidV7>,
+    IComparable,
     ISpanParsable<GuidV7>,
     ISpanFormattable,
     IUtf8SpanFormattable {
@@ -266,6 +267,13 @@ public readonly record struct GuidV7 :
     /// <inheritdoc/>
     public int CompareTo(GuidV7 other) {
         return this._value.CompareTo(other._value);
+    }
+
+    /// <inheritdoc/>
+    int IComparable.CompareTo(object? obj) {
+        if(obj is null) return 1;
+        if(obj is GuidV7 other) return CompareTo(other);
+        throw new ArgumentException($"Object must be of type {nameof(GuidV7)}.", nameof(obj));
     }
 
     /// <inheritdoc/>

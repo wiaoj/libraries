@@ -270,6 +270,12 @@ public readonly record struct Base62String :
         return s.Value;
     }
 
+    /// <summary>Implicitly converts a <see cref="Base62String"/> to a <see cref="ReadOnlySpan{Char}"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator ReadOnlySpan<char>(Base62String s) {
+        return s.Value.AsSpan();
+    }
+
     /// <summary>Explicitly converts a string to a <see cref="Base62String"/>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator Base62String(string s) {

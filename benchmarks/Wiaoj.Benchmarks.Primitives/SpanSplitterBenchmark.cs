@@ -4,6 +4,7 @@ using System.Buffers;
 using Wiaoj.Primitives.Buffers;
 
 namespace Wiaoj.Benchmarks.Primitives;
+
 [MemoryDiagnoser]
 [RankColumn]
 [HideColumns("Error", "StdDev", "Median", "RatioSD")]
@@ -28,7 +29,7 @@ public class SpanSplitterBenchmark {
         // 2. Uzun Metin (Büyük log satırı veya veri bloğu) - Yaklaşık 10KB
         // Rastgele kelimeler ve aralarına , ; | serpiştiriyoruz
         Random rand = new(42);
-        var chars = new char[10_000];
+        char[] chars = new char[10_000];
         for(int i = 0; i < chars.Length; i++) {
             if(i % 10 == 0)
                 chars[i] = SeparatorsStr[rand.Next(SeparatorsStr.Length)]; // Ayırıcı koy
@@ -49,7 +50,7 @@ public class SpanSplitterBenchmark {
     public int StringSplit_Short() {
         int sum = 0;
         // Klasik yöntem: Array allocation + String allocation
-        foreach(var part in this._shortText!.Split(Separator)) {
+        foreach(string part in this._shortText!.Split(Separator)) {
             sum += part.Length;
         }
         return sum;
@@ -73,7 +74,7 @@ public class SpanSplitterBenchmark {
         int sum = 0;
         // Senin yazdığın struct
         foreach(var part in this._shortText!.SplitValue(Separator)) {
-            sum += part.Length;
+            sum += part.Value.Length;
         }
         return sum;
     }
@@ -85,7 +86,7 @@ public class SpanSplitterBenchmark {
     [Benchmark(Description = "String.Split (Long)")]
     public int StringSplit_Long() {
         int sum = 0;
-        foreach(var part in this._longText!.Split(Separator)) {
+        foreach(string part in this._longText!.Split(Separator)) {
             sum += part.Length;
         }
         return sum;
@@ -95,7 +96,7 @@ public class SpanSplitterBenchmark {
     public int WiaojSplitter_Long() {
         int sum = 0;
         foreach(var part in this._longText.AsSpan().SplitValue(Separator)) {
-            sum += part.Length;
+            sum += part.Value.Length;
         }
         return sum;
     }
@@ -108,7 +109,7 @@ public class SpanSplitterBenchmark {
     public int StringSplitAny_Multi() {
         int sum = 0;
         // Split(char[]) kullanır
-        foreach(var part in this._shortText!.Split(this._separatorArray)) {
+        foreach(string part in this._shortText!.Split(this._separatorArray)) {
             sum += part.Length;
         }
         return sum;
@@ -119,7 +120,7 @@ public class SpanSplitterBenchmark {
         int sum = 0;
         // Senin SearchValues optimizasyonlu metodun
         foreach(var part in this._shortText.AsSpan().SplitValue(this._searchValues!)) {
-            sum += part.Length;
+            sum += part.Value.Length;
         }
         return sum;
     }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -245,22 +245,6 @@ public readonly record struct HexString :
     /// <param name="bytesWritten">The number of bytes written to the buffer.</param>
     /// <returns><see langword="true"/> if decoding was successful; otherwise, <see langword="false"/>.</returns>
     public bool TryDecode(Span<byte> destination, out int bytesWritten) {
-        //int requiredLength = GetDecodedLength();
-        //if (destination.Length < requiredLength) {
-        //    bytesWritten = 0;
-        //    return false;
-        //} 
-        //ReadOnlySpan<char> source = this.Value.AsSpan();
-
-        //for (int i = 0; i < requiredLength; i++) {
-        //    int hi = HexCharToValue(source[i * 2]);
-        //    int lo = HexCharToValue(source[i * 2 + 1]);
-        //    destination[i] = (byte)((hi << 4) | lo);
-        //}
-
-        //bytesWritten = requiredLength;
-        //return true;
-
         int requiredLength = GetDecodedLength();
         if(destination.Length < requiredLength) {
             bytesWritten = 0;

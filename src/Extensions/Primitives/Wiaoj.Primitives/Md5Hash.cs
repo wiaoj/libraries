@@ -12,6 +12,7 @@ namespace Wiaoj.Primitives;
 /// allocation-free operations for computing and comparing hashes.
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanFormattable {
     internal const int HashSizeInBytes = 16; // MD5 is 128 bits = 16 bytes
     private fixed byte _bytes[HashSizeInBytes];
@@ -195,6 +196,17 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanF
     }
 
     /// <summary>
+    /// Attempts to copy the hash bytes to the specified destination span.
+    /// </summary>
+    /// <param name="destination">The span to copy the bytes into.</param>
+    /// <returns><see langword="true"/> if the copy was successful; otherwise, <see langword="false"/>.</returns>
+    public bool TryCopyTo(Span<byte> destination) {
+        if(destination.Length < HashSizeInBytes) return false;
+        AsSpan().CopyTo(destination);
+        return true;
+    }
+
+    /// <summary>
     /// Returns a <see cref="ReadOnlySpan{Byte}"/> view of the hash bytes.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -265,8 +277,9 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanF
     }
 
     public override int GetHashCode() {
-        // Read first 4 bytes as int for fast hash code distribution
-        return BitConverter.ToInt32(AsSpan());
+        HashCode hash = new();
+        hash.AddBytes(AsSpan());
+        return hash.ToHashCode();
     }
 
     public static bool operator ==(Md5Hash left, Md5Hash right) {

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -84,6 +84,29 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
         return new HmacSha256Hash(hashBuffer);
     }
 
+    /// <summary>
+    /// Computes the HMAC-SHA256 hash of a string using the specified key and encoding.
+    /// </summary>
+    /// <param name="key">The cryptographic key.</param>
+    /// <param name="data">The string data to hash.</param>
+    /// <param name="encoding">The character encoding used to convert the string to bytes.</param>
+    /// <returns>A <see cref="HmacSha256Hash"/> instance.</returns>
+    public static HmacSha256Hash Compute(ReadOnlySpan<byte> key, string data, Encoding encoding) {
+        Preca.ThrowIfNull(data);
+        Preca.ThrowIfNull(encoding);
+        return Compute(key, encoding.GetBytes(data));
+    }
+
+    /// <summary>
+    /// Computes the HMAC-SHA256 hash of a string using the specified key and UTF-8 encoding.
+    /// </summary>
+    /// <param name="key">The cryptographic key.</param>
+    /// <param name="data">The string data to hash.</param>
+    /// <returns>A <see cref="HmacSha256Hash"/> instance.</returns>
+    public static HmacSha256Hash Compute(ReadOnlySpan<byte> key, string data) {
+        return Compute(key, data, Encoding.UTF8);
+    }
+
     #endregion
 
     #region Data Access & Conversion
@@ -96,22 +119,53 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
         return MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef<byte>(Unsafe.AsPointer(ref this._bytes[0])), HashSizeInBytes);
     }
 
+    /// <summary>
+    /// Provides safe, scoped access to the hash bytes as a <see cref="ReadOnlySpan{Byte}"/>.
+    /// </summary>
+    /// <param name="action">The delegate to invoke with the hash bytes.</param>
+    public void Expose(Action<ReadOnlySpan<byte>> action) {
+        fixed(byte* p = this._bytes) {
+            action(new ReadOnlySpan<byte>(p, HashSizeInBytes));
+        }
+    }
+
+    /// <summary>
+    /// Provides safe, scoped access to the hash bytes and returns a result.
+    /// </summary>
+    /// <typeparam name="TResult">The type of the value returned by <paramref name="func"/>.</typeparam>
+    /// <param name="func">The delegate to invoke with the hash bytes.</param>
+    /// <returns>The value returned by <paramref name="func"/>.</returns>
+    public TResult Expose<TResult>(Func<ReadOnlySpan<byte>, TResult> func) {
+        fixed(byte* p = this._bytes) {
+            return func(new ReadOnlySpan<byte>(p, HashSizeInBytes));
+        }
+    }
+
     /// <summary>Converts the hash to its <see cref="HexString"/> representation.</summary>
-    public HexString ToHexString() => HexString.FromBytes(AsSpan());
+    public HexString ToHexString() {
+        return HexString.FromBytes(AsSpan());
+    }
 
     /// <summary>Converts the hash to its <see cref="Base64String"/> representation.</summary>
-    public Base64String ToBase64String() => Base64String.FromBytes(AsSpan());
+    public Base64String ToBase64String() {
+        return Base64String.FromBytes(AsSpan());
+    }
 
     /// <summary>Converts the hash to its <see cref="Base64UrlString"/> representation.</summary>
-    public Base64UrlString ToBase64UrlString() => Base64UrlString.FromBytes(AsSpan());
+    public Base64UrlString ToBase64UrlString() {
+        return Base64UrlString.FromBytes(AsSpan());
+    }
 
     /// <summary>Returns the hexadecimal string representation of the hash.</summary>
     /// <returns>An uppercase hexadecimal string.</returns>
-    public override string ToString() => Convert.ToHexString(AsSpan());
+    public override string ToString() {
+        return Convert.ToHexString(AsSpan());
+    }
 
     // IFormattable — "x" = lowercase hex, default = uppercase
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) =>
-        format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+    }
 
     // ISpanFormattable
     bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
@@ -145,7 +199,7 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
     /// <param name="hex">The hex-encoded string containing the hash.</param>
     /// <returns>A new <see cref="HmacSha256Hash"/> instance.</returns>
     /// <exception cref="FormatException">Thrown when the hex string does not represent 32 bytes.</exception>
-    public static HmacSha256Hash FromHex(HexString hex) {
+    public static HmacSha256Hash From(HexString hex) {
         Span<byte> buffer = stackalloc byte[HashSizeInBytes];
         if(hex.TryDecode(buffer, out int written) && written == HashSizeInBytes) {
             return new HmacSha256Hash(buffer);
@@ -156,15 +210,96 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
     /// <summary>
     /// Creates a <see cref="HmacSha256Hash"/> from a valid <see cref="Base64String"/>.
     /// </summary>
-    /// <param name="b64">The base64-encoded string containing the hash.</param>
+    /// <param name="base64">The base64-encoded string containing the hash.</param>
     /// <returns>A new <see cref="HmacSha256Hash"/> instance.</returns>
     /// <exception cref="FormatException">Thrown when the decoded base64 data is not 32 bytes.</exception>
-    public static HmacSha256Hash FromBase64(Base64String b64) {
+    public static HmacSha256Hash From(Base64String base64) {
         Span<byte> buffer = stackalloc byte[HashSizeInBytes];
-        if(b64.TryDecode(buffer, out int written) && written == HashSizeInBytes) {
+        if(base64.TryDecode(buffer, out int written) && written == HashSizeInBytes) {
             return new HmacSha256Hash(buffer);
         }
         throw new FormatException("Base64 string is not a valid 32-byte hash.");
+    }
+
+    /// <summary>
+    /// Tries to create a <see cref="HmacSha256Hash"/> from a <see cref="HexString"/>.
+    /// </summary>
+    /// <param name="hex">The hex-encoded string to parse.</param>
+    /// <param name="result">
+    ///     When this method returns <see langword="true"/>, contains the parsed hash;
+    ///     otherwise, contains the default value.
+    /// </param>
+    /// <returns>
+    ///     <see langword="true"/> if <paramref name="hex"/> represents exactly 32 bytes;
+    ///     otherwise, <see langword="false"/>.
+    /// </returns>
+    public static bool TryParse(HexString hex, out HmacSha256Hash result) {
+        if(hex.GetDecodedLength() != HashSizeInBytes) {
+            result = default;
+            return false;
+        }
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
+        hex.TryDecode(buffer, out _);
+        result = new HmacSha256Hash(buffer);
+        return true;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="HmacSha256Hash"/> from a raw byte array.
+    /// </summary>
+    /// <param name="bytes">A byte array of exactly 32 bytes.</param>
+    /// <returns>A new <see cref="HmacSha256Hash"/> instance.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="bytes"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the array length is not 32.</exception>
+    public static HmacSha256Hash FromBytes(byte[] bytes) {
+        Preca.ThrowIfNull(bytes);
+        return new HmacSha256Hash(bytes.AsSpan());
+    }
+
+    /// <summary>
+    /// Creates a <see cref="HmacSha256Hash"/> from a read-only span of bytes.
+    /// </summary>
+    /// <param name="source">A span of exactly 32 bytes.</param>
+    /// <returns>A new <see cref="HmacSha256Hash"/> instance.</returns>
+    /// <exception cref="ArgumentException">Thrown when the span length is not 32.</exception>
+    public static HmacSha256Hash FromBytes(ReadOnlySpan<byte> source) {
+        return new HmacSha256Hash(source);
+    }
+
+    /// <summary>
+    /// Attempts to create a <see cref="HmacSha256Hash"/> from a read-only span of bytes.
+    /// </summary>
+    /// <param name="source">A span of bytes.</param>
+    /// <param name="result">
+    ///     When this method returns <see langword="true"/>, contains the parsed hash;
+    ///     otherwise, contains the default value.
+    /// </param>
+    /// <returns>
+    ///     <see langword="true"/> if <paramref name="source"/> contains exactly 32 bytes;
+    ///     otherwise, <see langword="false"/>.
+    /// </returns>
+    public static bool TryFromBytes(ReadOnlySpan<byte> source, out HmacSha256Hash result) {
+        if(source.Length != HashSizeInBytes) {
+            result = default;
+            return false;
+        }
+        result = new HmacSha256Hash(source);
+        return true;
+    }
+
+    /// <summary>
+    /// Copies the hash bytes to a destination span.
+    /// </summary>
+    /// <param name="destination">The span to copy the bytes into. Must be at least 32 bytes.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="destination"/> is shorter than 32 bytes.
+    /// </exception>
+    public void CopyTo(Span<byte> destination) {
+        if(destination.Length < HashSizeInBytes)
+            throw new ArgumentException("Destination span must be at least 32 bytes long.", nameof(destination));
+        fixed(byte* p = this._bytes) {
+            new ReadOnlySpan<byte>(p, HashSizeInBytes).CopyTo(destination);
+        }
     }
 
     /// <summary>
@@ -174,7 +309,7 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
     /// <returns><see langword="true"/> if the copy was successful; otherwise, <see langword="false"/>.</returns>
     public bool TryCopyTo(Span<byte> destination) {
         if(destination.Length < HashSizeInBytes) return false;
-        fixed(byte* p = _bytes) {
+        fixed(byte* p = this._bytes) {
             new ReadOnlySpan<byte>(p, HashSizeInBytes).CopyTo(destination);
         }
         return true;
@@ -183,7 +318,9 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
     /// <summary>
     /// Implicitly converts a <see cref="HmacSha256Hash"/> to a <see cref="ReadOnlySpan{Byte}"/>.
     /// </summary>
-    public static implicit operator ReadOnlySpan<byte>(HmacSha256Hash hash) => hash.AsSpan();
+    public static implicit operator ReadOnlySpan<byte>(HmacSha256Hash hash) {
+        return hash.AsSpan();
+    }
 
     #endregion
 
@@ -192,25 +329,33 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
     /// <summary>
     /// Determines whether two <see cref="HmacSha256Hash"/> instances are equal using a constant-time algorithm.
     /// </summary>
-    public bool Equals(HmacSha256Hash other) => CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
+    public bool Equals(HmacSha256Hash other) {
+        return CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
+    }
 
     /// <inheritdoc/>
-    public override bool Equals(object? obj) => obj is HmacSha256Hash other && Equals(other);
+    public override bool Equals(object? obj) {
+        return obj is HmacSha256Hash other && Equals(other);
+    }
 
     /// <inheritdoc/>
     public override int GetHashCode() {
-        fixed(byte* p = _bytes) {
-            var hash = new HashCode();
+        fixed(byte* p = this._bytes) {
+            HashCode hash = new();
             hash.AddBytes(new ReadOnlySpan<byte>(p, HashSizeInBytes));
             return hash.ToHashCode();
         }
     }
 
     /// <summary>Compares two <see cref="HmacSha256Hash"/> instances for equality.</summary>
-    public static bool operator ==(HmacSha256Hash left, HmacSha256Hash right) => left.Equals(right);
+    public static bool operator ==(HmacSha256Hash left, HmacSha256Hash right) {
+        return left.Equals(right);
+    }
 
     /// <summary>Compares two <see cref="HmacSha256Hash"/> instances for inequality.</summary>
-    public static bool operator !=(HmacSha256Hash left, HmacSha256Hash right) => !left.Equals(right);
+    public static bool operator !=(HmacSha256Hash left, HmacSha256Hash right) {
+        return !left.Equals(right);
+    }
 
     #endregion
 }

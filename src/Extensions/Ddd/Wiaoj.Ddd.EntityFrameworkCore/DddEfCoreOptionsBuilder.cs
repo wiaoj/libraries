@@ -31,7 +31,7 @@ public sealed class DddEfCoreOptionsBuilder(IServiceCollection services) {
     public void UseSerializer(Action<IWiaojSerializationBuilder> configure) {
         this.Services.AddWiaojSerializer(configure);
         this.IsSerializerConfigured = true;
-    }
+    } 
 
     /// <summary>
     /// Uses System.Text.Json as the serializer for Outbox messages.
@@ -40,10 +40,10 @@ public sealed class DddEfCoreOptionsBuilder(IServiceCollection services) {
     public void UseSystemTextJson(Action<JsonSerializerOptions>? configure = null) {
         UseSerializer(builder => {
             if (configure is null) {
-                builder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>();
+                builder.TryUseSystemTextJson<DddEfCoreOutboxSerializerKey>();
             }
             else {
-                builder.UseSystemTextJson<DddEfCoreOutboxSerializerKey>(configure);
+                builder.TryUseSystemTextJson<DddEfCoreOutboxSerializerKey>(configure);
             }
         });
     }

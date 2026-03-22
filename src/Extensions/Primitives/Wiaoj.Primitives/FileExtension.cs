@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Wiaoj.Primitives; 
-[DebuggerDisplay("{Value}")]
+[DebuggerDisplay("{ToString(),nq}")]
 [JsonConverter(typeof(FileExtensionJsonConverter))]
 [TypeConverter(typeof(FileExtensionTypeConverter))]
 public readonly record struct FileExtension :
@@ -146,7 +146,7 @@ public readonly record struct FileExtension :
 
 // --- CONVERTERS (Bunları da unutmadım) ---
 
-public class FileExtensionJsonConverter : JsonConverter<FileExtension> {
+public sealed class FileExtensionJsonConverter : JsonConverter<FileExtension> {
     public override FileExtension Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         return FileExtension.Parse(reader.GetString() ?? string.Empty);
     }
@@ -156,7 +156,7 @@ public class FileExtensionJsonConverter : JsonConverter<FileExtension> {
     }
 }
 
-public class FileExtensionTypeConverter : TypeConverter {
+public sealed class FileExtensionTypeConverter : TypeConverter {
     public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) {
         return sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
     }

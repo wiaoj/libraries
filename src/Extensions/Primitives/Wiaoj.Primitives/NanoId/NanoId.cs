@@ -18,7 +18,7 @@ namespace Wiaoj.Primitives;
 /// Default Length: 21 chars (~126 bits of entropy)
 /// </para>
 /// </summary>
-[DebuggerDisplay("{Value}")]
+[DebuggerDisplay("{ToString(),nq}")]
 [TypeConverter(typeof(NanoIdTypeConverter))]
 [JsonConverter(typeof(NanoIdJsonConverter))]
 [StructLayout(LayoutKind.Auto)]
@@ -306,7 +306,7 @@ public static class PrecaExtensions {
 /// <summary>
 /// Provides JSON serialization support for the <see cref="NanoId"/> struct.
 /// </summary>
-public class NanoIdJsonConverter : JsonConverter<NanoId> {
+public sealed class NanoIdJsonConverter : JsonConverter<NanoId> {
     /// <inheritdoc/>
     public override NanoId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if(reader.TokenType == JsonTokenType.String) {
@@ -334,7 +334,7 @@ public class NanoIdJsonConverter : JsonConverter<NanoId> {
 /// <summary>
 /// Provides type conversion support for the <see cref="NanoId"/> struct to and from string representations.
 /// </summary>
-public class NanoIdTypeConverter : TypeConverter {
+public sealed class NanoIdTypeConverter : TypeConverter {
     /// <inheritdoc/>
     public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType)
         => sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);

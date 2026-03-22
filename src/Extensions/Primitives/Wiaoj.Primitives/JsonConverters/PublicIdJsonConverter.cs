@@ -1,6 +1,4 @@
-﻿using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
@@ -8,8 +6,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.Snowflake;
 
-namespace Wiaoj.Primitives.Obfuscation;
-public class PublicIdJsonConverter : JsonConverter<PublicId> {
+namespace Wiaoj.Primitives.JsonConverters;
+public sealed class PublicIdJsonConverter : JsonConverter<PublicId> {
     public override PublicId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if(reader.TokenType == JsonTokenType.String) {
             ReadOnlySpan<byte> utf8Bytes = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
@@ -57,7 +55,7 @@ public class PublicIdJsonConverter : JsonConverter<PublicId> {
     }
 }
 
-public class PublicIdTypeConverter : TypeConverter {
+public sealed class PublicIdTypeConverter : TypeConverter {
     public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) {
         return sourceType == typeof(string) ||
                sourceType == typeof(SnowflakeId) ||
