@@ -7,7 +7,7 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnu
     public DateTimeOffset CreatedAt { get; protected set; }
     public DateTimeOffset? UpdatedAt { get; protected set; }
     public DateTimeOffset? DeletedAt { get; protected set; }
-    public bool IsDeleted => this.DeletedAt.HasValue;
+    public virtual bool IsDeleted => this.DeletedAt.HasValue;
 
     protected readonly List<IDomainEvent> domainEvents = [];
     public IReadOnlyList<IDomainEvent> DomainEvents => this.domainEvents.AsReadOnly();
@@ -17,32 +17,32 @@ public abstract class Aggregate<TId> : Entity<TId>, IAggregate where TId : notnu
     protected Aggregate() { }
     protected Aggregate(TId id) : base(id) { }
 
-    public void Delete(DateTimeOffset deletedAt) {
+    public virtual void Delete(DateTimeOffset deletedAt) {
         Preca.ThrowIf<EntityAlreadyDeletedException>(this.IsDeleted);
         this.DeletedAt = deletedAt;
     }
 
-    public void Restore() {
+    public virtual void Restore() {
         Preca.ThrowIfFalse<EntityNotDeletedException>(this.IsDeleted);
         this.DeletedAt = null;
     }
 
-    public void SetCreatedAt(DateTimeOffset createdAt) {
+    public virtual void SetCreatedAt(DateTimeOffset createdAt) {
         Preca.ThrowIf<CreatedAtAlreadySetException>(this.CreatedAt != default);
         this.CreatedAt = createdAt;
     }
 
-    public void SetUpdatedAt(DateTimeOffset updatedAt) {
+    public virtual void SetUpdatedAt(DateTimeOffset updatedAt) {
         Preca.ThrowIfDefault(updatedAt);
         this.UpdatedAt = updatedAt;
     }
       
-    public void RaiseDomainEvent<TEvent>(TEvent @event) where TEvent : IDomainEvent {
+    public virtual void RaiseDomainEvent<TEvent>(TEvent @event) where TEvent : IDomainEvent {
         Preca.ThrowIfNull(@event);
         this.domainEvents.Add(@event);
     }
 
-    public void ClearDomainEvents() {
+    public virtual void ClearDomainEvents() {
         this.domainEvents.Clear();
     }
 }
@@ -94,7 +94,7 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull 
         this.Id = id;
     }
 
-    public bool Equals(Entity<TId>? other) {
+    public virtual bool Equals(Entity<TId>? other) {
         if(other is null) {
             return false;
         }
