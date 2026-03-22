@@ -448,8 +448,8 @@ void RunMimeTypeExamples() {
 void RunGuidV7Examples() {
 
     // Temel üretim
-    GuidV7 id1 = GuidV7.NewId();
-    GuidV7 id2 = GuidV7.NewId();
+    GuidV7 id1 = GuidV7.Create();
+    GuidV7 id2 = GuidV7.Create();
     Console.WriteLine($"ID 1: {id1}");
     Console.WriteLine($"ID 2: {id2}");
     Console.WriteLine($"Farklı mı: {id1 != id2}");     // True
@@ -457,12 +457,12 @@ void RunGuidV7Examples() {
 
     // TimeProvider ile deterministik üretim
     DateTimeOffset fixedTime = new(2025, 6, 1, 12, 0, 0, TimeSpan.Zero);
-    GuidV7 seededId = GuidV7.NewId(new FixedTimeProvider(fixedTime));
+    GuidV7 seededId = GuidV7.Create(new FixedTimeProvider(fixedTime));
     Console.WriteLine($"\nFixed time ID: {seededId}");
 
     // UnixTimestamp ile üretim
     UnixTimestamp ts = UnixTimestamp.FromMilliseconds(1_748_000_000_000L);
-    GuidV7 tsId = GuidV7.NewId(ts);
+    GuidV7 tsId = GuidV7.Create(ts);
     Console.WriteLine($"UnixTimestamp ID: {tsId}");
 
     // Timestamp extraction
@@ -506,7 +506,7 @@ void RunGuidV7Examples() {
     Console.WriteLine($"UTF8 format: {System.Text.Encoding.UTF8.GetString(utf8Buf[..bytesWritten])}");
 
     // Sıralama
-    var ids = Enumerable.Range(0, 5).Select(_ => GuidV7.NewId()).ToList();
+    var ids = Enumerable.Range(0, 5).Select(_ => GuidV7.Create()).ToList();
     var sorted = ids.OrderBy(x => x).ToList();
     Console.WriteLine($"\n5 ID sıralı mı: {ids.SequenceEqual(sorted)}"); // True
 
@@ -749,7 +749,7 @@ void RunBase64UrlStringExamples() {
     Console.WriteLine($"Stack decode: {written} bytes");
 
     // GuidV7 ile birlikte kullanım
-    GuidV7 guidId = GuidV7.NewId();
+    GuidV7 guidId = GuidV7.Create();
     Base64UrlString compact = guidId.ToBase64Url();
     Console.WriteLine($"\nGuidV7 compact: {compact}"); // 22 char URL-safe
 
@@ -1222,7 +1222,7 @@ void RunSnowflakeAdvancedExamples() {
     Console.WriteLine($"Base62: {id.ToBase62String()}");
 
     // GuidV7 ile karşılaştırma
-    GuidV7 guidId = GuidV7.NewId();
+    GuidV7 guidId = GuidV7.Create();
     Console.WriteLine($"\nSnowflake (19 char): {id}");
     Console.WriteLine($"GuidV7 D (36 char): {guidId}");
     Console.WriteLine($"GuidV7 N (32 char): {guidId.ToString("N")}");
@@ -1238,7 +1238,7 @@ void RunRealWorldScenarios() {
     {
         // Tip sistemi yanlış kullanımı compile-time'da engeller
         var user = new IamUser(
-            Id: GuidV7.NewId(),
+            Id: GuidV7.Create(),
             Email: NonEmptyString.Create("alice@acme.com"),
             Username: BoundedString<C3, C50>.Create("alice"),
             Role: NonEmptyString.Create("org:member")
@@ -1257,7 +1257,7 @@ void RunRealWorldScenarios() {
         Console.WriteLine($"Rollout: {rollout} kullanıcıya aktif");
 
         // Kullanıcı ID'si bu rollout'a dahil mi?
-        GuidV7 userId = GuidV7.NewId();
+        GuidV7 userId = GuidV7.Create();
         // Basit hash-based rollout kararı
         bool inRollout = (Math.Abs(userId.Value.GetHashCode()) % 100) < (int)(rollout.Value * 100);
         Console.WriteLine($"User {userId.ToString()[..8]}... rollout'ta mı: {inRollout}");
@@ -1297,8 +1297,8 @@ void RunRealWorldScenarios() {
     Console.WriteLine("\n─── Senaryo 5: Audit Log Entry ───");
     {
         var entry = new AuditEntry(
-            Id: GuidV7.NewId(),
-            UserId: Urn.Create("user", GuidV7.NewId().ToString()),
+            Id: GuidV7.Create(),
+            UserId: Urn.Create("user", GuidV7.Create().ToString()),
             Action: NonEmptyString.Create("auth.login.success"),
             IpAddress: NonEmptyString.Create("195.142.0.1"),
             Timestamp: UnixTimestamp.Now

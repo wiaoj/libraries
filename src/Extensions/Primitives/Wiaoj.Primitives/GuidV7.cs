@@ -35,7 +35,7 @@ public readonly record struct GuidV7 :
 
     /// <summary>
     /// Represents an empty (all-zeros) GuidV7.
-    /// Not a valid time-ordered ID — use <see cref="NewId()"/> for generation.
+    /// Not a valid time-ordered ID — use <see cref="Create()"/> for generation.
     /// </summary>
     public static GuidV7 Empty => new(Guid.Empty);
 
@@ -50,7 +50,7 @@ public readonly record struct GuidV7 :
     /// Each call produces a monotonically increasing value within the same millisecond.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static GuidV7 NewId() {
+    public static GuidV7 Create() {
         return new(Guid.CreateVersion7());
     }
 
@@ -59,7 +59,7 @@ public readonly record struct GuidV7 :
     /// Useful for deterministic testing.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static GuidV7 NewId(TimeProvider timeProvider) {
+    public static GuidV7 Create(TimeProvider timeProvider) {
         Preca.ThrowIfNull(timeProvider);
         return new(Guid.CreateVersion7(timeProvider.GetUtcNow()));
     }
@@ -76,7 +76,7 @@ public readonly record struct GuidV7 :
     /// <param name="timestamp">The Unix timestamp to embed into the UUID v7.</param>
     /// <returns>A new <see cref="GuidV7"/> with the given timestamp encoded in its high bits.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static GuidV7 NewId(UnixTimestamp timestamp) {
+    public static GuidV7 Create(UnixTimestamp timestamp) {
         return new(Guid.CreateVersion7(timestamp.ToDateTimeOffset()));
     }
 

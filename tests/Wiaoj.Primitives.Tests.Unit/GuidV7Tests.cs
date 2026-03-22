@@ -15,46 +15,46 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Generation_NewId_ReturnsVersion7Guid() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal(7, id.Value.Version);
     }
 
     [Fact]
     public void Generation_NewId_IsNotEmpty() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.NotEqual(GuidV7.Empty, id);
         Assert.NotEqual(Guid.Empty, id.Value);
     }
 
     [Fact]
     public void Generation_TwoConsecutiveCalls_ProduceDifferentIds() {
-        Assert.NotEqual(GuidV7.NewId(), GuidV7.NewId());
+        Assert.NotEqual(GuidV7.Create(), GuidV7.Create());
     }
 
     [Fact]
     public void Generation_NewId_WithTimeProvider_UsesProvidedTime() {
         DateTimeOffset fixedTime = new(2025, 6, 15, 12, 0, 0, TimeSpan.Zero);
-        GuidV7 id = GuidV7.NewId(new FakeTimeProvider(fixedTime));
+        GuidV7 id = GuidV7.Create(new FakeTimeProvider(fixedTime));
         Assert.Equal(fixedTime.ToUnixTimeMilliseconds(), id.GetTimestamp().ToUnixTimeMilliseconds());
     }
 
     [Fact]
     public void Generation_NewId_WithNullTimeProvider_ThrowsArgumentNullException() {
         // Preca throws a subclass of ArgumentNullException — ThrowsAny covers the hierarchy
-        Assert.ThrowsAny<ArgumentNullException>(() => GuidV7.NewId(null!));
+        Assert.ThrowsAny<ArgumentNullException>(() => GuidV7.Create(null!));
     }
 
     [Fact]
     public void Generation_NewId_WithUnixTimestamp_EmbedsCorrectTimestamp() {
         UnixTimestamp ts = UnixTimestamp.Now;
-        GuidV7 id = GuidV7.NewId(ts);
+        GuidV7 id = GuidV7.Create(ts);
 
         Assert.Equal(ts.TotalMilliseconds, id.GetTimestamp().ToUnixTimeMilliseconds());
     }
 
     [Fact]
     public void Generation_NewId_WithUnixTimestamp_ReturnsVersion7Guid() {
-        GuidV7 id = GuidV7.NewId(UnixTimestamp.Now);
+        GuidV7 id = GuidV7.Create(UnixTimestamp.Now);
         Assert.Equal(7, id.Value.Version);
     }
 
@@ -63,8 +63,8 @@ public sealed class GuidV7Tests {
         UnixTimestamp earlier = UnixTimestamp.Now;
         UnixTimestamp later = UnixTimestamp.FromMilliseconds(earlier.TotalMilliseconds + 1);
 
-        GuidV7 a = GuidV7.NewId(earlier);
-        GuidV7 b = GuidV7.NewId(later);
+        GuidV7 a = GuidV7.Create(earlier);
+        GuidV7 b = GuidV7.Create(later);
 
         Assert.True(a < b, "ID with earlier timestamp should be less than ID with later timestamp");
     }
@@ -73,8 +73,8 @@ public sealed class GuidV7Tests {
     public void Generation_NewId_WithUnixTimestamp_SameTimestampProducesUniqueIds() {
         UnixTimestamp ts = UnixTimestamp.Now;
 
-        GuidV7 a = GuidV7.NewId(ts);
-        GuidV7 b = GuidV7.NewId(ts);
+        GuidV7 a = GuidV7.Create(ts);
+        GuidV7 b = GuidV7.Create(ts);
 
         Assert.NotEqual(a, b);
     }
@@ -87,7 +87,7 @@ public sealed class GuidV7Tests {
         DateTimeOffset dto = DateTimeOffset.Parse(isoDate).ToUniversalTime();
         UnixTimestamp ts = UnixTimestamp.From(dto);
 
-        GuidV7 id = GuidV7.NewId(ts);
+        GuidV7 id = GuidV7.Create(ts);
 
         Assert.Equal(ts.TotalMilliseconds, id.GetTimestamp().ToUnixTimeMilliseconds());
     }
@@ -108,7 +108,7 @@ public sealed class GuidV7Tests {
         FakeTimeProvider fake = new(DateTimeOffset.UtcNow);
         List<GuidV7> ids = [];
         for(int i = 0; i < 10; i++) {
-            ids.Add(GuidV7.NewId(fake));
+            ids.Add(GuidV7.Create(fake));
             fake.Advance(TimeSpan.FromMilliseconds(1));
         }
         for(int i = 1; i < ids.Count; i++) {
@@ -124,7 +124,7 @@ public sealed class GuidV7Tests {
     [Fact]
     public void Timestamp_GetTimestamp_IsApproximatelyNow() {
         DateTimeOffset before = DateTimeOffset.UtcNow;
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         DateTimeOffset after = DateTimeOffset.UtcNow;
 
         long extracted = id.GetTimestamp().ToUnixTimeMilliseconds();
@@ -137,19 +137,19 @@ public sealed class GuidV7Tests {
     [Fact]
     public void Timestamp_GetTimestamp_WithFakeTime_IsExact() {
         DateTimeOffset fixedTime = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        GuidV7 id = GuidV7.NewId(new FakeTimeProvider(fixedTime));
+        GuidV7 id = GuidV7.Create(new FakeTimeProvider(fixedTime));
         Assert.Equal(fixedTime.ToUnixTimeMilliseconds(), id.GetTimestamp().ToUnixTimeMilliseconds());
     }
 
     [Fact]
     public void Timestamp_UnixTimestamp_MatchesGetTimestamp() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal(id.GetTimestamp().ToUnixTimeMilliseconds(), id.UnixTimestamp.TotalMilliseconds);
     }
 
     [Fact]
     public void Timestamp_GetTimestamp_IsUtc() {
-        Assert.Equal(TimeSpan.Zero, GuidV7.NewId().GetTimestamp().Offset);
+        Assert.Equal(TimeSpan.Zero, GuidV7.Create().GetTimestamp().Offset);
     }
 
     [Theory]
@@ -158,7 +158,7 @@ public sealed class GuidV7Tests {
     [InlineData("1970-01-01T00:00:00.001Z")]
     public void Timestamp_GetTimestamp_RoundTripsVariousDates(string isoDate) {
         DateTimeOffset original = DateTimeOffset.Parse(isoDate).ToUniversalTime();
-        GuidV7 id = GuidV7.NewId(new FakeTimeProvider(original));
+        GuidV7 id = GuidV7.Create(new FakeTimeProvider(original));
         Assert.Equal(original.ToUnixTimeMilliseconds(), id.GetTimestamp().ToUnixTimeMilliseconds());
     }
 
@@ -170,9 +170,9 @@ public sealed class GuidV7Tests {
     [Fact]
     public void Timestamp_LaterIdHasGreaterOrEqualTimestamp() {
         FakeTimeProvider fake = new(DateTimeOffset.UtcNow);
-        GuidV7 a = GuidV7.NewId(fake);
+        GuidV7 a = GuidV7.Create(fake);
         fake.Advance(TimeSpan.FromMilliseconds(1));
-        GuidV7 b = GuidV7.NewId(fake);
+        GuidV7 b = GuidV7.Create(fake);
         Assert.True(b.GetTimestamp() >= a.GetTimestamp());
     }
 
@@ -210,7 +210,7 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Parse_Roundtrip_PreservesValue() {
-        GuidV7 original = GuidV7.NewId();
+        GuidV7 original = GuidV7.Create();
         Assert.Equal(original, GuidV7.Parse(original.ToString()));
     }
 
@@ -280,7 +280,7 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Format_ToString_IsHyphenatedFormat() {
-        string s = GuidV7.NewId().ToString();
+        string s = GuidV7.Create().ToString();
         Assert.Equal(36, s.Length);
         Assert.Equal('-', s[8]);
         Assert.Equal('-', s[13]);
@@ -294,18 +294,18 @@ public sealed class GuidV7Tests {
     [InlineData("B", 38)]
     [InlineData("P", 38)]
     public void Format_ToString_WithFormat_ProducesCorrectLength(string format, int expectedLength) {
-        Assert.Equal(expectedLength, GuidV7.NewId().ToString(format).Length);
+        Assert.Equal(expectedLength, GuidV7.Create().ToString(format).Length);
     }
 
     [Fact]
     public void Format_ToString_NullFormat_FallsBackToD() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal(id.ToString("D"), id.ToString(null));
     }
 
     [Fact]
     public void Format_ISpanFormattable_TryFormat_Succeeds() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Span<char> buf = stackalloc char[36];
         bool ok = ((ISpanFormattable)id).TryFormat(buf, out int written, "D", null);
         Assert.True(ok);
@@ -316,14 +316,14 @@ public sealed class GuidV7Tests {
     [Fact]
     public void Format_ISpanFormattable_TooSmallBuffer_ReturnsFalse() {
         Span<char> buf = stackalloc char[10];
-        bool ok = ((ISpanFormattable)GuidV7.NewId()).TryFormat(buf, out int written, "D", null);
+        bool ok = ((ISpanFormattable)GuidV7.Create()).TryFormat(buf, out int written, "D", null);
         Assert.False(ok);
         Assert.Equal(0, written);
     }
 
     [Fact]
     public void Format_ISpanFormattable_EmptyFormat_DefaultsToD() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Span<char> buf = stackalloc char[36];
         ((ISpanFormattable)id).TryFormat(buf, out int written, ReadOnlySpan<char>.Empty, null);
         Assert.Equal(id.ToString("D"), new string(buf[..written]));
@@ -331,7 +331,7 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Format_IUtf8SpanFormattable_TryFormat_Succeeds() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Span<byte> buf = stackalloc byte[36];
         bool ok = ((IUtf8SpanFormattable)id).TryFormat(buf, out int written, "D", null);
         Assert.True(ok);
@@ -342,14 +342,14 @@ public sealed class GuidV7Tests {
     [Fact]
     public void Format_IUtf8SpanFormattable_TooSmallBuffer_ReturnsFalse() {
         Span<byte> buf = stackalloc byte[5];
-        bool ok = ((IUtf8SpanFormattable)GuidV7.NewId()).TryFormat(buf, out int written, "D", null);
+        bool ok = ((IUtf8SpanFormattable)GuidV7.Create()).TryFormat(buf, out int written, "D", null);
         Assert.False(ok);
         Assert.Equal(0, written);
     }
 
     [Fact]
     public void Format_IFormattable_MatchesPublicToString() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal(id.ToString("D"), ((IFormattable)id).ToString("D", null));
     }
 
@@ -359,36 +359,36 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Conversion_ToGuid_ReturnsUnderlyingGuid() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal(id.Value, id.ToGuid());
     }
 
     [Fact]
     public void Conversion_ImplicitCastToGuid_Works() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Guid g = id;
         Assert.Equal(id.Value, g);
     }
 
     [Fact]
     public void Conversion_ToHexString_Is32Chars() {
-        Assert.Equal(32, GuidV7.NewId().ToHexString().Value.Length);
+        Assert.Equal(32, GuidV7.Create().ToHexString().Value.Length);
     }
 
     [Fact]
     public void Conversion_ToHexString_RoundTrips() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal(id.Value, new Guid(id.ToHexString().ToBytes(), bigEndian: true));
     }
 
     [Fact]
     public void Conversion_ToBase64Url_Is22Chars() {
-        Assert.Equal(22, GuidV7.NewId().ToBase64Url().Value.Length);
+        Assert.Equal(22, GuidV7.Create().ToBase64Url().Value.Length);
     }
 
     [Fact]
     public void Conversion_ToBase64Url_RoundTrips() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Span<byte> decoded = stackalloc byte[16];
         id.ToBase64Url().TryDecode(decoded, out _);
         Assert.Equal(id.Value, new Guid(decoded, bigEndian: true));
@@ -396,7 +396,7 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Conversion_ToHexString_And_ToBase64Url_RepresentSameBytes() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         byte[] fromHex = id.ToHexString().ToBytes();
         Span<byte> fromB64 = stackalloc byte[16];
         id.ToBase64Url().TryDecode(fromB64, out _);
@@ -409,7 +409,7 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Equality_SameId_IsEqual() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         GuidV7 copy = GuidV7.Parse(id.ToString());
         Assert.Equal(id, copy);
         Assert.True(id == copy);
@@ -417,40 +417,40 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Equality_DifferentIds_AreNotEqual() {
-        GuidV7 a = GuidV7.NewId();
-        GuidV7 b = GuidV7.NewId();
+        GuidV7 a = GuidV7.Create();
+        GuidV7 b = GuidV7.Create();
         Assert.NotEqual(a, b);
         Assert.True(a != b);
     }
 
     [Fact]
     public void Equality_GetHashCode_SameIdSameHash() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal(id.GetHashCode(), GuidV7.Parse(id.ToString()).GetHashCode());
     }
 
     [Fact]
     public void Comparison_CompareTo_LaterIdIsGreater() {
         FakeTimeProvider fake = new(DateTimeOffset.UtcNow);
-        GuidV7 a = GuidV7.NewId(fake);
+        GuidV7 a = GuidV7.Create(fake);
         fake.Advance(TimeSpan.FromMilliseconds(1));
-        GuidV7 b = GuidV7.NewId(fake);
+        GuidV7 b = GuidV7.Create(fake);
         Assert.True(a.CompareTo(b) < 0);
         Assert.True(b.CompareTo(a) > 0);
     }
 
     [Fact]
     public void Comparison_CompareTo_SameIdReturnsZero() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal(0, id.CompareTo(id));
     }
 
     [Fact]
     public void Comparison_Operators_LessThanGreaterThan() {
         FakeTimeProvider fake = new(DateTimeOffset.UtcNow);
-        GuidV7 a = GuidV7.NewId(fake);
+        GuidV7 a = GuidV7.Create(fake);
         fake.Advance(TimeSpan.FromMilliseconds(1));
-        GuidV7 b = GuidV7.NewId(fake);
+        GuidV7 b = GuidV7.Create(fake);
         Assert.True(a < b);
         Assert.True(b > a);
         Assert.False(a > b);
@@ -459,7 +459,7 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Comparison_Operators_GreaterOrEqualLessOrEqual_SameId() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.True(id >= id);
         Assert.True(id <= id);
     }
@@ -468,7 +468,7 @@ public sealed class GuidV7Tests {
     public void Comparison_OrderBy_SortsChronologically() {
         FakeTimeProvider fake = new(DateTimeOffset.UtcNow);
         List<GuidV7> ids = Enumerable.Range(0, 10).Select(_ => {
-            GuidV7 id = GuidV7.NewId(fake);
+            GuidV7 id = GuidV7.Create(fake);
             fake.Advance(TimeSpan.FromMilliseconds(1));
             return id;
         }).ToList();
@@ -480,7 +480,7 @@ public sealed class GuidV7Tests {
     [Fact]
     public void Equality_CanBeUsedAsDictionaryKey() {
         Dictionary<GuidV7, string> dict = [];
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         dict[id] = "value";
         Assert.Equal("value", dict[id]);
     }
@@ -488,7 +488,7 @@ public sealed class GuidV7Tests {
     [Fact]
     public void Equality_HashSet_NoDuplicates() {
         HashSet<GuidV7> set = [];
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.True(set.Add(id));
         Assert.False(set.Add(id));
         Assert.Single(set);
@@ -502,13 +502,13 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Json_Serialize_ProducesQuotedHyphenatedString() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         Assert.Equal($"\"{id}\"", JsonSerializer.Serialize(id, _jsonOptions));
     }
 
     [Fact]
     public void Json_Deserialize_ValidV7String_Succeeds() {
-        GuidV7 original = GuidV7.NewId();
+        GuidV7 original = GuidV7.Create();
         GuidV7 result = JsonSerializer.Deserialize<GuidV7>($"\"{original}\"", _jsonOptions);
         Assert.Equal(original, result);
     }
@@ -533,14 +533,14 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Json_SerializeDeserialize_Roundtrip() {
-        GuidV7 original = GuidV7.NewId();
+        GuidV7 original = GuidV7.Create();
         string json = JsonSerializer.Serialize(original, _jsonOptions);
         Assert.Equal(original, JsonSerializer.Deserialize<GuidV7>(json, _jsonOptions));
     }
 
     [Fact]
     public void Json_Serialize_InObject_ContainsCorrectValue() {
-        GuidV7 id = GuidV7.NewId();
+        GuidV7 id = GuidV7.Create();
         string json = JsonSerializer.Serialize(new { Id = id, Name = "test" }, _jsonOptions);
         Assert.Contains(id.ToString(), json);
     }
@@ -551,20 +551,20 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Interface_IParsable_Parse_Succeeds() {
-        GuidV7 original = GuidV7.NewId();
+        GuidV7 original = GuidV7.Create();
         Assert.Equal(original, ParseVia<GuidV7>(original.ToString()));
     }
 
     [Fact]
     public void Interface_IParsable_TryParse_Succeeds() {
-        GuidV7 original = GuidV7.NewId();
+        GuidV7 original = GuidV7.Create();
         Assert.True(TryParseVia<GuidV7>(original.ToString(), out GuidV7 result));
         Assert.Equal(original, result);
     }
 
     [Fact]
     public void Interface_ISpanParsable_TryParse_Succeeds() {
-        GuidV7 original = GuidV7.NewId();
+        GuidV7 original = GuidV7.Create();
         Assert.True(TryParseSpanVia<GuidV7>(original.ToString().AsSpan(), out GuidV7 result));
         Assert.Equal(original, result);
     }
@@ -586,7 +586,7 @@ public sealed class GuidV7Tests {
     [Fact]
     public void EdgeCase_AllGeneratedIds_AreVersion7() {
         for(int i = 0; i < 20; i++)
-            Assert.Equal(7, GuidV7.NewId().Value.Version);
+            Assert.Equal(7, GuidV7.Create().Value.Version);
     }
 
     [Fact]
@@ -594,18 +594,18 @@ public sealed class GuidV7Tests {
         const int count = 10_000;
         HashSet<GuidV7> ids = new(count);
         for(int i = 0; i < count; i++)
-            Assert.True(ids.Add(GuidV7.NewId()), $"ID {i} was a duplicate");
+            Assert.True(ids.Add(GuidV7.Create()), $"ID {i} was a duplicate");
         Assert.Equal(count, ids.Count);
     }
 
     [Fact]
     public void EdgeCase_FakeTimeProvider_Advance_ProducesOrderedIds() {
         FakeTimeProvider fake = new(DateTimeOffset.UtcNow);
-        GuidV7 a = GuidV7.NewId(fake);
+        GuidV7 a = GuidV7.Create(fake);
         fake.Advance(TimeSpan.FromMilliseconds(1));
-        GuidV7 b = GuidV7.NewId(fake);
+        GuidV7 b = GuidV7.Create(fake);
         fake.Advance(TimeSpan.FromMilliseconds(1));
-        GuidV7 c = GuidV7.NewId(fake);
+        GuidV7 c = GuidV7.Create(fake);
 
         Assert.True(a < b, "a should be less than b");
         Assert.True(b < c, "b should be less than c");
