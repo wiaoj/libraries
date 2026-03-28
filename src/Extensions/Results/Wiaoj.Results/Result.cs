@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Results; 
+﻿using System.Diagnostics.Contracts;
+
+namespace Wiaoj.Results; 
 /// <summary>
 /// Provides static factory methods to create <see cref="Result{TValue}"/> instances.
 /// <para>
@@ -14,6 +16,7 @@ public static partial class Result {
     /// Creates a successful <see cref="Result{TValue}"/> of <see cref="Success"/>
     /// for operations that return no value.
     /// </summary>
+    [Pure]
     public static Result<Success> Success() {
         return Wiaoj.Results.Success.Default;
     }
@@ -24,6 +27,7 @@ public static partial class Result {
     /// </summary>
     /// <typeparam name="T">The value type.</typeparam>
     /// <param name="value">The value to wrap.</param>
+    [Pure]
     public static Result<T> Success<T>(T value) {
         return value;
     }
@@ -32,6 +36,7 @@ public static partial class Result {
     /// Creates a failed <see cref="Result{TValue}"/> of <see cref="Success"/>
     /// from a single <paramref name="error"/>.
     /// </summary>
+    [Pure]
     public static Result<Success> Failure(Error error) {
         return error;
     }
@@ -40,6 +45,7 @@ public static partial class Result {
     /// Creates a failed <see cref="Result{TValue}"/> of <see cref="Success"/>
     /// from a list of errors.
     /// </summary>
+    [Pure]
     public static Result<Success> Failure(List<Error> errors) {
         return errors;
     }
@@ -50,6 +56,7 @@ public static partial class Result {
     /// Useful when a method returns <see cref="Result{TValue}"/> but needs to
     /// propagate an error without having a value to return.
     /// </summary>
+    [Pure]
     public static Result<T> Failure<T>(Error error) {
         return error;
     }

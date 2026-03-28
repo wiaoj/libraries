@@ -19,7 +19,7 @@ public sealed class ResultAsyncTests {
         Result<string> result = await FailureIntTask()
             .ThenAsync(v => { nextCalled = true; return Task.FromResult(Result<string>.Success($"{v}")); });
         Assert.False(nextCalled);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public sealed class ResultAsyncTests {
     public async Task ThenAsync_TaskResult_ToSyncNext_WhenError_Propagates() {
         Result<string> result = await FailureIntTask()
             .ThenAsync(v => Result<string>.Success($"{v}"));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -61,7 +61,7 @@ public sealed class ResultAsyncTests {
         Result<string> result = await FailureInt()
             .ThenAsync(v => { called = true; return Task.FromResult(Result<string>.Success($"{v}")); });
         Assert.False(called);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class ResultAsyncTests {
         CancellationToken ct = CancellationToken.None;
         Result<string> result = await FailureInt()
             .ThenAsync((v, token) => Task.FromResult(Result<string>.Success($"{v}")), ct);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── MatchAsync ────────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ public sealed class ResultAsyncTests {
     public async Task MapAsync_SyncMapper_WhenError_Propagates() {
         Result<string> result = await FailureIntTask()
             .MapAsync(v => $"{v}");
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public sealed class ResultAsyncTests {
     public async Task MapAsync_ResultMapper_WhenMapperFails_ReturnsMapperError() {
         Result<string> result = await SuccessIntTask()
             .MapAsync(_ => (Result<string>)AnotherError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(AnotherError, result.FirstError);
     }
 
@@ -176,7 +176,7 @@ public sealed class ResultAsyncTests {
     [Fact]
     public async Task MapSuccessAsync_WhenError_Propagates() {
         Result<Success> result = await FailureIntTask().MapSuccessAsync();
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 

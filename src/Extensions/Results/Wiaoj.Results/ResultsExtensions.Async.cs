@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics.Contracts;
+using System.Runtime.CompilerServices;
 
 namespace Wiaoj.Results;
 
@@ -49,13 +50,14 @@ public static partial class ResultsExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if the incoming result was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNext>> ThenAsync<T, TNext>(
         this Task<Result<T>> task,
         Func<T, Task<Result<TNext>>> next,
         CancellationToken cancellationToken = default) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
 
         cancellationToken.ThrowIfCancellationRequested();
         return await next(result.Value).ConfigureAwait(false);
@@ -79,13 +81,14 @@ public static partial class ResultsExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if the incoming result was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNext>> ThenAsync<T, TNext>(
         this Task<Result<T>> task,
         Func<T, CancellationToken, Task<Result<TNext>>> next,
         CancellationToken cancellationToken = default) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
 
         cancellationToken.ThrowIfCancellationRequested();
         return await next(result.Value, cancellationToken).ConfigureAwait(false);
@@ -107,12 +110,13 @@ public static partial class ResultsExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if the incoming result was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNext>> ThenAsync<T, TNext>(
         this Task<Result<T>> task,
         Func<T, Result<TNext>> next) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return next(result.Value);
     }
 
@@ -130,11 +134,12 @@ public static partial class ResultsExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if <paramref name="result"/> was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNext>> ThenAsync<T, TNext>(
         this Result<T> result,
         Func<T, Task<Result<TNext>>> next) {
 
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return await next(result.Value).ConfigureAwait(false);
     }
 
@@ -154,12 +159,13 @@ public static partial class ResultsExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if <paramref name="result"/> was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNext>> ThenAsync<T, TNext>(
         this Result<T> result,
         Func<T, CancellationToken, Task<Result<TNext>>> next,
         CancellationToken cancellationToken = default) {
 
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return await next(result.Value, cancellationToken).ConfigureAwait(false);
     }
 
@@ -180,11 +186,12 @@ public static partial class ResultsExtensions {
     /// A successful <see cref="Result{TValue}"/> wrapping the awaited value, or
     /// the original errors if <paramref name="result"/> was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNext>> ThenAsync<T, TNext>(
         this Result<T> result,
         Func<T, Task<TNext>> next) {
 
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         TNext value = await next(result.Value).ConfigureAwait(false);
         return Result.Success(value);
     }
@@ -207,12 +214,13 @@ public static partial class ResultsExtensions {
     /// A successful <see cref="Result{TValue}"/> wrapping the awaited value, or
     /// the original errors if <paramref name="result"/> was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNext>> ThenAsync<T, TNext>(
         this Result<T> result,
         Func<T, CancellationToken, Task<TNext>> next,
         CancellationToken cancellationToken = default) {
 
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         TNext value = await next(result.Value, cancellationToken).ConfigureAwait(false);
         return Result.Success(value);
     }
@@ -232,6 +240,7 @@ public static partial class ResultsExtensions {
     /// Checked after the task completes and before the match functions are called.
     /// </param>
     /// <returns>The value returned by whichever branch was executed.</returns>
+    [Pure]
     public static async Task<TResult> MatchAsync<T, TResult>(
         this Task<Result<T>> task,
         Func<T, TResult> onValue,
@@ -256,6 +265,7 @@ public static partial class ResultsExtensions {
     /// Checked after the task completes and before the chosen branch is executed.
     /// </param>
     /// <returns>The value produced by whichever async branch was executed.</returns>
+    [Pure]
     public static async Task<TResult> MatchAsync<T, TResult>(
         this Task<Result<T>> task,
         Func<T, Task<TResult>> onValue,
@@ -265,7 +275,7 @@ public static partial class ResultsExtensions {
         Result<T> result = await task.ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
-        return result.IsError
+        return result.IsFailure
             ? await onError(result.Errors).ConfigureAwait(false)
             : await onValue(result.Value).ConfigureAwait(false);
     }
@@ -287,12 +297,13 @@ public static partial class ResultsExtensions {
     /// A successful <see cref="Result{TValue}"/> containing the mapped value,
     /// or the original errors.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNew>> MapAsync<T, TNew>(
         this Task<Result<T>> task,
         Func<T, TNew> mapper) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return Result.Success(mapper(result.Value));
     }
 
@@ -308,12 +319,13 @@ public static partial class ResultsExtensions {
     /// A successful <see cref="Result{TValue}"/> containing the mapped value,
     /// or the original errors.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNew>> MapAsync<T, TNew>(
         this Task<Result<T>> task,
         Func<T, Task<TNew>> mapper) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return Result.Success(await mapper(result.Value).ConfigureAwait(false));
     }
 
@@ -334,12 +346,13 @@ public static partial class ResultsExtensions {
     /// The flattened <see cref="Result{TValue}"/> from <paramref name="mapper"/>,
     /// or the original errors if the incoming result was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<TNew>> MapAsync<T, TNew>(
         this Task<Result<T>> task,
         Func<T, Result<TNew>> mapper) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return mapper(result.Value);
     }
 
@@ -361,6 +374,7 @@ public static partial class ResultsExtensions {
     /// <see cref="Result{TValue}"/> of <see cref="Success"/> on success,
     /// or the original errors on failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<Success>> MapSuccessAsync<T>(
         this Task<Result<T>> task,
         CancellationToken cancellationToken = default) {
@@ -387,6 +401,7 @@ public static partial class ResultsExtensions {
     /// A successful <see cref="Result{TValue}"/> containing either the original
     /// value or the fallback, depending on the outcome.
     /// </returns>
+    [Pure]
     public static async Task<Result<T>> RecoverAsync<T>(
         this Task<Result<T>> task,
         Func<IReadOnlyList<Error>, T> recover) {
@@ -410,6 +425,7 @@ public static partial class ResultsExtensions {
     /// A successful <see cref="Result{TValue}"/> containing either the original
     /// value or the awaited fallback.
     /// </returns>
+    [Pure]
     public static async Task<Result<T>> RecoverAsync<T>(
         this Task<Result<T>> task,
         Func<IReadOnlyList<Error>, Task<T>> recover) {
@@ -433,6 +449,7 @@ public static partial class ResultsExtensions {
     /// A successful <see cref="Result{TValue}"/> containing either the original
     /// value or the awaited fallback.
     /// </returns>
+    [Pure]
     public static async Task<Result<T>> RecoverAsync<T>(
         this Result<T> result,
         Func<IReadOnlyList<Error>, Task<T>> recover) {
@@ -628,7 +645,7 @@ public static partial class ResultsExtensions {
 
         Result<T> result = await task.ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if(result.IsError) action(result.Errors);
+        if(result.IsFailure) action(result.Errors);
         return result;
     }
 
@@ -650,7 +667,7 @@ public static partial class ResultsExtensions {
         CancellationToken cancellationToken = default) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) {
+        if(result.IsFailure) {
             cancellationToken.ThrowIfCancellationRequested();
             await action(result.Errors, cancellationToken).ConfigureAwait(false);
         }

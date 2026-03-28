@@ -14,9 +14,16 @@ public readonly record struct Error {
     public ErrorType Type { get; }
 
     /// <summary>Optional contextual metadata. <c>null</c> when no metadata has been attached.</summary>
-    public IReadOnlyDictionary<string, object>? Metadata { get; }
+    public IReadOnlyDictionary<string, object?>? Metadata { get; }
 
-    private Error(string code, string description, ErrorType type, IReadOnlyDictionary<string, object>? metadata) {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Error"/> record.
+    /// </summary>
+    /// <param name="code">Machine-readable code, e.g. <c>"User.NotFound"</c>.</param>
+    /// <param name="description">Human-readable description.</param>
+    /// <param name="type">Category of the error — see <see cref="ErrorType"/> for built-ins or custom types.</param>
+    /// <param name="metadata">Optional contextual metadata. <c>null</c> when no metadata has been attached.</param>
+    public Error(string code, string description, ErrorType type, IReadOnlyDictionary<string, object?>? metadata) {
         this.Code = code;
         this.Description = description;
         this.Type = type;
@@ -249,7 +256,7 @@ public readonly record struct Error {
     /// Does not mutate the current instance.
     /// </summary>
     public Error WithMetadata(string key, object value) {
-        Dictionary<string, object> newMeta = this.Metadata is null
+        Dictionary<string, object?> newMeta = this.Metadata is null
             ? new(1)
             : new(this.Metadata);
         newMeta[key] = value;

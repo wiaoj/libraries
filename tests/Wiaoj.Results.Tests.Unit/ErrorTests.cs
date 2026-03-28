@@ -180,21 +180,21 @@ public sealed class ErrorTests {
     [Fact]
     public void Multiple_WithErrors_CreatesFailedResult() {
         Result<Success> result = Error.Multiple([SomeError, AnotherError]);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(2, result.Errors.Count);
     }
 
     [Fact]
     public void Multiple_Generic_CreatesFailedResultOfThatType() {
         Result<int> result = Error.Multiple<int>([SomeError, AnotherError]);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(2, result.Errors.Count);
     }
 
     [Fact]
     public void Multiple_WithSingleError_CreatesFailedResult() {
         Result<Success> result = Error.Multiple([SomeError]);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 

@@ -26,7 +26,7 @@ public sealed class ResultValueTaskTests {
         Result<string> result = await FailureIntVT()
             .ThenAsync(v => { called = true; return ValueTask.FromResult(Result<string>.Success($"{v}")); });
         Assert.False(called);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public sealed class ResultValueTaskTests {
         Result<string> result = await FailureInt()
             .ThenAsync(v => { called = true; return ValueTask.FromResult(Result<string>.Success($"{v}")); });
         Assert.False(called);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public sealed class ResultValueTaskTests {
     public async Task MapAsync_ValueTask_SyncMapper_WhenError_Propagates() {
         Result<string> result = await FailureIntVT()
             .MapAsync(v => $"{v}");
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public sealed class ResultValueTaskTests {
         Result<string> result = await FailureIntVT()
             .MapAsync(v => { called = true; return ValueTask.FromResult($"{v}"); });
         Assert.False(called);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── AsValueTask ───────────────────────────────────────────────────────────

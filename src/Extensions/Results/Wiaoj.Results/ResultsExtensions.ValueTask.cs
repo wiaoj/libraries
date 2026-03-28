@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Results;
+﻿using System.Diagnostics.Contracts;
+
+namespace Wiaoj.Results;
 
 /// <summary>
 /// <see cref="ValueTask"/> overloads of the core async combinators.
@@ -46,13 +48,14 @@ public static class ResultsValueTaskExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if the incoming result was already a failure.
     /// </returns>
+    [Pure]
     public static async ValueTask<Result<TNext>> ThenAsync<T, TNext>(
         this ValueTask<Result<T>> valueTask,
         Func<T, ValueTask<Result<TNext>>> next,
         CancellationToken cancellationToken = default) {
 
         Result<T> result = await valueTask.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
 
         cancellationToken.ThrowIfCancellationRequested();
         return await next(result.Value).ConfigureAwait(false);
@@ -77,13 +80,14 @@ public static class ResultsValueTaskExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if the incoming result was already a failure.
     /// </returns>
+    [Pure]
     public static async ValueTask<Result<TNext>> ThenAsync<T, TNext>(
         this ValueTask<Result<T>> valueTask,
         Func<T, CancellationToken, ValueTask<Result<TNext>>> next,
         CancellationToken cancellationToken = default) {
 
         Result<T> result = await valueTask.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
 
         cancellationToken.ThrowIfCancellationRequested();
         return await next(result.Value, cancellationToken).ConfigureAwait(false);
@@ -101,11 +105,12 @@ public static class ResultsValueTaskExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if <paramref name="result"/> was already a failure.
     /// </returns>
+    [Pure]
     public static async ValueTask<Result<TNext>> ThenAsync<T, TNext>(
         this Result<T> result,
         Func<T, ValueTask<Result<TNext>>> next) {
 
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return await next(result.Value).ConfigureAwait(false);
     }
 
@@ -126,12 +131,13 @@ public static class ResultsValueTaskExtensions {
     /// The <see cref="Result{TValue}"/> returned by <paramref name="next"/>, or
     /// the original errors if <paramref name="result"/> was already a failure.
     /// </returns>
+    [Pure]
     public static async ValueTask<Result<TNext>> ThenAsync<T, TNext>(
         this Result<T> result,
         Func<T, CancellationToken, ValueTask<Result<TNext>>> next,
         CancellationToken cancellationToken = default) {
 
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return await next(result.Value, cancellationToken).ConfigureAwait(false);
     }
 
@@ -151,6 +157,7 @@ public static class ResultsValueTaskExtensions {
     /// Checked after the task completes and before the match functions are called.
     /// </param>
     /// <returns>The value returned by whichever branch was executed.</returns>
+    [Pure]
     public static async ValueTask<TResult> MatchAsync<T, TResult>(
         this ValueTask<Result<T>> valueTask,
         Func<T, TResult> onValue,
@@ -176,6 +183,7 @@ public static class ResultsValueTaskExtensions {
     /// Checked after the task completes and before the chosen branch is executed.
     /// </param>
     /// <returns>The value produced by whichever async branch was executed.</returns>
+    [Pure]
     public static async ValueTask<TResult> MatchAsync<T, TResult>(
         this ValueTask<Result<T>> valueTask,
         Func<T, ValueTask<TResult>> onValue,
@@ -185,7 +193,7 @@ public static class ResultsValueTaskExtensions {
         Result<T> result = await valueTask.ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
-        return result.IsError
+        return result.IsFailure
             ? await onError(result.Errors).ConfigureAwait(false)
             : await onValue(result.Value).ConfigureAwait(false);
     }
@@ -208,12 +216,13 @@ public static class ResultsValueTaskExtensions {
     /// A successful <see cref="Result{TValue}"/> containing the mapped value,
     /// or the original errors.
     /// </returns>
+    [Pure]
     public static async ValueTask<Result<TNew>> MapAsync<T, TNew>(
         this ValueTask<Result<T>> valueTask,
         Func<T, TNew> mapper) {
 
         Result<T> result = await valueTask.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return Result.Success(mapper(result.Value));
     }
 
@@ -230,12 +239,13 @@ public static class ResultsValueTaskExtensions {
     /// A successful <see cref="Result{TValue}"/> containing the mapped value,
     /// or the original errors.
     /// </returns>
+    [Pure]
     public static async ValueTask<Result<TNew>> MapAsync<T, TNew>(
         this ValueTask<Result<T>> valueTask,
         Func<T, ValueTask<TNew>> mapper) {
 
         Result<T> result = await valueTask.ConfigureAwait(false);
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         return Result.Success(await mapper(result.Value).ConfigureAwait(false));
     }
 

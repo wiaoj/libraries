@@ -87,7 +87,7 @@ public static class ResultsCollectionExtensions {
         this IEnumerable<Result<T>> source) {
 
         foreach(Result<T> result in source) {
-            if(result.IsError) {
+            if(result.IsFailure) {
                 foreach(Error error in result.Errors)
                     yield return error;
             }

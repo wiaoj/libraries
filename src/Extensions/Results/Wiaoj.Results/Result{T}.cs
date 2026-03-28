@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
 
 namespace Wiaoj.Results;
@@ -11,32 +12,34 @@ namespace Wiaoj.Results;
 /// to chain operations without nested <c>if</c> checks.
 /// </para>
 /// </summary>
-/// <typeparam name="TValue">The type of the underlying success value.</typeparam>
+/// <typeparam name="TValue">The type of the underlying success value.</typeparam> 
 public readonly record struct Result<TValue> : IResult {
     private readonly TValue? _value;
-    private readonly List<Error>? _errors;
+    private readonly Error _singleError;
+    private readonly List<Error>? _multipleErrors;
+    private readonly bool _isFailure;  
 
     /// <summary>
     /// Gets a value indicating whether the result represents a failure.
     /// </summary>
-    [MemberNotNullWhen(true, nameof(_errors))]
+    [MemberNotNullWhen(true, nameof(_multipleErrors))]
     [MemberNotNullWhen(false, nameof(_value))]
-    public bool IsError => _errors is not null;
+    public bool IsFailure => this._isFailure;
 
     /// <summary>
     /// Gets a value indicating whether the result represents a success.
     /// </summary>
-    [MemberNotNullWhen(false, nameof(_errors))]
-    public bool IsSuccess => _errors is null;
+    [MemberNotNullWhen(false, nameof(_multipleErrors))]
+    public bool IsSuccess => !this._isFailure;
 
     /// <summary>
     /// Gets the success value.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when <see cref="IsError"/> is <c>true</c>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when <see cref="IsFailure"/> is <c>true</c>.</exception>
     public TValue Value {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => IsSuccess
-            ? _value!
+        get => this.IsSuccess
+            ? this._value!
             : throw new InvalidOperationException(
                 "Cannot access the value of an error result. Check IsSuccess before accessing Value.");
     }
@@ -47,10 +50,10 @@ public readonly record struct Result<TValue> : IResult {
     /// <exception cref="InvalidOperationException">Thrown when <see cref="IsSuccess"/> is <c>true</c>.</exception>
     public Error FirstError {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => IsError
-            ? _errors[0]
+        get => this.IsFailure
+            ? (this._multipleErrors is not null ? this._multipleErrors[0] : this._singleError)
             : throw new InvalidOperationException(
-                "Cannot access an error of a successful result. Check IsError before accessing FirstError.");
+                "Cannot access an error of a successful result. Check IsFailure before accessing FirstError.");
     }
 
     /// <summary>
@@ -58,41 +61,77 @@ public readonly record struct Result<TValue> : IResult {
     /// </summary>
     public IReadOnlyList<Error> Errors {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _errors ?? (IReadOnlyList<Error>)[];
+        get {
+            if(this.IsSuccess) return [];
+            if(this._multipleErrors is not null) return this._multipleErrors;
+            return [this._singleError];
+        }
     }
 
     private Result(TValue value) {
-        _value = value;
-        _errors = null;
+        this._isFailure = false;
+        this._value = value;
+        this._singleError = default;
+        this._multipleErrors = null;
     }
 
-    private Result(List<Error> errors) {
-        if(errors is null || errors.Count == 0)
-            throw new ArgumentException(
-                "At least one error is required to create a failed result.", nameof(errors));
+    private Result(Error error) {
+        this._isFailure = true;
+        this._value = default;
+        this._singleError = error;
+        this._multipleErrors = null;
+    }
 
-        _value = default;
-        _errors = errors;
+    private Result(params List<Error> errors) {
+        if(errors is null || errors.Count == 0)
+            throw new ArgumentException("At least one error is required to create a failed result.", nameof(errors));
+
+        this._isFailure = true;
+        this._value = default;
+
+        if(errors.Count == 1) {
+            this._singleError = errors[0];
+            this._multipleErrors = null;
+        }
+        else {
+            this._singleError = default;
+            this._multipleErrors = errors;
+        }
     }
 
     // ── Implicit operators ────────────────────────────────────────────────────
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Result<TValue>(TValue value) => new(value);
+    public static implicit operator Result<TValue>(TValue value) {
+        return new(value);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Result<TValue>(Error error) => new([error]);
+    public static implicit operator Result<TValue>(Error error) {
+        return new(error);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Result<TValue>(List<Error> errors) => new(errors);
+    public static implicit operator Result<TValue>(List<Error> errors) {
+        return new(errors);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Result<TValue>(Error[] errors) => new([.. errors]);
+    public static implicit operator Result<TValue>(Error[] errors) {
+        return new([.. errors]);
+    }
 
     // ── Factory ───────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a successful <see cref="Result{TValue}"/> with the specified value.
+    /// </summary>
+    /// <param name="value">The success value to wrap.</param>
+    /// <returns>A successful result containing the specified value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Result<TValue> Success(TValue value) => new(value);
+    public static Result<TValue> Success(TValue value) {
+        return new(value);
+    }
 
     // ── ROP core ──────────────────────────────────────────────────────────────
 
@@ -103,7 +142,7 @@ public readonly record struct Result<TValue> : IResult {
     public TResult Match<TResult>(
         Func<TValue, TResult> onValue,
         Func<IReadOnlyList<Error>, TResult> onError) {
-        return IsError ? onError(_errors) : onValue(_value!);
+        return this.IsFailure ? onError(Errors) : onValue(this._value);
     }
 
     /// <summary>
@@ -113,8 +152,8 @@ public readonly record struct Result<TValue> : IResult {
     public void Switch(
         Action<TValue> onValue,
         Action<IReadOnlyList<Error>> onError) {
-        if(IsError) onError(_errors);
-        else onValue(_value!);
+        if(this.IsFailure) onError(Errors);
+        else onValue(this._value);
     }
 
     // ── Combinators ───────────────────────────────────────────────────────────
@@ -123,18 +162,20 @@ public readonly record struct Result<TValue> : IResult {
     /// Chains to the next operation. Propagates errors without calling <paramref name="next"/>.
     /// Equivalent to <c>Bind</c> or <c>FlatMap</c>.
     /// </summary>
+    [Pure]
     public Result<TNextValue> Then<TNextValue>(Func<TValue, Result<TNextValue>> next) {
-        if(IsError) return _errors;
-        return next(_value!);
+        if(this.IsFailure) return Fail<TNextValue>();
+        return next(this._value);
     }
 
     /// <summary>
     /// Transforms the success value. Does not allow returning an error —
     /// use <see cref="Then{TNextValue}"/> when the transformation may fail.
     /// </summary>
+    [Pure]
     public Result<TNew> Map<TNew>(Func<TValue, TNew> mapper) {
-        if(IsError) return _errors;
-        return mapper(_value!);
+        if(this.IsFailure) return Fail<TNew>();
+        return mapper(this._value);
     }
 
     /// <summary>
@@ -143,7 +184,7 @@ public readonly record struct Result<TValue> : IResult {
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Result<TValue> Do(Action<TValue> action) {
-        if(IsSuccess) action(_value!);
+        if(this.IsSuccess) action(this._value);
         return this;
     }
 
@@ -152,7 +193,7 @@ public readonly record struct Result<TValue> : IResult {
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Result<TValue> Do(Action action) {
-        if(IsSuccess) action();
+        if(this.IsSuccess) action();
         return this;
     }
 
@@ -160,56 +201,77 @@ public readonly record struct Result<TValue> : IResult {
     /// Validates a condition against the value. Returns <paramref name="error"/> when
     /// <paramref name="predicate"/> is <c>false</c>.
     /// </summary>
+    [Pure]
     public Result<TValue> Ensure(Func<TValue, bool> predicate, Error error) {
-        if(IsError) return this;
-        if(!predicate(_value!)) return error;
+        if(this.IsFailure) return this;
+        if(!predicate(this._value)) return error;
         return this;
     }
 
     /// <summary>
     /// Attempts to recover from a failure by returning a fallback value.
     /// </summary>
+    [Pure]
     public Result<TValue> Recover(Func<IReadOnlyList<Error>, TValue> recover) {
-        if(IsSuccess) return this;
-        return recover(_errors);
+        if(this.IsSuccess) return this;
+        return recover(this._multipleErrors);
     }
 
     /// <summary>
     /// Executes <paramref name="action"/> only when successful. Alias for <see cref="Do(Action{TValue})"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Result<TValue> IfSuccess(Action<TValue> action) => Do(action);
+    public Result<TValue> IfSuccess(Action<TValue> action) {
+        return Do(action);
+    }
 
     /// <summary>
     /// Executes <paramref name="action"/> only when failed.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Result<TValue> IfFailure(Action<IReadOnlyList<Error>> action) {
-        if(IsError) action(_errors);
+        if(this.IsFailure) action(this._multipleErrors);
         return this;
     }
-    // ── Equality ──────────────────────────────────────────────────────────────
-    // record struct auto-generates equality by comparing fields.
-    // _errors is a List<Error> — reference equality would make two Results with
-    // the same errors unequal. Override to compare list contents.
-
+    /// <summary>
+    /// Determines whether the specified <see cref="Result{TValue}"/> is equal to the current result.
+    /// </summary>
+    /// <remarks>
+    /// Two results are equal if they represent the same state (success or failure) and contain equal data.
+    /// For successful results, values are compared using <see cref="EqualityComparer{T}.Default"/>.
+    /// For failed results, errors are compared sequentially using <see cref="Enumerable.SequenceEqual{TSource}(IEnumerable{TSource}, IEnumerable{TSource})"/>.
+    /// </remarks>
+    /// <param name="other">The <see cref="Result{TValue}"/> to compare with the current instance.</param>
+    /// <returns><c>true</c> if both results are equal; otherwise, <c>false</c>.</returns>
     public bool Equals(Result<TValue> other) {
-        if(IsSuccess != other.IsSuccess) return false;
-
-        if(IsSuccess)
-            return EqualityComparer<TValue>.Default.Equals(_value!, other._value!);
-
-        return _errors!.SequenceEqual(other._errors!);
+        if(this.IsSuccess != other.IsSuccess) return false;
+        return this.IsSuccess
+            ? EqualityComparer<TValue>.Default.Equals(this._value!, other._value!)
+            : this.Errors.SequenceEqual(other.Errors);
     }
 
+
+    /// <summary>
+    /// Serves as the default hash function for this result.
+    /// </summary>
+    /// <remarks>
+    /// The hash code is computed based on the result's state and data:
+    /// <list type="bullet">
+    /// <item><description>For successful results: combines the success state with the value's hash code.</description></item>
+    /// <item><description>For failed results: combines the failure state with the hash codes of all errors in sequence.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <returns>A 32-bit signed integer hash code.</returns>
     public override int GetHashCode() {
-        if(IsSuccess)
-            return HashCode.Combine(true, _value);
+        if(this.IsSuccess)
+            return HashCode.Combine(true, this._value);
 
         HashCode hash = new();
         hash.Add(false);
-        foreach(Error e in _errors!)
-            hash.Add(e);
+
+        foreach(var error in this.Errors)
+            hash.Add(error);
+
         return hash.ToHashCode();
     }
 
@@ -224,9 +286,9 @@ public readonly record struct Result<TValue> : IResult {
     /// </para>
     /// </summary>
     public Result<TValue> Consume(Action<TValue> action) {
-        if(IsSuccess) {
-            using(_value as IDisposable) {
-                action(_value!);
+        if(this.IsSuccess) {
+            using(this._value as IDisposable) {
+                action(this._value!);
             }
         }
         return this;
@@ -240,16 +302,16 @@ public readonly record struct Result<TValue> : IResult {
         Func<TValue, CancellationToken, ValueTask> action,
         CancellationToken cancellationToken = default) {
 
-        if(!IsSuccess) return;
+        if(!this.IsSuccess) return;
 
-        if(_value is IAsyncDisposable asyncDisposable) {
+        if(this._value is IAsyncDisposable asyncDisposable) {
             await using(asyncDisposable.ConfigureAwait(false)) {
-                await action(_value!, cancellationToken).ConfigureAwait(false);
+                await action(this._value!, cancellationToken).ConfigureAwait(false);
             }
         }
         else {
-            using(_value as IDisposable) {
-                await action(_value!, cancellationToken).ConfigureAwait(false);
+            using(this._value as IDisposable) {
+                await action(this._value!, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -259,7 +321,7 @@ public readonly record struct Result<TValue> : IResult {
     /// Use this when you have already used the value and need to release it explicitly.
     /// </summary>
     public void DisposeValue() {
-        if(IsSuccess && _value is IDisposable disposable)
+        if(this.IsSuccess && this._value is IDisposable disposable)
             disposable.Dispose();
     }
 
@@ -268,15 +330,26 @@ public readonly record struct Result<TValue> : IResult {
     /// Prefers <see cref="IAsyncDisposable"/>, falls back to <see cref="IDisposable"/>.
     /// </summary>
     public ValueTask DisposeValueAsync() {
-        if(!IsSuccess) return ValueTask.CompletedTask;
+        if(!this.IsSuccess) return ValueTask.CompletedTask;
 
-        if(_value is IAsyncDisposable asyncDisposable)
+        if(this._value is IAsyncDisposable asyncDisposable)
             return asyncDisposable.DisposeAsync();
 
-        if(_value is IDisposable disposable)
+        if(this._value is IDisposable disposable)
             disposable.Dispose();
 
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc/>
+    public override string ToString() {
+        return this.IsSuccess ? "Success" : $"Failure ({this.Errors.Count} errors)";
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Result<TNew> Fail<TNew>() {
+        return this._multipleErrors is not null
+            ? new(this._multipleErrors)
+            : new(this._singleError);
+    }
 }

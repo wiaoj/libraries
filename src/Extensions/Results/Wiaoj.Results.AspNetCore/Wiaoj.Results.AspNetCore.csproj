@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+	  <RootNamespace>Wiaoj.Results</RootNamespace>
+	  <AssemblyName>Wiaoj.Results.AspNetCore</AssemblyName>
+	  <PackageId>Wiaoj.Results</PackageId>
+	  <Version>0.0.1-alpha.1</Version>
+	  <Authors>wiaoj</Authors>
+
+	  <Optimize>true</Optimize>
+	  <Deterministic>true</Deterministic>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\Wiaoj.Results\Wiaoj.Results.csproj" />
+	</ItemGroup>
+
+</Project>

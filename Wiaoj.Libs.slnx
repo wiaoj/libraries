@@ -53,6 +53,7 @@
   </Folder>
   <Folder Name="/src/Extensions/Results/">
     <File Path="src/Extensions/Results/README.md" />
+    <Project Path="src/Extensions/Results/Wiaoj.Results.AspNetCore/Wiaoj.Results.AspNetCore.csproj" Id="9c567ec4-bf87-485f-9c00-5ac4f4bb307f" />
     <Project Path="src/Extensions/Results/Wiaoj.Results/Wiaoj.Results.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/Wiaoj.Threading/">

@@ -11,10 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
-    <PackageReference Include="Wiaoj.Primitives" Version="0.0.1-alpha.33" />
-    <PackageReference Include="Wiaoj.Preconditions" Version="0.0.1-alpha.33" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Wiaoj.Primitives" Version="0.0.1-alpha.38" />
+    <PackageReference Include="Wiaoj.Preconditions" Version="0.0.1-alpha.38" />
   </ItemGroup>
 
 </Project>

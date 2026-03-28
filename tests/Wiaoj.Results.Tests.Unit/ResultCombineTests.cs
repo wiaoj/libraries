@@ -18,7 +18,7 @@ public sealed class ResultCombineTests {
             Result.Success(),
             Result.Failure(SomeError),
             Result.Success());
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public sealed class ResultCombineTests {
             Result.Failure(SomeError), Result.Success()
         ];
         Result<Success> result = Result.All(results);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Contains(SomeError, result.Errors);
     }
 
@@ -101,7 +101,7 @@ public sealed class ResultCombineTests {
         Result<(int, string)> result = Result.Combine(
             (Result<int>)SomeError,
             Result<string>.Success("a"));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Contains(SomeError, result.Errors);
     }
 
@@ -110,7 +110,7 @@ public sealed class ResultCombineTests {
         Result<(int, string)> result = Result.Combine(
             Result<int>.Success(1),
             (Result<string>)AnotherError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Contains(AnotherError, result.Errors);
     }
 
@@ -151,7 +151,7 @@ public sealed class ResultCombineTests {
             Result<int>.Success(1),
             (Result<string>)SomeError,
             Result<bool>.Success(true));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Single(result.Errors);
         Assert.Equal(SomeError, result.FirstError);
     }
@@ -179,6 +179,6 @@ public sealed class ResultCombineTests {
             (Result<string>)SomeError,
             Result<bool>.Success(false),
             Result<double>.Success(1.0));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 }

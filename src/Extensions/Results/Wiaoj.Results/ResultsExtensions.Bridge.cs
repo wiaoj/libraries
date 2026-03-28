@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics.Contracts;
+using System.Runtime.CompilerServices;
 
 namespace Wiaoj.Results;
 
@@ -17,8 +18,9 @@ public static partial class ResultsExtensions {
     /// <param name="value">The value to wrap.</param>
     /// <returns>A successful <see cref="Result{TValue}"/> containing <paramref name="value"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Result<T> AsResult<T>(this T value)
-        => Result.Success(value);
+    public static Result<T> AsResult<T>(this T value) {
+        return Result.Success(value);
+    }
 
     /// <summary>
     /// Awaits <paramref name="task"/> and wraps the result in a successful
@@ -44,8 +46,9 @@ public static partial class ResultsExtensions {
     /// <param name="result">The result to wrap.</param>
     /// <returns>A completed <see cref="Task{TResult}"/> containing <paramref name="result"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Task<Result<T>> AsTask<T>(this Result<T> result)
-        => Task.FromResult(result);
+    public static Task<Result<T>> AsTask<T>(this Result<T> result) {
+        return Task.FromResult(result);
+    }
 
     // ── Null safety ───────────────────────────────────────────────────────────
 
@@ -64,11 +67,12 @@ public static partial class ResultsExtensions {
     /// <paramref name="error"/> when the value is <see langword="null"/>;
     /// the original errors when the result was already a failure.
     /// </returns>
+    [Pure]
     public static Result<T> EnsureNotNull<T>(
         this Result<T?> result,
         Error error) where T : class {
 
-        if(result.IsError) return result.Errors.ToList();
+        if(result.IsFailure) return result.Errors.ToList();
         if(result.Value is null) return error;
         return Result.Success(result.Value);
     }
@@ -85,6 +89,7 @@ public static partial class ResultsExtensions {
     /// A <see cref="Task{TResult}"/> that yields a non-nullable
     /// <see cref="Result{TValue}"/>.
     /// </returns>
+    [Pure]
     public static async Task<Result<T>> EnsureNotNullAsync<T>(
         this Task<Result<T?>> task,
         Error error) where T : class {
@@ -107,8 +112,9 @@ public static partial class ResultsExtensions {
     /// <paramref name="error"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Pure]
     public static Result<T> MapError<T>(this Result<T> result, Error error) {
-        if(result.IsError) return error;
+        if(result.IsFailure) return error;
         return result;
     }
 
@@ -126,11 +132,12 @@ public static partial class ResultsExtensions {
     /// The original successful result, or a new failure containing the mapped error.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Pure]
     public static Result<T> MapError<T>(
         this Result<T> result,
         Func<Error, Error> errorMapper) {
 
-        if(result.IsError) return errorMapper(result.FirstError);
+        if(result.IsFailure) return errorMapper(result.FirstError);
         return result;
     }
 
@@ -151,6 +158,25 @@ public static partial class ResultsExtensions {
     /// or the original errors on failure.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Result<Success> MapSuccess<T>(this Result<T> result)
-        => result.Map(_ => Success.Default);
+    [Pure]
+    public static Result<Success> MapSuccess<T>(this Result<T> result) {
+        return result.Map(_ => Success.Default);
+    }
+
+    /// <summary>
+    /// LINQ Query Syntax desteği sağlar: var final = from x in result select x.Prop;
+    /// </summary>
+    public static Result<TResult> Select<T, TResult>(this Result<T> result, Func<T, TResult> selector) {
+        return result.Map(selector);
+    }
+
+    /// <summary>
+    /// LINQ Query Syntax desteği sağlar (Zincirleme sorgular için).
+    /// </summary>
+    public static Result<TResult> SelectMany<T, U, TResult>(
+            this Result<T> result,
+            Func<T, Result<U>> binder,
+            Func<T, U, TResult> project) {
+        return result.Then(t => binder(t).Map(u => project(t, u)));
+    }
 }

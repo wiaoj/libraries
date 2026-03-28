@@ -19,7 +19,7 @@ public sealed class ResultEnsureTests {
     [Fact]
     public void Ensure_SyncPredicate_WhenSuccess_PredicateFalse_ReturnsError() {
         Result<int> result = SuccessInt(-1).Ensure(v => v > 0, SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -45,7 +45,7 @@ public sealed class ResultEnsureTests {
     [Fact]
     public void Ensure_ValueIndependent_PredicateFalse_ReturnsError() {
         Result<int> result = SuccessInt().Ensure(() => false, SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── EnsureAsync — Task<Result<T>> + sync predicate ────────────────────────
@@ -61,7 +61,7 @@ public sealed class ResultEnsureTests {
     public async Task EnsureAsync_TaskResult_SyncPredicate_WhenSuccess_PredicateFalse() {
         Result<int> result = await SuccessIntTask(-1)
             .EnsureAsync(v => v > 0, SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -85,7 +85,7 @@ public sealed class ResultEnsureTests {
     public async Task EnsureAsync_TaskResult_AsyncPredicate_PredicateFalse() {
         Result<int> result = await SuccessIntTask(-5)
             .EnsureAsync(v => Task.FromResult(v > 0), SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public sealed class ResultEnsureTests {
     public async Task EnsureAsync_SyncResult_AsyncPredicate_PredicateFalse() {
         Result<int> result = await SuccessInt(-10)
             .EnsureAsync(v => Task.FromResult(v > 0), SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── EnsureAsync — dynamic error factory ──────────────────────────────────
@@ -121,7 +121,7 @@ public sealed class ResultEnsureTests {
                 predicate: v => Task.FromResult(v > 0),
                 errorFactory: v => Task.FromResult(Error.Validation("Range.Invalid", $"Value {v} is not positive")));
 
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal("Range.Invalid", result.FirstError.Code);
         Assert.Contains("-3", result.FirstError.Description);
     }

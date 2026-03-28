@@ -11,7 +11,7 @@ public interface IResult {
     /// <summary>
     /// Gets a value indicating whether the result represents a failure.
     /// </summary>
-    bool IsError { get; }
+    bool IsFailure { get; }
 
     /// <summary>
     /// Gets a value indicating whether the result represents a success.

@@ -25,7 +25,7 @@ public sealed class ResultCollectionTests {
             Result<int>.Success(3)
         ];
         Result<IReadOnlyList<int>> result = source.Combine();
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Contains(SomeError, result.Errors);
     }
 
@@ -67,7 +67,7 @@ public sealed class ResultCollectionTests {
             (Result<int>)AnotherError
         ];
         Result<IReadOnlyList<int>> result = source.Combine();
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── WhereSuccess ──────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ public sealed class ResultCollectionTests {
     public void ToResult_ReferenceType_WhenNull_ReturnsError() {
         string? value = null;
         Result<string> result = value.ToResult(SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -186,7 +186,7 @@ public sealed class ResultCollectionTests {
         bool called = false;
         Result<string> result = value.ToResult(() => { called = true; return SomeError; });
         Assert.True(called);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── ToResult (value type) ─────────────────────────────────────────────────
@@ -203,7 +203,7 @@ public sealed class ResultCollectionTests {
     public void ToResult_ValueType_WhenNull_ReturnsError() {
         int? value = null;
         Result<int> result = value.ToResult(SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -245,7 +245,7 @@ public sealed class ResultCollectionTests {
     public async Task AsResult_ValueTask_WithNullableRef_WhenNull_ReturnsError() {
         ValueTask<string?> vt = ValueTask.FromResult<string?>(null);
         Result<string> result = await vt.AsResult(SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 }

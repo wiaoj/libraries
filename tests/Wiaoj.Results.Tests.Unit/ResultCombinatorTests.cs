@@ -22,7 +22,7 @@ public sealed class ResultCombinatorTests {
             return Result<string>.Success($"val:{v}");
         });
         Assert.False(nextCalled);
-        Assert.True(next.IsError);
+        Assert.True(next.IsFailure);
         Assert.Equal(SomeError, next.FirstError);
     }
 
@@ -30,7 +30,7 @@ public sealed class ResultCombinatorTests {
     public void Then_WhenSuccessButNextFails_ReturnsNextErrors() {
         Result<int> result = 10;
         Result<string> next = result.Then(_ => (Result<string>)AnotherError);
-        Assert.True(next.IsError);
+        Assert.True(next.IsFailure);
         Assert.Equal(AnotherError, next.FirstError);
     }
 
@@ -44,7 +44,7 @@ public sealed class ResultCombinatorTests {
             .Then(v => { callCount++; return Result<string>.Success($"{v}"); });
 
         Assert.Equal(0, callCount);
-        Assert.True(final.IsError);
+        Assert.True(final.IsFailure);
     }
 
     // ── Map ───────────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ public sealed class ResultCombinatorTests {
         bool mapperCalled = false;
         Result<string> mapped = result.Map(v => { mapperCalled = true; return $"{v}"; });
         Assert.False(mapperCalled);
-        Assert.True(mapped.IsError);
+        Assert.True(mapped.IsFailure);
         Assert.Equal(SomeError, mapped.FirstError);
     }
 
@@ -132,7 +132,7 @@ public sealed class ResultCombinatorTests {
     public void Ensure_WhenSuccessAndPredicateFalse_ReturnsError() {
         Result<int> result = -5;
         Result<int> ensured = result.Ensure(v => v > 0, SomeError);
-        Assert.True(ensured.IsError);
+        Assert.True(ensured.IsFailure);
         Assert.Equal(SomeError, ensured.FirstError);
     }
 
@@ -162,7 +162,7 @@ public sealed class ResultCombinatorTests {
     public void Ensure_ValueIndependent_WhenPredicateFalse_ReturnsError() {
         Result<int> result = 10;
         Result<int> ensured = result.Ensure(() => false, SomeError);
-        Assert.True(ensured.IsError);
+        Assert.True(ensured.IsFailure);
     }
 
     // ── Recover ───────────────────────────────────────────────────────────────
@@ -280,6 +280,6 @@ public sealed class ResultCombinatorTests {
             .Then(v => { steps++; return Result<string>.Success(v); });
 
         Assert.Equal(1, steps);
-        Assert.True(final.IsError);
+        Assert.True(final.IsFailure);
     }
 }

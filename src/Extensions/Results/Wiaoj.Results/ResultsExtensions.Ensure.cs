@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Results;
+﻿using System.Diagnostics.Contracts;
+
+namespace Wiaoj.Results;
 
 public static partial class ResultsExtensions {
 
@@ -21,12 +23,13 @@ public static partial class ResultsExtensions {
     /// <paramref name="error"/> when the predicate fails;
     /// the original errors when the result was already a failure.
     /// </returns>
+    [Pure]
     public static Result<T> Ensure<T>(
         this Result<T> result,
         Func<T, bool> predicate,
         Error error) {
 
-        if(result.IsError) return result;
+        if(result.IsFailure) return result;
         if(!predicate(result.Value)) return error;
         return result;
     }
@@ -48,12 +51,13 @@ public static partial class ResultsExtensions {
     /// <paramref name="error"/> when the predicate fails;
     /// the original errors when the result was already a failure.
     /// </returns>
+    [Pure]
     public static Result<T> Ensure<T>(
         this Result<T> result,
         Func<bool> predicate,
         Error error) {
 
-        if(result.IsError) return result;
+        if(result.IsFailure) return result;
         if(!predicate()) return error;
         return result;
     }
@@ -75,13 +79,14 @@ public static partial class ResultsExtensions {
     /// <paramref name="error"/> when the predicate fails;
     /// the original errors when the result was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<T>> EnsureAsync<T>(
         this Task<Result<T>> task,
         Func<T, bool> predicate,
         Error error) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result;
+        if(result.IsFailure) return result;
         if(!predicate(result.Value)) return error;
         return result;
     }
@@ -102,13 +107,14 @@ public static partial class ResultsExtensions {
     /// <paramref name="error"/> when the predicate fails;
     /// the original errors when the result was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<T>> EnsureAsync<T>(
         this Task<Result<T>> task,
         Func<T, Task<bool>> predicate,
         Error error) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result;
+        if(result.IsFailure) return result;
         if(!await predicate(result.Value).ConfigureAwait(false)) return error;
         return result;
     }
@@ -126,12 +132,13 @@ public static partial class ResultsExtensions {
     /// <paramref name="error"/> when it fails;
     /// the original errors when the result was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<T>> EnsureAsync<T>(
         this Result<T> result,
         Func<T, Task<bool>> predicate,
         Error error) {
 
-        if(result.IsError) return result;
+        if(result.IsFailure) return result;
         if(!await predicate(result.Value).ConfigureAwait(false)) return error;
         return result;
     }
@@ -153,13 +160,14 @@ public static partial class ResultsExtensions {
     /// the error produced by <paramref name="errorFactory"/> when it fails;
     /// the original errors when the result was already a failure.
     /// </returns>
+    [Pure]
     public static async Task<Result<T>> EnsureAsync<T>(
         this Task<Result<T>> task,
         Func<T, Task<bool>> predicate,
         Func<T, Task<Error>> errorFactory) {
 
         Result<T> result = await task.ConfigureAwait(false);
-        if(result.IsError) return result;
+        if(result.IsFailure) return result;
 
         if(!await predicate(result.Value).ConfigureAwait(false))
             return await errorFactory(result.Value).ConfigureAwait(false);

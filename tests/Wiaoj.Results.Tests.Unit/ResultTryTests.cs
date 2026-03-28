@@ -15,7 +15,7 @@ public sealed class ResultTryTests {
     [Fact]
     public void Try_WhenOperationThrows_ReturnsError() {
         Result<int> result = Result.Try<int>(() => throw new InvalidOperationException("boom"));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public sealed class ResultTryTests {
     public void Try_VoidOperation_WhenThrows_ReturnsError() {
         Result<Success> result = Result.Try(
             () => throw new InvalidOperationException("fail"));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public sealed class ResultTryTests {
     public async Task TryAsync_WhenOperationThrows_ReturnsError() {
         Result<string> result = await Result.TryAsync<string>(
             _ => throw new InvalidOperationException("async boom"));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(ErrorType.Unexpected, result.FirstError.Type);
     }
 
@@ -138,7 +138,7 @@ public sealed class ResultTryTests {
     public async Task TryAsync_VoidOperation_WhenThrows_ReturnsError() {
         Result<Success> result = await Result.TryAsync(
             ct => throw new InvalidOperationException("void async fail"));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── TryAsync (no CT overload) ─────────────────────────────────────────────
@@ -153,6 +153,6 @@ public sealed class ResultTryTests {
     public async Task TryAsync_NoCt_WhenThrows_ReturnsError() {
         Result<int> result = await Result.TryAsync<int>(
             () => throw new Exception("no ct boom"));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 }

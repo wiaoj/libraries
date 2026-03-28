@@ -6,19 +6,19 @@ namespace Wiaoj.Results.Tests.Unit;
 [Trait("Category", Category.Core)]
 public sealed class ResultCoreTests {
 
-    // ── IsSuccess / IsError ───────────────────────────────────────────────────
+    // ── IsSuccess / IsFailure ───────────────────────────────────────────────────
 
     [Fact]
     public void IsSuccess_WhenCreatedFromValue_IsTrue() {
         Result<int> result = 42;
         Assert.True(result.IsSuccess);
-        Assert.False(result.IsError);
+        Assert.False(result.IsFailure);
     }
 
     [Fact]
     public void IsError_WhenCreatedFromError_IsTrue() {
         Result<int> result = SomeError;
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.False(result.IsSuccess);
     }
 
@@ -64,7 +64,7 @@ public sealed class ResultCoreTests {
         Result<int> result = 42;
         InvalidOperationException ex =
             Assert.Throws<InvalidOperationException>(() => result.FirstError);
-        Assert.Contains("IsError", ex.Message);
+        Assert.Contains("IsFailure", ex.Message);
     }
 
     // ── Errors collection ─────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ public sealed class ResultCoreTests {
     [Fact]
     public void ImplicitFromError_CreatesFailedResult() {
         Result<string> result = SomeError;
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -111,7 +111,7 @@ public sealed class ResultCoreTests {
     public void ImplicitFromErrorList_CreatesFailedResult() {
         List<Error> errors = [SomeError, AnotherError];
         Result<int> result = errors;
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(2, result.Errors.Count);
     }
 
@@ -119,7 +119,7 @@ public sealed class ResultCoreTests {
     public void ImplicitFromErrorArray_CreatesFailedResult() {
         Error[] errors = [SomeError, AnotherError];
         Result<int> result = errors;
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(2, result.Errors.Count);
     }
 
@@ -157,7 +157,7 @@ public sealed class ResultCoreTests {
     [Fact]
     public void ResultStaticFailure_WithError_CreatesFailedResult() {
         Result<Success> result = Result.Failure(SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -171,7 +171,7 @@ public sealed class ResultCoreTests {
     [Fact]
     public void ResultStaticFailureGeneric_CreatesFailedResultOfThatType() {
         Result<int> result = Result.Failure<int>(SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── Value semantics (record struct) ───────────────────────────────────────

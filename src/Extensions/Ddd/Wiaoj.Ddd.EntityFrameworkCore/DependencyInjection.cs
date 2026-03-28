@@ -78,7 +78,7 @@ public static class DependencyInjection {
                 provider => provider.GetRequiredService<TContext>(),
                 lifetime
             );
-            builder.Services.TryAdd(descriptor);
+            builder.Services.Add(descriptor);
             return builder;
         }
 

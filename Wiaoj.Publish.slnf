@@ -10,6 +10,7 @@
       "src\\Extensions\\DependencyInjection\\Wiaoj.Extensions.DependencyInjection\\Wiaoj.Extensions.DependencyInjection.csproj",
       "src\\Extensions\\Primitives\\Wiaoj.Primitives\\Wiaoj.Primitives.csproj",
       "src\\Extensions\\Results\\Wiaoj.Results\\Wiaoj.Results.csproj",
+      "src\\Extensions\\Results\\Wiaoj.Results.AspNetCore\\Wiaoj.Results.AspNetCore.csproj",
       "src\\Extensions\\Wiaoj.Extensions\\Wiaoj.Extensions.csproj",
       "src\\Extensions\\Wiaoj.Threading\\Wiaoj.Concurrency.csproj",
       "src\\ObjectPool\\Wiaoj.ObjectPool\\Wiaoj.ObjectPool.csproj",

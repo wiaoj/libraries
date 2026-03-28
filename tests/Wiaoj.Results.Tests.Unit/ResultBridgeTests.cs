@@ -44,7 +44,7 @@ public sealed class ResultBridgeTests {
     public async Task AsTask_FromErrorResult_ReturnsCompletedTaskWithError() {
         Task<Result<int>> task = FailureInt().AsTask();
         Result<int> result = await task;
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── EnsureNotNull ─────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ public sealed class ResultBridgeTests {
     public void EnsureNotNull_WhenValueIsNull_ReturnsError() {
         Result<string?> nullable = (string?)null;
         Result<string> result = nullable.EnsureNotNull(SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -84,7 +84,7 @@ public sealed class ResultBridgeTests {
     public async Task EnsureNotNullAsync_WhenValueIsNull_ReturnsError() {
         Task<Result<string?>> task = Task.FromResult((Result<string?>)(string?)null);
         Result<string> result = await task.EnsureNotNullAsync(SomeError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 
     // ── MapError ──────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ public sealed class ResultBridgeTests {
     [Fact]
     public void MapError_WhenError_ReplacesWithNewError() {
         Result<int> result = FailureInt().MapError(AnotherError);
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(AnotherError, result.FirstError);
     }
 
@@ -107,7 +107,7 @@ public sealed class ResultBridgeTests {
     public void MapError_WithMapper_WhenError_TransformsFirstError() {
         Result<int> result = FailureInt()
             .MapError(e => Error.Failure($"{e.Code}.Mapped", $"mapped: {e.Description}"));
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Contains(".Mapped", result.FirstError.Code);
     }
 
@@ -131,7 +131,7 @@ public sealed class ResultBridgeTests {
     [Fact]
     public void MapSuccess_WhenError_PropagatesError() {
         Result<Success> result = FailureInt().MapSuccess();
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
         Assert.Equal(SomeError, result.FirstError);
     }
 
@@ -144,6 +144,6 @@ public sealed class ResultBridgeTests {
     [Fact]
     public async Task MapSuccessAsync_WhenError_PropagatesError() {
         Result<Success> result = await FailureIntTask().MapSuccessAsync();
-        Assert.True(result.IsError);
+        Assert.True(result.IsFailure);
     }
 }

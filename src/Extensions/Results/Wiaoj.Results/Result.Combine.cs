@@ -25,7 +25,7 @@ public static partial class Result {
         List<Error>? errors = null;
 
         foreach(Result<Success> result in results) {
-            if(result.IsError) {
+            if(result.IsFailure) {
                 errors ??= [];
                 errors.AddRange(result.Errors);
             }
@@ -39,7 +39,7 @@ public static partial class Result {
         List<Error>? errors = null;
 
         foreach(Result<Success> result in results) {
-            if(result.IsError) {
+            if(result.IsFailure) {
                 errors ??= [];
                 errors.AddRange(result.Errors);
             }
@@ -69,8 +69,8 @@ public static partial class Result {
             return (r1.Value, r2.Value);
 
         List<Error> errors = [];
-        if(r1.IsError) errors.AddRange(r1.Errors);
-        if(r2.IsError) errors.AddRange(r2.Errors);
+        if(r1.IsFailure) errors.AddRange(r1.Errors);
+        if(r2.IsFailure) errors.AddRange(r2.Errors);
         return errors;
     }
 
@@ -85,9 +85,9 @@ public static partial class Result {
             return (r1.Value, r2.Value, r3.Value);
 
         List<Error> errors = [];
-        if(r1.IsError) errors.AddRange(r1.Errors);
-        if(r2.IsError) errors.AddRange(r2.Errors);
-        if(r3.IsError) errors.AddRange(r3.Errors);
+        if(r1.IsFailure) errors.AddRange(r1.Errors);
+        if(r2.IsFailure) errors.AddRange(r2.Errors);
+        if(r3.IsFailure) errors.AddRange(r3.Errors);
         return errors;
     }
 
@@ -102,10 +102,10 @@ public static partial class Result {
             return (r1.Value, r2.Value, r3.Value, r4.Value);
 
         List<Error> errors = [];
-        if(r1.IsError) errors.AddRange(r1.Errors);
-        if(r2.IsError) errors.AddRange(r2.Errors);
-        if(r3.IsError) errors.AddRange(r3.Errors);
-        if(r4.IsError) errors.AddRange(r4.Errors);
+        if(r1.IsFailure) errors.AddRange(r1.Errors);
+        if(r2.IsFailure) errors.AddRange(r2.Errors);
+        if(r3.IsFailure) errors.AddRange(r3.Errors);
+        if(r4.IsFailure) errors.AddRange(r4.Errors);
         return errors;
     }
 }
