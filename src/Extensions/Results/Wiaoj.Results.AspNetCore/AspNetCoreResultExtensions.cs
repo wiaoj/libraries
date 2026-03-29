@@ -1,4 +1,5 @@
 ﻿using Wiaoj.Results;
+using Wiaoj.Results.AspNetCore;
 
 #pragma warning disable IDE0130
 namespace Microsoft.AspNetCore.Http;
