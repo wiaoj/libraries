@@ -84,7 +84,7 @@ public static class ModulithServiceCollectionExtensions {
         List<IModule> modules = [];
 
         foreach(ModuleDescriptor descriptor in sortedDescriptors) {
-            IModule module = (IModule)Activator.CreateInstance(descriptor.Type)
+            IModule module = (IModule?)Activator.CreateInstance(descriptor.Type)
                 ?? throw new InvalidOperationException(
                     $"Failed to create an instance of module '{descriptor.Type.Name}'. " +
                     "Ensure the module has a public parameterless constructor.");
