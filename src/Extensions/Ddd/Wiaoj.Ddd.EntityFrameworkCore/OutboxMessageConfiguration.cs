@@ -10,7 +10,7 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Type).HasMaxLength(500).IsRequired();
-        builder.Property(x => x.Content).IsRequired(); // JSON ise MaxLength vermeyebiliriz
+        builder.Property(x => x.Content).IsRequired();
         builder.Property(x => x.PartitionKey).HasMaxLength(100);
 
         // Optimistic Concurrency Token
@@ -21,6 +21,10 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
 
         // 2. Partitioning kullanılıyorsa: PartitionKey + ProcessedAt
         builder.HasIndex(x => new { x.PartitionKey, x.ProcessedAt })
+               .HasFilter("\"ProcessedAt\" IS NULL");
+
+        // Zombie/Polling
+        builder.HasIndex(x => new { x.ProcessedAt, x.LockId, x.LockExpiration })
                .HasFilter("\"ProcessedAt\" IS NULL");
     }
 }

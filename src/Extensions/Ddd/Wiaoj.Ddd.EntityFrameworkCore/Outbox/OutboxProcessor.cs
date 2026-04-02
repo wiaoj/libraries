@@ -160,7 +160,9 @@ internal sealed class OutboxProcessor<TContext>(
                 .Where(m => m.ProcessedAt == null)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(m => m.ProcessedAt, timeProvider.GetUtcNow())
+                    .SetProperty(m => m.ProcessedBy, this._myInstanceId)
                     .SetProperty(m => m.Error, (string?)null)
+                    .SetProperty(m => m.LockId, (string?)null)
                     .SetProperty(m => m.LockExpiration, (DateTimeOffset?)null),
                     stoppingToken);
 
@@ -207,7 +209,9 @@ internal sealed class OutboxProcessor<TContext>(
                 .Where(m => m.Id == id && m.LockId == this._myInstanceId)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(m => m.Error, error)
-                    .SetProperty(m => m.RetryCount, c => c.RetryCount + 1),
+                    .SetProperty(m => m.RetryCount, c => c.RetryCount + 1)
+                    .SetProperty(m => m.LockId, (string?)null)
+                    .SetProperty(m => m.LockExpiration, (DateTimeOffset?)null),
                     token);
 
             if(rows > 0) {

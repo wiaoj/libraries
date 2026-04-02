@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Consensus.Raft.Abstractions;
+﻿using Wiaoj.Preconditions;
+
+namespace Wiaoj.Consensus.Raft.Abstractions;
 
 /// <summary>
 /// Raft dönemini (Term) temsil eden, değişmez ve karşılaştırılabilir bir yapı.

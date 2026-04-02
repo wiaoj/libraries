@@ -1,8 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text.Json;
+using Wiaoj.Ddd.EntityFrameworkCore.Internal;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
 using Wiaoj.Preconditions;
+using Wiaoj.Primitives;
 using Wiaoj.Serialization;
 using Wiaoj.Serialization.SystemTextJson;
 
@@ -12,7 +14,8 @@ namespace Wiaoj.Ddd.EntityFrameworkCore;
 /// </summary>
 public sealed class DddEfCoreOptionsBuilder(IServiceCollection services) {
     private readonly OutboxOptions _outboxOptions = new();
-    private bool _isSerializerConfigured;
+    private bool _isSerializerConfigured; 
+    private string _instanceId = $"{Environment.MachineName}_{NanoId.NewId(8)}";
 
     /// <summary>
     /// Configures the Outbox settings (polling interval, batch size, locking, etc.).
@@ -20,6 +23,16 @@ public sealed class DddEfCoreOptionsBuilder(IServiceCollection services) {
     public DddEfCoreOptionsBuilder ConfigureOutbox(Action<OutboxOptions> configure) {
         Preca.ThrowIfNull(configure);
         configure(this._outboxOptions);
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a custom identifier for this processor instance.
+    /// Useful for identifying which pod or machine processed the message (e.g. Environment.MachineName).
+    /// </summary>
+    public DddEfCoreOptionsBuilder UseInstanceId(string instanceId) {
+        Preca.ThrowIfNullOrWhiteSpace(instanceId);
+        this._instanceId = instanceId;
         return this;
     }
 
@@ -78,5 +91,7 @@ public sealed class DddEfCoreOptionsBuilder(IServiceCollection services) {
         if(!this._isSerializerConfigured) {
             UseSystemTextJson();
         }
+
+        services.TryAddSingleton(new OutboxInstanceInfo(this._instanceId));
     }
 }

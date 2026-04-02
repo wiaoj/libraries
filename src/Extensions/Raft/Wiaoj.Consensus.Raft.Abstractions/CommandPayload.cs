@@ -14,7 +14,7 @@ public readonly record struct CommandPayload(ReadOnlyMemory<byte> Value) {
 
     public static Result<CommandPayload> Create(ReadOnlyMemory<byte> value, int maxSizeInBytes = 1_048_576) { // Default 1MB max
         if (value.Length > maxSizeInBytes) {
-            return Error.Validation.InvalidFormat("Command.TooLarge", $"Command payload size ({value.Length} bytes) exceeds the maximum allowed size ({maxSizeInBytes} bytes).");
+            return Error.Validation("Command.TooLarge", $"Command payload size ({value.Length} bytes) exceeds the maximum allowed size ({maxSizeInBytes} bytes).");
         }
         return new CommandPayload(value);
     }

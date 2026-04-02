@@ -12,4 +12,9 @@
 	<ItemGroup>
 		<PackageReference Include="MemoryPack" Version="1.21.4" />
 	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+	  <ProjectReference Include="..\..\Results\Wiaoj.Results\Wiaoj.Results.csproj" />
+	</ItemGroup>
 </Project>

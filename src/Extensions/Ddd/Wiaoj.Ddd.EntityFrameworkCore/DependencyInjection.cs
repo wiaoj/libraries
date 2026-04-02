@@ -37,8 +37,7 @@ public static class DependencyInjection {
             Preca.ThrowIfNull(configure);
 
             builder.Services.TryAddSingleton<OutboxChannel>();
-            builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);
-            builder.Services.TryAddSingleton<OutboxInstanceInfo>();
+            builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System); 
 
             builder.Services.TryAddScoped<AuditInterceptor>();
             builder.Services.TryAddScoped<DomainEventDispatcherInterceptor>();

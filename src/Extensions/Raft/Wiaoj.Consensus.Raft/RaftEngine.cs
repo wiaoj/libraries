@@ -226,7 +226,7 @@ using Wiaoj.Consensus.Raft.Abstractions;
 using Wiaoj.Consensus.Raft.Roles;
 using Wiaoj.Primitives;
 using Wiaoj.Results;
-using Wiaoj.Threading.Channels;
+using DisposeState = Wiaoj.Primitives.DisposeState;
 
 namespace Wiaoj.Consensus.Raft;
 
