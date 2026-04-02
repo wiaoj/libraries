@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Primitives.Tests.Unit;
 public sealed class AdditionalPrimitivesTests {

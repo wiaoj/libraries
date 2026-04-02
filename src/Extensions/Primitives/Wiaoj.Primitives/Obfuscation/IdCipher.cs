@@ -1,8 +1,9 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using Wiaoj.Primitives.Cryptography.Hashing;
 
-namespace Wiaoj.Primitives.Obfuscation; 
+namespace Wiaoj.Primitives.Obfuscation;
 /// <summary>
 /// A generalized, stateless Feistel Cipher implementation for 64-bit and 128-bit integers.
 /// Used to scramble sequential IDs into random-looking numbers while preserving their bit length.
@@ -102,6 +103,24 @@ internal static class IdCipher {
         }
 
         return ((Int128)left << 64) | right;
+    }
+
+    /// <summary>
+    /// Derives round keys directly from a highly secure <see cref="Sha256Hash"/> primitive.
+    /// Prevents string allocation in memory for sensitive seeds.
+    /// </summary>
+    public static uint[] DeriveKeys(Sha256Hash seedHash) {
+        uint[] keys = new uint[Rounds];
+
+        seedHash.Expose(hashBytes => {
+            for(int i = 0; i < Rounds; i++) {
+                int offset = (i * 4) % hashBytes.Length;
+
+                keys[i] = BitConverter.ToUInt32(hashBytes[offset..]);
+            }
+        });
+
+        return keys;
     }
 
     /// <summary>

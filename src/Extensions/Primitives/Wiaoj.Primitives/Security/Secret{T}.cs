@@ -5,8 +5,9 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
+#pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Wiaoj.Primitives;
-
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Represents sensitive data (e.g., passwords, API keys, cryptographic keys) in a secure, GC-immune memory region.
 /// The lifetime of the data is deterministically controlled via the IDisposable pattern, ensuring it is securely erased from memory.

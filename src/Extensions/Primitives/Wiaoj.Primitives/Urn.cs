@@ -178,7 +178,7 @@ public readonly record struct Urn :
 
     /// <summary>
     /// Creates a URN from a namespace and multiple segments.
-    /// Uses <see cref="string.Create"/> to minimize allocations.
+    /// Uses <see cref="string.Create{TState}(int, TState, System.Buffers.SpanAction{char, TState})"/> to minimize allocations.
     /// </summary>
     /// <param name="nid">The Namespace Identifier.</param>
     /// <param name="segments">An array of segments to join.</param>
@@ -234,6 +234,22 @@ public readonly record struct Urn :
         });
 
         return new Urn(urnString);
+    }
+
+    /// <summary>
+    /// Creates a URN from a namespace and a cryptographic hash (Md5, Sha256, etc.).
+    /// Uses high-performance interpolation to avoid temporary string allocations.
+    /// </summary>
+    /// <param name="nid">The Namespace Identifier (e.g., "sha256").</param>
+    /// <param name="hash">The hash instance.</param>
+    /// <returns>A new <see cref="Urn"/> instance formatted in lowercase hex.</returns>
+    public static Urn Create<THash>(string nid, THash hash) where THash : struct, ISpanFormattable {
+        Preca.ThrowIfNullOrWhiteSpace(nid);
+        ValidateNid(nid);
+
+        // .NET InterpolatedStringHandler, 'hash:x' formatını algılayıp 
+        // ISpanFormattable arayüzü üzerinden doğrudan hedef span'e yazar. Allocation = 0.
+        return new Urn($"{Prefix}{Separator}{nid}{Separator}{hash:x}");
     }
 
     #endregion

@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Wiaoj.Primitives;
+namespace Wiaoj.Primitives.Cryptography.Hashing;
 
 /// <summary>
 /// Represents a 16-byte MD5 hash. 
@@ -68,6 +68,36 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanF
             throw new FormatException("Failed to decode Base64 into Hash.");
         }
         return new Md5Hash(buffer);
+    }
+
+    /// <summary>
+    /// Creates a hash instance from a valid <see cref="Base32String"/>.
+    /// </summary>
+    public static Md5Hash From(Base32String base32) {
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
+        if(base32.TryDecode(buffer, out int written) && written == HashSizeInBytes) {
+            return new(buffer);
+        }
+        throw new FormatException($"Base32 string length mismatch for {HashSizeInBytes}-byte hash.");
+    }
+
+    /// <summary>
+    /// Creates a hash instance from a valid <see cref="Base62String"/>.
+    /// </summary>
+    public static Md5Hash From(Base62String base62) {
+        byte[] bytes = base62.ToBytes();
+
+        if(bytes.Length > HashSizeInBytes) {
+            for(int i = 0; i < bytes.Length - HashSizeInBytes; i++) {
+                if(bytes[i] != 0) throw new FormatException("Base62 string represents a value too large for this hash.");
+            }
+            return new(bytes.AsSpan(bytes.Length - HashSizeInBytes));
+        }
+
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
+        buffer.Clear();
+        bytes.CopyTo(buffer[(HashSizeInBytes - bytes.Length)..]);
+        return new(buffer);
     }
 
     /// <summary>
@@ -228,6 +258,16 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanF
         return Base64String.FromBytes(AsSpan());
     }
 
+    /// <summary>Encodes the hash bytes into a type-safe <see cref="Base32String"/>.</summary>
+    public Base32String ToBase32String() {
+        return Base32String.FromBytes(AsSpan());
+    }
+
+    /// <summary>Encodes the hash bytes into a type-safe <see cref="Base62String"/>.</summary>
+    public Base62String ToBase62String() {
+        return Base62String.FromBytes(AsSpan());
+    }
+
     /// <summary>
     /// Returns the hash as a hexadecimal string (Legacy support).
     /// </summary>
@@ -236,8 +276,9 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanF
     }
 
     // IFormattable — "x" = lowercase hex, default = uppercase
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) =>
-        format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+    }
 
     // ISpanFormattable
     bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {

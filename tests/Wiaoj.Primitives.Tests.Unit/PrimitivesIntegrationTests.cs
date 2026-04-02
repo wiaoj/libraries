@@ -1,5 +1,5 @@
 ﻿using System.Text;
-using Wiaoj.Primitives;
+using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Primitives.Tests.Unit;
 public class PrimitivesIntegrationTests {

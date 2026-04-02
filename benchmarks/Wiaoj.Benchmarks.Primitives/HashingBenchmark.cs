@@ -1,6 +1,7 @@
 ﻿using System.Security.Cryptography;
 using BenchmarkDotNet.Attributes;
 using Wiaoj.Primitives;
+using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Benchmarks.Primitives;  
 [MemoryDiagnoser]

@@ -1,16 +1,19 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 
-namespace Wiaoj.Primitives;
+namespace Wiaoj.Primitives.Cryptography.Hashing;
 /// <summary>
 /// Represents a 32-byte SHA256 hash. This struct guarantees the correct size
 /// and provides high-performance, allocation-free operations for computing and comparing hashes.
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+[StructLayout(LayoutKind.Sequential)]
+[JsonConverter(typeof(JsonConverters.Sha256HashJsonConverter))]
 public unsafe struct Sha256Hash : IEquatable<Sha256Hash>, ISpanFormattable, IUtf8SpanFormattable {
     internal const int HashSizeInBytes = 32;
     private fixed byte _bytes[HashSizeInBytes];
@@ -68,6 +71,36 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash>, ISpanFormattable, IUtf
             throw new FormatException("Failed to decode Base64 into Hash.");
         }
         return new Sha256Hash(buffer);
+    }
+
+    /// <summary>
+    /// Creates a hash instance from a valid <see cref="Base32String"/>.
+    /// </summary>
+    public static Sha256Hash From(Base32String base32) {
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
+        if(base32.TryDecode(buffer, out int written) && written == HashSizeInBytes) {
+            return new(buffer);
+        }
+        throw new FormatException($"Base32 string length mismatch for {HashSizeInBytes}-byte hash.");
+    }
+
+    /// <summary>
+    /// Creates a hash instance from a valid <see cref="Base62String"/>.
+    /// </summary>
+    public static Sha256Hash From(Base62String base62) {
+        byte[] bytes = base62.ToBytes();
+
+        if(bytes.Length > HashSizeInBytes) {
+            for(int i = 0; i < bytes.Length - HashSizeInBytes; i++) {
+                if(bytes[i] != 0) throw new FormatException("Base62 string represents a value too large for this hash.");
+            }
+            return new(bytes.AsSpan(bytes.Length - HashSizeInBytes));
+        }
+
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
+        buffer.Clear();
+        bytes.CopyTo(buffer[(HashSizeInBytes - bytes.Length)..]);
+        return new(buffer);
     }
 
     /// <summary>
@@ -220,6 +253,16 @@ public unsafe struct Sha256Hash : IEquatable<Sha256Hash>, ISpanFormattable, IUtf
     /// <returns>A <see cref="Base64String"/> representation of the SHA256 hash.</returns>
     public Base64String ToBase64String() {
         return Base64String.FromBytes(AsSpan());
+    }
+
+    /// <summary>Encodes the hash bytes into a type-safe <see cref="Base32String"/>.</summary>
+    public Base32String ToBase32String() {
+        return Base32String.FromBytes(AsSpan());
+    }
+
+    /// <summary>Encodes the hash bytes into a type-safe <see cref="Base62String"/>.</summary>
+    public Base62String ToBase62String() {
+        return Base62String.FromBytes(AsSpan());
     }
 
     /// <summary>

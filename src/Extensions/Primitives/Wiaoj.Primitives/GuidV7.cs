@@ -211,6 +211,15 @@ public readonly record struct GuidV7 :
     #endregion
 
     #region Formatting
+    /// <summary>
+    /// Creates a URN using this GuidV7 and a specified namespace.
+    /// <para>Example: <c>ToUrn("user") -> urn:user:01968e3a-b4c2-7f00-a1b2-c3d4e5f60718</c></para>
+    /// </summary>
+    public Urn ToUrn(string nid) {
+        Preca.ThrowIfEmpty(this._value, () => new InvalidOperationException("Cannot create URN from an empty GuidV7.")); 
+        return Urn.Create(nid, this._value);
+    }
+
 
     /// <summary>Returns the standard hyphenated GUID string (format "D").</summary>
     /// <example>01968e3a-b4c2-7f00-a1b2-c3d4e5f60718</example>

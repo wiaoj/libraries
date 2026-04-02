@@ -5,8 +5,7 @@ using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Primitives.Tests.Unit;
-public sealed class HmacSha256HashTests {
-    // Testlerde kullanmak için rastgele byte dizisi üreten yardımcı metot
+public sealed class Sha256HashTests {
     private static byte[] GetRandomBytes(int length = 32) {
         byte[] buffer = new byte[length];
         RandomNumberGenerator.Fill(buffer);
@@ -21,10 +20,9 @@ public sealed class HmacSha256HashTests {
         byte[] expectedBytes = GetRandomBytes(32);
 
         // Act
-        HmacSha256Hash hash = new(expectedBytes);
+        Sha256Hash hash = new(expectedBytes);
 
         // Assert
-        // Span karşılaştırması için ToArray kullanıyoruz
         Assert.Equal(expectedBytes, hash.AsSpan().ToArray());
     }
 
@@ -37,13 +35,13 @@ public sealed class HmacSha256HashTests {
         byte[] invalidBytes = GetRandomBytes(length);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => new HmacSha256Hash(invalidBytes));
+        Assert.Throws<ArgumentException>(() => new Sha256Hash(invalidBytes));
     }
 
     [Fact]
     public void Empty_ShouldReturnZeroFilledHash() {
         // Arrange
-        var empty = HmacSha256Hash.Empty;
+        var empty = Sha256Hash.Empty;
 
         // Act
         byte[] bytes = empty.AsSpan().ToArray();
@@ -63,8 +61,8 @@ public sealed class HmacSha256HashTests {
     public void Equality_SameContent_ShouldBeEqual() {
         // Arrange
         byte[] bytes = GetRandomBytes(32);
-        HmacSha256Hash hash1 = new(bytes);
-        HmacSha256Hash hash2 = new(bytes);
+        Sha256Hash hash1 = new(bytes);
+        Sha256Hash hash2 = new(bytes);
 
         // Assert
         Assert.True(hash1.Equals(hash2));
@@ -79,11 +77,10 @@ public sealed class HmacSha256HashTests {
         byte[] bytes1 = GetRandomBytes(32);
         byte[] bytes2 = GetRandomBytes(32);
 
-        // Çok düşük ihtimalle aynı gelirse diye ilk byte'ı değiştiriyoruz
         if(bytes1[0] == bytes2[0]) bytes2[0] = (byte)(bytes1[0] + 1);
 
-        HmacSha256Hash hash1 = new(bytes1);
-        HmacSha256Hash hash2 = new(bytes2);
+        Sha256Hash hash1 = new(bytes1);
+        Sha256Hash hash2 = new(bytes2);
 
         // Assert
         Assert.False(hash1.Equals(hash2));
@@ -97,16 +94,15 @@ public sealed class HmacSha256HashTests {
     #region Hesaplama (Computation) Testleri
 
     [Fact]
-    public void Compute_ShouldMatchStandardDotNetHMAC() {
+    public void Compute_ShouldMatchStandardDotNetSHA256() {
         // Arrange
-        byte[] key = Encoding.UTF8.GetBytes("test-key-123");
         byte[] data = Encoding.UTF8.GetBytes("test-data-abc");
 
         // Act - Sizin struct'ınızın hesaplaması
-        HmacSha256Hash resultStruct = HmacSha256Hash.Compute(key, data);
+        Sha256Hash resultStruct = Sha256Hash.Compute(data);
 
         // Act - Standart .NET hesaplaması (Referans)
-        byte[] expectedBytes = HMACSHA256.HashData(key, data);
+        byte[] expectedBytes = SHA256.HashData(data);
 
         // Assert
         Assert.Equal(expectedBytes, resultStruct.AsSpan().ToArray());
@@ -121,8 +117,8 @@ public sealed class HmacSha256HashTests {
     public void ToString_ShouldReturnUppercaseHex() {
         // Arrange
         byte[] bytes = new byte[32];
-        for(int i = 0; i < 32; i++) bytes[i] = 0xAB; // Hepsi AB
-        HmacSha256Hash hash = new(bytes);
+        for(int i = 0; i < 32; i++) bytes[i] = 0xAB;
+        Sha256Hash hash = new(bytes);
 
         // Act
         string result = hash.ToString();

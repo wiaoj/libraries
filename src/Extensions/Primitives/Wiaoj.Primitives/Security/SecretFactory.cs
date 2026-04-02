@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Primitives;
+﻿#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Primitives;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Provides an entry point for fluent extension methods designed to generate sensitive data 
 /// according to specific cryptographic standards (e.g., AES, RSA, Secure Salts).
@@ -13,5 +15,5 @@ public sealed class SecretFactory {
     /// Prevents external instantiation. 
     /// Access should be performed through <see cref="Secret{any}.Factory"/>.
     /// </summary>
-    internal SecretFactory() { }
+    internal SecretFactory() { } 
 }

@@ -2,7 +2,9 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 
+#pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Wiaoj.Primitives;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Provides static factory methods for creating and operating on <see cref="Secret{T}"/> instances.
 /// Using these methods allows for type inference, enabling cleaner syntax (e.g., `Secret.FromMilliseconds(bytes)`).

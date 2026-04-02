@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.Cryptography.Hashing;
 using Wiaoj.Primitives.JsonConverters;
 
 namespace Wiaoj.Primitives;

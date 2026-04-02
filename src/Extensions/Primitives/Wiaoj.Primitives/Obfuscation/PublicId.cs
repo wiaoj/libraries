@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.Cryptography.Hashing;
 using Wiaoj.Primitives.JsonConverters;
 using Wiaoj.Primitives.Obfuscation;
 using Wiaoj.Primitives.Snowflake;
@@ -42,6 +43,17 @@ public readonly struct PublicId :
         Preca.ThrowIfNullOrWhiteSpace(seed);
         lock(_configLock) {
             _keys = IdCipher.DeriveKeys(seed);
+            _isConfigured = true;
+        }
+    }
+
+    /// <summary>
+    /// Configures the global obfuscation logic with a pre-computed, secure <see cref="Sha256Hash"/>.
+    /// Recommended for maximum memory safety.
+    /// </summary>
+    public static void Configure(Sha256Hash seedHash) {
+        lock(_configLock) {
+            _keys = IdCipher.DeriveKeys(seedHash);
             _isConfigured = true;
         }
     }

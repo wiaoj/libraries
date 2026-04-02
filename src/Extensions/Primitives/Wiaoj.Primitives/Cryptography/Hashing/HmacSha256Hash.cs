@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.JsonConverters;
 
-namespace Wiaoj.Primitives;
+namespace Wiaoj.Primitives.Cryptography.Hashing;
 /// <summary>
 /// Represents a fixed-size, 32-byte HMAC-SHA256 hash.
 /// </summary>
@@ -17,8 +17,8 @@ namespace Wiaoj.Primitives;
 /// to prevent timing-based side-channel attacks.
 /// </remarks>
 [DebuggerDisplay("{ToString(),nq}")]
-[JsonConverter(typeof(HmacSha256HashJsonConverter))]
 [StructLayout(LayoutKind.Sequential)]
+[JsonConverter(typeof(HmacSha256HashJsonConverter))]
 public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattable, IUtf8SpanFormattable {
 
     /// <summary>The size of the HMAC-SHA256 hash in bytes (32 bytes).</summary>
@@ -156,6 +156,16 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
         return Base64UrlString.FromBytes(AsSpan());
     }
 
+    /// <summary>Encodes the hash bytes into a type-safe <see cref="Base32String"/>.</summary>
+    public Base32String ToBase32String() {
+        return Base32String.FromBytes(AsSpan());
+    }
+
+    /// <summary>Encodes the hash bytes into a type-safe <see cref="Base62String"/>.</summary>
+    public Base62String ToBase62String() {
+        return Base62String.FromBytes(AsSpan());
+    }
+
     /// <summary>Returns the hexadecimal string representation of the hash.</summary>
     /// <returns>An uppercase hexadecimal string.</returns>
     public override string ToString() {
@@ -219,6 +229,36 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
             return new HmacSha256Hash(buffer);
         }
         throw new FormatException("Base64 string is not a valid 32-byte hash.");
+    }
+
+    /// <summary>
+    /// Creates a hash instance from a valid <see cref="Base32String"/>.
+    /// </summary>
+    public static HmacSha256Hash From(Base32String base32) {
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
+        if(base32.TryDecode(buffer, out int written) && written == HashSizeInBytes) {
+            return new(buffer);
+        }
+        throw new FormatException($"Base32 string length mismatch for {HashSizeInBytes}-byte hash.");
+    }
+
+    /// <summary>
+    /// Creates a hash instance from a valid <see cref="Base62String"/>.
+    /// </summary>
+    public static HmacSha256Hash From(Base62String base62) {
+        byte[] bytes = base62.ToBytes();
+
+        if(bytes.Length > HashSizeInBytes) {
+            for(int i = 0; i < bytes.Length - HashSizeInBytes; i++) {
+                if(bytes[i] != 0) throw new FormatException("Base62 string represents a value too large for this hash.");
+            }
+            return new(bytes.AsSpan(bytes.Length - HashSizeInBytes));
+        }
+
+        Span<byte> buffer = stackalloc byte[HashSizeInBytes];
+        buffer.Clear();
+        bytes.CopyTo(buffer[(HashSizeInBytes - bytes.Length)..]);
+        return new(buffer);
     }
 
     /// <summary>

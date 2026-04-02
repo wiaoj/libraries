@@ -68,18 +68,20 @@ public readonly partial record struct NanoId :
     /// Gets the string representation of this <see cref="NanoId"/>.
     /// Returns an empty string if the identifier is not initialized.
     /// </summary>
-    public string Value => _value ?? string.Empty;
+    public string Value => this._value ?? string.Empty;
 
     /// <summary>
     /// Gets a value indicating whether the current <see cref="NanoId"/> is empty.
     /// </summary>
-    public bool IsEmpty => string.IsNullOrEmpty(_value);
+    public bool IsEmpty => string.IsNullOrEmpty(this._value);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NanoId"/> struct with a validated value.
     /// </summary>
     /// <param name="value">The validated string value.</param>
-    private NanoId(string value) => _value = value;
+    private NanoId(string value) {
+        this._value = value;
+    }
 
     // -------------------------------------------------------------------------
     // GENERATION (High Performance)
@@ -91,7 +93,9 @@ public readonly partial record struct NanoId :
     /// </summary>
     /// <returns>A new, unique <see cref="NanoId"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static NanoId NewId() => NewId(DefaultLength);
+    public static NanoId NewId() {
+        return NewId(DefaultLength);
+    }
 
     /// <summary>
     /// Generates a new cryptographically secure <see cref="NanoId"/> with the specified length 
@@ -100,6 +104,7 @@ public readonly partial record struct NanoId :
     /// <param name="length">The desired length of the identifier. Must be between 1 and <see cref="MaxAllowedLength"/>.</param>
     /// <returns>A new <see cref="NanoId"/> with the specified length.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when length is less than or equal to zero or exceeds <see cref="MaxAllowedLength"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static NanoId NewId(int length) {
         Preca.ThrowIfNonValidNanoIdLength(length);
 
@@ -210,10 +215,21 @@ public readonly partial record struct NanoId :
     // -------------------------------------------------------------------------
 
     /// <summary>
+    /// Creates a URN using this NanoId and a specified namespace.
+    /// <para>Example: <c>ToUrn("session") -> urn:session:V1StGXR8_Z5jdHi6B-myT</c></para>
+    /// </summary>
+    public Urn ToUrn(string nid) {
+        Preca.ThrowIf(this.IsEmpty, () => new InvalidOperationException("Cannot create URN from an empty NanoId."));
+        return Urn.Create(nid, this.Value);
+    }
+
+    /// <summary>
     /// Returns the string value of the <see cref="NanoId"/>.
     /// </summary>
     /// <returns>The underlying string identifier.</returns>
-    public override string ToString() => Value;
+    public override string ToString() {
+        return this.Value;
+    }
 
     /// <summary>
     /// Attempts to format the <see cref="NanoId"/> into the provided character span.
@@ -222,18 +238,18 @@ public readonly partial record struct NanoId :
     /// <param name="charsWritten">The number of characters written to the destination.</param>
     /// <returns><see langword="true"/> if the operation was successful; otherwise, <see langword="false"/>.</returns>
     public bool TryFormat(Span<char> destination, out int charsWritten) {
-        if(string.IsNullOrEmpty(_value)) {
+        if(string.IsNullOrEmpty(this._value)) {
             charsWritten = 0;
             return false;
         }
 
-        if(destination.Length < _value.Length) {
+        if(destination.Length < this._value.Length) {
             charsWritten = 0;
             return false;
         }
 
-        _value.CopyTo(destination);
-        charsWritten = _value.Length;
+        this._value.CopyTo(destination);
+        charsWritten = this._value.Length;
         return true;
     }
 
@@ -242,41 +258,72 @@ public readonly partial record struct NanoId :
     // -------------------------------------------------------------------------
 
     /// <inheritdoc/>
-    static NanoId IParsable<NanoId>.Parse(string s, IFormatProvider? provider) => Parse(s);
-    /// <inheritdoc/>
-    static bool IParsable<NanoId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out NanoId result) => TryParse(s, out result);
-    /// <inheritdoc/>
-    static NanoId ISpanParsable<NanoId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
-    /// <inheritdoc/>
-    static bool ISpanParsable<NanoId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out NanoId result) => TryParse(s, out result);
+    static NanoId IParsable<NanoId>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
 
     /// <inheritdoc/>
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) => TryFormat(destination, out charsWritten);
+    static bool IParsable<NanoId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out NanoId result) {
+        return TryParse(s, out result);
+    }
+
     /// <inheritdoc/>
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) => Value;
+    static NanoId ISpanParsable<NanoId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    /// <inheritdoc/>
+    static bool ISpanParsable<NanoId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out NanoId result) {
+        return TryParse(s, out result);
+    }
+
+    /// <inheritdoc/>
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return TryFormat(destination, out charsWritten);
+    }
+
+    /// <inheritdoc/>
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return this.Value;
+    }
 
     // -------------------------------------------------------------------------
     // EQUALITY & OPERATORS
     // -------------------------------------------------------------------------
 
     /// <inheritdoc/>
-    public bool Equals(NanoId other) => string.Equals(_value, other._value, StringComparison.Ordinal);
+    public bool Equals(NanoId other) {
+        return string.Equals(this._value, other._value, StringComparison.Ordinal);
+    }
+
     /// <inheritdoc/>
-    public override int GetHashCode() => _value?.GetHashCode() ?? 0;
+    public override int GetHashCode() {
+        return this._value?.GetHashCode() ?? 0;
+    }
+
     /// <inheritdoc/>
-    public int CompareTo(NanoId other) => string.CompareOrdinal(_value, other._value);
+    public int CompareTo(NanoId other) {
+        return string.CompareOrdinal(this._value, other._value);
+    }
+
     /// <inheritdoc/>
-    public int CompareTo(object? obj) => obj is NanoId other ? CompareTo(other) : 1;
+    public int CompareTo(object? obj) {
+        return obj is NanoId other ? CompareTo(other) : 1;
+    }
 
     /// <summary>
     /// Implicitly converts a <see cref="NanoId"/> to its string value.
     /// </summary>
-    public static implicit operator string(NanoId id) => id.Value;
+    public static implicit operator string(NanoId id) {
+        return id.Value;
+    }
 
     /// <summary>
     /// Explicitly converts a string to a <see cref="NanoId"/> by parsing it.
     /// </summary>
-    public static explicit operator NanoId(string s) => Parse(s);
+    public static explicit operator NanoId(string s) {
+        return Parse(s);
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -296,7 +343,7 @@ public static class PrecaExtensions {
         /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="length"/> is less than 1 or greater than <see cref="NanoId.MaxAllowedLength"/>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ThrowIfNonValidNanoIdLength(int length) {
-            if(length <= 0 || length > NanoId.MaxAllowedLength) {
+            if(length is <= 0 or > NanoId.MaxAllowedLength) {
                 throw new ArgumentOutOfRangeException(nameof(length), $"Length must be between 1 and {NanoId.MaxAllowedLength}.");
             }
         }
@@ -323,12 +370,14 @@ public sealed class NanoIdJsonConverter : JsonConverter<NanoId> {
     }
 
     /// <inheritdoc/>
-    public override NanoId ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        => NanoId.Parse(reader.GetString()!);
+    public override NanoId ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return NanoId.Parse(reader.GetString()!);
+    }
 
     /// <inheritdoc/>
-    public override void WriteAsPropertyName(Utf8JsonWriter writer, NanoId value, JsonSerializerOptions options)
-        => writer.WritePropertyName(value.Value);
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, NanoId value, JsonSerializerOptions options) {
+        writer.WritePropertyName(value.Value);
+    }
 }
 
 /// <summary>
@@ -336,8 +385,9 @@ public sealed class NanoIdJsonConverter : JsonConverter<NanoId> {
 /// </summary>
 public sealed class NanoIdTypeConverter : TypeConverter {
     /// <inheritdoc/>
-    public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType)
-        => sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+    public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) {
+        return sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+    }
 
     /// <inheritdoc/>
     public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value) {
@@ -347,8 +397,9 @@ public sealed class NanoIdTypeConverter : TypeConverter {
     }
 
     /// <inheritdoc/>
-    public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType)
-        => destinationType == typeof(string) || base.CanConvertTo(context, destinationType);
+    public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType) {
+        return destinationType == typeof(string) || base.CanConvertTo(context, destinationType);
+    }
 
     /// <inheritdoc/>
     public override object? ConvertTo(ITypeDescriptorContext? context, CultureInfo? culture, object? value, Type destinationType) {

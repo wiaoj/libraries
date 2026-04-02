@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using Wiaoj.Primitives;
+using Wiaoj.Primitives.Cryptography.Hashing;
 using Wiaoj.Primitives.Snowflake;
 using Wiaoj.Samples.Primitives;
 
