@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -14,7 +15,11 @@ namespace Wiaoj.Primitives.Cryptography.Hashing;
 [DebuggerDisplay("{ToString(),nq}")]
 [StructLayout(LayoutKind.Sequential)]
 [JsonConverter(typeof(JsonConverters.Sha512HashJsonConverter))]
-public unsafe struct Sha512Hash : IEquatable<Sha512Hash>, ISpanFormattable, IUtf8SpanFormattable {
+public unsafe struct Sha512Hash
+    : IEquatable<Sha512Hash>,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IEqualityOperators<Sha512Hash, Sha512Hash, bool> {
     internal const int HashSizeInBytes = 64;
     private fixed byte _bytes[HashSizeInBytes];
 
@@ -273,8 +278,9 @@ public unsafe struct Sha512Hash : IEquatable<Sha512Hash>, ISpanFormattable, IUtf
     }
 
     // IFormattable — format "x" = lowercase hex, default = uppercase
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) =>
-        format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
+    }
 
     // ISpanFormattable — zero-alloc hex write
     bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
@@ -327,10 +333,12 @@ public unsafe struct Sha512Hash : IEquatable<Sha512Hash>, ISpanFormattable, IUtf
         return hash.ToHashCode();
     }
 
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
     public static bool operator ==(Sha512Hash left, Sha512Hash right) {
         return left.Equals(right);
     }
 
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Inequality(TSelf, TOther)" />
     public static bool operator !=(Sha512Hash left, Sha512Hash right) {
         return !left.Equals(right);
     }

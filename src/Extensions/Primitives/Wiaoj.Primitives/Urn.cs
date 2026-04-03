@@ -30,18 +30,19 @@ public readonly record struct Urn :
 
     // Storing the full value is safer and faster for a ValueObject than storing parts.
     private readonly string _value;
-
+    private readonly ushort _nidEnd;
+    private readonly ushort _nssStart;
     /// <summary>
     /// Gets the Namespace Identifier (NID). 
     /// <para>Example: "user" in "urn:user:123".</para>
     /// </summary>
-    public ReadOnlySpan<char> Namespace => ParseSegment(0);
+    public ReadOnlySpan<char> Namespace => string.IsNullOrEmpty(this._value) ? [] : this._value.AsSpan(PrefixLength, this._nidEnd - PrefixLength);
 
     /// <summary>
     /// Gets the Namespace Specific String (NSS). 
     /// <para>Example: "123" in "urn:user:123".</para>
     /// </summary>
-    public ReadOnlySpan<char> Identity => ParseSegment(1);
+    public ReadOnlySpan<char> Identity => string.IsNullOrEmpty(this._value) ? [] : this._value.AsSpan(this._nssStart);
 
     /// <summary>
     /// Represents an empty URN.
@@ -55,6 +56,18 @@ public readonly record struct Urn :
 
     private Urn(string value) {
         this._value = value;
+
+        if(string.IsNullOrEmpty(value)) {
+            this._nidEnd = 0;
+            this._nssStart = 0;
+            return;
+        }
+
+        int firstColon = 3;
+        int secondColon = value.IndexOf(Separator, firstColon + 1);
+
+        this._nidEnd = (ushort)secondColon;
+        this._nssStart = (ushort)(secondColon + 1);
     }
 
     /// <summary>
@@ -296,15 +309,14 @@ public readonly record struct Urn :
         }
 
         // Find separator after "urn:"
-        int firstColon = 3;
-        int secondColon = s[4..].IndexOf(Separator);
+        int secondColon = s[PrefixLength..].IndexOf(Separator);
 
         // NID empty check
         if(secondColon < 1) {
             result = default; return false;
         }
 
-        secondColon += 4; // Adjust index to absolute position
+        secondColon += PrefixLength; // Adjust index to absolute position
 
         // NSS empty check
         if(secondColon >= s.Length - 1) {
@@ -312,7 +324,7 @@ public readonly record struct Urn :
         }
 
         // Validate NID Chars (Allocation-free check)
-        ReadOnlySpan<char> nid = s[4..secondColon];
+        ReadOnlySpan<char> nid = s[PrefixLength..secondColon];
         foreach(char c in nid) {
             if(!IsAlphaNumericOrHyphen(c)) {
                 result = default; return false;
@@ -326,26 +338,6 @@ public readonly record struct Urn :
     #endregion
 
     #region Helpers & Formatting
-
-    // Internal helper to get span slices without allocation
-    private ReadOnlySpan<char> ParseSegment(int segmentIndex) {
-        if(string.IsNullOrEmpty(this._value)) return [];
-
-        int firstColon = 3;
-        int secondColon = this._value.IndexOf(Separator, firstColon + 1);
-
-        // Should catch invalid internal state, though factory prevents it.
-        if(secondColon == -1) return [];
-
-        if(segmentIndex == 0) // NID
-            return this._value.AsSpan(firstColon + 1, secondColon - (firstColon + 1));
-
-        if(segmentIndex == 1) // NSS (Rest of the string)
-            return this._value.AsSpan(secondColon + 1);
-
-        return [];
-    }
-
     private static void ValidateNid(string nid) {
         foreach(char c in nid) {
             if(!IsAlphaNumericOrHyphen(c))

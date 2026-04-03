@@ -1,18 +1,19 @@
 ﻿using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Text.Json.Serialization;
+using Wiaoj.Preconditions.Exceptions;
+using Wiaoj.Primitives.JsonConverters;
 
 namespace Wiaoj.Primitives;
 /// <summary>
 /// Represents an inclusive interval [Min, Max] that ensures the start is always less than or equal to the end.
+/// Supports any type that implements <see cref="IComparable{T}"/>.
 /// </summary>
-/// <typeparam name="T">The type of value (e.g. <see cref="int"/>, <see cref="DateTime"/>, <see cref="SemVer"/>).</typeparam>
+/// <typeparam name="T">The type of value (e.g. <see cref="int"/>, <see cref="DateTime"/>, <see cref="BigInteger"/>).</typeparam>
 [DebuggerDisplay("[{Min}, {Max}]")]
 [JsonConverter(typeof(RangeJsonConverterFactory))]
 public readonly record struct Range<T> : IEquatable<Range<T>> where T : IComparable<T> {
-
     /// <summary>Gets the inclusive lower bound of the range.</summary>
     public T Min { get; }
 
@@ -20,48 +21,56 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
     public T Max { get; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Range{T}"/> struct.
-    /// Automatically swaps values if <paramref name="min"/> is greater than <paramref name="max"/>.
+    /// Initializes a new instance of the <see cref="Range{T}"/> struct with strict boundary validation.
     /// </summary>
-    public Range(T min, T max) {
-        if(min.CompareTo(max) > 0) {
-            this.Min = max;
-            this.Max = min;
-        }
-        else {
-            this.Min = min;
-            this.Max = max;
-        }
+    /// <param name="min">The inclusive lower bound of the range.</param>
+    /// <param name="max">The inclusive upper bound of the range.</param>
+    /// <remarks>
+    /// This constructor enforces strict ordering. If <paramref name="min"/> is greater than <paramref name="max"/>, 
+    /// a validation exception is thrown instead of automatically swapping the values.
+    /// </remarks>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="min"/> or <paramref name="max"/> is null.</exception>
+    /// <exception cref="PrecaArgumentException">
+    /// Thrown when <paramref name="min"/> is greater than <paramref name="max"/>, 
+    /// or when a floating-point value is <see cref="double.NaN"/> or <see cref="float.NaN"/>.
+    /// </exception>
+    public Range(T min, T max) { 
+        Preca.ThrowIfNull(min);
+        Preca.ThrowIfNull(max);
+         
+        if(min is double dMin) Preca.ThrowIfNaN(dMin);
+        if(max is double dMax) Preca.ThrowIfNaN(dMax);
+        if(min is float fMin) Preca.ThrowIfNaN(fMin);
+        if(max is float fMax) Preca.ThrowIfNaN(fMax);
+        if(min is Half hMin) Preca.ThrowIfNaN(hMin);
+        if(max is Half hMax) Preca.ThrowIfNaN(hMax);
+
+
+        Preca.ThrowIf(
+            min.CompareTo(max) > 0,
+            static (x) => new PrecaArgumentException($"Min value ({x.min}) cannot be greater than Max value ({x.max})."), (min,max));
+
+        this.Min = min;
+        this.Max = max;
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Range{T}"/> struct using a standard C# <see cref="System.Range"/>.
     /// </summary>
     /// <param name="range">The range expression (e.g., <c>10..50</c>).</param>
-    /// <remarks>
-    /// <para>
-    /// <strong>Type Constraint:</strong> This constructor is only valid when <typeparamref name="T"/> is <see cref="int"/>.
-    /// Attempting to use it with other types will result in an <see cref="InvalidOperationException"/>.
-    /// </para>
-    /// <para>
-    /// <strong>Performance:</strong> Uses <see cref="Unsafe.As{TFrom, TTo}"/> to perform zero-allocation type casting.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when <typeparamref name="T"/> is not <see cref="int"/>.</exception>
-    /// <exception cref="ArgumentException">Thrown if the provided <paramref name="range"/> uses relative-from-end indices (e.g. <c>^1</c>).</exception>
+    /// <exception cref="PrecaInvalidOperationException">Thrown when <typeparamref name="T"/> is not <see cref="int"/>.</exception>
+    /// <exception cref="PrecaArgumentException">Thrown if the provided <paramref name="range"/> uses relative-from-end indices.</exception>
     public Range(System.Range range) {
-        if(typeof(T) != typeof(int)) {
-            throw new InvalidOperationException($"Conversion from System.Range is only supported for Range<int>, not Range<{typeof(T).Name}>.");
-        }
+        Preca.ThrowIfGenericTypeIsNot<T, int, PrecaInvalidOperationException>(() =>
+            new PrecaInvalidOperationException($"Conversion from System.Range is only supported for Range<int>."));
 
-        // System.Range'in Index değerleri absolute (mutlak) olmalıdır, tersten (^1) olamaz.
-        if(range.Start.IsFromEnd || range.End.IsFromEnd) {
-            throw new ArgumentException("Domain Range does not support 'from-end' (^) indices. Use absolute values.");
-        }
+        Preca.ThrowIf(range.Start.IsFromEnd || range.End.IsFromEnd,
+            static () => new PrecaArgumentException("Domain Range does not support 'from-end' (^) indices. Use absolute values."));
 
         int start = range.Start.Value;
         int end = range.End.Value;
 
+        // Zero-allocation casting for int
         T min = Unsafe.As<int, T>(ref start);
         T max = Unsafe.As<int, T>(ref end);
 
@@ -75,14 +84,60 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
         }
     }
 
+    /// <summary>
+    /// Creates a new <see cref="Range{T}"/> instance by automatically determining the minimum and maximum values 
+    /// from the provided arguments.
+    /// </summary>
+    /// <param name="val1">The first value to compare.</param>
+    /// <param name="val2">The second value to compare.</param>
+    /// <returns>
+    /// A <see cref="Range{T}"/> where the smaller value is assigned to <see cref="Min"/> 
+    /// and the larger value to <see cref="Max"/>.
+    /// </returns>
+    /// <remarks>
+    /// Unlike the constructor, this factory method is "self-healing" and will not throw an exception 
+    /// if the first argument is larger than the second; it will simply swap them.
+    /// </remarks>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="val1"/> or <paramref name="val2"/> is null.</exception>
+    public static Range<T> Create(T val1, T val2) {
+        Preca.ThrowIfNull(val1);
+        Preca.ThrowIfNull(val2);
+
+        return val1.CompareTo(val2) <= 0
+            ? new Range<T>(val1, val2)
+            : new Range<T>(val2, val1);
+    }
+
+    /// <summary>
+    /// A semantic alias for <see cref="Create"/> that defines a range encompassing all values between <paramref name="a"/> and <paramref name="b"/>.
+    /// </summary>
+    /// <param name="a">The first boundary value.</param>
+    /// <param name="b">The second boundary value.</param>
+    /// <returns>A validated <see cref="Range{T}"/> instance.</returns>
+    /// <remarks>
+    /// This method provides a more natural syntax for scenarios where the boundaries are inclusive and 
+    /// the order of input is not guaranteed.
+    /// </remarks>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="a"/> or <paramref name="b"/> is null.</exception>
+    public static Range<T> Between(T a, T b) {
+        return Create(a, b);
+    }
+
     /// <summary>Determines whether the specified value is within the inclusive range.</summary>
-    public bool Contains(T value) => value.CompareTo(this.Min) >= 0 && value.CompareTo(this.Max) <= 0;
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Contains(T value) {
+        return value.CompareTo(this.Min) >= 0 && value.CompareTo(this.Max) <= 0;
+    }
 
     /// <summary>Determines whether the specified range is entirely contained within this range.</summary>
-    public bool Contains(Range<T> other) => other.Min.CompareTo(this.Min) >= 0 && other.Max.CompareTo(this.Max) <= 0;
+    public bool Contains(Range<T> other) {
+        return other.Min.CompareTo(this.Min) >= 0 && other.Max.CompareTo(this.Max) <= 0;
+    }
 
     /// <summary>Checks if this range overlaps with another range.</summary>
-    public bool Overlaps(Range<T> other) => this.Min.CompareTo(other.Max) <= 0 && this.Max.CompareTo(other.Min) >= 0;
+    public bool Overlaps(Range<T> other) {
+        return this.Min.CompareTo(other.Max) <= 0 && this.Max.CompareTo(other.Min) >= 0;
+    }
 
     /// <summary>Returns the intersection of two ranges, or <see langword="null"/> if they do not overlap.</summary>
     public Range<T>? Intersect(Range<T> other) {
@@ -99,110 +154,14 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
         return new Range<T>(newMin, newMax);
     }
 
-    public override string ToString() => $"[{this.Min}, {this.Max}]";
+    /// <inheritdoc/>
+    public override string ToString() {
+        return $"[{this.Min}, {this.Max}]";
+    }
 
     /// <summary>Deconstructs the range into its Min and Max components.</summary>
     public void Deconstruct(out T min, out T max) {
         min = this.Min;
         max = this.Max;
-    }
-}
-
-// --- JSON Converter Factory for Generics ---
-public sealed class RangeJsonConverterFactory : JsonConverterFactory {
-    public override bool CanConvert(Type typeToConvert) {
-        return typeToConvert.IsGenericType && typeToConvert.GetGenericTypeDefinition() == typeof(Range<>);
-    }
-
-    public override JsonConverter? CreateConverter(Type typeToConvert, JsonSerializerOptions options) {
-        Type itemType = typeToConvert.GetGenericArguments()[0];
-        return (JsonConverter)Activator.CreateInstance(
-            typeof(RangeJsonConverter<>).MakeGenericType(itemType))!;
-    }
-}
-
-public sealed class RangeJsonConverter<T> : JsonConverter<Range<T>> where T : IComparable<T> {
-    public override Range<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if(reader.TokenType != JsonTokenType.StartObject) throw new JsonException();
-
-        T min = default!;
-        T max = default!;
-        bool minSet = false, maxSet = false;
-
-        while(reader.Read()) {
-            if(reader.TokenType == JsonTokenType.EndObject) break;
-            if(reader.TokenType != JsonTokenType.PropertyName) throw new JsonException();
-
-            string? prop = reader.GetString();
-            reader.Read();
-
-            if(string.Equals(prop, "Min", StringComparison.OrdinalIgnoreCase)) {
-                min = JsonSerializer.Deserialize<T>(ref reader, options)!;
-                minSet = true;
-            }
-            else if(string.Equals(prop, "Max", StringComparison.OrdinalIgnoreCase)) {
-                max = JsonSerializer.Deserialize<T>(ref reader, options)!;
-                maxSet = true;
-            }
-        }
-
-        if(!minSet || !maxSet) throw new JsonException("Range must contain 'Min' and 'Max' properties.");
-        return new Range<T>(min, max);
-    }
-
-    public override void Write(Utf8JsonWriter writer, Range<T> value, JsonSerializerOptions options) {
-        writer.WriteStartObject();
-        writer.WritePropertyName("Min");
-        JsonSerializer.Serialize(writer, value.Min, options);
-        writer.WritePropertyName("Max");
-        JsonSerializer.Serialize(writer, value.Max, options);
-        writer.WriteEndObject();
-    }
-}
-
-public static class RangeExtensions {
-
-    /// <summary>
-    /// Generates a random value within the specified range using <see cref="Random.Shared"/>.
-    /// </summary>
-    /// <typeparam name="T">A type that implements <see cref="INumber{T}"/>.</typeparam>
-    /// <remarks>
-    /// Optimized with direct casting for <see cref="int"/> and <see cref="double"/> to avoid overhead.
-    /// </remarks>
-    public static T NextRandom<T>(this Range<T> range) where T : INumber<T> { 
-        T minT = range.Min;
-        T maxT = range.Max;
-
-        if(typeof(T) == typeof(int)) { 
-            int min = Unsafe.As<T, int>(ref minT);
-            int max = Unsafe.As<T, int>(ref maxT);
-
-            int result = Random.Shared.Next(min, max + 1);
-            return Unsafe.As<int, T>(ref result);
-        }
-
-        if(typeof(T) == typeof(double)) {
-            double min = Unsafe.As<T, double>(ref minT);
-            double max = Unsafe.As<T, double>(ref maxT);
-
-            double result = min + (Random.Shared.NextDouble() * (max - min));
-            return Unsafe.As<double, T>(ref result);
-        }
-
-        // Diğer tipler için (long, decimal vb.) generic fallback
-        double factor = Random.Shared.NextDouble();
-
-        // INumber üzerinden aritmetik işlem (range.Max - range.Min)
-        T diff = maxT - minT;
-
-        // T değerini double'a, sonra sonucu tekrar T'ye güvenli çevirme
-        return minT + T.CreateTruncating(double.CreateTruncating(diff) * factor);
-    }
-
-    /// <summary>
-    /// Generates a random integer within the specified range using the provided <see cref="Random"/> instance.
-    /// </summary>
-    public static int Next(this Random rng, Range<int> range) {
-        return rng.Next(range.Min, range.Max + 1);
     }
 }

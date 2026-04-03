@@ -1,6 +1,8 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -12,8 +14,12 @@ namespace Wiaoj.Primitives.Cryptography.Hashing;
 /// allocation-free operations for computing and comparing hashes.
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanFormattable {
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct Md5Hash
+    : IEquatable<Md5Hash>,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IEqualityOperators<Md5Hash, Md5Hash, bool> {
     internal const int HashSizeInBytes = 16; // MD5 is 128 bits = 16 bytes
     private fixed byte _bytes[HashSizeInBytes];
 
@@ -313,20 +319,24 @@ public unsafe struct Md5Hash : IEquatable<Md5Hash>, ISpanFormattable, IUtf8SpanF
         return CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) {
         return obj is Md5Hash other && Equals(other);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode() {
         HashCode hash = new();
         hash.AddBytes(AsSpan());
         return hash.ToHashCode();
     }
 
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
     public static bool operator ==(Md5Hash left, Md5Hash right) {
         return left.Equals(right);
     }
 
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Inequality(TSelf, TOther)" />
     public static bool operator !=(Md5Hash left, Md5Hash right) {
         return !left.Equals(right);
     }

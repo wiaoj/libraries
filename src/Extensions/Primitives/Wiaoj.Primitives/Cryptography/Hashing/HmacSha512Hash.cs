@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -19,7 +20,11 @@ namespace Wiaoj.Primitives.Cryptography.Hashing;
 [DebuggerDisplay("{ToString(),nq}")]
 [StructLayout(LayoutKind.Sequential)]
 [JsonConverter(typeof(HmacSha512HashJsonConverter))]
-public unsafe struct HmacSha512Hash : IEquatable<HmacSha512Hash>, ISpanFormattable, IUtf8SpanFormattable { 
+public unsafe struct HmacSha512Hash
+    : IEquatable<HmacSha512Hash>,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IEqualityOperators<HmacSha512Hash, HmacSha512Hash, bool> {
     /// <summary>The size of the HMAC-SHA512 hash in bytes (64 bytes).</summary>
     internal const int HashSizeInBytes = 64;
 
@@ -68,6 +73,25 @@ public unsafe struct HmacSha512Hash : IEquatable<HmacSha512Hash>, ISpanFormattab
     /// <returns>A <see cref="HmacSha512Hash"/> instance.</returns>
     public static HmacSha512Hash Compute(Secret<byte> key, Secret<byte> data) {
         return data.Expose(key, static (keySecret, dataSpan) => Compute(keySecret, dataSpan));
+    }
+
+    /// <summary>
+    /// Computes the HMAC-SHA256 hash of a string using a secure secret key and the specified encoding.
+    /// </summary>
+    public static HmacSha512Hash Compute(Secret<byte> key, string data, Encoding encoding) {
+        Preca.ThrowIfNull(data);
+        Preca.ThrowIfNull(encoding);
+
+        // Kurye mantığı burada devreye giriyor. Secret'ı açıyor ve var olan string alan metoduna yönlendiriyor!
+        return key.Expose((data, encoding), static (state, keySpan) =>
+            Compute(keySpan, state.data, state.encoding));
+    }
+
+    /// <summary>
+    /// Computes the HMAC-SHA256 hash of a string using a secure secret key and UTF-8 encoding.
+    /// </summary>
+    public static HmacSha512Hash Compute(Secret<byte> key, string data) {
+        return Compute(key, data, Encoding.UTF8);
     }
 
     /// <summary>
@@ -386,12 +410,12 @@ public unsafe struct HmacSha512Hash : IEquatable<HmacSha512Hash>, ISpanFormattab
         }
     }
 
-    /// <summary>Compares two <see cref="HmacSha512Hash"/> instances for equality.</summary>
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
     public static bool operator ==(HmacSha512Hash left, HmacSha512Hash right) {
         return left.Equals(right);
     }
 
-    /// <summary>Compares two <see cref="HmacSha512Hash"/> instances for inequality.</summary>
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Inequality(TSelf, TOther)" />
     public static bool operator !=(HmacSha512Hash left, HmacSha512Hash right) {
         return !left.Equals(right);
     }

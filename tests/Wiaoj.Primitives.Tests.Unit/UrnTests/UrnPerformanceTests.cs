@@ -15,7 +15,7 @@ public sealed class UrnPerformanceTests {
     [Fact]
     public void TryFormat_BufferTooSmall_ShouldReturnFalse() {
         var urn = Urn.Create("test", "verylongidentifier");
-        Span<char> buffer = stackalloc char[5]; // Çok küçük buffer
+        Span<char> buffer = stackalloc char[5]; 
 
         bool success = urn.TryFormat(buffer, out int charsWritten, default, null);
 

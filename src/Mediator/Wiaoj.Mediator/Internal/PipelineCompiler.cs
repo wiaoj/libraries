@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -25,8 +25,13 @@ internal static class PipelineCompiler {
 
         // 1. Resolve handler and invoke Handle
         Expression handlerInstance = CreateServiceResolution(handlerType, spParam);
-        MethodInfo handleMethod = GetMethodOrThrow(handlerType, nameof(IRequestHandler<,>.Handle));
-        Expression next = Expression.Call(handlerInstance, handleMethod, typedRequest, ctParam);
+        
+        // Cast instance to the interface — handles multiple handlers and explicit implementations correctly.
+        Type handlerInterface = typeof(IRequestHandler<,>).MakeGenericType(requestType, responseType);
+        MethodInfo handleMethod = GetMethodOrThrow(handlerInterface, nameof(IRequestHandler<,>.Handle));
+        Expression castInstance = Expression.Convert(handlerInstance, handlerInterface);
+        
+        Expression next = Expression.Call(castInstance, handleMethod, typedRequest, ctParam);
 
         // 2. Wrap behaviors in reverse (outermost = first registered)
         foreach(Type behaviorType in behaviorTypes.Reverse()) {
@@ -53,8 +58,13 @@ internal static class PipelineCompiler {
          UnaryExpression typedRequest) = CreateParameters(requestType);
 
         Expression handlerInstance = CreateServiceResolution(handlerType, spParam);
-        MethodInfo handleMethod = GetMethodOrThrow(handlerType, nameof(IStreamRequestHandler<,>.Handle));
-        Expression body = Expression.Call(handlerInstance, handleMethod, typedRequest, ctParam);
+        
+        // Cast instance to the interface — handles multiple handlers and explicit implementations correctly.
+        Type handlerInterface = typeof(IStreamRequestHandler<,>).MakeGenericType(requestType, responseType);
+        MethodInfo handleMethod = GetMethodOrThrow(handlerInterface, nameof(IStreamRequestHandler<,>.Handle));
+        Expression castInstance = Expression.Convert(handlerInstance, handlerInterface);
+        
+        Expression body = Expression.Call(castInstance, handleMethod, typedRequest, ctParam);
 
         return Expression.Lambda(body, spParam, reqParam, ctParam).Compile();
     }

@@ -47,6 +47,7 @@ public readonly record struct UnixTimestamp :
     private readonly long _milliseconds;
     private const long MinUnixMillis = -62135596800000; // 0001-01-01
     private const long MaxUnixMillis = 253402300799999; // 9999-12-31
+    private const long MillisecondsPerDay = 86400000;
 
     /// <summary>
     /// Represents the Unix Epoch (1970-01-01T00:00:00Z). Value is 0.
@@ -102,7 +103,7 @@ public readonly record struct UnixTimestamp :
     /// </para>
     /// </remarks>
     /// <value>The number of ticks since the 1970-01-01 epoch.</value>
-    public long UnixTicks => _milliseconds * TimeSpan.TicksPerMillisecond;
+    public long UnixTicks => this._milliseconds * TimeSpan.TicksPerMillisecond;
 
     private UnixTimestamp(long milliseconds) {
         this._milliseconds = milliseconds;
@@ -179,6 +180,145 @@ public readonly record struct UnixTimestamp :
     }
 
     // -------------------------------------------------------------------------
+    // FLUENT ARITHMETIC
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Adds the specified number of milliseconds to this instance.
+    /// </summary>
+    /// <param name="milliseconds">The number of milliseconds to add. Can be negative.</param>
+    /// <returns>A new <see cref="UnixTimestamp"/> representing the future or past instant.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp AddMilliseconds(long milliseconds) {
+        return new UnixTimestamp(this._milliseconds + milliseconds);
+    }
+
+    /// <summary>
+    /// Adds the specified number of seconds to this instance.
+    /// </summary>
+    /// <param name="seconds">The number of seconds to add. Can be fractional and negative.</param>
+    /// <returns>A new <see cref="UnixTimestamp"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp AddSeconds(double seconds) {
+        return this + TimeSpan.FromSeconds(seconds);
+    }
+
+    /// <summary>
+    /// Adds the specified number of minutes to this instance.
+    /// </summary>
+    /// <param name="minutes">The number of minutes to add. Can be fractional and negative.</param>
+    /// <returns>A new <see cref="UnixTimestamp"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp AddMinutes(double minutes) {
+        return this + TimeSpan.FromMinutes(minutes);
+    }
+
+    /// <summary>
+    /// Adds the specified number of hours to this instance.
+    /// </summary>
+    /// <param name="hours">The number of hours to add. Can be fractional and negative.</param>
+    /// <returns>A new <see cref="UnixTimestamp"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp AddHours(double hours) {
+        return this + TimeSpan.FromHours(hours);
+    }
+
+    /// <summary>
+    /// Adds the specified number of days to this instance.
+    /// </summary>
+    /// <param name="days">The number of days to add. Can be fractional and negative.</param>
+    /// <returns>A new <see cref="UnixTimestamp"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp AddDays(double days) {
+        return this + TimeSpan.FromDays(days);
+    }
+
+    // -------------------------------------------------------------------------
+    // PRECISION MANAGEMENT & ROUNDING
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Truncates the timestamp to the nearest second, setting the millisecond component to zero.
+    /// </summary>
+    /// <returns>A new <see cref="UnixTimestamp"/> with seconds precision.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp TruncateToSeconds() {
+        return new UnixTimestamp((this._milliseconds / 1000) * 1000);
+    }
+
+    /// <summary>
+    /// Truncates the timestamp to the nearest minute, setting both seconds and milliseconds to zero.
+    /// </summary>
+    /// <returns>A new <see cref="UnixTimestamp"/> with minutes precision.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp TruncateToMinutes() {
+        return new UnixTimestamp((this._milliseconds / 60000) * 60000);
+    }
+
+    /// <summary>
+    /// Truncates the timestamp to the start of the current day (00:00:00) in Universal Coordinated Time (UTC).
+    /// </summary>
+    /// <remarks>
+    /// Uses high-performance integer math instead of allocating DateTime objects.
+    /// This is highly useful for grouping database records by day or normalizing time-series data.
+    /// </remarks> 
+    /// <returns>A new <see cref="UnixTimestamp"/> representing midnight of the same UTC day.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp TruncateToDay() {
+        long ms = this._milliseconds;
+        long mod = ms % MillisecondsPerDay;
+        if(ms < 0 && mod != 0) {
+            mod += MillisecondsPerDay;
+        }
+        return new UnixTimestamp(ms - mod);
+    }
+
+    // -------------------------------------------------------------------------
+    // DOMAIN LOGIC & COMPARISON HELPERS
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Checks if this timestamp falls within a specific range.
+    /// </summary>
+    /// <param name="start">The inclusive start timestamp.</param>
+    /// <param name="end">The inclusive end timestamp.</param>
+    /// <returns><see langword="true"/> if the current timestamp is between the start and end (inclusive); otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsBetween(UnixTimestamp start, UnixTimestamp end) {
+        return this._milliseconds >= start._milliseconds && this._milliseconds <= end._milliseconds;
+    }
+
+    /// <summary>
+    /// Checks if this timestamp is strictly before another timestamp.
+    /// </summary>
+    /// <param name="other">The timestamp to compare against.</param>
+    /// <returns><see langword="true"/> if this instance is older/before the other; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsBefore(UnixTimestamp other) {
+        return this._milliseconds < other._milliseconds;
+    }
+
+    /// <summary>
+    /// Checks if this timestamp is strictly after another timestamp.
+    /// </summary>
+    /// <param name="other">The timestamp to compare against.</param>
+    /// <returns><see langword="true"/> if this instance is newer/after the other; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsAfter(UnixTimestamp other) {
+        return this._milliseconds > other._milliseconds;
+    }
+
+    /// <summary>
+    /// Calculates the time elapsed since the specified past timestamp.
+    /// </summary>
+    /// <param name="other">The past timestamp.</param>
+    /// <returns>A <see cref="TimeSpan"/> representing the duration between the two timestamps.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TimeSpan ElapsedSince(UnixTimestamp other) {
+        return this - other;
+    }
+
+    // -------------------------------------------------------------------------
     // CONVERSIONS (Instance Methods)
     // -------------------------------------------------------------------------
 
@@ -210,49 +350,51 @@ public readonly record struct UnixTimestamp :
     // OPERATORS & CASTING
     // -------------------------------------------------------------------------
 
-    /// <summary>Adds a <see cref="TimeSpan"/> to a <see cref="UnixTimestamp"/>, returning a new future timestamp.</summary>
+    /// <inheritdoc cref="IAdditionOperators{TSelf, TOther, TResult}.op_Addition(TSelf, TOther)" />
     public static UnixTimestamp operator +(UnixTimestamp left, TimeSpan right) {
         return new(left._milliseconds + (long)right.TotalMilliseconds);
     }
 
-    /// <summary>Subtracts a <see cref="TimeSpan"/> from a <see cref="UnixTimestamp"/>, returning a past timestamp.</summary>
+    /// <inheritdoc cref="ISubtractionOperators{TSelf, TOther, TResult}.op_Subtraction(TSelf, TOther)" />
     public static UnixTimestamp operator -(UnixTimestamp left, TimeSpan right) {
         return new(left._milliseconds - (long)right.TotalMilliseconds);
     }
 
-    /// <summary>Calculates the time difference between two timestamps.</summary>
+    /// <inheritdoc cref="ISubtractionOperators{TSelf, TOther, TResult}.op_Subtraction(TSelf, TOther)" />
     public static TimeSpan operator -(UnixTimestamp left, UnixTimestamp right) {
         return TimeSpan.FromMilliseconds(left._milliseconds - right._milliseconds);
     }
 
     // Comparators
-    /// <inheritdoc/>
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
     public static bool operator >(UnixTimestamp left, UnixTimestamp right) {
         return left._milliseconds > right._milliseconds;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
     public static bool operator <(UnixTimestamp left, UnixTimestamp right) {
         return left._milliseconds < right._milliseconds;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
     public static bool operator >=(UnixTimestamp left, UnixTimestamp right) {
         return left._milliseconds >= right._milliseconds;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
     public static bool operator <=(UnixTimestamp left, UnixTimestamp right) {
         return left._milliseconds <= right._milliseconds;
     }
 
     // Equality with raw long (allows check like: timestamp == 0)
-    /// <summary>Checks equality between a timestamp and raw milliseconds.</summary>
+
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
     public static bool operator ==(UnixTimestamp left, long right) {
         return left._milliseconds == right;
     }
 
-    /// <summary>Checks inequality between a timestamp and raw milliseconds.</summary>
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Inequality(TSelf, TOther)" />
     public static bool operator !=(UnixTimestamp left, long right) {
         return left._milliseconds != right;
     }
@@ -286,8 +428,8 @@ public readonly record struct UnixTimestamp :
         return ts.ToDateTimeOffset();
     }
 
-    /// <summary>Explicitly converts a <see cref="DateTimeOffset"/> to a <see cref="UnixTimestamp"/>.</summary>
-    public static explicit operator UnixTimestamp(DateTimeOffset dto) {
+    /// <summary>Implicitly converts a <see cref="DateTimeOffset"/> to a <see cref="UnixTimestamp"/>.</summary>
+    public static implicit operator UnixTimestamp(DateTimeOffset dto) {
         return From(dto);
     }
 
@@ -329,7 +471,7 @@ public readonly record struct UnixTimestamp :
     /// </summary>
     private string ToStringInternal(string? format, IFormatProvider? formatProvider) {
         bool isRawRequest = format is "R" or "r" or "N" or "n";
-        bool isOutOfRange = _milliseconds < MinUnixMillis || _milliseconds > MaxUnixMillis;
+        bool isOutOfRange = this._milliseconds is < MinUnixMillis or > MaxUnixMillis;
 
         if(isRawRequest || isOutOfRange) {
             return this._milliseconds.ToString(formatProvider);
@@ -345,7 +487,7 @@ public readonly record struct UnixTimestamp :
     /// <inheritdoc cref="ToString(string?)"/>
     bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         bool isRawRequest = format.Equals("R", StringComparison.OrdinalIgnoreCase) || format.Equals("N", StringComparison.OrdinalIgnoreCase);
-        bool isOutOfRange = _milliseconds < MinUnixMillis || _milliseconds > MaxUnixMillis;
+        bool isOutOfRange = this._milliseconds is < MinUnixMillis or > MaxUnixMillis;
 
         if(isRawRequest || isOutOfRange) {
             return this._milliseconds.TryFormat(destination, out charsWritten, format, provider);
@@ -361,7 +503,7 @@ public readonly record struct UnixTimestamp :
     /// <inheritdoc cref="ToString(string?)"/>
     bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         bool isRawRequest = format.Equals("R", StringComparison.OrdinalIgnoreCase) || format.Equals("N", StringComparison.OrdinalIgnoreCase);
-        bool isOutOfRange = _milliseconds < MinUnixMillis || _milliseconds > MaxUnixMillis;
+        bool isOutOfRange = this._milliseconds is < MinUnixMillis or > MaxUnixMillis;
 
         if(isRawRequest || isOutOfRange) {
             return this._milliseconds.TryFormat(utf8Destination, out bytesWritten, format, provider);

@@ -100,13 +100,39 @@ internal static class Thrower {
         throw new PrecaArgumentException($"The value '{value}' cannot contain the separator character '{invalidChar}'.", paramName);
     }
 
-    [DoesNotReturn]
-    [StackTraceHidden]
+    [DebuggerHidden, StackTraceHidden, DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     internal static void ThrowPrecaInvalidTypeException<TExpected>(object? argument, string? paramName) {
         string expectedTypeName = typeof(TExpected).Name;
         string actualTypeName = argument?.GetType().Name ?? "null";
 
         throw new PrecaInvalidTypeException(paramName, expectedTypeName, actualTypeName);
+    }
+
+    /// <summary>
+    /// Throws a <see cref="PrecaInvalidOperationException"/> with the specified message.
+    /// </summary>
+    /// <param name="message">The error message that explains the reason for the exception.</param>
+    /// <exception cref="PrecaInvalidOperationException">Always thrown.</exception>
+    [DebuggerHidden, StackTraceHidden, DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    internal static void ThrowPrecaInvalidOperationException([NotNull] string message) {
+        throw new PrecaInvalidOperationException(message);
+    }
+
+    /// <summary>
+    /// Throws a <see cref="PrecaInvalidOperationException"/> with the specified message and operation context.
+    /// </summary>
+    /// <param name="message">The error message that explains the reason for the exception.</param>
+    /// <param name="operationContext">The context or operation name that caused the error.</param>
+    /// <exception cref="PrecaInvalidOperationException">Always thrown.</exception>
+    [DebuggerHidden, StackTraceHidden, DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    internal static void ThrowPrecaInvalidOperationException([NotNull] string message, string? operationContext) {
+        throw new PrecaInvalidOperationException(message, operationContext);
     }
 
     /// <summary>
@@ -146,5 +172,19 @@ internal static class Thrower {
         }
 
         throw exception;
+    }
+
+    /// <summary>
+    /// Throws an <see cref="InvalidOperationException"/> indicating a generic type mismatch.
+    /// </summary>
+    [DebuggerHidden, StackTraceHidden, DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    internal static void ThrowGenericTypeMismatchException<TActual, TExpected>(string? message) {
+        string errorMessage = message ?? $"Generic type argument must be exactly '{typeof(TExpected).Name}', but was '{typeof(TActual).Name}'.";
+
+        // Eğer kendi özel InvalidOperationException'ın (örn: PrecaInvalidOperationException) varsa
+        // onu da kullanabilirsin. Yoksa standart olanı fırlatıyoruz.
+        Thrower.ThrowPrecaInvalidOperationException(errorMessage);
     }
 }

@@ -9,7 +9,8 @@ namespace Wiaoj.Primitives;
 [DebuggerDisplay("{ToString(),nq}")]
 [JsonConverter(typeof(FileExtensionJsonConverter))]
 [TypeConverter(typeof(FileExtensionTypeConverter))]
-public readonly record struct FileExtension :
+public readonly record struct FileExtension 
+    : IComparable<FileExtension>,
     IEquatable<FileExtension>,
     ISpanParsable<FileExtension>,
     ISpanFormattable,
@@ -69,6 +70,11 @@ public readonly record struct FileExtension :
         }
         charsWritten = 0;
         return false;
+    }
+
+    public int CompareTo(FileExtension other) {
+        // Zaten ToLowerInvariant ile oluşturulduğu için Ordinal karşılaştırma en hızlısıdır.
+        return string.Compare(this.Value, other.Value, StringComparison.Ordinal);
     }
 
     // --- EXPLICIT IMPLEMENTATIONS (Arayüzler için arka kapı) ---

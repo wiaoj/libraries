@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -19,7 +20,11 @@ namespace Wiaoj.Primitives.Cryptography.Hashing;
 [DebuggerDisplay("{ToString(),nq}")]
 [StructLayout(LayoutKind.Sequential)]
 [JsonConverter(typeof(HmacSha256HashJsonConverter))]
-public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattable, IUtf8SpanFormattable {
+public unsafe struct HmacSha256Hash
+    : IEquatable<HmacSha256Hash>,
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IEqualityOperators<HmacSha256Hash, HmacSha256Hash, bool> {
 
     /// <summary>The size of the HMAC-SHA256 hash in bytes (32 bytes).</summary>
     internal const int HashSizeInBytes = 32;
@@ -71,6 +76,22 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
         return data.Expose(key, static (keySecret, dataSpan) => Compute(keySecret, dataSpan));
     }
 
+    /// <summary>
+    /// Computes the HMAC-SHA256 hash of a string using a secure secret key and the specified encoding.
+    /// </summary>
+    public static HmacSha256Hash Compute(Secret<byte> key, string data, Encoding encoding) {
+        Preca.ThrowIfNull(data);
+        Preca.ThrowIfNull(encoding);
+
+        return key.Expose((data, encoding), static (state, keySpan) => Compute(keySpan, state.data, state.encoding));
+    }
+
+    /// <summary>
+    /// Computes the HMAC-SHA256 hash of a string using a secure secret key and UTF-8 encoding.
+    /// </summary>
+    public static HmacSha256Hash Compute(Secret<byte> key, string data) {
+        return Compute(key, data, Encoding.UTF8);
+    }
     /// <summary>
     /// Computes the HMAC-SHA256 hash using raw byte spans for both key and data.
     /// </summary>
@@ -387,15 +408,14 @@ public unsafe struct HmacSha256Hash : IEquatable<HmacSha256Hash>, ISpanFormattab
         }
     }
 
-    /// <summary>Compares two <see cref="HmacSha256Hash"/> instances for equality.</summary>
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
     public static bool operator ==(HmacSha256Hash left, HmacSha256Hash right) {
         return left.Equals(right);
     }
 
-    /// <summary>Compares two <see cref="HmacSha256Hash"/> instances for inequality.</summary>
+    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Inequality(TSelf, TOther)" />
     public static bool operator !=(HmacSha256Hash left, HmacSha256Hash right) {
         return !left.Equals(right);
     }
-
     #endregion
 }

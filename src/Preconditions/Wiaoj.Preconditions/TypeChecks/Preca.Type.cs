@@ -38,4 +38,37 @@ public static partial class Preca {
             Thrower.ThrowFromFactory(exceptionFactory);
         }
     }
+
+    /// <summary>
+    /// Validates that the generic type parameter <typeparamref name="TActual"/> is exactly <typeparamref name="TExpected"/>.
+    /// Useful for restricting generic structs or methods to specific types.
+    /// </summary>
+    /// <typeparam name="TActual">The generic type parameter provided by the user.</typeparam>
+    /// <typeparam name="TExpected">The type that <typeparamref name="TActual"/> is required to be.</typeparam>
+    /// <param name="message">Optional custom message for the exception.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough]
+    [StackTraceHidden]
+    public static void ThrowIfGenericTypeIsNot<TActual, TExpected>(string? message = null) { 
+        if(typeof(TActual) != typeof(TExpected)) {
+            Thrower.ThrowGenericTypeMismatchException<TActual, TExpected>(message);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the generic type parameter <typeparamref name="TActual"/> is exactly <typeparamref name="TExpected"/>, using a custom exception factory.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [DebuggerStepThrough]
+    [StackTraceHidden]
+    public static void ThrowIfGenericTypeIsNot<TActual, TExpected, TException>(
+        [NotNull] Func<TException> exceptionFactory)
+        where TException : notnull, Exception {
+
+        ThrowIfNull(exceptionFactory, nameof(exceptionFactory));
+
+        if(typeof(TActual) != typeof(TExpected)) {
+            Thrower.ThrowFromFactory(exceptionFactory);
+        }
+    }
 }
