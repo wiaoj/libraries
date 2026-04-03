@@ -34,10 +34,10 @@ public readonly record struct Range<T> : IEquatable<Range<T>>, IEqualityOperator
     /// Thrown when <paramref name="min"/> is greater than <paramref name="max"/>, 
     /// or when a floating-point value is <see cref="double.NaN"/> or <see cref="float.NaN"/>.
     /// </exception>
-    public Range(T min, T max) { 
+    public Range(T min, T max) {
         Preca.ThrowIfNull(min);
         Preca.ThrowIfNull(max);
-         
+
         if(min is double dMin) Preca.ThrowIfNaN(dMin);
         if(max is double dMax) Preca.ThrowIfNaN(dMax);
         if(min is float fMin) Preca.ThrowIfNaN(fMin);
@@ -48,7 +48,7 @@ public readonly record struct Range<T> : IEquatable<Range<T>>, IEqualityOperator
 
         Preca.ThrowIf(
             min.CompareTo(max) > 0,
-            static (x) => new PrecaArgumentException($"Min value ({x.min}) cannot be greater than Max value ({x.max})."), (min,max));
+            static (x) => new PrecaArgumentException($"Min value ({x.min}) cannot be greater than Max value ({x.max})."), (min, max));
 
         this.Min = min;
         this.Max = max;
@@ -159,24 +159,23 @@ public readonly record struct Range<T> : IEquatable<Range<T>>, IEqualityOperator
     }
 
     /// <summary>
-    /// Calculates the numeric gap between İki non-overlapping ranges.
+    /// Calculates the numeric gap between two non-overlapping ranges.
     /// </summary>
-    /// <param name="first">The first range.</param>
-    /// <param name="second">The second range.</param>
+    /// <param name="other">The other range to compare against.</param>
     /// <returns>
-    /// A new <see cref="Range{T}"/> representing the distance between the İki ranges, 
+    /// A new <see cref="Range{T}"/> representing the distance between the two ranges, 
     /// or <see langword="null"/> if the ranges overlap or are contiguous (touching).
     /// </returns>
     /// <example>
     /// Range [1, 5] and [10, 15] have a gap of Range [5, 10].
     /// </example>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Range<T>? Gap(Range<T> first, Range<T> second) {
-        if(first.Overlaps(second)) return null;
+    public Range<T>? Gap(Range<T> other) {
+        if(Overlaps(other)) return null;
 
-        return first.Max.CompareTo(second.Min) < 0
-            ? new Range<T>(first.Max, second.Min)
-            : new Range<T>(second.Max, first.Min);
+        return this.Max.CompareTo(other.Min) < 0
+            ? new Range<T>(this.Max, other.Min)
+            : new Range<T>(other.Max, this.Min);
     }
 
     /// <summary>Returns the intersection of İki ranges.</summary>
