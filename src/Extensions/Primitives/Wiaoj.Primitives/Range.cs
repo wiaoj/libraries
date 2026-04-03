@@ -13,7 +13,7 @@ namespace Wiaoj.Primitives;
 /// <typeparam name="T">The type of value (e.g. <see cref="int"/>, <see cref="DateTime"/>, <see cref="BigInteger"/>).</typeparam>
 [DebuggerDisplay("[{Min}, {Max}]")]
 [JsonConverter(typeof(RangeJsonConverterFactory))]
-public readonly record struct Range<T> : IEquatable<Range<T>> where T : IComparable<T> {
+public readonly record struct Range<T> : IEquatable<Range<T>>, IEqualityOperators<Range<T>, Range<T>, bool> where T : IComparable<T> {
     /// <summary>Gets the inclusive lower bound of the range.</summary>
     public T Min { get; }
 
@@ -99,6 +99,7 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
     /// if the first argument is larger than the second; it will simply swap them.
     /// </remarks>
     /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="val1"/> or <paramref name="val2"/> is null.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Range<T> Create(T val1, T val2) {
         Preca.ThrowIfNull(val1);
         Preca.ThrowIfNull(val2);
@@ -119,27 +120,69 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
     /// the order of input is not guaranteed.
     /// </remarks>
     /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="a"/> or <paramref name="b"/> is null.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Range<T> Between(T a, T b) {
         return Create(a, b);
     }
 
-    /// <summary>Determines whether the specified value is within the inclusive range.</summary>
+    /// <summary>
+    /// Determines whether the specified value is within the inclusive range [Min, Max].
+    /// </summary>
+    /// <param name="value">The value to check.</param>
+    /// <returns><see langword="true"/> if the value is greater than or equal to <see cref="Min"/> and less than or equal to <see cref="Max"/>; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Contains(T value) {
         return value.CompareTo(this.Min) >= 0 && value.CompareTo(this.Max) <= 0;
     }
 
-    /// <summary>Determines whether the specified range is entirely contained within this range.</summary>
+    /// <summary>
+    /// Determines whether the specified range is entirely contained within this range.
+    /// </summary>
+    /// <param name="other">The other range to check.</param>
+    /// <returns><see langword="true"/> if the other range's boundaries are within this range's boundaries; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Contains(Range<T> other) {
         return other.Min.CompareTo(this.Min) >= 0 && other.Max.CompareTo(this.Max) <= 0;
     }
 
-    /// <summary>Checks if this range overlaps with another range.</summary>
+    /// <summary>
+    /// Checks if this range overlaps with another range (Inclusive).
+    /// </summary>
+    /// <param name="other">The other range to check for overlap.</param>
+    /// <remarks>
+    /// Since this is an inclusive range [Min, Max], touching boundaries 
+    /// (e.g., [1, 5] and [5, 10]) are considered an overlap.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Overlaps(Range<T> other) {
         return this.Min.CompareTo(other.Max) <= 0 && this.Max.CompareTo(other.Min) >= 0;
     }
 
-    /// <summary>Returns the intersection of two ranges, or <see langword="null"/> if they do not overlap.</summary>
+    /// <summary>
+    /// Calculates the numeric gap between İki non-overlapping ranges.
+    /// </summary>
+    /// <param name="first">The first range.</param>
+    /// <param name="second">The second range.</param>
+    /// <returns>
+    /// A new <see cref="Range{T}"/> representing the distance between the İki ranges, 
+    /// or <see langword="null"/> if the ranges overlap or are contiguous (touching).
+    /// </returns>
+    /// <example>
+    /// Range [1, 5] and [10, 15] have a gap of Range [5, 10].
+    /// </example>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Range<T>? Gap(Range<T> first, Range<T> second) {
+        if(first.Overlaps(second)) return null;
+
+        return first.Max.CompareTo(second.Min) < 0
+            ? new Range<T>(first.Max, second.Min)
+            : new Range<T>(second.Max, first.Min);
+    }
+
+    /// <summary>Returns the intersection of İki ranges.</summary>
+    /// <param name="other">The range to intersect with.</param>
+    /// <returns>A new <see cref="Range{T}"/> representing the intersection, or <see langword="null"/> if they do not overlap.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Range<T>? Intersect(Range<T> other) {
         if(!Overlaps(other)) return null;
         T newMin = this.Min.CompareTo(other.Min) > 0 ? this.Min : other.Min;
@@ -148,6 +191,9 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
     }
 
     /// <summary>Returns the smallest range that encompasses both ranges.</summary>
+    /// <param name="other">The range to unite with.</param>
+    /// <returns>A new encompassing <see cref="Range{T}"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Range<T> Union(Range<T> other) {
         T newMin = this.Min.CompareTo(other.Min) < 0 ? this.Min : other.Min;
         T newMax = this.Max.CompareTo(other.Max) > 0 ? this.Max : other.Max;
@@ -160,6 +206,7 @@ public readonly record struct Range<T> : IEquatable<Range<T>> where T : ICompara
     }
 
     /// <summary>Deconstructs the range into its Min and Max components.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Deconstruct(out T min, out T max) {
         min = this.Min;
         max = this.Max;
