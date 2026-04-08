@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using System.Reflection;
@@ -38,9 +39,13 @@ public static class DependencyInjection {
             Preca.ThrowIfNull(configure);
 
             builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);  
-            builder.Services.TryAddSingleton<OutboxChannel<TContext>>();
-            builder.Services.TryAddScoped<AuditInterceptor>(); 
+            builder.Services.TryAddSingleton<OutboxChannel<TContext>>(); 
+
+            builder.Services.TryAddScoped<AuditInterceptor>();
+            builder.Services.TryAddScoped<ISaveChangesInterceptor>(sp => sp.GetRequiredService<AuditInterceptor>());
+
             builder.Services.TryAddScoped<DomainEventDispatcherInterceptor<TContext>>();
+            builder.Services.TryAddScoped<ISaveChangesInterceptor>(sp => sp.GetRequiredService<DomainEventDispatcherInterceptor<TContext>>());
 
             DddEfCoreOptionsBuilder optionsBuilder = new(builder.Services);
 
