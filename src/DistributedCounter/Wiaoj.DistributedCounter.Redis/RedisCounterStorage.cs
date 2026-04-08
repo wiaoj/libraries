@@ -44,7 +44,7 @@ internal sealed class RedisCounterStorage : ICounterStorage {
         return new CounterValue((long)resultLua);
     }
 
-    public async ValueTask<CounterLimitResult> TryIncrementAsync(CounterKey key, long amount, long limit, CounterExpiry expiry, CancellationToken ct) {
+    public async ValueTask<CounterLimitResult> TryIncrementAsync(CounterKey key, long amount, long limit, CounterExpiry expiry, CancellationToken cancellationToken ) {
         long ttlMs = expiry.GetTtlMilliseconds();
 
         // DÜZELTME: Parametre sırasını garantiye alıyoruz.
@@ -65,7 +65,7 @@ internal sealed class RedisCounterStorage : ICounterStorage {
         return ParseLimitResult(result, limit);
     }
 
-    public async ValueTask<CounterLimitResult> TryDecrementAsync(CounterKey key, long amount, long minLimit, CounterExpiry expiry, CancellationToken ct) {
+    public async ValueTask<CounterLimitResult> TryDecrementAsync(CounterKey key, long amount, long minLimit, CounterExpiry expiry, CancellationToken cancellationToken ) {
         long ttlMs = expiry.GetTtlMilliseconds();
 
         // DÜZELTME: Parametre sırasını garantiye alıyoruz.

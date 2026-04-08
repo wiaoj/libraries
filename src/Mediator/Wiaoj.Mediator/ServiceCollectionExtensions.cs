@@ -6,8 +6,7 @@ using Wiaoj.Mediator.Internal;
 
 #pragma warning disable IDE0130
 namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130
-
+#pragma warning restore IDE0130 
 /// <summary>
 /// Extension methods for registering Wiaoj Mediator services.
 /// </summary>
@@ -26,11 +25,13 @@ public static class ServiceCollectionExtensions {
         configure(builder);
 
         // ── Collect all candidate types ──────────────────────────────────────
-        List<Assembly> assemblies =
-            [.. builder.AssemblyMarkers.Select(t => t.Assembly).Distinct()];
+        List<Assembly> assemblies = [.. builder.AssemblyMarkers.Select(t => t.Assembly).Distinct()];
 
-        List<Type> allTypes =
-            [.. assemblies.SelectMany(a => a.GetTypes()).Where(t => t.IsClass && !t.IsAbstract)];
+        List<Type> allTypes = [..
+            assemblies
+            .SelectMany(a => a.GetTypes())
+            .Where(t => t.IsClass && !t.IsAbstract && !t.IsGenericTypeDefinition)
+        ];
 
         // Merge manual registrations
         allTypes.AddRange(builder.ManualHandlers);
@@ -196,12 +197,12 @@ public static class ServiceCollectionExtensions {
     }
 
     private static List<ProcessorDescriptor> FindPreProcessors(List<Type> allTypes) {
-        return [.. allTypes.SelectMany(t => 
+        return [.. allTypes.SelectMany(t =>
                 t.GetInterfaces()
                 .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequestPreProcessor<,>))
             .Select(i => new ProcessorDescriptor(
-                i.GetGenericArguments()[0], 
-                i.GetGenericArguments()[1], 
+                i.GetGenericArguments()[0],
+                i.GetGenericArguments()[1],
                 t)))];
     }
 
@@ -243,8 +244,8 @@ public static class ServiceCollectionExtensions {
 
     private static bool IsAssignableToGenericType(Type givenType, Type genericType) {
         return givenType.GetInterfaces()
-            .Any(it => 
-                it.IsGenericType 
+            .Any(it =>
+                it.IsGenericType
                 && it.GetGenericTypeDefinition() == genericType)
                 || (givenType.IsGenericType && givenType.GetGenericTypeDefinition() == genericType);
     }

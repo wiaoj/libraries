@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 
 namespace Wiaoj.Mediator.Internal;
+[DebuggerStepThrough, DebuggerNonUserCode]
 internal sealed class TracingMediator(IServiceProvider serviceProvider, HandlerRegistry registry) : IMediator {
 
     public async Task<TResponse> Send<TResponse>(

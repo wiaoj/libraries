@@ -1,6 +1,7 @@
-﻿using System.Reflection;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+using System.Reflection;
 using Wiaoj.Ddd;
 using Wiaoj.Ddd.EntityFrameworkCore;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
@@ -36,11 +37,10 @@ public static class DependencyInjection {
             where TContext : DbContext {
             Preca.ThrowIfNull(configure);
 
-            builder.Services.TryAddSingleton<OutboxChannel>();
-            builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System); 
-
-            builder.Services.TryAddScoped<AuditInterceptor>();
-            builder.Services.TryAddScoped<DomainEventDispatcherInterceptor>();
+            builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);  
+            builder.Services.TryAddSingleton<OutboxChannel<TContext>>();
+            builder.Services.TryAddScoped<AuditInterceptor>(); 
+            builder.Services.TryAddScoped<DomainEventDispatcherInterceptor<TContext>>();
 
             DddEfCoreOptionsBuilder optionsBuilder = new(builder.Services);
 
@@ -205,7 +205,7 @@ public static class DependencyInjection {
             return AddRepositoriesFromAssemblies<TContext>(builder, lifetime, [typeof(TMarker).Assembly]);
         }
     }
-
+     
     /// <param name="optionsBuilder">The DbContext options builder.</param>
     extension(DbContextOptionsBuilder optionsBuilder) {
         /// <summary>
@@ -215,10 +215,10 @@ public static class DependencyInjection {
         /// </summary>
         /// <param name="serviceProvider">The scoped service provider, passed from the AddDbContext delegate.</param>
         /// <returns>The options builder for chaining.</returns>
-        public DbContextOptionsBuilder UseDddInterceptors(IServiceProvider serviceProvider) {
+        public DbContextOptionsBuilder UseDddInterceptors<TContext>(IServiceProvider serviceProvider) where TContext : DbContext {
             return optionsBuilder.AddInterceptors(
                 serviceProvider.GetRequiredService<AuditInterceptor>(),
-                serviceProvider.GetRequiredService<DomainEventDispatcherInterceptor>());
+                serviceProvider.GetRequiredService<DomainEventDispatcherInterceptor<TContext>>());
         }
     }
 }

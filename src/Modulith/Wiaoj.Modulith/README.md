@@ -160,23 +160,23 @@ public sealed class OrdersModule : IModule, IModuleLifecycle {
         services.AddScoped<IOrderService, OrderService>();
     }
 
-    public async Task OnStarting(CancellationToken ct) {
+    public async Task OnStarting(CancellationToken cancellationToken ) {
         // Runs before the host begins accepting requests.
         // Suitable for migrations, cache warm-up, connection checks.
-        await _dbContext.Database.MigrateAsync(ct);
+        await _dbContext.Database.MigrateAsync(cancellationToken);
     }
 
-    public Task OnStarted(CancellationToken ct) {
+    public Task OnStarted(CancellationToken cancellationToken ) {
         // Runs after the host is fully up and accepting requests.
         // Failures here are non-fatal — logged and ignored.
         _logger.LogInformation("Orders module ready.");
         return Task.CompletedTask;
     }
 
-    public async Task OnStopping(CancellationToken ct) {
+    public async Task OnStopping(CancellationToken cancellationToken ) {
         // Runs during shutdown, in reverse boot order.
         // Suitable for draining queues and closing connections gracefully.
-        await _outbox.FlushAsync(ct);
+        await _outbox.FlushAsync(cancellationToken);
     }
 }
 ```
@@ -240,12 +240,12 @@ Host.Build()
 
 Host.StartAsync()
 └── ModulithHostedService
-    ├── For each IModuleLifecycle in boot order → OnStarting(ct)
-    └── For each IModuleLifecycle in boot order → OnStarted(ct)
+    ├── For each IModuleLifecycle in boot order → OnStarting(cancellationToken)
+    └── For each IModuleLifecycle in boot order → OnStarted(cancellationToken)
 
 Host.StopAsync()
 └── ModulithHostedService
-    └── For each IModuleLifecycle in reverse boot order → OnStopping(ct)
+    └── For each IModuleLifecycle in reverse boot order → OnStopping(cancellationToken)
 ```
 
 ---

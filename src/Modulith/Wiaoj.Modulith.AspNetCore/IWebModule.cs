@@ -7,7 +7,7 @@ namespace Wiaoj.Modulith.AspNetCore;
 /// module needs to register middleware, map endpoints, or configure routing.
 /// </para>
 /// <para>
-/// <see cref="Configure"/> is called by <c>app.UseModulith()</c> after the host is built,
+/// <see cref="ConfigureAsync"/> is called by <c>app.UseModulithAsync()</c> after the host is built,
 /// in topological dependency order.
 /// </para>
 /// </summary>
@@ -21,7 +21,7 @@ namespace Wiaoj.Modulith.AspNetCore;
 ///         services.AddScoped&lt;IOrderService, OrderService&gt;();
 ///     }
 ///
-///     public void Configure(IApplicationBuilder app) {
+///     public Task ConfigureAsync(IApplicationBuilder app) {
 ///         if (app is WebApplication web)
 ///             web.MapGroup("/orders").MapOrderEndpoints();
 ///     }
@@ -38,5 +38,5 @@ public interface IWebModule : IModule {
     /// The application builder. Cast to <see cref="WebApplication"/> to access
     /// endpoint routing APIs.
     /// </param>
-    void Configure(IApplicationBuilder app);
+    Task ConfigureAsync(IApplicationBuilder app);
 }

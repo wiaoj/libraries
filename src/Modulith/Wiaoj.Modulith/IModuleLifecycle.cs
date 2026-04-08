@@ -19,17 +19,17 @@
 ///     public string Name => "Orders";
 ///     public void Register(...) { ... }
 ///
-///     public async Task OnStarting(CancellationToken ct) {
-///         await _cache.WarmUpAsync(ct);
+///     public async Task OnStarting(CancellationToken cancellationToken ) {
+///         await _cache.WarmUpAsync(cancellationToken);
 ///     }
 ///
-///     public Task OnStarted(CancellationToken ct) {
+///     public Task OnStarted(CancellationToken cancellationToken ) {
 ///         _logger.LogInformation("Orders module ready.");
 ///         return Task.CompletedTask;
 ///     }
 ///
-///     public async Task OnStopping(CancellationToken ct) {
-///         await _backgroundQueue.DrainAsync(ct);
+///     public async Task OnStopping(CancellationToken cancellationToken ) {
+///         await _backgroundQueue.DrainAsync(cancellationToken);
 ///     }
 /// }
 /// </code>
@@ -43,11 +43,11 @@ public interface IModuleLifecycle {
     Task OnStarting(CancellationToken cancellationToken = default);
 
     /*Module base sınıf oluşturulacak ve override mantığı olacak
-     public async Task OnStarting(IServiceProvider sp, CancellationToken ct) // Eğer sp geliyorsa
+     public async Task OnStarting(IServiceProvider sp, CancellationToken cancellationToken ) // Eğer sp geliyorsa
         { 
             using var scope = sp.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<VexilDbContext>();
-            await dbContext.Database.MigrateAsync(ct);
+            await dbContext.Database.MigrateAsync(cancellationToken);
         }
      */
 

@@ -14,13 +14,13 @@ namespace Wiaoj.Ddd.EntityFrameworkCore.Internal;
 /// Intercepts <see cref="DbContext.SaveChangesAsync(CancellationToken)"/> to handle domain events.
 /// Dispatches PreCommit events recursively, persists Outbox messages with optimistic ownership, and pushes to the in-memory channel.
 /// </summary>
-internal sealed class DomainEventDispatcherInterceptor(
+internal sealed class DomainEventDispatcherInterceptor<TContext>(
     IDomainEventDispatcher domainEventDispatcher,
     ISerializer<DddEfCoreOutboxSerializerKey> serializer,
-    OutboxChannel outboxChannel,
+    OutboxChannel<TContext> outboxChannel,
     IOptions<OutboxOptions> options,
     OutboxInstanceInfo instanceInfo,
-    TimeProvider timeProvider) : SaveChangesInterceptor {
+    TimeProvider timeProvider) : SaveChangesInterceptor where TContext : DbContext {
 
     private readonly int _maxIterations = options.Value.MaxDomainEventDispatchAttempts;
     private List<OutboxMessage>? _messagesToPublish;

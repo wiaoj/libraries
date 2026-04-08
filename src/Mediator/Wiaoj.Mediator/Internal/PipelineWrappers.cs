@@ -1,4 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.ExceptionServices;
 
 namespace Wiaoj.Mediator.Internal;
@@ -9,10 +11,11 @@ namespace Wiaoj.Mediator.Internal;
 /// (behaviors + handler) is compiled with <see cref="PipelineCompiler"/> as pure expression trees.
 /// Exception handling and processors require proper async chaining, so they are wrapped here
 /// using regular <c>async</c> lambdas.  Each wrapper method is invoked ONCE per handler type
-/// via <see cref="System.Reflection.MethodInfo.MakeGenericMethod"/> at startup; the resulting
+/// via <see cref="MethodInfo.MakeGenericMethod"/> at startup; the resulting
 /// delegate is cached in <see cref="HandlerRegistry"/> and called at zero allocation cost at runtime.
 /// </para>
 /// </summary>
+[DebuggerStepThrough, DebuggerNonUserCode]
 internal static class PipelineWrappers {
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -35,31 +38,33 @@ internal static class PipelineWrappers {
         Type requestType,
         Type responseType,
         Type exceptionHandlerInterfaceType) {
+
+        // Added BindingFlags to ensure we can find the method even if it's private/internal
         return typeof(PipelineWrappers)
-                                                        .GetMethod(nameof(WrapWithExceptionHandlerCore))!
-                                                        .MakeGenericMethod(requestType, responseType)
-                                                        .Invoke(null, [innerDelegate, exceptionHandlerInterfaceType])!;
+            .GetMethod(nameof(WrapWithExceptionHandlerCore), BindingFlags.Static | BindingFlags.NonPublic)!
+            .MakeGenericMethod(requestType, responseType)
+            .Invoke(null, [innerDelegate, exceptionHandlerInterfaceType])!;
     }
 
     /// <summary>
     /// Generic core — called once at startup via MakeGenericMethod; result is cached.
     /// </summary>
-    public static Func<IServiceProvider, object, CancellationToken, Task<TResponse>>
+    private static Func<IServiceProvider, object, CancellationToken, Task<TResponse>>
         WrapWithExceptionHandlerCore<TRequest, TResponse>(
             Func<IServiceProvider, object, CancellationToken, Task<TResponse>> inner,
             Type exceptionHandlerInterfaceType)
         where TRequest : IRequest<TResponse> {
 
-        return async (sp, req, ct) => {
+        return async (sp, req, cancellationToken) => {
             try {
-                return await inner(sp, req, ct).ConfigureAwait(false);
+                return await inner(sp, req, cancellationToken).ConfigureAwait(false);
             }
             catch(Exception ex) {
-                IRequestExceptionHandler<TRequest, TResponse, Exception> handler = (IRequestExceptionHandler<TRequest, TResponse, Exception>)
-                    sp.GetRequiredService(exceptionHandlerInterfaceType);
+                IRequestExceptionHandler<TRequest, TResponse, Exception> handler =
+                    (IRequestExceptionHandler<TRequest, TResponse, Exception>)sp.GetRequiredService(exceptionHandlerInterfaceType);
 
                 ExceptionContext<TResponse> context = new();
-                await handler.Handle((TRequest)req, ex, context, ct).ConfigureAwait(false);
+                await handler.Handle((TRequest)req, ex, context, cancellationToken).ConfigureAwait(false);
 
                 if(context.IsHandled)
                     return context.Result;
@@ -79,11 +84,6 @@ internal static class PipelineWrappers {
     /// Wraps <paramref name="innerDelegate"/> with pre-processor calls (before) and
     /// post-processor calls (after) the inner pipeline.
     /// </summary>
-    /// <param name="innerDelegate">The (optionally exception-wrapped) pipeline delegate (boxed).</param>
-    /// <param name="requestType">Closed request type.</param>
-    /// <param name="responseType">Closed response type.</param>
-    /// <param name="preProcessorTypes">Ordered list of pre-processor implementation types.</param>
-    /// <param name="postProcessorTypes">Ordered list of post-processor implementation types.</param>
     public static object WrapWithProcessors(
         object innerDelegate,
         Type requestType,
@@ -103,7 +103,7 @@ internal static class PipelineWrappers {
                 .ToArray();
 
         return typeof(PipelineWrappers)
-            .GetMethod(nameof(WrapWithProcessorsCore))!
+            .GetMethod(nameof(WrapWithProcessorsCore), BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(responseType)
             .Invoke(null, [innerDelegate, preCompiled, postCompiled])!;
     }
@@ -111,7 +111,7 @@ internal static class PipelineWrappers {
     /// <summary>
     /// Generic core — called once at startup via MakeGenericMethod; result is cached.
     /// </summary>
-    public static Func<IServiceProvider, object, CancellationToken, Task<TResponse>>
+    private static Func<IServiceProvider, object, CancellationToken, Task<TResponse>>
         WrapWithProcessorsCore<TResponse>(
             Func<IServiceProvider, object, CancellationToken, Task<TResponse>> inner,
             Func<IServiceProvider, object, CancellationToken, Task>[] preProcessors,
@@ -123,17 +123,18 @@ internal static class PipelineWrappers {
                 .Cast<Func<IServiceProvider, object, TResponse, CancellationToken, Task>>()
                 .ToArray();
 
+        // Fast-path: Skip async state machine overhead if there are no processors
         if(preProcessors.Length == 0 && postProcessors.Length == 0)
             return inner;
 
-        return async (sp, req, ct) => {
+        return async (sp, req, cancellationToken) => {
             for(int i = 0; i < preProcessors.Length; i++)
-                await preProcessors[i](sp, req, ct).ConfigureAwait(false);
+                await preProcessors[i](sp, req, cancellationToken).ConfigureAwait(false);
 
-            TResponse result = await inner(sp, req, ct).ConfigureAwait(false);
+            TResponse result = await inner(sp, req, cancellationToken).ConfigureAwait(false);
 
             for(int i = 0; i < postProcessors.Length; i++)
-                await postProcessors[i](sp, req, result, ct).ConfigureAwait(false);
+                await postProcessors[i](sp, req, result, cancellationToken).ConfigureAwait(false);
 
             return result;
         };

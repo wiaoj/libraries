@@ -1,9 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace Wiaoj.Mediator.Internal;
-
+[DebuggerStepThrough, DebuggerNonUserCode]
 internal static class PipelineCompiler {
     // ─────────────────────────────────────────────────────────────────────────
     // Request Handler (behaviors + handler core)
@@ -25,16 +26,19 @@ internal static class PipelineCompiler {
 
         // 1. Resolve handler and invoke Handle
         Expression handlerInstance = CreateServiceResolution(handlerType, spParam);
-        
+
         // Cast instance to the interface — handles multiple handlers and explicit implementations correctly.
         Type handlerInterface = typeof(IRequestHandler<,>).MakeGenericType(requestType, responseType);
         MethodInfo handleMethod = GetMethodOrThrow(handlerInterface, nameof(IRequestHandler<,>.Handle));
         Expression castInstance = Expression.Convert(handlerInstance, handlerInterface);
-        
+
         Expression next = Expression.Call(castInstance, handleMethod, typedRequest, ctParam);
 
         // 2. Wrap behaviors in reverse (outermost = first registered)
-        foreach(Type behaviorType in behaviorTypes.Reverse()) {
+        // OPTIMIZED: Replaced LINQ .Reverse() with a reverse for-loop to avoid allocations
+        for(int i = behaviorTypes.Count - 1; i >= 0; i--) {
+            Type behaviorType = behaviorTypes[i];
+
             Expression behaviorInstance = CreateServiceResolution(behaviorType, spParam);
             MethodInfo behaviorMethod = GetMethodOrThrow(behaviorType, nameof(IPipelineBehavior<,>.Handle));
 
@@ -58,12 +62,12 @@ internal static class PipelineCompiler {
          UnaryExpression typedRequest) = CreateParameters(requestType);
 
         Expression handlerInstance = CreateServiceResolution(handlerType, spParam);
-        
+
         // Cast instance to the interface — handles multiple handlers and explicit implementations correctly.
         Type handlerInterface = typeof(IStreamRequestHandler<,>).MakeGenericType(requestType, responseType);
         MethodInfo handleMethod = GetMethodOrThrow(handlerInterface, nameof(IStreamRequestHandler<,>.Handle));
         Expression castInstance = Expression.Convert(handlerInstance, handlerInterface);
-        
+
         Expression body = Expression.Call(castInstance, handleMethod, typedRequest, ctParam);
 
         return Expression.Lambda(body, spParam, reqParam, ctParam).Compile();
@@ -145,11 +149,11 @@ internal static class PipelineCompiler {
 
     /// <summary>
     /// Resolves a method by name from <paramref name="type"/> and throws a clear
-    /// <see cref="InvalidOperationException"/> if it cannot be found — instead of
-    /// propagating a silent <see cref="NullReferenceException"/> from the call site.
+    /// <see cref="InvalidOperationException"/> if it cannot be found.
     /// </summary>
     private static MethodInfo GetMethodOrThrow(Type type, string methodName) {
-        return type.GetMethod(methodName)
+        // ADDED: BindingFlags for safer and faster reflection (Interface methods are always Public & Instance)
+        return type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Instance)
             ?? throw new InvalidOperationException(
                 $"Method '{methodName}' was not found on '{type.FullName}'. " +
                 $"This is likely a Wiaoj.Mediator bug — please open an issue.");

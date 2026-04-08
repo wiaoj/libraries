@@ -27,7 +27,7 @@ internal sealed class ModulithHostedService(
             logger.LogInformation("[Modulith] {Module} — OnStarting", name);
 
             await RunWithTimeoutAsync(
-                ct => module.OnStarting(ct),
+                ct => module.OnStarting(cancellationToken),
                 _options.StartupHookTimeout,
                 name, "OnStarting",
                 cancellationToken,
@@ -38,7 +38,7 @@ internal sealed class ModulithHostedService(
             string name = ((IModule)module).Name;
 
             await RunWithTimeoutAsync(
-                ct => module.OnStarted(ct),
+                ct => module.OnStarted(cancellationToken),
                 _options.StartupHookTimeout,
                 name, "OnStarted",
                 cancellationToken,
@@ -52,7 +52,7 @@ internal sealed class ModulithHostedService(
             logger.LogInformation("[Modulith] {Module} — OnStopping", name);
 
             await RunWithTimeoutAsync(
-                ct => module.OnStopping(ct),
+                ct => module.OnStopping(cancellationToken),
                 _options.ShutdownHookTimeout,
                 name, "OnStopping",
                 cancellationToken,
@@ -67,12 +67,12 @@ internal sealed class ModulithHostedService(
         TimeSpan timeout,
         string moduleName,
         string hookName,
-        CancellationToken ct,
+        CancellationToken cancellationToken ,
         bool throwOnFailure) {
 
         using CancellationTokenSource cts = timeout == Timeout.InfiniteTimeSpan
-            ? CancellationTokenSource.CreateLinkedTokenSource(ct)
-            : CancellationTokenSource.CreateLinkedTokenSource(ct);
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         if(timeout != Timeout.InfiniteTimeSpan)
             cts.CancelAfter(timeout);
@@ -80,7 +80,7 @@ internal sealed class ModulithHostedService(
         try {
             await work(cts.Token).ConfigureAwait(false);
         }
-        catch(OperationCanceledException) when(!ct.IsCancellationRequested) {
+        catch(OperationCanceledException) when(!cancellationToken.IsCancellationRequested) {
             string msg = $"[Modulith] {moduleName} — {hookName} timed out after {timeout.TotalSeconds}s.";
             if(throwOnFailure) throw new TimeoutException(msg);
             logger.LogWarning(msg);

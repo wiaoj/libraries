@@ -20,7 +20,7 @@ internal sealed class OutboxProcessor<TContext>(
     IOptionsMonitor<OutboxOptions> options,
     ISerializer<DddEfCoreOutboxSerializerKey> serializer,
     ILogger<OutboxProcessor<TContext>> logger,
-    OutboxChannel outboxChannel,
+    OutboxChannel<TContext> outboxChannel,
     OutboxInstanceInfo instanceInfo)
     : BackgroundService where TContext : DbContext {
 
@@ -95,7 +95,8 @@ internal sealed class OutboxProcessor<TContext>(
         IQueryable<OutboxMessage> query = dbContext.Set<OutboxMessage>()
             .Where(m => m.ProcessedAt == null)
             .Where(m => m.LockId == null || m.LockExpiration < now)
-            .Where(m => m.RetryCount < currentOptions.RetryCount);
+            .Where(m => m.RetryCount < currentOptions.RetryCount)
+            .Where(m => m.OccurredAt == m.OccurredAt.Add(-currentOptions.InitialDelay));
 
         if(!string.IsNullOrEmpty(currentOptions.PartitionKey)) {
             query = query.Where(m => m.PartitionKey == currentOptions.PartitionKey);

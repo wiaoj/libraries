@@ -16,8 +16,8 @@ public static class ModulithAspNetCoreServiceCollectionExtensions {
     /// <para>
     /// Call <c>AddModulith()</c> first to register modules and the core
     /// infrastructure, then call this method to enable
-    /// <see cref="Wiaoj.Modulith.AspNetCore.IWebModule.Configure"/> orchestration
-    /// via <c>app.UseModulith()</c>.
+    /// <see cref="Wiaoj.Modulith.AspNetCore.IWebModule.ConfigureAsync"/> orchestration
+    /// via <c>app.UseModulithAsync()</c>.
     /// </para>
     /// </summary>
     /// <example>
@@ -28,7 +28,7 @@ public static class ModulithAspNetCoreServiceCollectionExtensions {
     ///     .AddModulithAspNetCore();
     ///
     /// var app = builder.Build();
-    /// app.UseModulith();
+    /// app.UseModulithAsync();
     /// app.Run();
     /// </code>
     /// </example>

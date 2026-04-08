@@ -42,7 +42,7 @@ public record Ping(string Message) : IRequest<string>;
 
 // Handler
 public class PingHandler : IRequestHandler<Ping, string> {
-    public Task<string> HandleAsync(Ping request, CancellationToken ct) {
+    public Task<string> HandleAsync(Ping request, CancellationToken cancellationToken ) {
         return Task.FromResult($"Pong: {request.Message}");
     }
 }
@@ -101,9 +101,9 @@ Native support for high-performance streaming without buffering.
 public record StreamData : IStreamRequest<int>;
 
 public class StreamHandler : IStreamRequestHandler<StreamData, int> {
-    public async IAsyncEnumerable<int> Handle(StreamData request, [EnumeratorCancellation] CancellationToken ct) {
+    public async IAsyncEnumerable<int> Handle(StreamData request, [EnumeratorCancellation] CancellationToken cancellationToken ) {
         for (int i = 0; i < 100; i++) {
-            await Task.Delay(10, ct);
+            await Task.Delay(10, cancellationToken);
             yield return i;
         }
     }
@@ -144,7 +144,7 @@ Define global exception handlers without runtime reflection costs. The try/catch
 
 ```csharp
 public class GlobalErrorHandler : IRequestExceptionHandler<Ping, string, Exception> {
-    public Task HandleAsync(Ping request, Exception ex, CancellationToken ct) {
+    public Task HandleAsync(Ping request, Exception ex, CancellationToken cancellationToken ) {
         Console.WriteLine($"Error: {ex.Message}");
         return Task.CompletedTask;
     }

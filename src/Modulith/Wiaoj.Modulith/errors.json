@@ -1,0 +1,231 @@
+{
+  "$schema": "http://json.schemastore.org/sarif-1.0.0",
+  "version": "1.0.0",
+  "runs": [
+    {
+      "tool": {
+        "name": "Microsoft (R) Visual C# Derleyicisi",
+        "version": "5.0.0.0",
+        "fileVersion": "5.0.0-2.25612.105 (44525024)",
+        "semanticVersion": "5.0.0",
+        "language": "tr-TR"
+      },
+      "results": [
+        {
+          "ruleId": "CA1068",
+          "level": "note",
+          "message": "'Wiaoj.Modulith.Internal.ModulithHostedService.RunWithTimeoutAsync(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.Task>, System.TimeSpan, string, string, System.Threading.CancellationToken, bool)' yöntemi, son parametre olarak CancellationToken’ı almalıdır",
+          "locations": [
+            {
+              "resultFile": {
+                "uri": "file:///C:/Users/berta/source/repos/libraries/src/Modulith/Wiaoj.Modulith/Internal/ModulithHostedService.cs",
+                "region": {
+                  "startLine": 65,
+                  "startColumn": 24,
+                  "endLine": 65,
+                  "endColumn": 43
+                }
+              }
+            }
+          ],
+          "properties": {
+            "warningLevel": 1
+          }
+        },
+        {
+          "ruleId": "CA1873",
+          "level": "note",
+          "message": "Günlüğe kaydetme devre dışı bırakılırsa bu bağımsız değişkenin değerlendirmesi pahalı ve gereksiz olabilir",
+          "locations": [
+            {
+              "resultFile": {
+                "uri": "file:///C:/Users/berta/source/repos/libraries/src/Modulith/Wiaoj.Modulith/Internal/ModuleLoader.cs",
+                "region": {
+                  "startLine": 26,
+                  "startColumn": 28,
+                  "endLine": 28,
+                  "endColumn": 64
+                }
+              }
+            }
+          ],
+          "properties": {
+            "warningLevel": 1
+          }
+        },
+        {
+          "ruleId": "CA1873",
+          "level": "note",
+          "message": "Günlüğe kaydetme devre dışı bırakılırsa bu bağımsız değişkenin değerlendirmesi pahalı ve gereksiz olabilir",
+          "locations": [
+            {
+              "resultFile": {
+                "uri": "file:///C:/Users/berta/source/repos/libraries/src/Modulith/Wiaoj.Modulith/Internal/ModuleLoader.cs",
+                "region": {
+                  "startLine": 34,
+                  "startColumn": 28,
+                  "endLine": 36,
+                  "endColumn": 64
+                }
+              }
+            }
+          ],
+          "properties": {
+            "warningLevel": 1
+          }
+        },
+        {
+          "ruleId": "CA2254",
+          "level": "note",
+          "message": "Günlük kaydı ileti şablonu ‘LoggerExtensions.LogWarning(ILogger, string?, params object?[])’ çağrıları arasında değişiklik göstermemelidir",
+          "locations": [
+            {
+              "resultFile": {
+                "uri": "file:///C:/Users/berta/source/repos/libraries/src/Modulith/Wiaoj.Modulith/Internal/ModulithHostedService.cs",
+                "region": {
+                  "startLine": 86,
+                  "startColumn": 31,
+                  "endLine": 86,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "properties": {
+            "warningLevel": 1
+          }
+        },
+        {
+          "ruleId": "CA2254",
+          "level": "note",
+          "message": "Günlük kaydı ileti şablonu ‘LoggerExtensions.LogError(ILogger, Exception?, string?, params object?[])’ çağrıları arasında değişiklik göstermemelidir",
+          "locations": [
+            {
+              "resultFile": {
+                "uri": "file:///C:/Users/berta/source/repos/libraries/src/Modulith/Wiaoj.Modulith/Internal/ModulithHostedService.cs",
+                "region": {
+                  "startLine": 91,
+                  "startColumn": 37,
+                  "endLine": 91,
+                  "endColumn": 40
+                }
+              }
+            }
+          ],
+          "properties": {
+            "warningLevel": 1
+          }
+        },
+        {
+          "ruleId": "CA2254",
+          "level": "note",
+          "message": "Günlük kaydı ileti şablonu ‘LoggerExtensions.LogWarning(ILogger, Exception?, string?, params object?[])’ çağrıları arasında değişiklik göstermemelidir",
+          "locations": [
+            {
+              "resultFile": {
+                "uri": "file:///C:/Users/berta/source/repos/libraries/src/Modulith/Wiaoj.Modulith/Internal/ModulithHostedService.cs",
+                "region": {
+                  "startLine": 94,
+                  "startColumn": 35,
+                  "endLine": 94,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "properties": {
+            "warningLevel": 1
+          }
+        },
+        {
+          "ruleId": "CA1873",
+          "level": "note",
+          "message": "Günlüğe kaydetme devre dışı bırakılırsa bu bağımsız değişkenin değerlendirmesi pahalı ve gereksiz olabilir",
+          "locations": [
+            {
+              "resultFile": {
+                "uri": "file:///C:/Users/berta/source/repos/libraries/src/Modulith/Wiaoj.Modulith/Internal/ModulithHostedService.cs",
+                "region": {
+                  "startLine": 27,
+                  "startColumn": 13,
+                  "endLine": 27,
+                  "endColumn": 76
+                }
+              }
+            }
+          ],
+          "properties": {
+            "warningLevel": 1
+          }
+        },
+        {
+          "ruleId": "CA1873",
+          "level": "note",
+          "message": "Günlüğe kaydetme devre dışı bırakılırsa bu bağımsız değişkenin değerlendirmesi pahalı ve gereksiz olabilir",
+          "locations": [
+            {
+              "resultFile": {
+                "uri": "file:///C:/Users/berta/source/repos/libraries/src/Modulith/Wiaoj.Modulith/Internal/ModulithHostedService.cs",
+                "region": {
+                  "startLine": 52,
+                  "startColumn": 13,
+                  "endLine": 52,
+                  "endColumn": 76
+                }
+              }
+            }
+          ],
+          "properties": {
+            "warningLevel": 1
+          }
+        }
+      ],
+      "rules": {
+        "CA1068": {
+          "id": "CA1068",
+          "shortDescription": "CancellationToken parametreleri en sonda olmalıdır",
+          "defaultLevel": "note",
+          "helpUri": "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1068",
+          "properties": {
+            "category": "Design",
+            "isEnabledByDefault": true,
+            "tags": [
+              "Telemetry",
+              "EnabledRuleInAggressiveMode"
+            ]
+          }
+        },
+        "CA1873": {
+          "id": "CA1873",
+          "shortDescription": "Pahalı olabilecek günlüğe kaydetme işlemlerinden kaçının",
+          "fullDescription": "Birçok durumda günlüğe kaydetme devre dışı bırakılır ya da bu bağımsız değişken için gereksiz bir değerlendirmeye yol açacak düzeyde sonuçları günlüğe kaydedecek şekilde ayarlanır.",
+          "defaultLevel": "note",
+          "helpUri": "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1873",
+          "properties": {
+            "category": "Performance",
+            "isEnabledByDefault": true,
+            "tags": [
+              "Telemetry",
+              "EnabledRuleInAggressiveMode"
+            ]
+          }
+        },
+        "CA2254": {
+          "id": "CA2254",
+          "shortDescription": "Şablon statik bir ifade olmalıdır",
+          "fullDescription": "Günlük ileti şablonu çağrılar arasında değişiklik göstermemelidir.",
+          "defaultLevel": "note",
+          "helpUri": "https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2254",
+          "properties": {
+            "category": "Usage",
+            "isEnabledByDefault": true,
+            "tags": [
+              "Telemetry",
+              "EnabledRuleInAggressiveMode"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

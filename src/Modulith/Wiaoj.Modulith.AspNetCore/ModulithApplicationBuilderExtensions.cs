@@ -12,7 +12,7 @@ namespace Microsoft.AspNetCore.Builder;
 /// </summary>
 public static class ModulithApplicationBuilderExtensions { 
     /// <summary>
-    /// Invokes <c>Configure(IApplicationBuilder)</c> on all active
+    /// Invokes <c>ConfigureAsync(IApplicationBuilder)</c> on all active
     /// <see cref="Wiaoj.Modulith.AspNetCore.IWebModule"/> implementations
     /// in topological boot order.
     /// <para>
@@ -24,20 +24,20 @@ public static class ModulithApplicationBuilderExtensions {
     /// <example>
     /// <code>
     /// var app = builder.Build();
-    /// app.UseModulith();
+    /// app.UseModulithAsync();
     /// app.Run();
     /// </code>
     /// </example>
-    public static IApplicationBuilder UseModulith(this IApplicationBuilder app) {
+    public static async ValueTask<IApplicationBuilder> UseModulith(this IApplicationBuilder app) {
         WebModuleRegistry registry = app.ApplicationServices
             .GetRequiredService<WebModuleRegistry>();
-        registry.Configure(app);
+        await registry.ConfigureAsync(app);
         return app;
     }
 
     /// <inheritdoc cref="UseModulith(IApplicationBuilder)"/>
-    public static WebApplication UseModulith(this WebApplication app) {
-        ((IApplicationBuilder)app).UseModulith();
+    public static async ValueTask<WebApplication> UseModulithAsync(this WebApplication app) {
+        await ((IApplicationBuilder)app).UseModulith();
         return app;
     }
 }

@@ -12,11 +12,11 @@ internal sealed class WebModuleRegistry(ModuleRegistry coreRegistry) {
     private readonly IReadOnlyList<IWebModule> _webModules = [.. coreRegistry.Modules.OfType<IWebModule>()];
 
     /// <summary>
-    /// Invokes <see cref="IWebModule.Configure"/> on all web modules in boot order.
-    /// Called by <c>UseModulith()</c>.
+    /// Invokes <see cref="IWebModule.ConfigureAsync"/> on all web modules in boot order.
+    /// Called by <c>UseModulithAsync()</c>.
     /// </summary>
-    public void Configure(IApplicationBuilder app) {
+    public async Task ConfigureAsync(IApplicationBuilder app) {
         foreach(IWebModule module in this._webModules)
-            module.Configure(app);
+           await module.ConfigureAsync(app);
     }
 }

@@ -20,8 +20,8 @@ internal sealed class SlidingWindowCounter {
     /// <summary>
     /// Attempts to acquire a slot. Returns <c>false</c> immediately if the limit is exceeded.
     /// </summary>
-    public async ValueTask<bool> TryAcquireAsync(CancellationToken ct = default) {
-        await this._lock.WaitAsync(ct).ConfigureAwait(false);
+    public async ValueTask<bool> TryAcquireAsync(CancellationToken cancellationToken  = default) {
+        await this._lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
             long now = DateTime.UtcNow.Ticks;
             long cutoff = now - this._window.Ticks;

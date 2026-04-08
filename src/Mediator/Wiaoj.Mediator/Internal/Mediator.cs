@@ -1,4 +1,7 @@
-﻿namespace Wiaoj.Mediator.Internal;
+﻿using System.Diagnostics;
+
+namespace Wiaoj.Mediator.Internal; 
+[DebuggerStepThrough, DebuggerNonUserCode]
 internal sealed class Mediator(IServiceProvider serviceProvider, HandlerRegistry registry) : IMediator {
     public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default) {
         Func<IServiceProvider, object, CancellationToken, Task<TResponse>> handler

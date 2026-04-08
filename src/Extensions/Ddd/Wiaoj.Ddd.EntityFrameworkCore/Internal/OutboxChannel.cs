@@ -1,8 +1,9 @@
-﻿using System.Threading.Channels;
+﻿using Microsoft.EntityFrameworkCore;
+using System.Threading.Channels;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.Internal; 
-internal sealed class OutboxChannel {
+internal sealed class OutboxChannel<TContext> where TContext : DbContext {
     private readonly Channel<OutboxMessage> _channel = Channel.CreateUnbounded<OutboxMessage>();
 
     public ChannelReader<OutboxMessage> Reader => this._channel.Reader;
