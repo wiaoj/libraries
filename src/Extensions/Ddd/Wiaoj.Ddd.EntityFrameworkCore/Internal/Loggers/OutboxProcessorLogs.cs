@@ -79,7 +79,7 @@ internal static partial class OutboxProcessorLogs {
 
     [LoggerMessage(
         EventId = 2005,
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Message processed and status updated in database successfully. Total Time: {Duration}ms")]
     public static partial void LogMessageProcessedSuccessfully(this ILogger logger, long duration);
 
