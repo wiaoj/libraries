@@ -175,46 +175,6 @@ public sealed class ErrorTests {
         Assert.Equal(Error.None, Error.None);
     }
 
-    // ── Error.Multiple ────────────────────────────────────────────────────────
-
-    [Fact]
-    public void Multiple_WithErrors_CreatesFailedResult() {
-        Result<Success> result = Error.Multiple([SomeError, AnotherError]);
-        Assert.True(result.IsFailure);
-        Assert.Equal(2, result.Errors.Count);
-    }
-
-    [Fact]
-    public void Multiple_Generic_CreatesFailedResultOfThatType() {
-        Result<int> result = Error.Multiple<int>([SomeError, AnotherError]);
-        Assert.True(result.IsFailure);
-        Assert.Equal(2, result.Errors.Count);
-    }
-
-    [Fact]
-    public void Multiple_WithSingleError_CreatesFailedResult() {
-        Result<Success> result = Error.Multiple([SomeError]);
-        Assert.True(result.IsFailure);
-        Assert.Equal(SomeError, result.FirstError);
-    }
-
-    [Fact]
-    public void Multiple_WithEmptyList_Throws() {
-        Assert.Throws<ArgumentException>(() => Error.Multiple([]));
-    }
-
-    [Fact]
-    public void Multiple_Generic_WithEmptyList_Throws() {
-        Assert.Throws<ArgumentException>(() => Error.Multiple<int>([]));
-    }
-
-    [Fact]
-    public void Multiple_AcceptsIEnumerable_NotOnlyList() {
-        IEnumerable<Error> errors = [SomeError, AnotherError];
-        Result<Success> result = Error.Multiple(errors);
-        Assert.Equal(2, result.Errors.Count);
-    }
-
     // ── Error.Custom ──────────────────────────────────────────────────────────
 
     [Fact]

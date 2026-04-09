@@ -195,42 +195,7 @@ public readonly record struct Error {
     public static Error Custom(ErrorType type, string code, string description) {
         return new(code, description, type, null);
     }
-
-    // ── Compound factory ──────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Creates a <see cref="Result{Success}"/> that carries multiple errors at once.
-    /// Useful when a validation or batch operation produces more than one error.
-    /// </summary>
-    /// <param name="errors">At least one error. An empty collection throws <see cref="ArgumentException"/>.</param>
-    /// <returns>A failed <see cref="Result{Success}"/>.</returns>
-    /// <example>
-    /// <code>
-    /// List&lt;Error&gt; validationErrors = [
-    ///     Error.Validation("Name.Required",  "Name is required."),
-    ///     Error.Validation("Email.Invalid",  "Email format is invalid."),
-    /// ];
-    ///
-    /// return Error.Multiple(validationErrors);
-    /// </code>
-    /// </example>
-    public static Result<Success> Multiple(IEnumerable<Error> errors) {
-        List<Error> list = errors as List<Error> ?? errors.ToList();
-        if(list.Count == 0)
-            throw new ArgumentException(
-                "At least one error is required.", nameof(errors));
-        return list;
-    }
-
-    /// <inheritdoc cref="Multiple(IEnumerable{Error})"/>
-    public static Result<T> Multiple<T>(IEnumerable<Error> errors) {
-        List<Error> list = errors as List<Error> ?? errors.ToList();
-        if(list.Count == 0)
-            throw new ArgumentException(
-                "At least one error is required.", nameof(errors));
-        return list;
-    }
-
+ 
     // ── No-op sentinel ────────────────────────────────────────────────────────
 
     /// <summary>
