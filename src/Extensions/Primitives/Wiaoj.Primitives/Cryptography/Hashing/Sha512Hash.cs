@@ -38,7 +38,7 @@ public unsafe struct Sha512Hash
     /// Represents a SHA512 hash consisting of all zero bytes.
     /// Equivalent to a 64-byte array filled with 0x00.
     /// </summary>
-    public static readonly Sha512Hash Empty = new(stackalloc byte[HashSizeInBytes]);
+    public static readonly Sha512Hash Empty = default;
 
     /// <summary>
     /// Creates a Sha512Hash instance from a 64-byte span.
@@ -109,6 +109,49 @@ public unsafe struct Sha512Hash
     }
 
     /// <summary>
+    /// Parses a hexadecimal string into a Sha512Hash.
+    /// </summary>
+    public static Sha512Hash Parse(string s) {
+        Preca.ThrowIfNull(s);
+        if(!TryParse(s, out Sha512Hash result)) {
+            throw new FormatException($"Input string must represent exactly {HashSizeInBytes} bytes (128 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a span of characters into a Sha512Hash. (Zero-allocation)
+    /// </summary>
+    public static Sha512Hash Parse(ReadOnlySpan<char> s) {
+        if(!TryParse(s, out Sha512Hash result)) {
+            throw new FormatException($"Input span must represent exactly {HashSizeInBytes} bytes (128 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Tries to parse a hexadecimal string into a Sha512Hash.
+    /// </summary>
+    public static bool TryParse(string? s, out Sha512Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to parse a span of characters into a Sha512Hash.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, out Sha512Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
     /// Tries to create a Sha512Hash instance from a hexadecimal string representation.
     /// </summary>
     public static bool TryParse(HexString hex, out Sha512Hash result) {
@@ -122,6 +165,7 @@ public unsafe struct Sha512Hash
         result = new Sha512Hash(buffer);
         return true;
     }
+
     #endregion
 
     #region High-Performance Computation
@@ -361,7 +405,7 @@ public static partial class Sha512HashExtensions {
             if(stream.CanSeek) stream.Position = 0;
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(Sha512Hash.HashSizeInBytes);
-            
+
             try {
                 await SHA512.HashDataAsync(stream, buffer.AsMemory(0, Sha512Hash.HashSizeInBytes), cancellationToken);
 

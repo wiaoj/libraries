@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
-namespace Wiaoj.Primitives.Tests.Unit;
+namespace Wiaoj.Primitives.Tests.Unit.Hashing;
 public sealed class HmacSha256HashTests {
     // Testlerde kullanmak için rastgele byte dizisi üreten yardımcı metot
     private static byte[] GetRandomBytes(int length = 32) {

@@ -7,7 +7,10 @@ using Wiaoj.Samples.Primitives;
 // ─────────────────────────────────────────────────────────────────────────────
 // Wiaoj.Primitives — Kapsamlı Kullanım Örnekleri
 // ─────────────────────────────────────────────────────────────────────────────
-
+var x = NanoId.NewId(128);
+Console.WriteLine(x);
+Console.WriteLine(x.Value.Length);
+return;
 JsonSerializerOptions jsonOpts = new() { WriteIndented = true };
 
 PrintHeader("NON EMPTY STRING");
@@ -935,8 +938,8 @@ void RunHmacSha256HashExamples() {
     Console.WriteLine($"Base64Url: {b64url}");
 
     // FromHex / FromBase64 roundtrip
-    HmacSha256Hash fromHex = HmacSha256Hash.FromHex(hex);
-    HmacSha256Hash fromB64 = HmacSha256Hash.FromBase64(b64);
+    HmacSha256Hash fromHex = HmacSha256Hash.From(hex);
+    HmacSha256Hash fromB64 = HmacSha256Hash.From(b64);
     Console.WriteLine($"\nFromHex roundtrip: {hmac1 == fromHex}");
     Console.WriteLine($"FromBase64 roundtrip: {hmac1 == fromB64}");
 

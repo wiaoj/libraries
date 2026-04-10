@@ -284,6 +284,49 @@ public unsafe struct HmacSha256Hash
     }
 
     /// <summary>
+    /// Parses a hexadecimal string into a HmacSha256Hash.
+    /// </summary>
+    public static HmacSha256Hash Parse(string s) {
+        Preca.ThrowIfNull(s);
+        if(!TryParse(s, out HmacSha256Hash result)) {
+            throw new FormatException($"Input string must represent exactly {HashSizeInBytes} bytes (64 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a span of characters into a HmacSha256Hash. (Zero-allocation)
+    /// </summary>
+    public static HmacSha256Hash Parse(ReadOnlySpan<char> s) {
+        if(!TryParse(s, out HmacSha256Hash result)) {
+            throw new FormatException($"Input span must represent exactly {HashSizeInBytes} bytes (64 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Tries to parse a hexadecimal string into a HmacSha256Hash.
+    /// </summary>
+    public static bool TryParse(string? s, out HmacSha256Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to parse a span of characters into a HmacSha256Hash.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, out HmacSha256Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
     /// Tries to create a <see cref="HmacSha256Hash"/> from a <see cref="HexString"/>.
     /// </summary>
     /// <param name="hex">The hex-encoded string to parse.</param>

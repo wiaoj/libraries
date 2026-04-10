@@ -38,7 +38,7 @@ public unsafe struct Sha256Hash
     /// Represents a SHA256 hash consisting of all zero bytes.
     /// Equivalent to a 32-byte array filled with 0x00.
     /// </summary>
-    public static readonly Sha256Hash Empty = new(stackalloc byte[HashSizeInBytes]);
+    public static readonly Sha256Hash Empty = default;
 
     /// <summary>
     /// Creates a Sha256Hash instance from a 32-byte span.
@@ -106,6 +106,49 @@ public unsafe struct Sha256Hash
         buffer.Clear();
         bytes.CopyTo(buffer[(HashSizeInBytes - bytes.Length)..]);
         return new(buffer);
+    }
+
+    /// <summary>
+    /// Parses a hexadecimal string into a Sha256Hash.
+    /// </summary>
+    public static Sha256Hash Parse(string s) {
+        Preca.ThrowIfNull(s);
+        if(!TryParse(s, out Sha256Hash result)) {
+            throw new FormatException($"Input string must represent exactly {HashSizeInBytes} bytes (64 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a span of characters into a Sha256Hash. (Zero-allocation)
+    /// </summary>
+    public static Sha256Hash Parse(ReadOnlySpan<char> s) {
+        if(!TryParse(s, out Sha256Hash result)) {
+            throw new FormatException($"Input span must represent exactly {HashSizeInBytes} bytes (64 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Tries to parse a hexadecimal string into a Sha256Hash.
+    /// </summary>
+    public static bool TryParse(string? s, out Sha256Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to parse a span of characters into a Sha256Hash.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, out Sha256Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
     }
 
     /// <summary>

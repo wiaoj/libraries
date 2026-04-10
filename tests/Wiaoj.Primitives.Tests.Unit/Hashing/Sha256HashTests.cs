@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
-namespace Wiaoj.Primitives.Tests.Unit;
+namespace Wiaoj.Primitives.Tests.Unit.Hashing;
 public sealed class Sha256HashTests {
     private static byte[] GetRandomBytes(int length = 32) {
         byte[] buffer = new byte[length];

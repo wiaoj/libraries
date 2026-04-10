@@ -38,7 +38,7 @@ public unsafe struct Md5Hash
     /// <summary>
     /// Represents an MD5 hash consisting of all zero bytes.
     /// </summary>
-    public static readonly Md5Hash Empty = new(stackalloc byte[HashSizeInBytes]);
+    public static readonly Md5Hash Empty = default;
 
     /// <summary>
     /// Creates a Md5Hash instance from a 16-byte span.
@@ -107,6 +107,49 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
+    /// Parses a hexadecimal string into a Md5Hash.
+    /// </summary>
+    public static Md5Hash Parse(string s) {
+        Preca.ThrowIfNull(s);
+        if(!TryParse(s, out Md5Hash result)) {
+            throw new FormatException($"Input string must represent exactly {HashSizeInBytes} bytes (32 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a span of characters into a Md5Hash. (Zero-allocation)
+    /// </summary>
+    public static Md5Hash Parse(ReadOnlySpan<char> s) {
+        if(!TryParse(s, out Md5Hash result)) {
+            throw new FormatException($"Input span must represent exactly {HashSizeInBytes} bytes (32 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Tries to parse a hexadecimal string into a Md5Hash.
+    /// </summary>
+    public static bool TryParse(string? s, out Md5Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to parse a span of characters into a Md5Hash.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, out Md5Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
     /// Tries to create a Md5Hash instance from a hexadecimal string representation.
     /// </summary>
     public static bool TryParse(HexString hex, out Md5Hash result) {
@@ -116,13 +159,9 @@ public unsafe struct Md5Hash
         }
 
         Span<byte> buffer = stackalloc byte[HashSizeInBytes];
-        if(hex.TryDecode(buffer, out _)) {
-            result = new Md5Hash(buffer);
-            return true;
-        }
-
-        result = default;
-        return false;
+        hex.TryDecode(buffer, out _);
+        result = new Md5Hash(buffer);
+        return true;
     }
 
     #endregion
@@ -352,7 +391,7 @@ public static partial class Md5HashExtensions {
         /// <summary>
         /// Asynchronously computes the MD5 hash of a stream.
         /// </summary>
-        public static async ValueTask<Md5Hash> ComputeMd5Async(Stream stream, CancellationToken cancellationToken = default) {
+        public static async ValueTask<Md5Hash> ComputeAsync(Stream stream, CancellationToken cancellationToken = default) {
             Preca.ThrowIfNull(stream);
 
             if(stream.CanSeek) stream.Position = 0;

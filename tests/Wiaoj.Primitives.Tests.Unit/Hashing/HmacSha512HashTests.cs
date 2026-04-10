@@ -2,7 +2,7 @@
 using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
-namespace Wiaoj.Primitives.Tests.Unit;
+namespace Wiaoj.Primitives.Tests.Unit.Hashing;
 
 public sealed class HmacSha512HashTests {
     private static byte[] GetRandomBytes(int length = 32) {

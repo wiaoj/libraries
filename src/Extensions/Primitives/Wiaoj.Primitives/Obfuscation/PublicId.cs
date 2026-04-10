@@ -48,12 +48,11 @@ public readonly struct PublicId :
     }
 
     /// <summary>
-    /// Configures the global obfuscation logic with a pre-computed, secure <see cref="Sha256Hash"/>.
-    /// Recommended for maximum memory safety.
+    /// Configures the global obfuscation logic with a raw byte span.
     /// </summary>
-    public static void Configure(Sha256Hash seedHash) {
+    public static void Configure(ReadOnlySpan<byte> seedBytes) {
         lock(_configLock) {
-            _keys = IdCipher.DeriveKeys(seedHash);
+            _keys = IdCipher.DeriveKeys(seedBytes);
             _isConfigured = true;
         }
     }

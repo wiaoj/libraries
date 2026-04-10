@@ -286,6 +286,49 @@ public unsafe struct HmacSha512Hash
     }
 
     /// <summary>
+    /// Parses a hexadecimal string into a HmacSha512Hash.
+    /// </summary>
+    public static HmacSha512Hash Parse(string s) {
+        Preca.ThrowIfNull(s);
+        if(!TryParse(s, out HmacSha512Hash result)) {
+            throw new FormatException($"Input string must represent exactly {HashSizeInBytes} bytes (128 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a span of characters into a HmacSha512Hash. (Zero-allocation)
+    /// </summary>
+    public static HmacSha512Hash Parse(ReadOnlySpan<char> s) {
+        if(!TryParse(s, out HmacSha512Hash result)) {
+            throw new FormatException($"Input span must represent exactly {HashSizeInBytes} bytes (128 hex characters).");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Tries to parse a hexadecimal string into a HmacSha512Hash.
+    /// </summary>
+    public static bool TryParse(string? s, out HmacSha512Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to parse a span of characters into a HmacSha512Hash.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, out HmacSha512Hash result) {
+        if(HexString.TryParse(s, out HexString hex)) {
+            return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
     /// Tries to create a <see cref="HmacSha512Hash"/> from a <see cref="HexString"/>.
     /// </summary>
     /// <param name="hex">The hex-encoded string to parse.</param>

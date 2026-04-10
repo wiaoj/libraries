@@ -2,8 +2,8 @@
 using System.Text.Json;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
-namespace Wiaoj.Primitives.Tests.Unit;
-public sealed class HmacSha256HashJsonTests {
+namespace Wiaoj.Primitives.Tests.Unit.Hashing;
+public sealed class Sha256HashJsonTests {
     private static byte[] GetRandomBytes(int length = 32) {
         byte[] buffer = new byte[length];
         RandomNumberGenerator.Fill(buffer);
@@ -14,14 +14,13 @@ public sealed class HmacSha256HashJsonTests {
     public void Serialize_ShouldProduceHexString() {
         // Arrange
         byte[] bytes = GetRandomBytes(32);
-        var hash = new HmacSha256Hash(bytes);
+        var hash = new Sha256Hash(bytes);
         string expectedHex = Convert.ToHexString(bytes);
 
         // Act
         string json = JsonSerializer.Serialize(hash);
 
         // Assert
-        // JSON string içinde tırnaklarla gelir: "DEADBEEF..."
         Assert.Equal($"\"{expectedHex}\"", json);
     }
 
@@ -33,7 +32,7 @@ public sealed class HmacSha256HashJsonTests {
         string json = $"\"{hex}\"";
 
         // Act
-        var result = JsonSerializer.Deserialize<HmacSha256Hash>(json);
+        var result = JsonSerializer.Deserialize<Sha256Hash>(json);
 
         // Assert
         Assert.Equal(bytes, result.AsSpan().ToArray());
@@ -45,27 +44,27 @@ public sealed class HmacSha256HashJsonTests {
         string json = "null";
 
         // Act
-        var result = JsonSerializer.Deserialize<HmacSha256Hash>(json);
+        var result = JsonSerializer.Deserialize<Sha256Hash>(json);
 
         // Assert
-        Assert.Equal(HmacSha256Hash.Empty, result);
+        Assert.Equal(Sha256Hash.Empty, result);
     }
 
     [Theory]
-    [InlineData("\"ZZZZ\"")] // Geçersiz hex karakter
-    [InlineData("\"ABCD\"")] // Eksik uzunluk (64 char olmalı)
-    [InlineData("12345")]   // String değil
+    [InlineData("\"ZZZZ\"")]
+    [InlineData("\"ABCD\"")]
+    [InlineData("12345")]
     public void Deserialize_InvalidInput_ShouldThrowJsonException(string invalidJson) {
         // Act & Assert
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<HmacSha256Hash>(invalidJson));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Sha256Hash>(invalidJson));
     }
 
     [Fact]
     public void DictionaryKey_ShouldSerializeAsHexKey() {
         // Arrange
         byte[] bytes = GetRandomBytes(32);
-        var hash = new HmacSha256Hash(bytes);
-        var dict = new Dictionary<HmacSha256Hash, string>
+        var hash = new Sha256Hash(bytes);
+        var dict = new Dictionary<Sha256Hash, string>
         {
             { hash, "my-value" }
         };
@@ -74,7 +73,6 @@ public sealed class HmacSha256HashJsonTests {
         string json = JsonSerializer.Serialize(dict);
 
         // Assert
-        // Beklenen format: {"HEX_KEY":"my-value"}
         string expectedKey = Convert.ToHexString(bytes);
         Assert.Contains(expectedKey, json);
         Assert.Contains("my-value", json);
@@ -88,7 +86,7 @@ public sealed class HmacSha256HashJsonTests {
         string json = $"{{\"{hex}\": \"success\"}}";
 
         // Act
-        var dict = JsonSerializer.Deserialize<Dictionary<HmacSha256Hash, string>>(json);
+        var dict = JsonSerializer.Deserialize<Dictionary<Sha256Hash, string>>(json);
 
         // Assert
         Assert.NotNull(dict);

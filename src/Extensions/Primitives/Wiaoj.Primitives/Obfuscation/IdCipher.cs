@@ -1,6 +1,4 @@
 ﻿using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
-using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Primitives.Obfuscation;
@@ -16,21 +14,30 @@ internal static class IdCipher {
     private const uint GoldenRatioPrime = 2654435761u;
 
     /// <summary>
-    /// Derives round keys from a user seed string using SHA256.
+    /// Derives round keys from a user seed string using <see cref="Sha256Hash" />.
     /// This ensures high entropy even from weak passwords.
     /// </summary>
     public static uint[] DeriveKeys(string seed) {
         if(string.IsNullOrEmpty(seed))
             throw new ArgumentNullException(nameof(seed));
 
-        // Use SHA256 to expand the seed into 32 bytes
-        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
+        Sha256Hash hash = Sha256Hash.Compute(seed);
+        return DeriveKeys(hash.AsSpan());
+    }
 
-        // Create keys for the rounds (we need 'Rounds' keys)
-        // Since SHA256 gives 8 uints (32 bytes), and we typically need 4 rounds, we are safe.
+    /// <summary>
+    /// Derives round keys from a raw byte span.
+    /// Ensures no dependency on specific high-level hashing structures.
+    /// </summary>
+    public static uint[] DeriveKeys(ReadOnlySpan<byte> seedBytes) {
+        if(seedBytes.Length < Rounds * 4) {
+            throw new ArgumentException($"Seed span must be at least {Rounds * 4} bytes long to derive keys safely.");
+        }
+
         uint[] keys = new uint[Rounds];
         for(int i = 0; i < Rounds; i++) {
-            keys[i] = BitConverter.ToUInt32(hash, (i * 4) % hash.Length);
+            int offset = (i * 4) % seedBytes.Length;
+            keys[i] = BitConverter.ToUInt32(seedBytes.Slice(offset, 4));
         }
         return keys;
     }
