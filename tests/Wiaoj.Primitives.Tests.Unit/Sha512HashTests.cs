@@ -131,4 +131,34 @@ public sealed class Sha512HashTests {
     }
 
     #endregion 
+
+    #region Asenkron Stream (ComputeAsync) Testleri
+
+    [Fact]
+    public async Task ComputeAsync_ShouldMatchStandardDotNetSHA512_AndResetStreamPosition() {
+        // Arrange
+        byte[] data = Encoding.UTF8.GetBytes("async-stream-test-data-for-sha512");
+        using MemoryStream ms = new(data);
+        ms.Position = ms.Length;
+
+        // Act
+        Sha512Hash resultStruct = await Sha512Hash.ComputeAsync(ms);
+
+        // Assert
+        Assert.Equal(0, ms.Position);
+
+        byte[] expectedBytes = SHA512.HashData(data);
+        Assert.Equal(expectedBytes, resultStruct.AsSpan().ToArray());
+    }
+
+    [Fact]
+    public async Task ComputeAsync_NullStream_ShouldThrowArgumentNullException() {
+        // Arrange
+        Stream nullStream = null!;
+
+        // Act & Assert
+        await Assert.ThrowsAnyAsync<ArgumentNullException>(() => Sha512Hash.ComputeAsync(nullStream).AsTask());
+    }
+
+    #endregion
 }

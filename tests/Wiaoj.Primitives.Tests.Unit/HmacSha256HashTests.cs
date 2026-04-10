@@ -133,4 +133,40 @@ public sealed class HmacSha256HashTests {
     }
 
     #endregion 
+
+    #region Asenkron Stream (ComputeAsync) Testleri
+
+    [Fact]
+    public async Task ComputeAsync_ShouldMatchStandardDotNetHMAC_AndResetStreamPosition() {
+        // Arrange
+        byte[] keyBytes = GetRandomBytes(32);
+        using var key = Secret<byte>.From(keyBytes);
+        byte[] data = Encoding.UTF8.GetBytes("async-stream-test-data-for-hmac-256");
+
+        using MemoryStream ms = new(data);
+        // Stream'i bilerek sona alıyoruz ki metodun en başında Position = 0 yapıp yapmadığını görelim
+        ms.Position = ms.Length;
+
+        // Act
+        HmacSha256Hash resultStruct = await HmacSha256Hash.ComputeAsync(ms, key);
+
+        // Assert
+        // 1. İşlem bittiğinde stream başa sarılmış olmalı! (En önemli acceptance criteria)
+        Assert.Equal(0, ms.Position);
+
+        // 2. Hash sonucu .NET'in standardı ile aynı olmalı
+        byte[] expectedBytes = HMACSHA256.HashData(keyBytes, data);
+        Assert.Equal(expectedBytes, resultStruct.AsSpan().ToArray());
+    }
+
+    [Fact]
+    public async Task ComputeAsync_NullStream_ShouldThrowArgumentNullException() {
+        // Arrange
+        Stream nullStream = null!;
+        using var key = Secret<byte>.From(GetRandomBytes(32));
+
+        // Act & Assert
+        await Assert.ThrowsAnyAsync<ArgumentNullException>(() => HmacSha256Hash.ComputeAsync(nullStream, key).AsTask());
+    } 
+    #endregion
 }

@@ -41,7 +41,7 @@ public static class UnixTimestampExtensions {
     }
 
     // -------------------------------------------------------------------------
-    // FUTURE TIME HELPERS (GELECEK ZAMAN YARDIMCILARI)
+    // FUTURE TIME HELPERS
     // -------------------------------------------------------------------------
 
     /// <summary>

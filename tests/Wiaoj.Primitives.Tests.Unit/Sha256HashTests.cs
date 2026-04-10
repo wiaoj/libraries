@@ -128,5 +128,38 @@ public sealed class Sha256HashTests {
         Assert.Equal("ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB", result);
     }
 
-    #endregion 
+    #endregion
+     
+    #region Asenkron Stream (ComputeAsync) Testleri
+
+    [Fact]
+    public async Task ComputeAsync_ShouldMatchStandardDotNetSHA256_AndResetStreamPosition() {
+        // Arrange
+        byte[] data = Encoding.UTF8.GetBytes("async-stream-test-data-for-sha256");
+        using MemoryStream ms = new(data);
+        // Stream'i kasıtlı olarak en sona sarıyoruz
+        ms.Position = ms.Length;
+
+        // Act
+        Sha256Hash resultStruct = await Sha256Hash.ComputeAsync(ms);
+
+        // Assert
+        // 1. İşlem bittiğinde stream başa sarılmış olmalı
+        Assert.Equal(0, ms.Position);
+
+        // 2. Hash sonucu standart referansla aynı olmalı
+        byte[] expectedBytes = SHA256.HashData(data);
+        Assert.Equal(expectedBytes, resultStruct.AsSpan().ToArray());
+    }
+
+    [Fact]
+    public async Task ComputeAsync_NullStream_ShouldThrowArgumentNullException() {
+        // Arrange
+        Stream nullStream = null!;
+
+        // Act & Assert
+        await Assert.ThrowsAnyAsync<ArgumentNullException>(() => Sha256Hash.ComputeAsync(nullStream).AsTask());
+    }
+
+    #endregion
 }
