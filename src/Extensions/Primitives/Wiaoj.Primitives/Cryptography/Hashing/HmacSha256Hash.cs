@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -418,4 +419,49 @@ public unsafe struct HmacSha256Hash
         return !left.Equals(right);
     }
     #endregion
+}
+
+/// <summary>
+/// Extension methods for <see cref="HmacSha256Hash"/>.
+/// </summary>
+public static partial class HmacSha256HashExtensions {
+    extension(HmacSha256Hash) {
+        /// <summary>
+        /// Asynchronously computes the HMAC-SHA256 hash of a stream.
+        /// Ensures the stream is reset before and after computation, and manages memory securely.
+        /// </summary>
+        public static async ValueTask<HmacSha256Hash> ComputeAsync(
+            Stream stream,
+            Secret<byte> key,
+            CancellationToken cancellationToken = default) {
+            Preca.ThrowIfNull(stream);
+            Preca.ThrowIfNull(key);
+
+            if(stream.CanSeek) stream.Position = 0;
+
+            int keyLength = key.Expose(k => k.Length);
+            byte[] keyBuffer = ArrayPool<byte>.Shared.Rent(keyLength);
+
+            byte[] hashBuffer = ArrayPool<byte>.Shared.Rent(HmacSha256Hash.HashSizeInBytes);
+
+            try {
+                key.Expose(k => k.CopyTo(keyBuffer));
+
+                await HMACSHA256.HashDataAsync(
+                    new ReadOnlyMemory<byte>(keyBuffer, 0, keyLength),
+                    stream,
+                    hashBuffer.AsMemory(0, HmacSha256Hash.HashSizeInBytes),
+                    cancellationToken);
+
+                if(stream.CanSeek) stream.Position = 0;
+
+                return new HmacSha256Hash(hashBuffer.AsSpan(0, HmacSha256Hash.HashSizeInBytes));
+            }
+            finally {
+                CryptographicOperations.ZeroMemory(keyBuffer.AsSpan(0, keyLength));
+                ArrayPool<byte>.Shared.Return(keyBuffer);
+                ArrayPool<byte>.Shared.Return(hashBuffer);
+            }
+        }
+    }
 }

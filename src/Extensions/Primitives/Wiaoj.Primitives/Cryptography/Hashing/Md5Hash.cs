@@ -348,18 +348,27 @@ public unsafe struct Md5Hash
 /// Extension methods for <see cref="Md5Hash"/>.
 /// </summary>
 public static partial class Md5HashExtensions {
+    extension(Md5Hash) {
+        /// <summary>
+        /// Asynchronously computes the MD5 hash of a stream.
+        /// </summary>
+        public static async ValueTask<Md5Hash> ComputeMd5Async(Stream stream, CancellationToken cancellationToken = default) {
+            Preca.ThrowIfNull(stream);
 
-    /// <summary>
-    /// Asynchronously computes the MD5 hash of a stream.
-    /// </summary>
-    public static async ValueTask<Md5Hash> ComputeMd5Async(this Stream stream, CancellationToken cancellationToken = default) {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(Md5Hash.HashSizeInBytes);
-        try {
-            await MD5.HashDataAsync(stream, buffer.AsMemory(0, Md5Hash.HashSizeInBytes), cancellationToken);
-            return new Md5Hash(buffer.AsSpan(0, Md5Hash.HashSizeInBytes));
-        }
-        finally {
-            ArrayPool<byte>.Shared.Return(buffer);
+            if(stream.CanSeek) stream.Position = 0;
+
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(Md5Hash.HashSizeInBytes);
+
+            try {
+                await MD5.HashDataAsync(stream, buffer.AsMemory(0, Md5Hash.HashSizeInBytes), cancellationToken);
+
+                if(stream.CanSeek) stream.Position = 0;
+
+                return new Md5Hash(buffer.AsSpan(0, Md5Hash.HashSizeInBytes));
+            }
+            finally {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
     }
 }

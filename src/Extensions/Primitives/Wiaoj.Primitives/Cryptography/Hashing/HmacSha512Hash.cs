@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Buffers;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -421,4 +422,47 @@ public unsafe struct HmacSha512Hash
     }
 
     #endregion
+}
+
+/// <summary>
+/// Extension methods for <see cref="HmacSha512Hash"/>.
+/// </summary>
+public static partial class HmacSha512HashExtensions {
+    extension(HmacSha512Hash) {
+        /// <summary>
+        /// Asynchronously computes the HMAC-SHA512 hash of a stream.
+        /// Ensures the stream is reset before and after computation, and manages memory securely.
+        /// </summary>
+        public static async ValueTask<HmacSha512Hash> ComputeAsync(Stream stream,
+                                                                   Secret<byte> key,
+                                                                   CancellationToken cancellationToken = default) {
+            Preca.ThrowIfNull(stream);
+            Preca.ThrowIfNull(key);
+
+            if(stream.CanSeek) stream.Position = 0;
+
+            int keyLength = key.Expose(k => k.Length);
+            byte[] keyBuffer = ArrayPool<byte>.Shared.Rent(keyLength);
+            byte[] hashBuffer = ArrayPool<byte>.Shared.Rent(HmacSha512Hash.HashSizeInBytes);
+
+            try {
+                key.Expose(k => k.CopyTo(keyBuffer));
+
+                await HMACSHA512.HashDataAsync(
+                    new ReadOnlyMemory<byte>(keyBuffer, 0, keyLength),
+                    stream,
+                    hashBuffer.AsMemory(0, HmacSha512Hash.HashSizeInBytes),
+                    cancellationToken);
+
+                if(stream.CanSeek) stream.Position = 0;
+
+                return new HmacSha512Hash(hashBuffer.AsSpan(0, HmacSha512Hash.HashSizeInBytes));
+            }
+            finally {
+                CryptographicOperations.ZeroMemory(keyBuffer.AsSpan(0, keyLength));
+                ArrayPool<byte>.Shared.Return(keyBuffer);
+                ArrayPool<byte>.Shared.Return(hashBuffer);
+            }
+        }
+    }
 }

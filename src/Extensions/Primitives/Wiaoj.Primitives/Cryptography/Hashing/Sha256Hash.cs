@@ -356,9 +356,15 @@ public static partial class Sha256HashExtensions {
         /// This method does not use the 'async' keyword directly to remain compatible with the 'unsafe' struct context.
         /// </summary>
         public static async ValueTask<Sha256Hash> ComputeAsync(Stream stream, CancellationToken cancellationToken = default) {
+            Preca.ThrowIfNull(stream);
+
+            if(stream.CanSeek) stream.Position = 0;
+
             byte[] buffer = ArrayPool<byte>.Shared.Rent(Sha256Hash.HashSizeInBytes);
             try {
-                int bytesWritten = await SHA256.HashDataAsync(stream, buffer.AsMemory(0, Sha256Hash.HashSizeInBytes), cancellationToken);
+                await SHA256.HashDataAsync(stream, buffer.AsMemory(0, Sha256Hash.HashSizeInBytes), cancellationToken);
+
+                if(stream.CanSeek) stream.Position = 0;
 
                 return new Sha256Hash(buffer.AsSpan(0, Sha256Hash.HashSizeInBytes));
             }
