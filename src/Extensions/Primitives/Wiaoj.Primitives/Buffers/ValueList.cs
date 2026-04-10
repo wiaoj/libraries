@@ -1,6 +1,5 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -28,10 +27,10 @@ public ref struct ValueList<T> where T : notnull {
     private int _pos;
 
     /// <summary>Gets a value indicating whether the list is empty.</summary>
-    public readonly bool IsEmpty => _pos == 0;
+    public readonly bool IsEmpty => this._pos == 0;
 
     /// <summary>Gets the number of remaining slots in the current buffer before a resize is required.</summary>
-    public readonly int RemainingCapacity => _span.Length - _pos;
+    public readonly int RemainingCapacity => this._span.Length - this._pos;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ValueList{T}"/> using the provided buffer.
@@ -54,7 +53,9 @@ public ref struct ValueList<T> where T : notnull {
     /// Returns a <see cref="Span{T}"/> representing the active elements of the list.
     /// </summary>
     /// <returns>A span containing the current items.</returns>
-    public readonly Span<T> AsSpan() => this._span[..this._pos];
+    public readonly Span<T> AsSpan() {
+        return this._span[..this._pos];
+    }
 
     /// <summary>
     /// Adds an item to the list. Grows the internal buffer if necessary.
@@ -92,16 +93,16 @@ public ref struct ValueList<T> where T : notnull {
     /// </summary>
     /// <param name="items">The span of items to add.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddRange(ReadOnlySpan<T> items) {
+    public void AddRange(params ReadOnlySpan<T> items) {
         if(items.IsEmpty) return;
 
-        int requiredCapacity = _pos + items.Length;
-        if((uint)requiredCapacity > (uint)_span.Length) {
+        int requiredCapacity = this._pos + items.Length;
+        if((uint)requiredCapacity > (uint)this._span.Length) {
             Grow(requiredCapacity);
         }
 
-        items.CopyTo(_span[_pos..]);
-        _pos += items.Length;
+        items.CopyTo(this._span[this._pos..]);
+        this._pos += items.Length;
     }
 
     /// <summary>
@@ -110,7 +111,7 @@ public ref struct ValueList<T> where T : notnull {
     /// <param name="capacity">The minimum capacity required.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void EnsureCapacity(int capacity) {
-        if(capacity > _span.Length) {
+        if(capacity > this._span.Length) {
             Grow(capacity);
         }
     }
@@ -146,11 +147,11 @@ public ref struct ValueList<T> where T : notnull {
     /// <exception cref="InvalidOperationException">Thrown if the list is empty.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T Pop() {
-        if(_pos == 0) throw new InvalidOperationException("List is empty.");
-        _pos--;
-        T item = _span[_pos];
+        if(this._pos == 0) throw new InvalidOperationException("List is empty.");
+        this._pos--;
+        T item = this._span[this._pos];
         if(RuntimeHelpers.IsReferenceOrContainsReferences<T>()) {
-            _span[_pos] = default!;
+            this._span[this._pos] = default!;
         }
         return item;
     }
@@ -162,7 +163,7 @@ public ref struct ValueList<T> where T : notnull {
     /// <returns><see langword="true"/> if the item was successfully removed; otherwise, <see langword="false"/>.</returns>
     /// <remarks>This is an O(n) operation using vectorized search where available.</remarks>
     public bool Remove(T item) {
-        int index = this.AsSpan().IndexOf(item);
+        int index = AsSpan().IndexOf(item);
         if(index >= 0) {
             RemoveAt(index);
             return true;
@@ -176,13 +177,13 @@ public ref struct ValueList<T> where T : notnull {
     /// <param name="index">The zero-based index of the element to remove.</param>
     /// <exception cref="IndexOutOfRangeException">Thrown if the index is out of range.</exception>
     public void RemoveAt(int index) {
-        if((uint)index >= (uint)_pos) throw new IndexOutOfRangeException();
-        _pos--;
-        if(index < _pos) {
-            _span[(index + 1)..(_pos + 1)].CopyTo(_span[index..]);
+        if((uint)index >= (uint)this._pos) throw new IndexOutOfRangeException();
+        this._pos--;
+        if(index < this._pos) {
+            this._span[(index + 1)..(this._pos + 1)].CopyTo(this._span[index..]);
         }
         if(RuntimeHelpers.IsReferenceOrContainsReferences<T>()) {
-            _span[_pos] = default!;
+            this._span[this._pos] = default!;
         }
     }
 
@@ -200,8 +201,8 @@ public ref struct ValueList<T> where T : notnull {
     /// <param name="item">The item to add.</param>
     /// <returns><see langword="true"/> if the item was added; <see langword="false"/> if the buffer is full.</returns>
     public bool TryAdd(T item) {
-        if((uint)_pos < (uint)_span.Length) {
-            _span[_pos++] = item;
+        if((uint)this._pos < (uint)this._span.Length) {
+            this._span[this._pos++] = item;
             return true;
         }
         return false;
@@ -213,14 +214,14 @@ public ref struct ValueList<T> where T : notnull {
     /// <param name="index">The zero-based index at which the item should be inserted.</param>
     /// <param name="item">The item to insert.</param>
     public void Insert(int index, T item) {
-        if((uint)index > (uint)_pos) throw new IndexOutOfRangeException();
-        if(_pos == _span.Length) Grow(_pos + 1);
+        if((uint)index > (uint)this._pos) throw new IndexOutOfRangeException();
+        if(this._pos == this._span.Length) Grow(this._pos + 1);
 
-        if(index < _pos) {
-            _span[index.._pos].CopyTo(_span[(index + 1)..]);
+        if(index < this._pos) {
+            this._span[index..this._pos].CopyTo(this._span[(index + 1)..]);
         }
-        _span[index] = item;
-        _pos++;
+        this._span[index] = item;
+        this._pos++;
     }
 
     /// <summary>
@@ -229,14 +230,14 @@ public ref struct ValueList<T> where T : notnull {
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose() {
-        T[]? toReturn = _rented;
+        T[]? toReturn = this._rented;
         if(toReturn != null) {
-            _rented = null;
-            _span = default;
+            this._rented = null;
+            this._span = default;
             ArrayPool<T>.Shared.Return(toReturn, clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>());
         }
         else if(RuntimeHelpers.IsReferenceOrContainsReferences<T>()) {
-            _span[.._pos].Clear();
+            this._span[..this._pos].Clear();
         }
     }
 
@@ -251,7 +252,9 @@ public ref struct ValueList<T> where T : notnull {
     }
 
     /// <summary>Returns an enumerator that iterates through the list.</summary>
-    public readonly Span<T>.Enumerator GetEnumerator() => this._span[..this._pos].GetEnumerator();
+    public readonly Span<T>.Enumerator GetEnumerator() {
+        return this._span[..this._pos].GetEnumerator();
+    }
 
     /// <summary>
     /// Projects each element of the list into a new form and writes them to the destination span.
@@ -260,7 +263,7 @@ public ref struct ValueList<T> where T : notnull {
     /// <param name="destination">The destination span to write results.</param>
     /// <param name="selector">A transform function to apply to each element.</param>
     public readonly void Select<TResult>(Span<TResult> destination, Func<T, TResult> selector) {
-        var source = AsSpan();
+        Span<T> source = AsSpan();
         int limit = Math.Min(source.Length, destination.Length);
         for(int i = 0; i < limit; i++) {
             destination[i] = selector(source[i]);
@@ -278,10 +281,14 @@ public ref struct ValueList<T> where T : notnull {
     }
 
     /// <summary>Implicitly converts the list to a <see cref="ReadOnlySpan{T}"/>.</summary>
-    public static implicit operator ReadOnlySpan<T>(ValueList<T> list) => list.AsSpan();
+    public static implicit operator ReadOnlySpan<T>(ValueList<T> list) {
+        return list.AsSpan();
+    }
 
     /// <summary>Implicitly converts the list to a <see cref="Span{T}"/>.</summary>
-    public static implicit operator Span<T>(ValueList<T> list) => list.AsSpan();
+    public static implicit operator Span<T>(ValueList<T> list) {
+        return list.AsSpan();
+    }
 
     /// <summary>
     /// A zero-allocation enumerator that projects elements lazily.
@@ -293,18 +300,22 @@ public ref struct ValueList<T> where T : notnull {
         private int _index;
 
         internal SelectEnumerator(Span<T> source, Func<T, TResult> selector) {
-            _source = source;
-            _selector = selector;
-            _index = -1;
+            this._source = source;
+            this._selector = selector;
+            this._index = -1;
         }
 
         /// <summary>Advances the enumerator to the next element.</summary>
-        public bool MoveNext() => ++_index < _source.Length;
+        public bool MoveNext() {
+            return ++this._index < this._source.Length;
+        }
 
         /// <summary>Gets the element at the current position of the enumerator.</summary>
-        public readonly TResult Current => _selector(_source[_index]);
+        public readonly TResult Current => this._selector(this._source[this._index]);
 
         /// <summary>Returns the enumerator itself for use in foreach loops.</summary>
-        public readonly SelectEnumerator<TResult> GetEnumerator() => this;
+        public readonly SelectEnumerator<TResult> GetEnumerator() {
+            return this;
+        }
     }
 }

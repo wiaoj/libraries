@@ -141,6 +141,17 @@ public readonly partial record struct NanoId :
         return new NanoId(result);
     }
 
+    /// <summary>
+    /// Generates a new cryptographically secure NanoId directly into the destination span without heap allocation.
+    /// </summary>
+    public static bool TryGenerate(Span<char> destination, int length = DefaultLength) {
+        if(length is <= 0 or > MaxAllowedLength) return false;
+        if(destination.Length < length) return false;
+
+        RandomNumberGenerator.GetItems(Alphabet, destination[..length]);
+        return true;
+    }
+
     // -------------------------------------------------------------------------
     // PARSING
     // -------------------------------------------------------------------------
@@ -208,6 +219,41 @@ public readonly partial record struct NanoId :
 
         result = new NanoId(s.ToString());
         return true;
+    }
+
+    /// <summary>
+    /// Writes the NanoId value as UTF-8 bytes into the destination span.
+    /// </summary>
+    public bool TryWriteUtf8(Span<byte> destination, out int bytesWritten) {
+        bytesWritten = 0;
+        if(string.IsNullOrEmpty(this._value)) return true;
+        if(destination.Length < this._value.Length) return false;
+
+        // NanoId karakterleri URL-safe (ASCII) olduğu için doğrudan cast edilebilir
+        // Ancak en güvenli ve hızlı yol System.Text.Unicode.Utf8 kullanmaktır.
+        System.Text.Unicode.Utf8.FromUtf16(this._value, destination, out _, out bytesWritten);
+        return true;
+    }
+    
+    /// <summary>
+     /// Returns a ReadOnlySpan representation of the identifier.
+     /// </summary>
+    public ReadOnlySpan<char> AsSpan() => this._value.AsSpan();
+
+    /// <summary>
+    /// Allows the NanoId to be used in 'fixed' statements.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public ref readonly char GetPinnableReference() => ref this._value.GetPinnableReference();
+
+    /// <summary>
+    /// Writes the NanoId directly to the provided buffer writer.
+    /// </summary>
+    public void WriteTo(IBufferWriter<char> writer) {
+        if(string.IsNullOrEmpty(this._value)) return;
+        Span<char> span = writer.GetSpan(this._value.Length);
+        this._value.CopyTo(span);
+        writer.Advance(this._value.Length);
     }
 
     // -------------------------------------------------------------------------

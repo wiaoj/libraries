@@ -1,31 +1,35 @@
 ﻿using System.Text;
+using Wiaoj.Primitives.Obfuscation;
 
 namespace Wiaoj.Primitives.Tests.Unit.Obfuscation;
-public sealed class PublicIdParsingTests {
-    public PublicIdParsingTests() => PublicId.Configure("Parsing-Test-Seed");
+public sealed class OpaqueIdParsingTests {
+    public OpaqueIdParsingTests() {
+        OpaqueId.Configure(new FeistelBase62Obfuscator(new() { Seed = "1234567890123456"u8.ToArray() }));
+    }
+     
 
     [Fact]
     public void Parse_Utf8_Bytes_Should_Be_Zero_Alloc_And_Correct() {
-        PublicId original = new(555666777L);
+        OpaqueId original = new(555666777L);
         byte[] utf8Bytes = Encoding.UTF8.GetBytes(original.ToString());
 
-        PublicId decoded = PublicId.Parse(utf8Bytes);
+        OpaqueId decoded = OpaqueId.Parse(utf8Bytes);
         Assert.Equal(original, decoded);
     }
 
     [Fact]
     public void TryParse_Zero_String_Should_Return_Empty() {
-        Assert.True(PublicId.TryParse("0", out var result));
-        Assert.Equal(PublicId.Empty, result);
+        Assert.True(OpaqueId.TryParse("0", out var result));
+        Assert.Equal(OpaqueId.Empty, result);
     }
 
     [Fact]
     public void TryFormat_Should_Fill_Span_Directly() {
-        PublicId pid = new(Guid.NewGuid());
+        OpaqueId pid = new(Guid.NewGuid());
         Span<char> buffer = stackalloc char[64];
 
         Assert.True(pid.TryFormat(buffer, out int written, default, null));
-        Assert.Equal(pid, PublicId.Parse(buffer[..written]));
+        Assert.Equal(pid, OpaqueId.Parse(buffer[..written]));
     }
 
     [Theory]
@@ -33,6 +37,6 @@ public sealed class PublicIdParsingTests {
     [InlineData("zzzzzzzzzzzzzzzzzzzzzzz")]
     [InlineData("abc!def")]
     public void Parse_Invalid_Format_Should_Throw_FormatException(string invalidInput) {
-        Assert.Throws<FormatException>(() => PublicId.Parse(invalidInput));
+        Assert.Throws<FormatException>(() => OpaqueId.Parse(invalidInput));
     }
 }

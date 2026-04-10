@@ -307,7 +307,7 @@ public readonly struct SnowflakeId :
             return false;
         }
 
-        BinaryPrimitives.WriteInt64BigEndian(destination, this._value);
+        BinaryPrimitives.WriteInt64BigEndian(destination, this._value); 
         return true;
     }
 
@@ -588,7 +588,6 @@ public readonly struct SnowflakeId :
         return left._value >= right._value;
     }
 
-    public static explicit operator UnixTimestamp(SnowflakeId id) => id.ToUnixTimestamp();
-
+    public static explicit operator UnixTimestamp(SnowflakeId id) => id.ToUnixTimestamp(); 
     #endregion
 }

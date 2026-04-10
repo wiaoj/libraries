@@ -72,8 +72,9 @@ public class SpanSplitterBenchmark {
     [Benchmark(Description = "Wiaoj Splitter (Short)")]
     public int WiaojSplitter_Short() {
         int sum = 0;
+        ReadOnlySpan<char> span = this._shortText.AsSpan();
         // Senin yazdığın struct
-        foreach(var part in this._shortText!.SplitValue(Separator)) {
+        foreach(var part in span.SplitValue(Separator)) {
             sum += part.Value.Length;
         }
         return sum;
@@ -95,8 +96,23 @@ public class SpanSplitterBenchmark {
     [Benchmark(Description = "Wiaoj Splitter (Long)")]
     public int WiaojSplitter_Long() {
         int sum = 0;
-        foreach(var part in this._longText.AsSpan().SplitValue(Separator)) {
+        ReadOnlySpan<char> span = this._longText.AsSpan();
+
+        foreach(var part in span.SplitValue(Separator)) {
             sum += part.Value.Length;
+        }
+        return sum;
+    }
+
+    [Benchmark(Description = ".NET Span.Split (Long)")]
+    public int DotNetSpanSplit_Long() {
+        int sum = 0;
+        ReadOnlySpan<char> span = this._longText.AsSpan();
+
+        // .NET yerleşik Span Split (Range döndürür, biraz daha maliyetli olabilir)
+        foreach(var range in span.Split(Separator)) {
+            // Range'i kullanarak slice alıyoruz
+            sum += span[range].Length;
         }
         return sum;
     }

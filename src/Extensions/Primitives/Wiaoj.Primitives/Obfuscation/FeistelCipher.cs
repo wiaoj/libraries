@@ -6,7 +6,7 @@ namespace Wiaoj.Primitives.Obfuscation;
 /// A generalized, stateless Feistel Cipher implementation for 64-bit and 128-bit integers.
 /// Used to scramble sequential IDs into random-looking numbers while preserving their bit length.
 /// </summary>
-internal static class IdCipher {
+internal static class FeistelCipher {
     private const int Rounds = 4; // Balance between security and performance (3 is min, 4 is good)
 
     // Golden Ratio constant for better bit distribution (phi)
@@ -17,9 +17,8 @@ internal static class IdCipher {
     /// Derives round keys from a user seed string using <see cref="Sha256Hash" />.
     /// This ensures high entropy even from weak passwords.
     /// </summary>
-    public static uint[] DeriveKeys(string seed) {
-        if(string.IsNullOrEmpty(seed))
-            throw new ArgumentNullException(nameof(seed));
+    public static uint[] DeriveKeys(string seed) { 
+        Preca.ThrowIfNullOrEmpty(seed);
 
         Sha256Hash hash = Sha256Hash.Compute(seed);
         return DeriveKeys(hash.AsSpan());
@@ -30,9 +29,10 @@ internal static class IdCipher {
     /// Ensures no dependency on specific high-level hashing structures.
     /// </summary>
     public static uint[] DeriveKeys(ReadOnlySpan<byte> seedBytes) {
-        if(seedBytes.Length < Rounds * 4) {
-            throw new ArgumentException($"Seed span must be at least {Rounds * 4} bytes long to derive keys safely.");
-        }
+        Preca.ThrowIfLessThan(
+            argument: seedBytes.Length,
+            minimum: Rounds * 4, 
+            () => new ArgumentException($"Seed span must be at least {Rounds * 4} bytes long to derive keys safely."));
 
         uint[] keys = new uint[Rounds];
         for(int i = 0; i < Rounds; i++) {
@@ -46,7 +46,7 @@ internal static class IdCipher {
     /// Scrambles a 64-bit integer (reversible).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Encrypt64(ulong value, uint[] keys) {
+    public static ulong Encrypt64(ulong value, ReadOnlySpan<uint> keys) {
         uint left = (uint)(value >> 32);
         uint right = (uint)value;
 
@@ -65,7 +65,7 @@ internal static class IdCipher {
     /// Unscrambles a 64-bit integer.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Decrypt64(ulong value, uint[] keys) {
+    public static ulong Decrypt64(ulong value, ReadOnlySpan<uint> keys) {
         uint left = (uint)value;
         uint right = (uint)(value >> 32);
 
@@ -86,7 +86,7 @@ internal static class IdCipher {
     /// Scrambles a 128-bit integer (reversible).
     /// Uses a "Wide Block" approach treating 64-bit halves as the L/R blocks.
     /// </summary>
-    public static Int128 Encrypt128(Int128 value, uint[] keys) {
+    public static Int128 Encrypt128(Int128 value, ReadOnlySpan<uint> keys) {
         ulong left = (ulong)(value >> 64);
         ulong right = (ulong)value;
 
@@ -99,7 +99,7 @@ internal static class IdCipher {
         return ((Int128)right << 64) | left;
     }
 
-    public static Int128 Decrypt128(Int128 value, uint[] keys) {
+    public static Int128 Decrypt128(Int128 value, ReadOnlySpan<uint> keys) {
         ulong left = (ulong)value;
         ulong right = (ulong)(value >> 64);
 

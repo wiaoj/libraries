@@ -7,7 +7,6 @@
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Wiaoj.Samples.DistributedCounter/Wiaoj.Samples.DistributedCounter.csproj" />
-    <Project Path="samples/Wiaoj.Samples.Mediator/Wiaoj.Samples.Mediator.csproj" Id="6c3fda77-a127-4686-b656-9f2a21a27964" />
     <Project Path="samples/Wiaoj.Samples.Primitives/Wiaoj.Samples.Primitives.csproj" Id="7f7ef88f-3ab9-4333-a7cf-f493f9c04b58" />
   </Folder>
   <Folder Name="/src/" />

@@ -78,6 +78,9 @@ public class IdGenerationBenchmark {
 
     // YENİ: NanoId Üretimi (Secure Random + String Allocation)
     [BenchmarkCategory("Generation"), Benchmark]
+    public GuidV7 Wiaoj_GuidV7_New() => GuidV7.Create();
+
+    [BenchmarkCategory("Generation"), Benchmark]
     public NanoId Wiaoj_NanoId_New() => NanoId.NewId();
 
     [BenchmarkCategory("Generation"), Benchmark]

@@ -12,8 +12,8 @@ namespace Wiaoj.Benchmarks.Primitives;
 [MemoryDiagnoser] // Bellek kullanımını ölçer
 [RankColumn]      // Hız sıralaması yapar
 public class PublicIdBenchmark {
-    private PublicId _snowflakePublicId;
-    private PublicId _guidPublicId;
+    private OpaqueId _snowflakePublicId;
+    private OpaqueId _guidPublicId;
     private string _snowflakePublicString;
     private byte[] _snowflakePublicUtf8Bytes;
 
@@ -26,14 +26,14 @@ public class PublicIdBenchmark {
     [GlobalSetup]
     public void Setup() {
         // Konfigürasyon
-        PublicId.Configure("Wiaoj-Super-Secret-Key-2025");
+        OpaqueId.Configure("Wiaoj-Super-Secret-Key-2025");
         SnowflakeId.Configure(1);
 
         _rawSnowflake = SnowflakeId.NewId();
         _rawGuid = Guid.NewGuid();
 
-        _snowflakePublicId = new PublicId(_rawSnowflake);
-        _guidPublicId = new PublicId(_rawGuid);
+        _snowflakePublicId = new OpaqueId(_rawSnowflake);
+        _guidPublicId = new OpaqueId(_rawGuid);
 
         // Parse testleri için önceden encode edilmiş veriler
         _snowflakePublicString = _snowflakePublicId.ToString();
@@ -69,16 +69,16 @@ public class PublicIdBenchmark {
     // =========================================================================
 
     [Benchmark]
-    public PublicId PublicId_Parse_String() {
-        return PublicId.Parse(_snowflakePublicString);
+    public OpaqueId PublicId_Parse_String() {
+        return OpaqueId.Parse(_snowflakePublicString);
     }
 
     /// <summary>
     /// IUtf8SpanParsable sayesinde byte[] -> string dönüşümü yapmadan doğrudan parse.
     /// </summary>
     [Benchmark]
-    public PublicId PublicId_Parse_Utf8_ZeroAlloc() {
-        return PublicId.Parse(_snowflakePublicUtf8Bytes);
+    public OpaqueId PublicId_Parse_Utf8_ZeroAlloc() {
+        return OpaqueId.Parse(_snowflakePublicUtf8Bytes);
     }
 
     // =========================================================================
@@ -102,6 +102,6 @@ public class PublicIdBenchmark {
     }
 
     public class IdContainer {
-        public PublicId Id { get; set; }
+        public OpaqueId Id { get; set; }
     }
 }

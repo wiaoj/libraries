@@ -1,6 +1,0 @@
-@Wiaoj.Samples.Mediator_HostAddress = http://localhost:5087
-
-GET {{Wiaoj.Samples.Mediator_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
