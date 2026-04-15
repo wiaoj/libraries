@@ -1,206 +1,224 @@
-﻿# Wiaoj.Primitives
+﻿Here is a highly detailed, professional, and strictly technical `README.md`. All emojis have been removed, the tone is purely engineering-focused, and all experimental buffer structures have been excluded. It explains the "why" and "how" for each feature in depth.
 
-**Wiaoj.Primitives** is a high-performance, security-focused .NET library engineered to eliminate "Primitive Obsession" in domain-driven applications. It replaces generic primitives (`string`, `byte[]`, `double`, `long`) with strongly-typed, validation-guaranteed value objects.
+---
 
-Designed for **.NET 10** and beyond, it leverages advanced runtime features like `ref structs`, `Span<T>`, `unsafe` memory manipulation, SIMD vectorization, and pinned memory to deliver zero-allocation performance with military-grade security.
+# Wiaoj.Primitives
 
-## 🌟 Why Use Wiaoj.Primitives?
+**Wiaoj.Primitives** is a high-performance, security-focused .NET foundation library engineered to eliminate **Primitive Obsession** in domain-driven applications. 
 
-*   **🛡️ Secure Memory:** `Secret<T>` keeps sensitive data (keys, passwords) in unmanaged, pinned memory. It is immune to GC relocation, prevents memory dump leaks, and guarantees deterministic zeroing (shredding) upon disposal.
-*   **❄️ Distributed Identity:** Use `SnowflakeId` for generating k-sorted, 64-bit unique IDs without database coordination. Perfect for distributed systems.
-*   **🚀 Zero-Allocation:** Parsing methods (`Parse`, `TryParse`) use `ReadOnlySpan<char>` and `ReadOnlySpan<byte>` to process data directly from network buffers without string allocation overhead.
-*   **📦 Type Safety:** Eliminate errors like passing a Base64 string into a Hex parameter. Types like `Base64String`, `HexString`, and `Base32String` guarantee format validity at the type level.
-*   **⚡ Modern Optimizations:** SIMD-accelerated validation using `.NET 8 SearchValues`, lock-free concurrency, and `stackalloc` optimizations.
+In standard .NET development, developers frequently rely on generic primitives (`string`, `byte[]`, `double`, `long`) to represent complex domain concepts like cryptographic keys, identifiers, semantic versions, and encoded payloads. This leads to defensive coding, memory leaks in the managed heap, and severe performance bottlenecks.
 
-## 📦 Installation
+This library replaces these generic types with self-validating, strongly-typed value objects. Designed for modern .NET, it heavily utilizes `ref struct`, `Span<T>`, SIMD vectorization (`SearchValues<T>`), fixed-size buffers, and unmanaged memory manipulation to deliver zero-allocation performance and cryptographic-grade security.
+
+## Installation & Requirements
 
 ```bash
 dotnet add package Wiaoj.Primitives
 ```
 
-> **Note:** This library requires `AllowUnsafeBlocks` to be enabled in your `.csproj` for advanced memory manipulation.
+## 1. Secure Memory Management (`Secret<T>`)
 
----
+Standard .NET types like `string` and `byte[]` are managed by the Garbage Collector (GC). They are immutable, meaning any modification creates a copy, and they linger in memory until a GC cycle collects them. This makes them highly vulnerable to memory dumps and timing attacks.
 
-## ❄️ Distributed Identity (`SnowflakeId`)
-
-A high-performance, lock-free implementation of the Twitter Snowflake algorithm. Generates 64-bit unique IDs that are roughly sorted by time.
-
-*   **Thread-Safe:** Uses `Interlocked` operations for lock-free generation.
-*   **Crash Resistant:** Handles system clock rollbacks and sequence overflows gracefully.
-*   **Interoperable:** Native support for `Hex`, `Base62`, `Base64`, and `Urn` formats.
-
-```csharp
-using Wiaoj.Primitives.Snowflake;
-
-// 1. Configure once (e.g., in Program.cs)
-SnowflakeId.Configure(nodeId: 1);
-
-// 2. Generate ID (Allocates nothing, just returns a struct wrapping a long)
-SnowflakeId id = SnowflakeId.NewId(); 
-Console.WriteLine(id); // "123456789012345678"
-
-// 3. Convert to efficient formats
-Console.WriteLine(id.ToHexString());    // "1B6F..."
-Console.WriteLine(id.ToBase62String()); // "3k7Za..." (URL-Shortener friendly)
-```
-
-### `Urn` (Uniform Resource Name)
-Implements RFC 8141 for identifying resources in microservices.
-
-```csharp
-// Type-safe creation
-Urn userUrn = Urn.Create("user", SnowflakeId.NewId());
-Console.WriteLine(userUrn); // "urn:user:123456789..."
-
-// Zero-allocation parsing
-if (Urn.TryParse("urn:order:55", null, out Urn orderUrn)) {
-    Console.WriteLine(orderUrn.Namespace.ToString()); // "order"
-}
-```
-
----
-
-## 🔒 Secure Memory (`Secret<T>`)
-
-Never store passwords, API keys, or encryption keys in standard `string` or `byte[]`. These managed types linger in memory, are copied by the GC, and cannot be explicitly erased.
-
-`Secret<T>` allocates unmanaged memory that is **pinned** and **zero-initialized**. It implements `IDisposable` to securely wipe data immediately after use.
+`Secret<T>` solves this by allocating memory outside the managed heap using `NativeMemory.AllocZeroed`. The memory is pinned, inaccessible to the GC, and guaranteed to be cryptographically wiped (`CryptographicOperations.ZeroMemory`) when disposed.
 
 ```csharp
 using Wiaoj.Primitives;
 
-// Create a secret from a string (String is converted to bytes and wiped from stack)
+// 1. Generate a cryptographically strong 256-bit AES key directly into secure memory
+using Secret<byte> masterKey = Secret.Factory.Aes256Key();
+
+// 2. Parse a secret from an external source (intermediate strings are wiped)
 using Secret<byte> apiKey = Secret.From("super-secret-key-123");
 
-// Generate cryptographically strong random bytes directly into secure memory
-using Secret<byte> masterKey = Secret.Generate(32);
-
-// ACCESSING DATA:
-// The 'Expose' pattern prevents data from escaping the secure scope.
-apiKey.Expose(span => {
-    // 'span' is a ReadOnlySpan<byte> valid only within this block.
-    // It points to unmanaged memory. Passing it to cryptographic functions is safe.
+// 3. Controlled Access (The Expose Pattern)
+// Data cannot escape this scope. It prevents accidental logging or leaking.
+apiKey.Expose(span => 
+{
+    // 'span' is a ReadOnlySpan<byte> pointing directly to the unmanaged memory.
+    // It is safe to pass this to cryptographic algorithms.
     Console.WriteLine($"Key length: {span.Length}");
 });
 
-// Securely derive keys (HKDF-SHA256) without intermediate allocations
+// 4. Secure Key Derivation (HKDF-SHA256)
 using Secret<byte> derivedKey = masterKey.DeriveKey(salt: apiKey, outputByteCount: 64);
 ```
 
 ---
 
-## 🔠 Strongly-Typed Encodings
+## 2. Distributed Identity & Obfuscation
 
-Stop treating encoding strings as generic `string`. These value objects validate their format upon creation and offer optimized conversions.
+Relying on standard auto-incrementing `int` or random `Guid` (v4) for primary keys leads to database B-Tree index fragmentation and leaks business intelligence (e.g., how many orders you process daily).
 
-### `Base64String`, `Base32String`, `Base62String`, `HexString`
-
-*   **Validation:** Throws immediately if invalid characters or padding are detected.
-*   **SIMD:** Uses `SearchValues<T>` for ultra-fast validation.
-*   **Stack-Friendly:** Supports encoding/decoding directly to `Span<byte>`.
+### SnowflakeId & GuidV7 (Time-Ordered IDs)
+`SnowflakeId` is a lock-free, thread-safe implementation of the Twitter Snowflake algorithm. It generates 64-bit, k-sorted identifiers that eliminate database fragmentation without requiring a central coordination server. `GuidV7` provides the 128-bit RFC 9562 equivalent.
 
 ```csharp
-// Safe Parsing
-Base64String b64 = Base64String.Parse("SGVsbG8gV29ybGQ=");
-Base32String b32 = Base32String.Parse("JBSWY3DPEBLW64TMMQ======"); // RFC 4648
-HexString hex    = HexString.Parse("48656C6C6F");
+using Wiaoj.Primitives.Snowflake;
 
-// Zero-Allocation Decoding
-byte[] data = b64.ToBytes(); 
+// Configure the node identity at application startup
+SnowflakeId.Configure(nodeId: 1);
 
-// Or decode directly into stack memory
+// Generate a 64-bit ID (Zero allocation)
+SnowflakeId internalId = SnowflakeId.NewId();
+UnixTimestamp creationTime = internalId.ToUnixTimestamp();
+```
+
+### OpaqueId (Secure ID Obfuscation)
+You should never expose internal sequential database IDs to the public. `OpaqueId` wraps a `SnowflakeId` or `long` and scrambles it using a Format-Preserving Encryption approach (e.g., Feistel Cipher). It generates short, YouTube-like URL-safe strings while remaining an integer under the hood.
+
+```csharp
+using Wiaoj.Primitives.Obfuscation;
+
+// Configure the global obfuscation strategy using a secret seed
+var options = new FeistelObfuscatorOptions { Seed = mySecretSeed };
+OpaqueId.Configure(new FeistelBase62Obfuscator(options));
+
+// Create an opaque representation of the internal ID
+OpaqueId publicId = new OpaqueId(internalId);
+
+// Expose to API responses or URLs
+Console.WriteLine(publicId.ToString()); // Outputs a stable string like "7xk9A2"
+
+// Parse back from incoming HTTP requests directly to the internal ID
+OpaqueId parsedId = OpaqueId.Parse("7xk9A2");
+SnowflakeId originalId = parsedId.AsSnowflake();
+```
+
+### NanoId
+For completely random, highly collision-resistant public identifiers.
+```csharp
+// Generates a 21-character URL-safe string. 
+// Uses a default profanity-safe alphabet (vowels removed).
+NanoId videoId = NanoId.NewId();
+```
+
+---
+
+## 3. Allocation-Free Cryptographic Hashing
+
+Traditional hashing APIs return a `byte[]`, forcing a heap allocation on every single hash computation. 
+
+Wiaoj.Primitives provides `Sha256Hash`, `Sha512Hash`, `Md5Hash`, and `Hmac` variants as **fixed-size struct wrappers** containing inline arrays (e.g., `fixed byte[32]`). They live entirely on the stack. Furthermore, their `Equals` operators use `CryptographicOperations.FixedTimeEquals` to prevent timing attacks.
+
+```csharp
+using Wiaoj.Primitives.Cryptography.Hashing;
+
+// Compute hash on the stack (Zero heap allocations)
+Sha256Hash documentHash = Sha256Hash.Compute("document content");
+
+// Constant-time equality comparison
+if (documentHash == expectedHash) {
+    // Valid
+}
+
+// Memory-efficient async stream hashing (e.g., large file uploads)
+using var stream = File.OpenRead("large_data.bin");
+Sha256Hash streamHash = await Sha256HashExtensions.ComputeAsync(stream);
+```
+
+---
+
+## 4. Strongly-Typed Encodings
+
+A method requiring a Base64 payload should not accept a standard `string`. By using specialized types, the format is validated instantly upon instantiation using `.NET 8 SearchValues<T>` for SIMD-accelerated character scanning.
+
+Available types: `Base64String`, `Base64UrlString`, `Base32String`, `Base62String`, `HexString`.
+
+```csharp
+// Validates format instantly. Throws FormatException if invalid.
+Base64String payload = Base64String.Parse("SGVsbG8gV29ybGQ=");
+HexString signature = HexString.Parse("48656C6C6F");
+
+// Decode directly to stack memory without allocating intermediate byte arrays
 Span<byte> buffer = stackalloc byte[64];
-if (hex.TryDecode(buffer, out int bytesWritten)) {
-    // Process raw bytes...
+if (signature.TryDecode(buffer, out int bytesWritten)) {
+    // Process raw bytes securely
 }
-
-// Helpers
-Base64String fromText = Base64String.FromUtf8("Hello World");
 ```
 
 ---
 
-## ⚡ High-Performance Hashing (`Sha256Hash`)
+## 5. Domain Primitives & Value Objects
 
-A 32-byte **fixed-size struct** wrapper. Unlike `byte[]`, this is a value type that lives on the stack, preventing heap allocations for hash storage and reducing GC pressure.
+### Range&lt;T&gt;
+A structural pattern that guarantees `Min <= Max` at creation. It provides deep domain-specific extensions based on the generic type.
 
 ```csharp
-// Compute hash (Zero Allocation)
-Sha256Hash hash = Sha256Hash.Compute("Hello World");
+// Numeric Ranges
+Range<int> validAges = new Range<int>(18, 65);
+int userAge = validAges.Clamp(70); // Returns 65
+int span = validAges.Length();     // Returns 47
 
-// Hex representation
-Console.WriteLine(hash.ToString()); 
+// Temporal Ranges
+Range<DateTime> promotionPeriod = Range<DateTime>.Between(startDate, endDate);
+bool isActive = promotionPeriod.IsNowWithin(); // Automatically checks against UTC Now
 
-// Constant-Time Equality (Prevents Timing Attacks)
-if (hash == otherHash) {
-    // Verified securely
-}
-
-// Async Stream Hashing
-using var stream = File.OpenRead("large_file.iso");
-Sha256Hash fileHash = await Sha256HashExtensions.ComputeAsync(stream);
+// Semantic Version Ranges
+Range<SemVer> requiredVersion = new Range<SemVer>(SemVer.Parse("1.0.0"), SemVer.Parse("2.0.0"));
+SemVer? latest = requiredVersion.GetLatestCompatible(availableVersions);
 ```
 
----
-
-## 🔢 Domain Primitives
-
-### `UnixTimestamp`
-Wraps a `long` representing milliseconds since Epoch. Provides `DateTime` interoperability without the overhead.
+### UnixTimestamp
+Eliminates the ambiguity of passing `long` variables around by explicitly representing UTC milliseconds since Epoch. Provides low-overhead date manipulation without instantiating `DateTime` objects.
 
 ```csharp
 UnixTimestamp now = UnixTimestamp.Now;
-UnixTimestamp future = now + TimeSpan.FromMinutes(5);
 
-Console.WriteLine(now.ToDateTimeUtc()); // Standard .NET DateTime
+// High-performance truncation using integer math
+UnixTimestamp startOfDay = now.TruncateToDay(); 
+
+// Temporal logic
+bool isExpired = cacheExpiry.IsOlderThan(TimeSpan.FromMinutes(10));
+TimeSpan remaining = cacheExpiry.TimeUntil();
 ```
 
-### `Percentage`
-A value type wrapping a `double` (0.0 to 1.0) with clamped arithmetic operations.
+### SemVer
+A strict, allocation-free implementation of Semantic Versioning 2.0.0. It supports pre-release and build metadata parsing without the heavy overhead of `System.Version`.
 
 ```csharp
-Percentage p1 = Percentage.FromInt(50); // 0.5
-Percentage p2 = Percentage.FromDouble(0.6);
+SemVer current = SemVer.Parse("1.2.3-beta.1");
+SemVer next = current.BumpMinor(); // 1.3.0
 
-// Clamped Addition (Max 1.0)
-Percentage sum = p1.AddClamped(p2); // Returns 1.0, not 1.1
-
-// Formatting
-Console.WriteLine(p1); // "50%"
-```
-
-### `SemVer` (Semantic Versioning)
-Strict SemVer 2.0.0 implementation. Allocates significantly less than `System.Version` and supports pre-release/build metadata correctly.
-
-```csharp
-var v1 = SemVer.Parse("1.0.0-alpha.1");
-var v2 = SemVer.Parse("1.0.0-beta");
-
-if (v2 > v1) {
-    // True: Beta is newer than Alpha
+if (next.IsBackwardCompatibleWith(current)) {
+    // Validates Major/Minor precedence rules
 }
 ```
 
-### `OperationTimeout`
-Simplifies the pattern of having both a `TimeSpan` timeout and a `CancellationToken`.
+### Percentage
+Wraps a `double` representing a value between 0.0 and 1.0. Prevents logic errors involving out-of-bounds percentages.
 
 ```csharp
-// Defines a timeout of 5 seconds OR cancellation token trigger
-var timeout = OperationTimeout.From(TimeSpan.FromSeconds(5), cancellationToken);
+Percentage discount = Percentage.FromInt(15); // Represents 0.15
+Percentage remaining = discount.Remaining;    // Represents 0.85
 
-// Execute logic with combined token
-await timeout.ExecuteAsync(async (t) => {
-    // t.Token cancels if 5s passes OR parent token cancels
-    await Task.Delay(1000, t.Token);
-});
+double finalPrice = remaining.ApplyTo(100.0); // 85.0
 ```
 
-## 🛠️ Requirements
+### OperationTimeout
+Unifies API parameters that historically required passing both a `TimeSpan` (for absolute timeouts) and a `CancellationToken` (for external cancellation). 
 
-*   **.NET 10** (or compatible modern .NET runtime)
-*   **Unsafe Blocks:** Must be enabled in project settings.
+```csharp
+// Method signature expects a single unified object
+public async ValueTask FetchDataAsync(OperationTimeout timeout) 
+{
+    // Throws instantly if already expired or cancelled
+    timeout.ThrowIfExpired(); 
 
-## 📄 License
+    // Create a combined CancellationTokenSource automatically
+    using var cts = timeout.CreateCancellationTokenSource();
+    await _httpClient.GetAsync("/api/data", cts.Token);
+}
+
+// Caller can pass either type, and it implicitly converts:
+await FetchDataAsync(TimeSpan.FromSeconds(5)); 
+await FetchDataAsync(HttpContext.RequestAborted); 
+```
+
+## System.Text.Json Integration
+
+All primitives (`SnowflakeId`, `OpaqueId`, `Base64String`, `SemVer`, `UnixTimestamp`, etc.) are decorated with high-performance `JsonConverter` implementations. They serialize directly to primitive JSON formats (strings or numbers) using UTF-8 span writers, bypassing intermediate string allocations entirely.
+
+## License
 
 Licensed under the MIT License.

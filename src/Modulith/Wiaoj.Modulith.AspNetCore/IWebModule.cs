@@ -1,5 +1,8 @@
 ﻿using Microsoft.AspNetCore.Builder;
-namespace Wiaoj.Modulith.AspNetCore;
+
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Modulith;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Extends <see cref="IModule"/> with ASP.NET Core middleware and endpoint configuration.
 /// <para>

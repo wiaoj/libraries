@@ -100,6 +100,15 @@ public static class Atomic {
     }
 
     /// <summary>
+    /// Atomically compares two instances of reference types for equality and, if they are equal, replaces the first one.
+    /// </summary>
+    [return: NotNullIfNotNull(nameof(location))]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T CompareExchange<T>(ref T location, T value, T comparand) where T : class? {
+        return Interlocked.CompareExchange(ref location, value, comparand);
+    }
+
+    /// <summary>
     /// Atomically sets a field to a specified value if its current value is equal to a comparand.
     /// This is a more intuitive, boolean-returning wrapper around <see cref="Interlocked.CompareExchange{T}(ref T, T, T)"/>.
     /// </summary>
@@ -110,13 +119,13 @@ public static class Atomic {
     /// <returns><see langword="true"/> if the exchange succeeded; otherwise, <see langword="false"/>.</returns>
     [return: NotNullIfNotNull(nameof(location))]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe bool CompareExchange<T>(ref T? location, T? value, T? comparand) where T : class {
+    public static bool TryCompareExchange<T>(ref T? location, T? value, T? comparand) where T : class? {
         return Interlocked.CompareExchange(ref location, value, comparand) == comparand;
     }
 
     [return: NotNullIfNotNull(nameof(location))]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe bool CompareExchange(ref byte location, byte value, byte comparand) {
+    public static bool TryCompareExchange(ref byte location, byte value, byte comparand) {
         return Interlocked.CompareExchange(ref location, value, comparand) == comparand;
     }
 
@@ -130,7 +139,7 @@ public static class Atomic {
 
     [return: NotNullIfNotNull(nameof(location))]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe T? Take<T>(ref T? location) where T : class {
+    public static T? Take<T>(ref T? location) where T : class {
         return Interlocked.Exchange(ref location, null);
     }
 

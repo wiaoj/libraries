@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);WIAOJ_CONCURRENCY_PRESENT</DefineConstants>
+  </PropertyGroup>
+</Project>

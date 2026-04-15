@@ -4,15 +4,15 @@ using System.Runtime.CompilerServices;
 using Wiaoj.Abstractions;
 
 namespace Wiaoj.Concurrency;
-
 /// <summary>
 /// Provides support for lazy, asynchronous initialization of a value.
 /// This implementation is aligned with the design patterns of System.Lazy&lt;T&gt;.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This implementation is fully thread-safe, ensures the value-producing factory is executed only once,
-/// and correctly handles exceptions and cancellation. It is a foundational primitive for concurrent and asynchronous programming.
+/// This implementation is fully thread-safe, lock-free, ensures the value-producing factory is executed only once,
+/// and correctly handles exceptions and cancellation. It prevents thread starvation by avoiding synchronous locks.
+/// It is a foundational primitive for highly concurrent and asynchronous programming.
 /// </para>
 /// <para>
 /// It supports initialization from a pre-computed value, a parameterless constructor, 
@@ -23,8 +23,9 @@ namespace Wiaoj.Concurrency;
 [DebuggerDisplay("Status = {Status,nq}")]
 public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T> : IAsyncDisposable {
     private Func<CancellationToken, Task<T>>? _factory;
-    private volatile Task<T>? _initializationTask;
-    private readonly Lock _lock = new();
+
+    // We use Volatile/Interlocked operations on this field to achieve lock-free thread safety.
+    private Task<T>? _initializationTask;
 
     #region Constructors
 
@@ -42,35 +43,32 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     /// Initializes a new instance of the <see cref="AsyncLazy{T}"/> class that will create the value
     /// using the public parameterless constructor of <typeparamref name="T"/>.
     /// </summary>
-    public AsyncLazy()
-        : this(cancellationToken => Task.Run(() => Activator.CreateInstance<T>(), cancellationToken)) {
-    }
+    public AsyncLazy() : this(cancellationToken => Task.Run(() => Activator.CreateInstance<T>(), cancellationToken)) { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AsyncLazy{T}"/> class using a synchronous factory.
     /// The factory will be executed asynchronously on a thread pool thread.
     /// </summary>
-    public AsyncLazy(Func<T> factory)
-        : this(WrapSyncFactory(factory)) {
-    }
+    public AsyncLazy(Func<T> factory) : this(WrapSyncFactory(factory)) { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AsyncLazy{T}"/> class using an asynchronous factory delegate.
     /// </summary>
-    public AsyncLazy(Func<Task<T>> factory)
-        : this(WrapFactory(factory)) {
-    }
+    public AsyncLazy(Func<Task<T>> factory) : this(WrapFactory(factory)) { }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AsyncLazy{T}"/> class using a pre-existing task.
+    /// </summary>
+    /// <param name="task">The task representing the asynchronous initialization.</param>
     public AsyncLazy(Task<T> task) {
+        Preca.ThrowIfNull(task);
         this._initializationTask = task;
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AsyncLazy{T}"/> class using a standardized async factory.
     /// </summary>
-    public AsyncLazy(IAsyncFactory<T> asyncFactory)
-        : this(asyncFactory.CreateAsync) {
-    }
+    public AsyncLazy(IAsyncFactory<T> asyncFactory) : this(asyncFactory.CreateAsync) { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AsyncLazy{T}"/> class using a cancellable asynchronous factory delegate.
@@ -88,20 +86,24 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     /// <summary>
     /// Gets a value indicating whether the asynchronous value has been created and completed successfully.
     /// </summary>
-    public bool IsValueCreated => this._initializationTask?.IsCompletedSuccessfully ?? false;
+    public bool IsValueCreated => Volatile.Read(ref this._initializationTask)?.IsCompletedSuccessfully ?? false;
 
     /// <summary>
-    /// Asynchronously starts the initialization and retrieves the value.
+    /// Asynchronously starts the initialization (if not already started) and retrieves the value.
     /// </summary>
     public ValueTask<T> GetValueAsync(CancellationToken cancellationToken = default) {
-        Task<T>? task = this._initializationTask;
+        // Fast path: Volatile read to check if the task is already created.
+        Task<T>? task = Volatile.Read(ref this._initializationTask);
+
         if(task is not null) {
+            // Optimization: If the task is already successfully completed, return the result synchronously.
             return task.IsCompletedSuccessfully
                 ? new ValueTask<T>(task.Result)
                 : new ValueTask<T>(task);
         }
 
-        return new ValueTask<T>(InitializeAndGetTaskAsync(cancellationToken));
+        // Slow path: The task hasn't been created yet. We need to initialize it lock-free.
+        return new ValueTask<T>(InitializeAsync(cancellationToken));
     }
 
     /// <summary>
@@ -115,31 +117,62 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
 
     #endregion
 
-    #region Private Implementation
+    #region Private Implementation (Lock-Free Initialization)
 
-    private Task<T> InitializeAndGetTaskAsync(CancellationToken cancellationToken) {
-        using(this._lock.EnterScope()) {
-            Task<T>? task = this._initializationTask;
-            if(task is not null) return task;
+    private Task<T> InitializeAsync(CancellationToken cancellationToken) {
+        // Prepare a placeholder task (TaskCompletionSource) that we will try to publish.
+        TaskCompletionSource<T> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            task = InitializeCoreAsync(cancellationToken);
-            this._initializationTask = task;
-            return task;
+        // Atomically attempt to set our placeholder task as the official initialization task.
+        // If _initializationTask is currently null, it becomes tcs.Task.
+        Task<T>? winningTask = Interlocked.CompareExchange(ref this._initializationTask, tcs.Task, null);
+
+        if(winningTask is not null) {
+            // Another thread beat us to the initialization! 
+            // We simply discard our 'tcs' and return the winner's task.
+            return winningTask;
         }
+
+        // If we reach here, we successfully published our placeholder task.
+        // We are now exclusively responsible for executing the factory.
+        // We fire and forget the execution method; it will resolve the 'tcs' when done.
+        _ = ExecuteFactoryAsync(tcs, cancellationToken);
+
+        return tcs.Task;
     }
 
-    private async Task<T> InitializeCoreAsync(CancellationToken cancellationToken) {
-        Func<CancellationToken, Task<T>>? factory = this._factory;
-        this._factory = null;
+    private async Task ExecuteFactoryAsync(TaskCompletionSource<T> tcs, CancellationToken cancellationToken) {
+        // Capture the factory and clear the field so it can be garbage collected.
+        Func<CancellationToken, Task<T>>? factory = Interlocked.Exchange(ref this._factory, null);
 
-        Preca.ThrowIfNull(factory, static () => new InvalidOperationException("The factory has already been executed or cleared."));
+        // This should theoretically never happen if the class is used correctly, but we guard against it.
+        if(factory is null) {
+            tcs.SetException(new InvalidOperationException("The factory has already been executed or cleared unexpectedly."));
+            return;
+        }
 
         try {
             cancellationToken.ThrowIfCancellationRequested();
-            return await factory(cancellationToken).ConfigureAwait(false);
+
+            // Execute the user-provided factory.
+            T result = await factory(cancellationToken).ConfigureAwait(false);
+
+            // Fulfill the promise, waking up all awaiting threads.
+            tcs.SetResult(result);
         }
-        catch(Exception) {
-            throw;
+        catch(OperationCanceledException ex) {
+            tcs.SetCanceled(ex.CancellationToken);
+
+            // If initialization was canceled, reset the state so it can be retried later.
+            Interlocked.Exchange(ref this._initializationTask, null);
+            Volatile.Write(ref this._factory, factory); // Restore the factory for retry
+        }
+        catch(Exception ex) {
+            tcs.SetException(ex);
+
+            // If initialization failed, reset the state so it can be retried later.
+            Interlocked.Exchange(ref this._initializationTask, null);
+            Volatile.Write(ref this._factory, factory); // Restore the factory for retry
         }
     }
 
@@ -155,13 +188,19 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
 
     #endregion
 
+    #region Disposal
+
+    /// <summary>
+    /// Asynchronously releases the resources used by the <see cref="AsyncLazy{T}"/> instance.
+    /// If the underlying value implements <see cref="IAsyncDisposable"/> or <see cref="IDisposable"/>, it is disposed.
+    /// </summary>
     public async ValueTask DisposeAsync() {
-        // Önce referansı yerel bir değişkene alıyoruz (Thread-safety için)
-        Task<T>? task = _initializationTask;
+        // Read the task safely.
+        Task<T>? task = Volatile.Read(ref this._initializationTask);
 
         if(task is not null) {
             try {
-                // Değerin oluşturulup tamamlandığından emin oluyoruz
+                // Ensure the value is fully created before attempting to dispose it.
                 T value = await task.ConfigureAwait(false);
 
                 if(value is IAsyncDisposable asyncDisp) {
@@ -172,14 +211,17 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
                 }
             }
             catch(Exception ex) {
-                // Disposal hataları genellikle yutulur veya loglanır, 
-                // ama uygulamanın ana akışını bozmamalıdır.
+                // Disposal errors are generally swallowed or logged, 
+                // but should not break the main application flow.
                 Debug.WriteLine($"AsyncLazy disposal failed: {ex.Message}");
             }
         }
     }
 
+    #endregion
+
     #region Debugger Support
+
     /// <summary>
     /// Gets the current initialization status of this instance.
     /// </summary>
@@ -188,7 +230,7 @@ public sealed class AsyncLazy<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     /// </remarks>
     private DebuggerStatus Status {
         get {
-            Task<T>? task = this._initializationTask;
+            Task<T>? task = Volatile.Read(ref this._initializationTask);
             if(task is null) return DebuggerStatus.NotStarted;
 
             if(task.IsCompletedSuccessfully) return DebuggerStatus.Succeeded;

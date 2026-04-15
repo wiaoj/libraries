@@ -33,7 +33,7 @@ public sealed class DisposeState {
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryBeginDispose() {
-        return Atomic.CompareExchange(ref this._state, StateDisposing, StateActive);
+        return Atomic.TryCompareExchange(ref this._state, StateDisposing, StateActive);
     }
 
     /// <summary>

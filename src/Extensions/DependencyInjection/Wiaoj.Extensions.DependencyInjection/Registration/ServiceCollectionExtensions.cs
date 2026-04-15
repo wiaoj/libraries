@@ -1,8 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
+﻿using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Wiaoj.Extensions.DependencyInjection;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Microsoft.Extensions.DependencyInjection;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// General extension methods for <see cref="IServiceCollection"/>.
 /// </summary>
@@ -20,14 +21,39 @@ public static class ServiceCollectionExtensions {
         where TService : class
         where TImplementation : class, TService {
 
-        var descriptor = new ServiceDescriptor(typeof(TService), typeof(TImplementation), lifetime);
+        ServiceDescriptor descriptor = new(typeof(TService), typeof(TImplementation), lifetime);
         services.Replace(descriptor);
+        return services;
+    }
+
+    /// <summary>
+    /// Replaces an existing service registration with a specific instance.
+    /// </summary>
+    public static IServiceCollection Replace<TService>(this IServiceCollection services, TService instance)
+        where TService : class {
+
+        services.Replace(ServiceDescriptor.Singleton(typeof(TService), instance));
+        return services;
+    }
+
+    /// <summary>
+    /// Replaces an existing service registration with a factory function.
+    /// Useful for complex initialization where you need to 'new' up the object manually.
+    /// </summary>
+    public static IServiceCollection Replace<TService>(
+        this IServiceCollection services,
+        Func<IServiceProvider, TService> implementationFactory,
+        ServiceLifetime lifetime)
+        where TService : class {
+
+        services.Replace(new ServiceDescriptor(typeof(TService), sp => implementationFactory(sp), lifetime));
         return services;
     }
 
     /// <summary>
     /// Adds support for <see cref="Lazy{T}"/> resolution. 
     /// This allows injecting <c>Lazy&lt;IMyService&gt;</c> into constructors to delay instantiation.
+    /// Warning: Injecting <see cref="Lazy{T}"/> <see langword="where" /> <see cref="{T}" /> is a Scoped service into a Singleton service will cause a captive dependency exception when .Value is accessed.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection for chaining.</returns>

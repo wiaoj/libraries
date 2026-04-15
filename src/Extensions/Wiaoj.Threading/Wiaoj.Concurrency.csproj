@@ -12,5 +12,9 @@
     <ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
     <ProjectReference Include="..\Abstractions\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
   </ItemGroup>
-
+	
+	<ItemGroup>
+		<None Include="Wiaoj.Concurrency.props" Pack="true" PackagePath="build" />
+	</ItemGroup>
+	
 </Project>

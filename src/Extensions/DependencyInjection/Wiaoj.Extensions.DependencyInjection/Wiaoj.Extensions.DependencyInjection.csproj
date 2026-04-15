@@ -51,10 +51,19 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
-		<!--<ProjectReference Include="..\..\Abstractions\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />-->
-		<!--<ProjectReference Include="..\..\Wiaoj.Threading\Wiaoj.Concurrency.csproj" />-->
+		<ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" /> 
 	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference 
+			Include="..\..\Wiaoj.Threading\Wiaoj.Concurrency.csproj"     
+			PrivateAssets="All" 
+            ReferenceOutputAssembly="true" />
+	</ItemGroup>
+	
+	<PropertyGroup>
+		<DefineConstants>$(DefineConstants);WIAOJ_CONCURRENCY_PRESENT</DefineConstants>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" Condition="Exists('..\README.md')" />
