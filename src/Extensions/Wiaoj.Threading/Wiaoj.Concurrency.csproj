@@ -13,8 +13,8 @@
     <ProjectReference Include="..\Abstractions\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
   </ItemGroup>
 	
-	<ItemGroup>
+	<!--<ItemGroup>
 		<None Include="Wiaoj.Concurrency.props" Pack="true" PackagePath="build" />
-	</ItemGroup>
+	</ItemGroup>-->
 	
 </Project>
