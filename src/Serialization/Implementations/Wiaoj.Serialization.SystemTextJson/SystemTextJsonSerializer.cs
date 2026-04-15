@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
@@ -10,7 +11,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
       IAsyncEnumerableSerializer<TKey> where TKey : ISerializerKey
 #pragma warning restore WS0001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 {
-    /// <inheritdoc />
+    /// <inheritdoc />  
     public string SerializeToString<TValue>(TValue value) {
         Preca.ThrowIfNull(value);
         try {

@@ -89,6 +89,7 @@
   </Folder>
   <Folder Name="/src/Serialization/Implementations/">
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Bson/Wiaoj.Serialization.Bson.csproj" />
+    <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Memory/Wiaoj.Serialization.Memory.csproj" Id="e7892f69-425c-4c61-aa2c-7ce047d2e1a2" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.MessagePack/Wiaoj.Serialization.MessagePack.csproj" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.SystemTextJson/Wiaoj.Serialization.SystemTextJson.csproj" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.YamlDotNet/Wiaoj.Serialization.YamlDotNet.csproj" />
@@ -104,5 +105,8 @@
   </Folder>
   <Folder Name="/tests/Ddd/">
     <Project Path="tests/Ddd/Wiaoj.Ddd.Tests.Unit/Wiaoj.Ddd.Tests.Unit.csproj" Id="ac985ecb-c629-44c3-b5a7-3ee827cbffe6" />
+  </Folder>
+  <Folder Name="/tests/Serialization/">
+    <Project Path="tests/Serialization/Wiaoj.Serialization.Memory.Tests.Unit/Wiaoj.Serialization.Memory.Tests.Unit.csproj" Id="063bdb25-945b-4204-8f44-66e063fc31b8" />
   </Folder>
 </Solution>

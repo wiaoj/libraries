@@ -1,9 +1,9 @@
 ﻿using System.Text.Json;
 using Wiaoj.Serialization.SystemTextJson;
 
-#pragma warning disable IDE0130 // Namespace does not match folder structure
+#pragma warning disable IDE0130
 namespace Wiaoj.Serialization.DependencyInjection;
-#pragma warning restore IDE0130 // Namespace does not match folder structure
+#pragma warning restore IDE0130
 /// <summary>
 /// Extension methods to register System.Text.Json serializers in IWiaojSerializationBuilder.
 /// </summary>
