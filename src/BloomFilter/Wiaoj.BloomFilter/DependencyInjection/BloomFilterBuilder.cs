@@ -6,16 +6,12 @@ namespace Wiaoj.BloomFilter.DependencyInjection;
 /// <summary>
 /// A builder class used to configure Bloom Filter services via extension methods.
 /// </summary>
-public class BloomFilterBuilder {
+/// <remarks>
+/// Initializes a new instance of the <see cref="BloomFilterBuilder"/> class.
+/// </remarks>
+public class BloomFilterBuilder(IServiceCollection services) {
     /// <summary>
     /// Gets the service collection where services are registered.
     /// </summary>
-    public IServiceCollection Services { get; }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="BloomFilterBuilder"/> class.
-    /// </summary>
-    public BloomFilterBuilder(IServiceCollection services) {
-        Services = services;
-    }
+    public IServiceCollection Services { get; } = services;
 }

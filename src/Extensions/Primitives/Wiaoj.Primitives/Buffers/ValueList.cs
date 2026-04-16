@@ -26,7 +26,8 @@ public ref struct ValueList<T> where T : notnull {
     private T[]? _rented;
     private int _pos;
 
-    /// <summary>Gets a value indicating whether the list is empty.</summary>
+    /// <summary>Gets a value indicating whether this <see cref="ValueList{T}"/> is empty.</summary> 
+    /// <value><see langword="true"/> if this span is empty; otherwise, <see langword="false"/>.</value>
     public readonly bool IsEmpty => this._pos == 0;
 
     /// <summary>Gets the number of remaining slots in the current buffer before a resize is required.</summary>
@@ -48,6 +49,7 @@ public ref struct ValueList<T> where T : notnull {
 
     /// <summary>Gets the total capacity of the internal buffer.</summary>
     public readonly int Capacity => this._span.Length;
+     
 
     /// <summary>
     /// Returns a <see cref="Span{T}"/> representing the active elements of the list.

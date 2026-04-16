@@ -21,7 +21,8 @@
       "src\\Serialization\\Features\\Wiaoj.Serialization.Security\\Wiaoj.Serialization.Security.csproj",
       "src\\Serialization\\Features\\Wiaoj.Serialization.Transcoding\\Wiaoj.Serialization.Transcoding.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.Bson\\Wiaoj.Serialization.Bson.csproj",
-      "src\\Serialization\\Implementations\\Wiaoj.Serialization.MessagePack\\Wiaoj.Serialization.MessagePack.csproj",
+      "src\\Serialization\\Implementations\\Wiaoj.Serialization.MessagePack\\Wiaoj.Serialization.MessagePack.csproj",      
+      "src\\Serialization\\Implementations\\Wiaoj.Serialization.Proxy\\Wiaoj.Serialization.Proxy.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.SystemTextJson\\Wiaoj.Serialization.SystemTextJson.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.YamlDotNet\\Wiaoj.Serialization.YamlDotNet.csproj"
     ]

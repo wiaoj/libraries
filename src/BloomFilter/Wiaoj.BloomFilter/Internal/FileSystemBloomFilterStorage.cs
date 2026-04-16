@@ -22,8 +22,7 @@ public class FileSystemBloomFilterStorage : IBloomFilterStorage {
         this._bufferSize = opts.BufferSizeBytes;
         this._ignoreErrors = opts.IgnoreErrors;
 
-        var path = opts.Path;
-        if(string.IsNullOrWhiteSpace(path)) path = "BloomData";
+        var path = string.IsNullOrWhiteSpace(opts.Path) ? "BloomData": opts.Path;
 
         this._baseDirectory = Path.IsPathFullyQualified(path)
             ? path

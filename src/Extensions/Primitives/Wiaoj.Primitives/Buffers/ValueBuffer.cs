@@ -79,19 +79,10 @@ public ref struct ValueBuffer<T> where T : unmanaged {
     }
 
     /// <summary>
-    /// Returns the buffer to the pool if it was rented.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Dispose() {
-        // Safe double-dispose guard
-        T[]? toReturn = this._rented;
-        this._rented = null; // Clear field to prevent double return
-
-        if(toReturn is not null) {
-            toReturn.AsSpan().Clear(); // Clear the rented array to prevent data leaks
-            ArrayPool<T>.Shared.Return(toReturn);
-        }
-    }
+    /// Forms a slice out of the current buffer starting at a specified index for a specified length.
+    /// Enables C# Range operator (..) support directly on the buffer.
+    /// </summary>[MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Span<T> Slice(int start, int length) => _span.Slice(start, length);
 
     /// <summary>
     /// Returns a reference to the 0th element of the Span. 
@@ -118,5 +109,20 @@ public ref struct ValueBuffer<T> where T : unmanaged {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ReadOnlySpan<T>(ValueBuffer<T> buffer) {
         return buffer._span;
+    }
+
+    /// <summary>
+    /// Returns the buffer to the pool if it was rented.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Dispose() {
+        // Safe double-dispose guard
+        T[]? toReturn = this._rented;
+        this._rented = null; // Clear field to prevent double return
+
+        if(toReturn is not null) {
+            toReturn.AsSpan().Clear(); // Clear the rented array to prevent data leaks
+            ArrayPool<T>.Shared.Return(toReturn);
+        }
     }
 }

@@ -1,4 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter;
 using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.BloomFilter.Hosting;
@@ -7,58 +9,60 @@ using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
 using Wiaoj.ObjectPool.Extensions;
 
-#pragma warning disable IDE0130 // Namespace does not match folder structure
+#pragma warning disable IDE0130
 namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130 // Namespace does not match folder structure
+#pragma warning restore IDE0130
+
 public static class BloomFilterServiceCollectionExtensions {
 
-    /// <summary>
-    /// Adds Wiaoj Bloom Filter services to the DI container.
-    /// Automatically binds configuration from the "BloomFilter" section in appsettings.json.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="setupAction">Optional builder action for code-based configuration.</param>
-    /// <returns>The service collection.</returns>
     public static IServiceCollection AddBloomFilter(
         this IServiceCollection services,
         Action<BloomFilterBuilder>? setupAction = null) {
-        // 1. Bind Options (Otomatik)
-        // Nuget Paketi Gerekli: Microsoft.Extensions.Options.ConfigurationExtensions
-        services.AddOptions<BloomFilterOptions>()
-                .BindConfiguration("BloomFilter");
-        //.ValidateDataAnnotations()
-        //.ValidateOnStart();
 
-        // 2. Create Builder & Execute User Code
+        services.AddOptions<BloomFilterOptions>()
+                .BindConfiguration(BloomFilterOptions.SectionName);
+
         BloomFilterBuilder builder = new(services);
         setupAction?.Invoke(builder);
 
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
 
-        // 3. Register Core Services
-        services.TryAddSingleton<BloomFilterProvider>();
-        services.TryAddSingleton<IBloomFilterProvider>(sp =>
-            sp.GetRequiredService<BloomFilterProvider>());
-        services.TryAddSingleton<IBloomFilterLifecycleManager>(sp =>
-            sp.GetRequiredService<BloomFilterProvider>());
+        // Core Services (Registry & Factory)
+        services.TryAddSingleton<IBloomFilterRegistry, BloomFilterRegistry>();
+        services.TryAddSingleton<BloomFilterFactory>();
 
         services.TryAddSingleton<IBloomFilterService, BloomFilterService>();
         services.TryAddSingleton<IBloomFilterSeeder, BloomFilterSeeder>();
 
-        // 4. Default Storage (File System) - If user didn't replace it via AddStorage
+        // Varsayılan appsettings içindeki filtreleri ayağa kaldırmak için otomatik Keyed kayıt
+        services.AddSingleton<IConfigureOptions<BloomFilterOptions>, BloomFilterOptionsSetup>();
+
         services.TryAddSingleton<IBloomFilterStorage, FileSystemBloomFilterStorage>();
 
-        // 5. Background Services
         services.AddHostedService<BloomFilterAutoSaveService>();
         services.AddHostedService<BloomFilterWarmUpService>();
+
         services.AddObjectPool<MemoryStream>(
             factory: () => new MemoryStream(),
-            resetter: ms => {
-                ms.SetLength(0);
-                return true;
-            }
+            resetter: ms => { ms.SetLength(0); return true; }
         );
 
         return services;
+    }
+}
+
+// appsettings.json'dan gelenleri Keyed Service olarak otomatik kaydetmek için PostConfigure hilesi
+internal class BloomFilterOptionsSetup(IServiceCollection services) : IConfigureOptions<BloomFilterOptions> {
+    public void Configure(BloomFilterOptions options) {
+        foreach(var key in options.Filters.Keys) {
+            services.AddKeyedSingleton<IBloomFilter>(key, (sp, k) => {
+                var factory = sp.GetRequiredService<BloomFilterFactory>();
+                var registry = sp.GetRequiredService<IBloomFilterRegistry>();
+                var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+                return new LazyBloomFilterProxy((string)k, factory, registry, loggerFactory);
+            });
+            services.AddKeyedSingleton<IPersistentBloomFilter>(key, (sp, k) =>
+                (IPersistentBloomFilter)sp.GetRequiredKeyedService<IBloomFilter>(k));
+        }
     }
 }

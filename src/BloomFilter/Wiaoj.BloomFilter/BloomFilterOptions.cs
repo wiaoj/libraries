@@ -7,6 +7,7 @@ namespace Wiaoj.BloomFilter;
 /// Acts as a pure DTO for binding from IConfiguration.
 /// </summary>
 public class BloomFilterOptions {
+    public const string SectionName = "BloomFilter";
     /// <summary>
     /// Configuration for storage mechanism (FileSystem, Redis, etc.).
     /// </summary>
@@ -112,4 +113,7 @@ public class LifecycleOptions {
 public class FilterDefinition {
     public long ExpectedItems { get; set; }
     public double ErrorRate { get; set; }
+
+    public bool IsScalable { get; set; } = false;
+    public double GrowthRate { get; set; } = 2.0;
 }

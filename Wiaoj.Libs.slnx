@@ -6,6 +6,7 @@
     <Project Path="benchmarks/Wiaoj.Benchmarks.Primitives/Wiaoj.Benchmarks.Primitives.csproj" Id="47a9018c-29c4-4747-8ef4-ffc2eacdaca2" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/Wiaoj.Samples.BloomFilter/Wiaoj.Samples.BloomFilter.csproj" Id="69d8af16-0970-4213-a1c2-ecea075b0b68" />
     <Project Path="samples/Wiaoj.Samples.Concurrency/Wiaoj.Samples.Concurrency.csproj" Id="7fb1def3-743f-4948-b778-2738f26254d1" />
     <Project Path="samples/Wiaoj.Samples.DistributedCounter/Wiaoj.Samples.DistributedCounter.csproj" />
     <Project Path="samples/Wiaoj.Samples.Primitives/Wiaoj.Samples.Primitives.csproj" Id="7f7ef88f-3ab9-4333-a7cf-f493f9c04b58" />
@@ -91,6 +92,7 @@
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Bson/Wiaoj.Serialization.Bson.csproj" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Memory/Wiaoj.Serialization.Memory.csproj" Id="e7892f69-425c-4c61-aa2c-7ce047d2e1a2" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.MessagePack/Wiaoj.Serialization.MessagePack.csproj" />
+    <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Proxy/Wiaoj.Serialization.Proxy.csproj" Id="c7628768-b569-4679-bcdd-f3f90abe99df" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.SystemTextJson/Wiaoj.Serialization.SystemTextJson.csproj" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.YamlDotNet/Wiaoj.Serialization.YamlDotNet.csproj" />
   </Folder>
@@ -108,5 +110,6 @@
   </Folder>
   <Folder Name="/tests/Serialization/">
     <Project Path="tests/Serialization/Wiaoj.Serialization.Memory.Tests.Unit/Wiaoj.Serialization.Memory.Tests.Unit.csproj" Id="063bdb25-945b-4204-8f44-66e063fc31b8" />
+    <Project Path="tests/Serialization/Wiaoj.Serialization.Proxy.Tests.Unit/Wiaoj.Serialization.Proxy.Tests.Unit.csproj" Id="031114b7-f281-462d-90ce-4109115fe3aa" />
   </Folder>
 </Solution>

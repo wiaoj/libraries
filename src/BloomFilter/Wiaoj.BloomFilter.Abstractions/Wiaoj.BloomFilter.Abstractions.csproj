@@ -8,9 +8,9 @@
 	<AssemblyName>Wiaoj.BloomFilter.Abstractions</AssemblyName>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Wiaoj.Concurrency" Version="0.0.1-alpha.22" />
+  <ItemGroup> 
 	  <ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
+	  <ProjectReference Include="..\..\Extensions\Wiaoj.Threading\Wiaoj.Concurrency.csproj" />
   </ItemGroup>
 
 </Project>

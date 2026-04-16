@@ -2,16 +2,16 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter.Diagnostics;
+using Wiaoj.BloomFilter.Internal;
 
 namespace Wiaoj.BloomFilter.Hosting;
-/// <summary>
-/// A background service that periodically saves the state of all active Bloom Filters.
-/// </summary>
-public class BloomFilterAutoSaveService(
-    IBloomFilterLifecycleManager lifecycleManager,
+
+internal class BloomFilterAutoSaveService(
+    IBloomFilterRegistry registry,
     TimeProvider timeProvider,
     IOptions<BloomFilterOptions> options,
     ILogger<BloomFilterAutoSaveService> logger) : BackgroundService {
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         if(options.Value.Lifecycle.AutoSaveInterval <= TimeSpan.Zero) return;
 
@@ -21,7 +21,12 @@ public class BloomFilterAutoSaveService(
             while(await timer.WaitForNextTickAsync(stoppingToken)) {
                 logger.LogAutoSaveTriggered();
 
-                await lifecycleManager.SaveAllDirtyAsync(stoppingToken);
+                foreach(var filter in registry.GetAll()) {
+                    if(filter.IsDirty) {
+                        try { await filter.SaveAsync(stoppingToken); }
+                        catch(Exception ex) { logger.LogAutoSaveFailed(ex, FilterName.Parse(filter.Name)); }
+                    }
+                }
             }
         }
         catch(OperationCanceledException) { }
@@ -29,11 +34,11 @@ public class BloomFilterAutoSaveService(
 
     public override async Task StopAsync(CancellationToken cancellationToken) {
         logger.LogInformation("Performing final save...");
-        try {
-            await lifecycleManager.SaveAllDirtyAsync(CancellationToken.None);
-        }
-        catch(Exception ex) {
-            logger.LogError(ex, "Final save failed.");
+        foreach(var filter in registry.GetAll()) {
+            if(filter.IsDirty) {
+                try { await filter.SaveAsync(CancellationToken.None); }
+                catch(Exception ex) { logger.LogError(ex, "Final save failed for {Name}", filter.Name); }
+            }
         }
         await base.StopAsync(cancellationToken);
     }

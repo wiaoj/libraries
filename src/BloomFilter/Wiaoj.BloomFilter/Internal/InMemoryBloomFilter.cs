@@ -9,7 +9,6 @@ using Wiaoj.Concurrency;
 using Wiaoj.ObjectPool;
 using Wiaoj.Primitives;
 using Wiaoj.Primitives.Buffers;
-using DisposeState = Wiaoj.Primitives.DisposeState;
 
 namespace Wiaoj.BloomFilter.Internal;
 /// <summary>
@@ -68,10 +67,8 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
         this._memoryLock.EnterReadLock();
         try {
-            ulong hash64 = XxHash3.HashToUInt64(item);
-            // Kirsch-Mitzenmacher tekniği için iki 64 bitlik taban hash
-            ulong h1 = hash64;
-            ulong h2 = (hash64 >> 32) | (hash64 << 32);
+
+            BloomHasher.ComputeBaseHashes(item, Configuration.HashSeed, out ulong h1, out ulong h2);
 
             bool atLeastOneSet = false;
             long size = this.Configuration.SizeInBits;
@@ -101,8 +98,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
 
             // Kalanlar için Standart 64-bit Döngü
             for(; i < k; i++) {
-                ulong combinedHash = h1 + ((ulong)i * h2);
-                long pos = (long)(((UInt128)combinedHash * (ulong)size) >> 64);
+                long pos = BloomHasher.GetBitPosition(h1, h2, i, size);
                 if(this._bits.Set(pos)) atLeastOneSet = true;
             }
 
@@ -195,7 +191,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
             this._logger.LogSaveStarted(this.Name);
 
             try {
-                using var memoryStreamPool = this._memoryStreamPool.Lease();
+                using PooledObject<MemoryStream> memoryStreamPool = this._memoryStreamPool.Lease();
                 MemoryStream snapshotStream = memoryStreamPool.Item;
                 snapshotStream.SetLength(0);
 
@@ -206,10 +202,10 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
                 try {
                     // a. Checksum hesapla (Anlık durum)
                     checksum = this._bits.CalculateChecksum();
-  
+
                     // b. Header'ı stream'e yaz
                     BloomFilterHeader.WriteHeader(snapshotStream, checksum, this.Configuration, Encoding.UTF8);
-                      
+
                     // c. Veriyi stream'e yaz (Hala kilitli, veri değişemez)
                     await this._bits.WriteToStreamAsync(snapshotStream, cancellationToken);
                     this._isDirty = false;
@@ -240,7 +236,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
         // I/O Kilidini al (Aynı anda tek bir reload/save çalışsın)
         using(await this._ioLock.LockAsync(cancellationToken)) {
 
-            var loadResult = await this._storage.LoadStreamAsync(this.Name, cancellationToken);
+            (BloomFilterConfiguration Config, Stream DataStream)? loadResult = await this._storage.LoadStreamAsync(this.Name, cancellationToken);
             if(loadResult == null) {
                 this._logger.LogReloadNotFound(this.Name);
                 return;
@@ -302,7 +298,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
                 this._memoryLock.EnterWriteLock();
                 try {
                     // A. Eski referansı yerel bir değişkene al (Sakla)
-                    var oldBits = this._bits;
+                    PooledBitArray oldBits = this._bits;
 
                     // B. Yeni veriyi asıl field'a ata (Atomik referans değişimi)
                     // Şu andan itibaren 'Contains/Add' metodları yeni bitleri kullanmaya başlar.

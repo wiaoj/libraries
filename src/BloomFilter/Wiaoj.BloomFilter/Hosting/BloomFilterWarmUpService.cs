@@ -1,45 +1,38 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
+using Wiaoj.BloomFilter.Internal;
 
 namespace Wiaoj.BloomFilter.Hosting;
-public class BloomFilterWarmUpService : BackgroundService {
-    private readonly IBloomFilterProvider _provider;
-    private readonly BloomFilterOptions _options;
-    private readonly ILogger<BloomFilterWarmUpService> _logger;
 
-    public BloomFilterWarmUpService(
-        IBloomFilterProvider provider,
-        IOptions<BloomFilterOptions> options,
-        ILogger<BloomFilterWarmUpService> logger) {
-        this._provider = provider;
-        this._options = options.Value;
-        this._logger = logger;
-    }
+internal class BloomFilterWarmUpService(
+    IServiceProvider serviceProvider,
+    IOptions<BloomFilterOptions> options,
+    ILogger<BloomFilterWarmUpService> logger) : BackgroundService {
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
-        if(!this._options.Lifecycle.EnableWarmUp)
-            return;
+        if(!options.Value.Lifecycle.EnableWarmUp) return;
 
-        this._logger.LogInformation("🔥 Warming up Bloom Filters...");
+        logger.LogInformation("🔥 Warming up Bloom Filters...");
         Stopwatch sw = Stopwatch.StartNew();
 
-        // Config'de kayıtlı tüm filtreleri paralel olarak tetikliyoruz.
-        // GetAsync çağırmak, filtreyi Lazy yüklemeden çıkartıp RAM'e ve Shard'lara hazırlar.
-        IEnumerable<Task> tasks = this._options.Filters.Keys.Select(async key => {
+        var tasks = options.Value.Filters.Keys.Select(async key => {
             try {
-                FilterName name = FilterName.Parse(key);
-                await this._provider.GetAsync(name);
+                var filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(key);
+                if(filter is LazyBloomFilterProxy proxy) {
+                    await proxy.EnsureInitializedAsync(stoppingToken);
+                }
             }
             catch(Exception ex) {
-                this._logger.LogError(ex, "Failed to warm up '{Name}'", key);
+                logger.LogError(ex, "Failed to warm up '{Name}'", key);
             }
         });
 
         await Task.WhenAll(tasks);
 
         sw.Stop();
-        this._logger.LogInformation("✅ All filters warmed up in {Elapsed}ms.", sw.ElapsedMilliseconds);
+        logger.LogInformation("✅ All filters warmed up in {Elapsed}ms.", sw.ElapsedMilliseconds);
     }
 }
