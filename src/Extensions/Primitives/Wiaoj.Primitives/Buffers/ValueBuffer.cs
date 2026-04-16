@@ -53,6 +53,17 @@ public ref struct ValueBuffer<T> where T : unmanaged {
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="ValueBuffer{T}"/> struct 
+    /// using EXACTLY the provided stack-allocated memory. No renting occurs.
+    /// </summary>
+    /// <param name="initialBuffer">A stack-allocated buffer.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ValueBuffer(Span<T> initialBuffer) {
+        this._rented = null;
+        this._span = initialBuffer;
+    }
+
+    /// <summary>
     /// Gets a <see cref="Span{T}"/> representing the active memory region.
     /// </summary>
     public readonly Span<T> Span {
