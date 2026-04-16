@@ -78,7 +78,7 @@ public static class DddBuilderExtensions {
     /// <typeparam name="TMapper">The mapper type to register. Must be a concrete class.</typeparam>
     /// <param name="builder">The DDD builder instance.</param>
     /// <returns>The builder instance for chaining.</returns>
-    public static IDddBuilder AddTytoIntegrationMapper<TMapper>(this IDddBuilder builder) where TMapper : class {
+    public static IDddBuilder AddTytoIntegrationMapper<TMapper>(this IDddBuilder builder) where TMapper : class, IIntegrationEventMapper {
         Preca.ThrowIfNull(builder);
         return builder.AddTytoIntegrationMapper<TMapper>(ServiceLifetime.Scoped);
     }
@@ -97,7 +97,7 @@ public static class DddBuilderExtensions {
     /// or maps to a type that does not implement <see cref="IEvent"/>.
     /// </exception>
     public static IDddBuilder AddTytoIntegrationMapper<TMapper>(this IDddBuilder builder, ServiceLifetime lifetime)
-        where TMapper : class {
+        where TMapper : class, IIntegrationEventMapper {
         Preca.ThrowIfNull(builder);
 
         Type mapperType = typeof(TMapper);
