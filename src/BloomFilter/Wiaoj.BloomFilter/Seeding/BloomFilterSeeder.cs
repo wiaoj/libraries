@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Logging;
 using System.Text;
 using Wiaoj.BloomFilter.Diagnostics;
-using Wiaoj.BloomFilter.Internal;
 using Wiaoj.BloomFilter.Seeder;
 
 namespace Wiaoj.BloomFilter.Seeding;
@@ -17,7 +16,7 @@ public class BloomFilterSeeder(IServiceProvider serviceProvider, ILogger<BloomFi
 
         logger.LogSeedingStarted(filterName);
 
-        var filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(filterName.Value);
+        IPersistentBloomFilter filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(filterName.Value);
         long count = 0;
 
         await foreach(T? item in source.WithCancellation(cancellationToken)) {
@@ -31,11 +30,12 @@ public class BloomFilterSeeder(IServiceProvider serviceProvider, ILogger<BloomFi
         logger.LogSeedingCompleted(filterName, count);
     }
 
-    public Task SeedAsync(FilterName filterName, IAsyncEnumerable<string> source, CancellationToken cancellationToken = default) =>
-        SeedAsync(filterName, source, (str) => Encoding.UTF8.GetBytes(str), cancellationToken);
+    public Task SeedAsync(FilterName filterName, IAsyncEnumerable<string> source, CancellationToken cancellationToken = default) {
+        return SeedAsync(filterName, source, (str) => Encoding.UTF8.GetBytes(str), cancellationToken);
+    }
 
     public Task SeedAsync<TTag>(IAsyncEnumerable<string> source, CancellationToken cancellationToken = default) where TTag : notnull {
-        var typedFilter = serviceProvider.GetRequiredService<IBloomFilter<TTag>>();
+        IBloomFilter<TTag> typedFilter = serviceProvider.GetRequiredService<IBloomFilter<TTag>>();
         return SeedAsync(FilterName.Parse(typedFilter.Name), source, cancellationToken);
     }
 
@@ -43,7 +43,7 @@ public class BloomFilterSeeder(IServiceProvider serviceProvider, ILogger<BloomFi
         IAsyncEnumerable<TItem> source,
         Func<TItem, ReadOnlySpan<byte>> serializer,
         CancellationToken cancellationToken = default) where TTag : notnull {
-        var typedFilter = serviceProvider.GetRequiredService<IBloomFilter<TTag>>();
+        IBloomFilter<TTag> typedFilter = serviceProvider.GetRequiredService<IBloomFilter<TTag>>();
         return SeedAsync(FilterName.Parse(typedFilter.Name), source, serializer, cancellationToken);
     }
 }

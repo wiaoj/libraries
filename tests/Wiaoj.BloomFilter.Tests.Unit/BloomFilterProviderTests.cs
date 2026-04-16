@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Wiaoj.BloomFilter.Internal;
+using Wiaoj.BloomFilter.Seeder;
 
 namespace Wiaoj.BloomFilter.Tests.Unit;
 

@@ -110,10 +110,19 @@ public class LifecycleOptions {
     public bool AutoResetOnMismatch { get; set; } = true;
 }
 
+public enum BloomFilterType { InMemory, Scalable, Rotating }
+
 public class FilterDefinition {
     public long ExpectedItems { get; set; }
     public double ErrorRate { get; set; }
 
-    public bool IsScalable { get; set; } = false;
+    // Filtre tipi ve ayarları
+    public BloomFilterType Type { get; set; } = BloomFilterType.InMemory;
+
+    // Scalable parametreleri
     public double GrowthRate { get; set; } = 2.0;
+
+    // Rotating parametreleri
+    public TimeSpan WindowSize { get; set; }
+    public int ShardCount { get; set; }
 }

@@ -2,10 +2,12 @@
 using Microsoft.Extensions.Options;
 using System.Numerics;
 using Wiaoj.BloomFilter.Advanced;
+using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.ObjectPool;
 using Wiaoj.Primitives;
 
-namespace Wiaoj.BloomFilter.Internal; 
+namespace Wiaoj.BloomFilter.Internal;
+
 internal sealed class BloomFilterFactory(
     IOptionsMonitor<BloomFilterOptions> optionsMonitor,
     ILoggerFactory loggerFactory,
@@ -14,55 +16,51 @@ internal sealed class BloomFilterFactory(
     IObjectPool<MemoryStream> memoryStreamPool,
     IBloomFilterStorage? storage = null) {
 
-    public async Task<IPersistentBloomFilter> CreateAndLoadAsync(string filterNameStr, CancellationToken ct) {
-        var name = FilterName.Parse(filterNameStr);
+    public async Task<IPersistentBloomFilter> Create(string filterNameStr, CancellationToken cancellationToken = default) {
+        FilterName name = FilterName.Parse(filterNameStr);
         var currentOptions = optionsMonitor.CurrentValue;
 
         if(!currentOptions.Filters.TryGetValue(name.Value, out FilterDefinition? definition)) {
-            var ex = new InvalidOperationException($"Filter configuration for '{name}' not found.");
+            InvalidOperationException ex = new($"Filter configuration for '{name}' not found.");
             loggerFactory.CreateLogger<BloomFilterFactory>().LogError(ex, "Configuration missing.");
             throw ex;
         }
 
-        var config = new BloomFilterConfiguration(
+        // Context (Tüm filtre tiplerinin ihtiyaç duyduğu ortak bağımlılıklar)
+        BloomFilterContext context = new(
+            storage,
+            memoryStreamPool,
+            loggerFactory.CreateLogger(name.Value),
+            currentOptions,
+            timeProvider
+        );
+
+        // BloomFilter Configuration
+        BloomFilterConfiguration config = new(
             name,
             definition.ExpectedItems,
             Percentage.FromDouble(definition.ErrorRate),
             currentOptions.Performance.GlobalHashSeed
         );
 
-        long totalBytes = (config.SizeInBits + 7) / 8;
-        int calculatedShards = 1;
+        // Filtreyi Tipe Göre Factory Et
+        IPersistentBloomFilter filter = definition.Type switch {
+            BloomFilterType.Scalable => new ScalableBloomFilter(config, context, (GrowthRate)definition.GrowthRate),
 
-        if(totalBytes > currentOptions.Lifecycle.ShardingThresholdBytes) {
-            double ratio = (double)totalBytes / currentOptions.Lifecycle.ShardingThresholdBytes;
-            int needed = (int)Math.Ceiling(ratio);
-            calculatedShards = (int)BitOperations.RoundUpToPowerOf2((uint)needed);
-        }
+            BloomFilterType.Rotating => new RotatingBloomFilter(config, context, definition.WindowSize, definition.ShardCount),
 
-        var finalConfig = config.WithShardCount(calculatedShards);
-        var context = new BloomFilterContext(storage, memoryStreamPool, loggerFactory.CreateLogger(name.Value), currentOptions, timeProvider);
+            _ => CreateDefaultFilter(config, context, currentOptions)
+        };
 
-        IPersistentBloomFilter filter;
-
-        if(definition.IsScalable) {
-            filter = new ScalableBloomFilter(config, context, (GrowthRate)definition.GrowthRate);
-        }
-        else if(calculatedShards > 1) {
-            filter = new ShardedBloomFilter(finalConfig, context);
-        }
-        else {
-            filter = new InMemoryBloomFilter(finalConfig, context);
-        }
-
+        // Yükleme ve Hata Yönetimi
         try {
-            await filter.ReloadAsync(ct);
+            await filter.ReloadAsync(cancellationToken);
         }
         catch(Exception ex) {
             loggerFactory.CreateLogger<BloomFilterFactory>().LogError(ex, "Load failed for '{Name}'. Resetting...", name);
 
             if(storage != null) {
-                await storage.DeleteAsync(name.Value, ct);
+                await storage.DeleteAsync(name.Value, cancellationToken);
             }
 
             if(currentOptions.Lifecycle.AutoReseed) {
@@ -73,8 +71,23 @@ internal sealed class BloomFilterFactory(
         return filter;
     }
 
+    private static IPersistentBloomFilter CreateDefaultFilter(BloomFilterConfiguration config, BloomFilterContext context, BloomFilterOptions options) {
+        long totalBytes = (config.SizeInBits + 7) / 8;
+        int calculatedShards = 1;
+
+        if(totalBytes > options.Lifecycle.ShardingThresholdBytes) {
+            double ratio = (double)totalBytes / options.Lifecycle.ShardingThresholdBytes;
+            int needed = (int)Math.Ceiling(ratio);
+            calculatedShards = (int)BitOperations.RoundUpToPowerOf2((uint)needed);
+        }
+
+        return calculatedShards > 1
+            ? new ShardedBloomFilter(config.WithShardCount(calculatedShards), context)
+            : new InMemoryBloomFilter(config, context);
+    }
+
     private async Task TriggerAutoReseedAsync(IPersistentBloomFilter filter, FilterName name, CancellationToken ct) {
-        var matchingSeeders = autoSeeders.Where(s => s.FilterName == name).ToList();
+        List<IAutoBloomFilterSeeder> matchingSeeders = autoSeeders.Where(s => s.FilterName == name).ToList();
         if(matchingSeeders.Count > 0) {
             var tasks = matchingSeeders.Select(s => s.SeedAsync(filter, ct));
             await Task.WhenAll(tasks);

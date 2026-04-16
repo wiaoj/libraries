@@ -18,7 +18,7 @@ internal sealed class LazyBloomFilterProxy : IPersistentBloomFilter, IDisposable
             Stopwatch sw = Stopwatch.StartNew();
             this._logger.LogLazyLoadTriggered(FilterName.Parse(name));
 
-            var filter = await factory.CreateAndLoadAsync(name, ct);
+            var filter = await factory.Create(name, ct);
 
             sw.Stop();
             this._logger.LogLazyLoadCompleted(FilterName.Parse(name), sw.ElapsedMilliseconds);

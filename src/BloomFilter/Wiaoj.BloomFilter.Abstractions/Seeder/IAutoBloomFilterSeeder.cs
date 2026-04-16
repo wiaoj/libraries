@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.BloomFilter;
+﻿namespace Wiaoj.BloomFilter.Seeder;
 /// <summary>
 /// Implement this interface to enable automatic reseeding when a filter is corrupted or reset.
 /// </summary>

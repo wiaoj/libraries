@@ -1,6 +1,8 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Wiaoj.BloomFilter;
 
-namespace Wiaoj.BloomFilter.DependencyInjection;
+#pragma warning disable IDE0130
+namespace Microsoft.Extensions.DependencyInjection;
+#pragma warning restore IDE0130
 /// <summary>
 /// A builder for configuring Wiaoj Bloom Filter services, options, and filter registrations.
 /// </summary>
@@ -15,4 +17,8 @@ public interface IBloomFilterBuilder {
     /// Internal usage allows extensions to modify options directly.
     /// </summary>
     BloomFilterOptions Options { get; }
+
+    IBloomFilterBuilder AddAutoSave();
+    IBloomFilterBuilder AddWarmUp();
+    IBloomFilterBuilder AddAutoReseed();
 }
