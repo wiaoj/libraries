@@ -55,6 +55,16 @@ public static class BloomFilterInspector {
     }
 
     private static void InspectNode(IBloomFilter filter, StringBuilder sb, int indentLevel, string label) {
+        if(filter is LazyBloomFilterProxy proxy) {
+            var inner = proxy.GetInnerIfCreated();
+            if(inner != null) {
+                InspectNode(inner, sb, indentLevel, label); // İçindekine devam et
+                return;
+            }
+            sb.AppendLine($"{new string(' ', indentLevel * 2)}>> [Proxy: Not Initialized]");
+            return;
+        }
+
         Type type = filter.GetType();
         string indent = new(' ', indentLevel * 2);
 

@@ -28,15 +28,18 @@ public sealed class ObjectProxy2Tests {
     #region 2. THE GIGANTIC SHIELD (Devasa Nesne Testi)
     [Fact]
     public void Proxying_Gigantic_Array_Should_Be_Instant() {
-        // Arrange: 1 GB'lık bir dizi (Normalde serileştirmesi saniyeler sürer)
+        // WARMUP (ISINMA): JIT Derleyicisini çalıştırıp aradan çıkarıyoruz.
+        _serializer.Serialize(new byte[1]);
+
+        // Arrange: 1 GB'lık devasa dizi
         byte[] hugeArray = new byte[1024 * 1024 * 1024];
 
-        // Act: Proxy ile saniyeler değil, nanosaniyeler sürmeli
+        // Act: Gerçek Test
         Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
         byte[] proxyId = this._serializer.Serialize(hugeArray);
         watch.Stop();
 
-        // Assert: 10ms'den kısa sürmeli (Aslında 1ms bile sürmez)
+        // Assert: Artık 1ms'nin bile altında sürecektir!
         Assert.True(watch.ElapsedMilliseconds < 10, $"Proxy çok yavaş: {watch.ElapsedMilliseconds}ms");
 
         var recovered = this._serializer.Deserialize<byte[]>(proxyId);

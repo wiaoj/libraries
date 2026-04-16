@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Drawing;
+using System.Numerics;
 using System.Text;
 using Wiaoj.BloomFilter.Internal;
 using Wiaoj.Concurrency;
@@ -52,52 +53,83 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         // İlk katmanı Provider'ın kurallarına göre oluştur (Akıllı Factory Metodu)
         this._layers = [CreateLayer(baseConfig, 0)];
     }
-
+    private long _addCount = 0;
     public bool Add(ReadOnlySpan<byte> item) {
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
 
-        this._lock.EnterReadLock();
-        bool needsScale = false;
-        try {
-            IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
+        IPersistentBloomFilter[] layers = Atomic.Read(ref this._layers);
 
-            for(int i = currentLayers.Length - 1; i >= 0; i--) {
-                if(currentLayers[i].Contains(item)) return false;
-            }
-
-            IPersistentBloomFilter activeLayer = currentLayers[^1];
-            if(activeLayer.Add(item)) {
-                Percentage fillRatio = Percentage.FromDouble((double)activeLayer.GetPopCount() / activeLayer.Configuration.SizeInBits);
-                if(fillRatio >= this._saturationThreshold) {
-                    needsScale = true;
-                }
-            }
-        }
-        finally {
-            this._lock.ExitReadLock();
+        // 1. Contains (Arama - Tüm katmanlar)
+        for(int i = layers.Length - 1; i >= 0; i--) {
+            if(layers[i].Contains(item)) return false;
         }
 
-        if(needsScale) {
-            ScaleUp();
+        // 2. Ekleme (Sadece son katman)
+        IPersistentBloomFilter activeLayer = layers[^1];
+        bool added = activeLayer.Add(item);
+
+        // 3. Ölçeklendirme Kontrolü (Her 1000 eklemede bir kontrol et, performansı bozma)
+        if(added && Interlocked.Increment(ref _addCount) % 1000 == 0) {
+            CheckAndScale(activeLayer);
         }
 
-        return true;
+        return added;
     }
 
-    public bool Contains(ReadOnlySpan<byte> item) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    private void CheckAndScale(IPersistentBloomFilter activeLayer) {
+        double fillRatio = (double)activeLayer.GetPopCount() / activeLayer.Configuration.SizeInBits; 
+        if(fillRatio >= this._saturationThreshold.Value) {
+            ScaleUp();
+        }
+    }
 
-        this._lock.EnterReadLock();
-        try {
-            IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
-            for(int i = currentLayers.Length - 1; i >= 0; i--) {
-                if(currentLayers[i].Contains(item)) return true;
-            }
-            return false;
+    //public bool Add(ReadOnlySpan<byte> item) {
+    //    this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+
+    //    this._lock.EnterReadLock();
+    //    try {
+    //        IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
+    //        for(int i = currentLayers.Length - 1; i >= 0; i--) {
+    //            if(currentLayers[i].Contains(item)) return false;
+    //        }
+    //    }
+    //    finally {
+    //        this._lock.ExitReadLock();
+    //    }
+
+    //    bool needsScale = false;
+
+    //    this._lock.EnterReadLock();
+    //    try {
+    //        IPersistentBloomFilter activeLayer = Atomic.Read(ref this._layers)[^1];
+
+    //        // Sadece aktif katmana ekle!
+    //        if(activeLayer.Add(item)) {
+    //            // Sadece ekleme başarılıysa doluluk kontrolü yap
+    //            Percentage fillRatio = Percentage.FromDouble(activeLayer.GetPopCount() / activeLayer.Configuration.SizeInBits);
+    //            if(fillRatio >= this._saturationThreshold) {
+    //                needsScale = true;
+    //            }
+    //        }
+    //    }
+    //    finally {
+    //        this._lock.ExitReadLock();
+    //    }
+
+    //    if(needsScale) {
+    //        ScaleUp();
+    //    }
+
+    //    return true;
+    //}
+
+    public bool Contains(ReadOnlySpan<byte> item) {
+        IPersistentBloomFilter[] layers = Atomic.Read(ref this._layers);
+        // En yeni katmandan geriye doğru git (L4, L3, L2...)
+        for(int i = layers.Length - 1; i >= 0; i--) {
+            if(layers[i].Contains(item)) return true;
         }
-        finally {
-            this._lock.ExitReadLock();
-        }
+        return false;
     }
 
     private void ScaleUp() {

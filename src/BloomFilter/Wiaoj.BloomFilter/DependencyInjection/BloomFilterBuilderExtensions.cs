@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Wiaoj.BloomFilter;
 using Wiaoj.BloomFilter.DependencyInjection;
@@ -8,9 +9,11 @@ using Wiaoj.BloomFilter.Internal;
 #pragma warning disable IDE0130
 namespace Microsoft.Extensions.DependencyInjection;
 #pragma warning restore IDE0130
-
 public static class BloomFilterBuilderExtensions {
 
+    /// <summary>
+    /// Hem ayarlarını yapılandırır hem de Keyed Service olarak kaydeder.
+    /// </summary>
     public static BloomFilterBuilder AddFilter(
         this BloomFilterBuilder builder,
         string name,
@@ -28,15 +31,22 @@ public static class BloomFilterBuilderExtensions {
             };
         });
 
-        // KEYED SERVICE OLARAK KAYDET (.NET 8+)
-        builder.Services.AddKeyedSingleton<IBloomFilter>(name, (sp, key) => {
+        return builder.RegisterFilter(name);
+    }
+
+    /// <summary>
+    /// Sadece ayarları appsettings'de olan bir filtreyi DI Container'a tanıtır.
+    /// </summary>
+    public static BloomFilterBuilder RegisterFilter(this BloomFilterBuilder builder, string name) {
+
+        builder.Services.TryAddKeyedSingleton<IBloomFilter>(name, (sp, key) => {
             BloomFilterFactory factory = sp.GetRequiredService<BloomFilterFactory>();
             IBloomFilterRegistry registry = sp.GetRequiredService<IBloomFilterRegistry>();
             ILoggerFactory loggerFactory = sp.GetRequiredService<ILoggerFactory>();
             return new LazyBloomFilterProxy((string)key, factory, registry, loggerFactory);
         });
 
-        builder.Services.AddKeyedSingleton<IPersistentBloomFilter>(name, (sp, key) =>
+        builder.Services.TryAddKeyedSingleton<IPersistentBloomFilter>(name, (sp, key) =>
             (IPersistentBloomFilter)sp.GetRequiredKeyedService<IBloomFilter>(key));
 
         return builder;
@@ -50,7 +60,6 @@ public static class BloomFilterBuilderExtensions {
 
         builder.AddFilter(name, expectedItems, errorRate);
 
-        // Typed Wrapper'ı DI'a ekle ve Keyed servis ile eşleştir
         builder.Services.TryAddSingleton<IBloomFilter<TTag>>(sp => {
             IBloomFilter innerFilter = sp.GetRequiredKeyedService<IBloomFilter>(name);
             return new TypedBloomFilterWrapper<TTag>(innerFilter);
@@ -59,13 +68,20 @@ public static class BloomFilterBuilderExtensions {
         return builder;
     }
 
+    /// <summary>
+    /// appsettings'de var olan bir ayarı Typed (Etiketli) Interface'e bağlar.
+    /// </summary>
     public static BloomFilterBuilder MapFilter<TTag>(this BloomFilterBuilder builder, string filterName)
         where TTag : notnull {
+
+        // Önce Keyed olarak tanıdığından emin olalım
+        builder.RegisterFilter(filterName);
 
         builder.Services.TryAddSingleton<IBloomFilter<TTag>>(sp => {
             IBloomFilter innerFilter = sp.GetRequiredKeyedService<IBloomFilter>(filterName);
             return new TypedBloomFilterWrapper<TTag>(innerFilter);
         });
+
         return builder;
     }
 

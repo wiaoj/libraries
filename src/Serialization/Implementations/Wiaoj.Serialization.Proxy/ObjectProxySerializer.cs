@@ -124,47 +124,70 @@ public sealed class ObjectProxySerializer<TKey>(ObjectProxyRegistry registry) : 
         return false;
     }
 
-    // --- ASYNC METHODS (In-process olduğu için senkron gibi davranır) ---
-
-    public Task SerializeAsync<TValue>(Stream stream, TValue value, CancellationToken cancellationToken = default) {
+    // --- ASYNC METHODS (In-process olduğu için senkron gibi davranır) --- 
+    public async Task SerializeAsync<TValue>(Stream stream, TValue value, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(stream);
         Preca.ThrowIfNull(value);
         long id = registry.Register(value);
-        byte[] buffer = new byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64LittleEndian(buffer, id);
-        return stream.WriteAsync(buffer, cancellationToken).AsTask();
+
+        // Havuzdan bellek kiralıyoruz (Allocation yok)
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(sizeof(long));
+        try {
+            BinaryPrimitives.WriteInt64LittleEndian(buffer, id);
+            await stream.WriteAsync(buffer.AsMemory(0, sizeof(long)), cancellationToken).ConfigureAwait(false);
+        }
+        finally {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
-    public Task SerializeAsync(Stream stream, object value, Type type, CancellationToken cancellationToken = default) {
+    public async Task SerializeAsync(Stream stream, object value, Type type, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(stream);
         Preca.ThrowIfNull(value);
         Preca.ThrowIfNull(type);
         long id = registry.Register(value);
-        byte[] buffer = new byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64LittleEndian(buffer, id);
-        return stream.WriteAsync(buffer, cancellationToken).AsTask();
+
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(sizeof(long));
+        try {
+            BinaryPrimitives.WriteInt64LittleEndian(buffer, id);
+            await stream.WriteAsync(buffer.AsMemory(0, sizeof(long)), cancellationToken).ConfigureAwait(false);
+        }
+        finally {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     public async ValueTask<TValue?> DeserializeAsync<TValue>(Stream stream, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(stream);
-        byte[] buffer = new byte[sizeof(long)];
-        await stream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
 
-        long id = BinaryPrimitives.ReadInt64LittleEndian(buffer);
-        object? obj = registry.Get(id);
-        return obj is TValue value ? value : default;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(sizeof(long));
+        try {
+            await stream.ReadExactlyAsync(buffer.AsMemory(0, sizeof(long)), cancellationToken).ConfigureAwait(false);
+            long id = BinaryPrimitives.ReadInt64LittleEndian(buffer);
+            object? obj = registry.Get(id);
+            return obj is TValue value ? value : default;
+        }
+        finally {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     public async ValueTask<object?> DeserializeAsync(Stream stream, Type type, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(stream);
         Preca.ThrowIfNull(type);
-        byte[] buffer = new byte[sizeof(long)];
-        await stream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
-        long id = BinaryPrimitives.ReadInt64LittleEndian(buffer);
-        return registry.Get(id);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(sizeof(long));
+        try {
+            await stream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+            long id = BinaryPrimitives.ReadInt64LittleEndian(buffer);
+            return registry.Get(id);
+        }
+        finally {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
-    public async ValueTask<(bool Success, TValue? Value)> TryDeserializeAsync<TValue>(Stream stream, CancellationToken cancellationToken = default) {
+    public async ValueTask<(bool Success, TValue? Value)> TryDeserializeAsync<TValue>(Stream stream,
+                                                                                      CancellationToken cancellationToken = default) {
         try {
             TValue? result = await DeserializeAsync<TValue>(stream, cancellationToken).ConfigureAwait(false);
             return (true, result);

@@ -30,7 +30,9 @@ internal sealed class LazyBloomFilterProxy : IPersistentBloomFilter, IDisposable
     }
 
     // WarmUp Servisinin tetiklemesi için
-    public ValueTask EnsureInitializedAsync(CancellationToken ct) => new(_lazyFilter.GetValueAsync(ct));
+    public async ValueTask EnsureInitializedAsync(CancellationToken ct) {
+        await _lazyFilter.GetValueAsync(ct);
+    }
 
     private IPersistentBloomFilter InnerFilter {
         get {

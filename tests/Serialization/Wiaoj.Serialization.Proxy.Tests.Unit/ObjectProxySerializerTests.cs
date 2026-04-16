@@ -16,6 +16,13 @@ public record ProxyTestKey : ISerializerKey;
 public sealed class ObjectProxySerializerTests {
     private readonly ObjectProxySerializer<ProxyTestKey> _serializer = new(new());
 
+    [Fact]
+    public void Serialize_NullValue_Should_Throw_ArgumentNullException() {
+        // Arrange & Act & Assert
+        Assert.ThrowsAny<ArgumentNullException>(() => this._serializer.Serialize<HardcoreUser>(null!));
+        Assert.ThrowsAny<ArgumentNullException>(() => this._serializer.SerializeToString<HardcoreUser>(null!));
+    }
+
     #region 1. REFERANS BÜTÜNLÜĞÜ (THE ILLUSION)
     [Fact]
     public void Serialize_ShouldPreserve_OriginalReference_Exactly() {
@@ -70,13 +77,17 @@ public sealed class ObjectProxySerializerTests {
     #region 3. MEMORY LEAK & LIFECYCLE (THE SAFETY)
     [Fact]
     public async Task Lease_Should_Allow_Multiple_Reads_But_Clean_Up_After_Expiry() {
+        var fastRegistry = new ObjectProxyRegistry(cleanupInterval: TimeSpan.FromSeconds(1)) {
+            LeaseDuration = TimeSpan.FromSeconds(2) // Kiralama süresi sadece 2 saniye
+        };
+        var fastSerializer = new ObjectProxySerializer<ProxyTestKey>(fastRegistry);
         // Arrange
         ProxyTestService service = new();
-        byte[] data = this._serializer.Serialize(service);
+        byte[] data = fastSerializer.Serialize(service);
 
         // Act 1: Kiralama süresi içinde defalarca okunabilmeli (Fan-out desteği)
-        var firstAttempt = this._serializer.Deserialize<ProxyTestService>(data);
-        var secondAttempt = this._serializer.Deserialize<ProxyTestService>(data);
+        var firstAttempt = fastSerializer.Deserialize<ProxyTestService>(data);
+        var secondAttempt = fastSerializer.Deserialize<ProxyTestService>(data);
 
         // Assert 1: İkisi de aynı orijinal nesneyi almalı
         Assert.Same(service, firstAttempt);
@@ -84,10 +95,10 @@ public sealed class ObjectProxySerializerTests {
 
         // Act 2: Kiralama süresinin dolmasını bekle (Örn: Registry'de 30sn ise testte bekliyoruz)
         // Not: Testlerin hızlı koşması için Registry'de bu süre test ortamında kısaltılabilir.
-        await Task.Delay(TimeSpan.FromSeconds(12));
+        await Task.Delay(TimeSpan.FromSeconds(4));
 
         // Act 3: Süre dolduktan sonra temizlikçi (CleanupTask) çalışmış olmalı
-        var finalAttempt = this._serializer.Deserialize<ProxyTestService>(data);
+        var finalAttempt = fastSerializer.Deserialize<ProxyTestService>(data);
 
         // Assert 2: Artık gerçekten silinmiş olmalı
         Assert.Null(finalAttempt);
@@ -252,33 +263,38 @@ public sealed class ObjectProxySerializerTests {
 
     [Fact]
     public async Task Object_Should_Be_Eligible_For_GC_Only_After_Lease_Expires() {
-        // Arrange: Zayıf referans oluştur
-        var weakRef = CreateWeakReferenceWithLease();
+        // Arrange: Teste özel "Fast Registry" 
+        // Temizlikçi 500ms'de bir çalışsın, Obje 1 saniyede ölsün.
+        var fastRegistry = new ObjectProxyRegistry(TimeSpan.FromMilliseconds(500)) {
+            LeaseDuration = TimeSpan.FromSeconds(1)
+        };
+        var fastSerializer = new ObjectProxySerializer<ProxyTestKey>(fastRegistry);
 
-        // Act 1: Hemen GC çağır (Nesne hala Registry'de olduğu için silinmemeli)
+        // Act 1: Nesneyi yarat ve referansını al
+        var weakRef = CreateWeakReferenceWithLease(fastSerializer); // <-- FastSerializer'ı parametre verdik
+
         GC.Collect();
         GC.WaitForPendingFinalizers();
         Assert.True(weakRef.IsAlive, "Nesne kiralama süresi dolmadan silindi! Registry referansı tutamıyor.");
 
-        // Act 2: Kiralama süresinin (Lease) ve temizlik periyodunun dolmasını bekle
-        await Task.Delay(TimeSpan.FromSeconds(12));
+        // Act 2: Lease (1sn) + Temizlikçi Payı (0.5sn) = 2 saniye beklemek GARANTİ çözüm.
+        await Task.Delay(TimeSpan.FromSeconds(2));
 
-        // Act 3: Şimdi GC'yi zorla
+        // Act 3: Artık Timer objeyi kesinlikle Dictionary'den uçurdu. GC silebilir.
         GC.Collect();
         GC.WaitForPendingFinalizers();
 
-        // Assert: Artık Registry'de Strong Reference kalmadığı için GC nesneyi toplamış olmalı
+        // Assert
         Assert.False(weakRef.IsAlive, "Lease dolmasına rağmen nesne hala bellekte!");
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private WeakReference CreateWeakReferenceWithLease() {
+    private WeakReference CreateWeakReferenceWithLease(ObjectProxySerializer<ProxyTestKey> serializer) {
         var item = new ProxyTestService();
-        var data = this._serializer.Serialize(item);
-        // Deserialize yaparak süreyi başlattık (veya sadece Serialize yettli)
-        this._serializer.Deserialize<ProxyTestService>(data);
+        var data = serializer.Serialize(item);
+        serializer.Deserialize<ProxyTestService>(data);
         return new WeakReference(item);
-    }
+    } 
 
     [Fact]
     public void Mixed_Types_In_Registry_Should_Not_Interfere() {
