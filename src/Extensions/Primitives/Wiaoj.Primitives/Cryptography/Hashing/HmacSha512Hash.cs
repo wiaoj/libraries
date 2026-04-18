@@ -497,14 +497,15 @@ public static partial class HmacSha512HashExtensions {
                     hashBuffer.AsMemory(0, HmacSha512Hash.HashSizeInBytes),
                     cancellationToken);
 
-                if(stream.CanSeek) stream.Position = 0;
-
                 return new HmacSha512Hash(hashBuffer.AsSpan(0, HmacSha512Hash.HashSizeInBytes));
             }
             finally {
                 CryptographicOperations.ZeroMemory(keyBuffer.AsSpan(0, keyLength));
                 ArrayPool<byte>.Shared.Return(keyBuffer);
                 ArrayPool<byte>.Shared.Return(hashBuffer);
+
+                if(stream.CanSeek) 
+                    stream.Position = 0;
             }
         }
     }

@@ -407,12 +407,14 @@ public static partial class Sha256HashExtensions {
             try {
                 await SHA256.HashDataAsync(stream, buffer.AsMemory(0, Sha256Hash.HashSizeInBytes), cancellationToken);
 
-                if(stream.CanSeek) stream.Position = 0;
 
                 return new Sha256Hash(buffer.AsSpan(0, Sha256Hash.HashSizeInBytes));
             }
             finally {
                 ArrayPool<byte>.Shared.Return(buffer);
+
+                if(stream.CanSeek) 
+                    stream.Position = 0;
             }
         }
     }
