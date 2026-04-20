@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.Buffers;
@@ -219,10 +221,32 @@ public unsafe struct Crc32Hash
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static uint Append(uint crc, ReadOnlySpan<byte> data) {
-        uint[] table = Crc32Table;
-        for(int i = 0; i < data.Length; i++) {
-            crc = (crc >> 8) ^ table[(crc ^ data[i]) & 0xFF];
+        // x86/x64 — SSE4.2
+        if(Sse42.IsSupported) {
+            int i = 0;
+            // 4 byte chunk
+            for(; i <= data.Length - 4; i += 4)
+                crc = Sse42.Crc32(crc, MemoryMarshal.Read<uint>(data[i..]));
+            // Kalan byte'lar
+            for(; i < data.Length; i++)
+                crc = Sse42.Crc32(crc, data[i]);
+            return crc;
         }
+
+        // ARM — CRC32 extension
+        if(Crc32.IsSupported) {
+            int i = 0;
+            for(; i <= data.Length - 4; i += 4)
+                crc = Crc32.ComputeCrc32(crc, MemoryMarshal.Read<uint>(data[i..]));
+            for(; i < data.Length; i++)
+                crc = Crc32.ComputeCrc32(crc, data[i]);
+            return crc;
+        }
+
+        // Fallback lookup
+        uint[] table = Crc32Table;
+        for(int i = 0; i < data.Length; i++)
+            crc = (crc >> 8) ^ table[(crc ^ data[i]) & 0xFF];
         return crc;
     }
 
@@ -368,9 +392,11 @@ public unsafe struct Crc32Hash
     /// <summary>
     /// Returns the hexadecimal string representation of the hash.
     /// </summary>
-    public override readonly string ToString() => string.Create(HashSizeInBytes * 2, this, (span, hash) => {
-        hash.TryFormat(span, out _);
-    });
+    public override readonly string ToString() {
+        return string.Create(HashSizeInBytes * 2, this, (span, hash) => {
+            hash.TryFormat(span, out _);
+        });
+    }
 
     /// <summary>
     /// Attempts to format the hash as a hexadecimal string into the provided character span.
