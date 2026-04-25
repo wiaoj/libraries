@@ -18,10 +18,10 @@ namespace Wiaoj.Primitives;
 /// <summary>
 /// Represents an opaque (obfuscated), URL-friendly identifier wrapper for 64-bit (Snowflake) or 128-bit (Guid) IDs.
 /// </summary>
-[TypeConverter(typeof(OpaqueIdTypeConverter))]
-[JsonConverter(typeof(OpaqueIdJsonConverter))]
 [StructLayout(LayoutKind.Auto)]
 [DebuggerDisplay("{ToString(),nq} [{Value}]")]
+[TypeConverter(typeof(OpaqueIdTypeConverter))]
+[JsonConverter(typeof(OpaqueIdJsonConverter))]
 public readonly struct OpaqueId :
     IEquatable<OpaqueId>,
     ISpanParsable<OpaqueId>,

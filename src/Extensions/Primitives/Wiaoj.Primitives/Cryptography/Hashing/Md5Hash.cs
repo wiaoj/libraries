@@ -5,6 +5,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
+using Wiaoj.Primitives.JsonConverters;
 
 namespace Wiaoj.Primitives.Cryptography.Hashing;
 
@@ -15,6 +17,7 @@ namespace Wiaoj.Primitives.Cryptography.Hashing;
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
 [StructLayout(LayoutKind.Sequential)]
+[JsonConverter(typeof(Md5HashJsonConverter))]
 public unsafe struct Md5Hash
     : IEquatable<Md5Hash>,
     ISpanFormattable,
