@@ -118,7 +118,7 @@ public static class EncryptedSecretMappingExtensions {
     /// <typeparam name="TContext">The secret context type associated with the <see cref="EncryptedSecret{TContext}"/>.</typeparam>
     /// <param name="propertyBuilder">The builder for the property being configured.</param>
     /// <returns>The same builder instance so that multiple calls can be chained.</returns>
-    public static PropertyBuilder<EncryptedSecret<TContext>?> HasNullableEncryptedSecretConversion<TContext>(
+    public static PropertyBuilder<EncryptedSecret<TContext>?> HasEncryptedSecretConversion<TContext>(
         this PropertyBuilder<EncryptedSecret<TContext>?> propertyBuilder)
         where TContext : ISecretContext {
 
