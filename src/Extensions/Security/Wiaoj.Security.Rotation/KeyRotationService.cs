@@ -1,12 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Diagnostics;
 using System.Security.Cryptography;
 
 namespace Wiaoj.Security;
-
-// ────────────────────────────────────────────────────────────────────────────
-// KeyRotationService<TContext>
-// ────────────────────────────────────────────────────────────────────────────
-
 /// <summary>
 /// Orchestrates key rotation: checks expiry, generates new keys,
 /// retires old ones, reloads the protector, and triggers data rotation.
@@ -26,18 +23,19 @@ public sealed class KeyRotationService<TContext>
     private readonly TimeProvider _timeProvider;
     private readonly string _ctx = typeof(TContext).Name;
 
+    private static readonly KeyValuePair<string, object?> _ctxTag = SecurityMeter.ContextTag<TContext>();
     public KeyRotationService(
         IEncryptionKeyStore store,
         IMasterKeyProvider masterKeyProvider,
         ManagedSecretProtector<TContext> protector,
-        KeyRotationOptions options,
-        ILogger<KeyRotationService<TContext>> logger, 
+        IOptions<KeyRotationOptions> options,
+        ILogger<KeyRotationService<TContext>> logger,
         TimeProvider timeProvider,
         IDataRotator<TContext>? dataRotator = null) {
         this._store = store;
         this._masterKeyProvider = masterKeyProvider;
         this._protector = protector;
-        this._options = options;
+        this._options = options.Value;
         this._logger = logger;
         this._timeProvider = timeProvider;
         this._dataRotator = dataRotator;
@@ -64,7 +62,7 @@ public sealed class KeyRotationService<TContext>
 
         TimeSpan age = DateTime.UtcNow - current.CreatedAt;
 
-        if(!current.IsExpired(this._options.RotationInterval, _timeProvider)) {
+        if(!current.IsExpired(this._options.RotationInterval, this._timeProvider)) {
             this._logger.LogDebug(
                 "[{Ctx}] Key v{V} is valid (age {Age:d\\d\\ hh\\:mm}, limit {Limit:d\\d}). No rotation.",
                 this._ctx, current.Version, age, this._options.RotationInterval);
@@ -100,16 +98,18 @@ public sealed class KeyRotationService<TContext>
     // ── Private ───────────────────────────────────────────────────────────────
 
     private async Task ExecuteRotationAsync(EncryptionKeyRecord current, CancellationToken ct) {
+        long start = Stopwatch.GetTimestamp();
         int newVersion = current.Version + 1;
         this._logger.LogInformation("[{Ctx}] Generating key v{New}...", this._ctx, newVersion);
 
         // 1. Generate & wrap new key
         byte[] keyMaterial = new byte[this._options.KeySizeInBytes];
+
         try {
             RandomNumberGenerator.Fill(keyMaterial);
-            
+
             using MasterKey masterKey = await this._masterKeyProvider.GetMasterKeyAsync(ct);
-             
+
             string wrapped = masterKey.Wrap(keyMaterial);
 
             EncryptionKeyRecord newRecord = new() {
@@ -117,44 +117,52 @@ public sealed class KeyRotationService<TContext>
                 ContextName = this._ctx,
                 Version = newVersion,
                 WrappedKeyMaterial = wrapped,
-                CreatedAt = _timeProvider.GetUtcNow(),
+                CreatedAt = this._timeProvider.GetUtcNow(),
             };
 
             await this._store.SaveKeyAsync(newRecord, ct);
             this._logger.LogInformation("[{Ctx}] Key v{New} persisted.", this._ctx, newVersion);
+
+            // 2. Retire old key
+            await this._store.RetireKeyAsync(this._ctx, current.Version, ct);
+            this._logger.LogInformation("[{Ctx}] Key v{Old} retired.", this._ctx, current.Version);
+
+            // 3. Hot-reload the protector (atomic swap)
+            await this._protector.ReloadAsync(ct);
+            this._logger.LogInformation("[{Ctx}] Protector reloaded → key v{New} is now active.", this._ctx, newVersion);
+
+            // 4. Optionally re-encrypt application data
+            if(this._options.AutoRotateData && this._dataRotator is not null)
+                await RotateDataAsync(ct);
+
+            SecurityMeter.RotationCount.Add(1, _ctxTag);
+            SecurityMeter.RotationDuration.Record(Stopwatch.GetElapsedTime(start).TotalMilliseconds, _ctxTag);
+        }
+        catch(Exception ex) {
+            SecurityMeter.RotationErrorCount.Add(1, _ctxTag);
+            this._logger.LogError(ex, "[{Ctx}] Rotation failed for key v{New}.", this._ctx, newVersion);
+            throw;
         }
         finally {
             CryptographicOperations.ZeroMemory(keyMaterial);
         }
-
-        // 2. Retire old key
-        await this._store.RetireKeyAsync(this._ctx, current.Version, ct);
-        this._logger.LogInformation("[{Ctx}] Key v{Old} retired.", this._ctx, current.Version);
-
-        // 3. Hot-reload the protector (atomic swap)
-        await this._protector.ReloadAsync(ct);
-        this._logger.LogInformation("[{Ctx}] Protector reloaded → key v{New} is now active.", this._ctx, newVersion);
-
-        // 4. Optionally re-encrypt application data
-        if(this._options.AutoRotateData && this._dataRotator is not null)
-            await RotateDataAsync(ct);
     }
-     
+
     private async Task RotateDataAsync(CancellationToken cancellationToken) {
-        _logger.LogInformation("[{Ctx}] Starting data rotation...", _ctx);
+        this._logger.LogInformation("[{Ctx}] Starting data rotation...", this._ctx);
         int total = 0;
 
-        while(!await _dataRotator!.IsCompleteAsync(cancellationToken)) {
+        while(!await this._dataRotator!.IsCompleteAsync(cancellationToken)) {
             cancellationToken.ThrowIfCancellationRequested();
-            int rotated = await _dataRotator.RotateBatchAsync(_options.DataRotationBatchSize, cancellationToken);
+            int rotated = await this._dataRotator.RotateBatchAsync(this._options.DataRotationBatchSize, cancellationToken);
             total += rotated;
-            _logger.LogDebug("[{Ctx}] Batch rotated {N} records.", _ctx, rotated);
-             
-            if(_options.DataRotationBatchDelay > TimeSpan.Zero) {
-                await Task.Delay(_options.DataRotationBatchDelay, cancellationToken);
+            this._logger.LogDebug("[{Ctx}] Batch rotated {N} records.", this._ctx, rotated);
+
+            if(this._options.DataRotationBatchDelay > TimeSpan.Zero) {
+                await Task.Delay(this._options.DataRotationBatchDelay, cancellationToken);
             }
         }
 
-        _logger.LogInformation("[{Ctx}] Data rotation complete. Total: {Total} records.", _ctx, total);
+        this._logger.LogInformation("[{Ctx}] Data rotation complete. Total: {Total} records.", this._ctx, total);
     }
 }

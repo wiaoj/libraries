@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
@@ -15,6 +16,10 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
 
     private readonly KeyRing<TContext> _keyRing;
     private readonly DisposeState _disposeState = new();
+
+    // Cache tag to avoid allocating a new KVP on every encrypt/decrypt call.
+    private static readonly KeyValuePair<string, object?> _contextTag = SecurityMeter.ContextTag<TContext>();
+
 
     /// <param name="keyRing">The key ring. This protector takes ownership and disposes it.</param>
     public SecretProtector(KeyRing<TContext> keyRing) {
@@ -34,22 +39,37 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
     public EncryptedSecret<TContext> Protect(ReadOnlySpan<byte> plainSecret) {
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(SecretProtector<>));
 
-        EncryptionKey currentKey = EnsureActiveKey();
-        byte[] packet = currentKey.Encrypt(plainSecret);
-
+        long start = Stopwatch.GetTimestamp();
         try {
-            return EncryptedSecret<TContext>.Create(
-                CipherBlob.FromEncryptionResult(Base64String.Parse(packet)),
+
+            EncryptionKey currentKey = EnsureActiveKey();
+            byte[] packet = currentKey.Encrypt(plainSecret);
+
+            try {
+                Base64UrlString encoded = Base64UrlString.FromBytes(packet);
+                EncryptedSecret<TContext> result = EncryptedSecret<TContext>.Create(
+                CipherBlob.From(encoded),
                 this._keyRing.CurrentVersion);
+
+                SecurityMeter.ProtectCount.Add(1, _contextTag);
+                SecurityMeter.ProtectDuration.Record(
+                    Stopwatch.GetElapsedTime(start).TotalMilliseconds, _contextTag);
+
+                return result;
+            }
+            finally {
+                CryptographicOperations.ZeroMemory(packet);
+            }
         }
-        finally {
-            CryptographicOperations.ZeroMemory(packet);
+        catch {
+            SecurityMeter.ProtectErrorCount.Add(1, _contextTag);
+            throw;
         }
     }
 
     /// <inheritdoc/>
     public EncryptedSecret<TContext> Protect(string plainText) {
-        ArgumentNullException.ThrowIfNull(plainText);
+        Preca.ThrowIfNull(plainText);
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(SecretProtector<>));
 
         byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
@@ -65,19 +85,32 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
     public Secret<byte> Unprotect(in EncryptedSecret<TContext> encrypted) {
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(SecretProtector<>));
 
-        EncryptionKey key = this._keyRing.GetKey(encrypted.KeyVersion);
-
-        byte[] combined = Convert.FromBase64String(encrypted.Blob.RawBase64);
+        long start = Stopwatch.GetTimestamp();
         try {
-            return key.Decrypt(combined);
-        }
-        catch(CryptographicException ex) when(ex.InnerException is AuthenticationTagMismatchException) {
-            throw new CryptographicException(
-                $"Authentication tag mismatch for EncryptedSecret<{typeof(TContext).Name}> " +
-                $"(key {encrypted.KeyVersion}). Data may be corrupt or tampered.", ex);
-        }
-        finally {
-            CryptographicOperations.ZeroMemory(combined);
+            EncryptionKey key = this._keyRing.GetKey(encrypted.KeyVersion);
+
+            byte[] combined = Base64UrlString.Parse(encrypted.Blob.RawBase64).ToBytes();
+            try {
+                Secret<byte> result = key.Decrypt(combined);
+
+                SecurityMeter.UnprotectCount.Add(1, _contextTag);
+                SecurityMeter.UnprotectDuration.Record(
+                    Stopwatch.GetElapsedTime(start).TotalMilliseconds, _contextTag);
+
+                return result;
+            }
+            catch(CryptographicException ex) when(ex.InnerException is AuthenticationTagMismatchException) { 
+                throw new CryptographicException(
+                    $"Authentication tag mismatch for EncryptedSecret<{typeof(TContext).Name}> " +
+                    $"(key {encrypted.KeyVersion}). Data may be corrupt or tampered.", ex);
+            }
+            finally {
+                CryptographicOperations.ZeroMemory(combined);
+            }
+        } 
+        catch {
+            SecurityMeter.UnprotectErrorCount.Add(1, _contextTag);
+            throw;
         }
     }
 
@@ -104,7 +137,7 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
             this._disposeState.SetDisposed();
         }
     }
-     
+
     private EncryptionKey EnsureActiveKey() {
         EncryptionKey currentKey = this._keyRing.CurrentKey;
         if(currentKey.IsRetired)

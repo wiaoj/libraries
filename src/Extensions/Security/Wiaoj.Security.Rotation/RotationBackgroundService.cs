@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Wiaoj.Security;
 
@@ -19,24 +20,15 @@ namespace Wiaoj.Security;
 /// the next tick will retry. Cancellation (graceful shutdown) propagates cleanly.
 /// </para>
 /// </remarks>
-public sealed class RotationBackgroundService<TContext> : BackgroundService
-    where TContext : ISecretContext {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly KeyRotationOptions _options;
-    private readonly ILogger<RotationBackgroundService<TContext>> _logger;
+public sealed class RotationBackgroundService<TContext>(IServiceScopeFactory scopeFactory,
+                                                        IOptions<KeyRotationOptions> options,
+                                                        ILogger<RotationBackgroundService<TContext>> logger)
+    : BackgroundService where TContext : ISecretContext {
+    private readonly KeyRotationOptions _options = options.Value;
     private readonly string _ctx = typeof(TContext).Name;
 
-    public RotationBackgroundService(
-        IServiceScopeFactory scopeFactory,
-        KeyRotationOptions options,
-        ILogger<RotationBackgroundService<TContext>> logger) {
-        this._scopeFactory = scopeFactory;
-        this._options = options;
-        this._logger = logger;
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
-        this._logger.LogInformation(
+        logger.LogInformation(
             "[{Ctx}] Rotation background service started. " +
             "RotationInterval={Rotation:d\\d}, CheckInterval={Check}.",
             this._ctx, this._options.RotationInterval, this._options.CheckInterval);
@@ -56,14 +48,14 @@ public sealed class RotationBackgroundService<TContext> : BackgroundService
 
     private async Task<TimeSpan> CheckAndRotateAsync(CancellationToken cancellationToken) {
         try {
-            await using AsyncServiceScope scope = this._scopeFactory.CreateAsyncScope();
+            await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
 
             KeyRotationService<TContext> keyRotationService = scope.ServiceProvider.GetRequiredService<KeyRotationService<TContext>>();
 
             bool rotated = await keyRotationService.RotateIfNeededAsync(cancellationToken);
 
             if(rotated)
-                this._logger.LogInformation("[{Ctx}] Scheduled rotation completed.", this._ctx);
+                logger.LogInformation("[{Ctx}] Scheduled rotation completed.", this._ctx);
 
             return this._options.CheckInterval;
         }
@@ -73,7 +65,7 @@ public sealed class RotationBackgroundService<TContext> : BackgroundService
         }
         catch(Exception ex) {
             // Log and continue — next tick will retry
-            this._logger.LogError(ex,
+            logger.LogError(ex,
                 "[{Ctx}] Rotation check failed. Will retry in {Interval}.",
                 this._ctx, this._options.CheckInterval);
             return this._options.RetryIntervalOnError;

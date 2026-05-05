@@ -23,26 +23,26 @@ public sealed class EnvironmentMasterKeyProvider : IMasterKeyProvider {
             throw new InvalidOperationException(
                 $"Master key environment variable '{this._variableName}' is not set or empty. " +
                 "Set it to a Base64-encoded 32-byte (256-bit) random value.");
-        
-        byte[]? keyBytes = null;
-        try {
-            keyBytes = Convert.FromBase64String(value);
 
-            if(keyBytes.Length is not (16 or 24 or 32))
+        Base64UrlString? keyBytes = null;
+        try {
+            keyBytes = Base64UrlString.Parse(value);
+            var lenght = keyBytes.Value.GetDecodedLength();
+            if(lenght is not (16 or 24 or 32))
                 throw new InvalidOperationException(
                     $"Master key must be 16, 24, or 32 bytes (128/192/256-bit AES). " +
-                    $"Got {keyBytes.Length} bytes from '{this._variableName}'.");
+                    $"Got {lenght} bytes from '{this._variableName}'.");
 
-            return ValueTask.FromResult(new MasterKey(Secret<byte>.From(keyBytes)));
+            return ValueTask.FromResult(new MasterKey(Secret.From(keyBytes.Value.ToBytes())));
         }
         catch(FormatException ex) {
             throw new InvalidOperationException(
                 $"Environment variable '{this._variableName}' is not valid Base64.", ex);
         }
         finally {
-            if(keyBytes is not null) {
+            if(keyBytes.HasValue) {
                 // İşimiz bittiği an managed diziyi RAM'den temizliyoruz
-                CryptographicOperations.ZeroMemory(keyBytes);
+                CryptographicOperations.ZeroMemory(keyBytes.Value.ToBytes());
             }
         }
     }

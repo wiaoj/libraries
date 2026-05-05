@@ -34,9 +34,14 @@ public static class Secret {
         return Secret<byte>.From(hex);
     }
 
-    /// <inheritdoc cref="Secret{T}.From(HexString)"/>
+    /// <inheritdoc cref="Secret{T}.From(Base32String)"/>
     public static Secret<byte> From(Base32String base32) {
         return Secret<byte>.From(base32);
+    }
+
+    /// <inheritdoc cref="Secret{T}.From(ReadOnlySpan{T})"/>
+    public static Secret<byte> From(Base64UrlString base64Url) {
+        return Secret<byte>.From(base64Url.ToBytes());
     }
 
     /// <inheritdoc cref="Secret{T}.From(string , Encoding)"/>

@@ -27,17 +27,57 @@ public static class SecurityServiceExtensions {
     ///     .AddEntityFrameworkKeyStore&lt;AppDbContext&gt;()  // Wiaoj.Security.EntityFrameworkCore
     ///     .AddManagedProtector&lt;WebhookContext&gt;()        // Wiaoj.Security.Rotation
     ///     .AddDataRotator&lt;WebhookContext, WebhookDataRotator&gt;(); // Wiaoj.Security.Rotation
+    /// </code> 
+    /// Or bind from appsettings.json / environment variables:
+    /// <code>
+    /// builder.Services
+    ///     .AddWiaojSecurity(builder.Configuration.GetSection("Security"))
+    ///     ...
     /// </code>
     /// </remarks>
     public static ISecurityBuilder AddWiaojSecurity(
         this IServiceCollection services,
         Action<KeyRotationOptions>? configure = null) {
-        KeyRotationOptions options = new();
-        configure?.Invoke(options);
-        options.Validate();
+        // IOptions<T> pipeline:
+        //   - Defaults from the class initializers
+        //   - Optional configure delegate from caller
+        //   - Validation runs at startup via ValidateOnStart()
+        services
+            .AddOptions<KeyRotationOptions>()
+            .Configure(configure ?? (_ => { }))
+            .Validate(
+                opts => {
+                    try { opts.Validate(); return true; }
+                    catch { return false; }
+                },
+                "KeyRotationOptions validation failed. " +
+                "Check KeySizeInBits (128/192/256), positive intervals, and positive BatchSize.")
+            .ValidateOnStart();
 
-        // Singleton shared by loader, rotation service, and background service.
-        services.TryAddSingleton(options);
+        services.TryAddSingleton(TimeProvider.System);
+
+        return new SecurityBuilder(services);
+    }
+
+    /// <summary>
+    /// Overload that binds <see cref="KeyRotationOptions"/> from an
+    /// <see cref="IConfiguration"/> section (e.g. <c>builder.Configuration.GetSection("Security")</c>).
+    /// </summary>  
+    public static ISecurityBuilder AddWiaojSecurity(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<KeyRotationOptions>? postConfigure = null) {
+        services
+            .AddOptions<KeyRotationOptions>()
+            .Bind(configuration)
+            .Configure(postConfigure ?? (_ => { }))
+            .Validate(
+                opts => {
+                    try { opts.Validate(); return true; }
+                    catch { return false; }
+                },
+                "KeyRotationOptions validation failed.")
+            .ValidateOnStart();
 
         services.TryAddSingleton(TimeProvider.System);
 

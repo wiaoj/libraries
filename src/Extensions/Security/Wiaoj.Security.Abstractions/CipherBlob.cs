@@ -28,8 +28,8 @@ namespace Wiaoj.Security;
 /// </para>
 /// </remarks>
 public readonly record struct CipherBlob {
-    private readonly Base64String _base64;
-    private CipherBlob(Base64String base64) {
+    private readonly Base64UrlString _base64;
+    private CipherBlob(Base64UrlString base64) {
         this._base64 = base64;
     }
 
@@ -42,7 +42,7 @@ public readonly record struct CipherBlob {
     /// Thrown when <paramref name="base64"/> is null, empty, whitespace, or not valid Base64.
     /// </exception>
     public static CipherBlob FromStorageString(string base64) {
-        return new(Base64String.Parse(base64));
+        return new(Base64UrlString.Parse(base64));
     }
 
     /// <summary>
@@ -50,7 +50,15 @@ public readonly record struct CipherBlob {
     /// Skips re-validation because the value was just produced by <c>Convert.ToBase64String</c>.
     /// </summary>
     public static CipherBlob FromEncryptionResult(string base64) {
-        return new(Base64String.Parse(base64));
+        return new(Base64UrlString.Parse(base64));
+    }
+
+    /// <summary>
+    /// Internal factory: used by <see cref="SecretProtector{TContext}"/> after completing encryption.
+    /// Skips re-validation because the value was just produced by <c>Convert.ToBase64String</c>.
+    /// </summary>
+    public static CipherBlob From(Base64UrlString base64) {
+        return new(base64);
     }
 
     /// <summary>

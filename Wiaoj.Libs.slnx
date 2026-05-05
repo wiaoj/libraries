@@ -10,6 +10,7 @@
     <Project Path="samples/Wiaoj.Samples.Concurrency/Wiaoj.Samples.Concurrency.csproj" Id="7fb1def3-743f-4948-b778-2738f26254d1" />
     <Project Path="samples/Wiaoj.Samples.DistributedCounter/Wiaoj.Samples.DistributedCounter.csproj" />
     <Project Path="samples/Wiaoj.Samples.Primitives/Wiaoj.Samples.Primitives.csproj" Id="7f7ef88f-3ab9-4333-a7cf-f493f9c04b58" />
+    <Project Path="samples/Wiaoj.Samples.Security/Wiaoj.Samples.Security.csproj" Id="3bcb4b2d-e896-4f05-866e-bf1f4fc7f505" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/BloomFilter/">

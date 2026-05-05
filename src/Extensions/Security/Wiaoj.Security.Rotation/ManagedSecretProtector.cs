@@ -47,8 +47,12 @@ public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext
         this._lazy = lazy;
         this._scopeFactory = scopeFactory;
     }
-
-    // ── Initialization ────────────────────────────────────────────────────────
+     
+    /// <summary>
+    /// <see langword="true"/> when the key ring has been successfully loaded at least once.
+    /// Used by <see cref="SecurityHealthCheck{TContext}"/>.
+    /// </summary>
+    public bool IsInitialized => _lazy.IsValueCreated;
 
     /// <summary>
     /// Ensures the inner <see cref="SecretProtector{TContext}"/> has been created.
@@ -58,9 +62,7 @@ public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext
     public async ValueTask EnsureInitializedAsync(CancellationToken ct = default) {
         await this._lazy.GetValueAsync(ct);
     }
-
-    // ── ISecretProtector<TContext> ────────────────────────────────────────────
-
+     
     public KeyVersion CurrentKeyVersion => this.Inner.CurrentKeyVersion;
 
     public EncryptedSecret<TContext> Protect(ReadOnlySpan<byte> plainSecret) {
@@ -81,9 +83,7 @@ public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext
 
     public EncryptedSecret<TContext> Rotate(in EncryptedSecret<TContext> encrypted) {
         return this.Inner.Rotate(encrypted);
-    }
-
-    // ── Hot reload ────────────────────────────────────────────────────────────
+    } 
 
     /// <summary>
     /// Reloads the <see cref="KeyRing{TContext}"/> from the database and atomically

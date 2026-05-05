@@ -1,5 +1,5 @@
-﻿using System.Security.Cryptography;
-using Wiaoj.Primitives;
+﻿using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 
 namespace Wiaoj.Security;
 
@@ -11,33 +11,26 @@ namespace Wiaoj.Security;
 /// <remarks>
 /// Register as Scoped — it holds a reference to a scoped <see cref="IEncryptionKeyStore"/>.
 /// </remarks>
-public sealed class KeyRingLoader<TContext>
+public sealed class KeyRingLoader<TContext>(IEncryptionKeyStore store,
+                                            IMasterKeyProvider masterKeyProvider,
+                                            IOptions<KeyRotationOptions> options)
     where TContext : ISecretContext {
-    private readonly IEncryptionKeyStore _store;
-    private readonly IMasterKeyProvider _masterKeyProvider;
-    private readonly KeyRotationOptions _options;
+    private readonly KeyRotationOptions _options = options.Value;
     private readonly string _contextName = typeof(TContext).Name;
-
-    public KeyRingLoader(
-        IEncryptionKeyStore store,
-        IMasterKeyProvider masterKeyProvider,
-        KeyRotationOptions options) {
-        this._store = store;
-        this._masterKeyProvider = masterKeyProvider;
-        this._options = options;
-    }
 
     /// <summary>
     /// Loads (or bootstraps) the <see cref="KeyRing{TContext}"/> for this context.
     /// </summary>
     public async Task<KeyRing<TContext>> LoadAsync(CancellationToken cancellationToken = default) {
         IReadOnlyList<EncryptionKeyRecord> records =
-            await this._store.LoadKeysAsync(this._contextName, cancellationToken);
+            await store.LoadKeysAsync(this._contextName, cancellationToken);
 
         if(records.Count == 0)
             return await BootstrapAsync(cancellationToken);
 
-        using MasterKey masterKey = await this._masterKeyProvider.GetMasterKeyAsync(cancellationToken);
+        SecurityMeter.KeyRingReloadCount.Add(1, SecurityMeter.ContextTag<TContext>());
+
+        using MasterKey masterKey = await masterKeyProvider.GetMasterKeyAsync(cancellationToken);
         return BuildKeyRing(records, masterKey);
     }
 
@@ -49,7 +42,7 @@ public sealed class KeyRingLoader<TContext>
         try {
             RandomNumberGenerator.Fill(keyMaterial);
 
-            using MasterKey masterKey = await this._masterKeyProvider.GetMasterKeyAsync(cancellationToken);
+            using MasterKey masterKey = await masterKeyProvider.GetMasterKeyAsync(cancellationToken);
 
             string wrapped = masterKey.Wrap(keyMaterial);
 
@@ -61,7 +54,9 @@ public sealed class KeyRingLoader<TContext>
                 CreatedAt = DateTimeOffset.UtcNow,
             };
 
-            await this._store.SaveKeyAsync(record, cancellationToken);
+            await store.SaveKeyAsync(record, cancellationToken);
+
+            SecurityMeter.KeyRingReloadCount.Add(1, SecurityMeter.ContextTag<TContext>());
 
             return BuildKeyRing([record], masterKey);
         }
@@ -89,7 +84,7 @@ public sealed class KeyRingLoader<TContext>
             EncryptionKey dek = masterKey.UnwrapToKey(record.WrappedKeyMaterial,
                                                       KeyVersion.Of(record.Version),
                                                       record.IsRetired);
-             
+
 
             if(record.IsRetired)
                 builder.WithRetiredKey(dek);

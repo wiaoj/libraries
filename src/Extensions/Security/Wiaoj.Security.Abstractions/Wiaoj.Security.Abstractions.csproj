@@ -17,13 +17,16 @@
 	  <RepositoryType>git</RepositoryType>
 	  <RepositoryBranch>master</RepositoryBranch>
 
-	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	  <GeneratePackageOnBuild Condition="'$(Configuration)' == 'Debug'">false</GeneratePackageOnBuild>
+	  <GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
 	  <IsPackable>true</IsPackable>
 	  <IncludeSymbols>true</IncludeSymbols>
 	  <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-	  <Optimize>true</Optimize>
-	  <IsAotCompatible>true</IsAotCompatible>
+	  <Optimize Condition="'$(Configuration)' == 'Debug'">false</Optimize>
+	  <Optimize Condition="'$(Configuration)' == 'Release'">true</Optimize>
+	  <IsAotCompatible Condition="'$(Configuration)' == 'Debug'">false</IsAotCompatible>
+	  <IsAotCompatible Condition="'$(Configuration)' == 'Release'">true</IsAotCompatible>
 	  <IsTrimmable>true</IsTrimmable>
 
 	  <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
