@@ -81,6 +81,9 @@ public sealed class EncryptedSecretValueComparer<TContext> : ValueComparer<Encry
     }
 }
 
+/// <summary>
+/// 
+/// </summary>
 public static class EncryptedSecretMappingExtensions {
     /// <summary>
     /// Configures the property to use the <see cref="EncryptedSecretValueConverter{TContext}"/> 

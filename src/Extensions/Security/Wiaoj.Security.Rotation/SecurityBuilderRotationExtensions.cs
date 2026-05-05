@@ -8,6 +8,9 @@ using Wiaoj.Security.DependencyInjection;
 namespace Microsoft.Extensions.DependencyInjection;
 #pragma warning restore IDE0130
 
+/// <summary>
+/// 
+/// </summary>
 public static class SecurityBuilderRotationExtensions {
 
     // ── Managed protector ─────────────────────────────────────────────────────
