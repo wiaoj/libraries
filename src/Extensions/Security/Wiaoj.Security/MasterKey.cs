@@ -39,7 +39,7 @@ public readonly struct MasterKey(Secret<byte> secret) : IDisposable {
         using AesGcmKey aesKey = AesGcmKey.From(secret);
         byte[] packet = aesKey.Encrypt(keyMaterial);
         try {
-            return Base64String.Parse(packet);
+            return Base64UrlString.FromBytes(packet);
         }
         finally {
             CryptographicOperations.ZeroMemory(packet);
@@ -54,13 +54,13 @@ public readonly struct MasterKey(Secret<byte> secret) : IDisposable {
     /// Thrown when the blob is malformed or authentication fails (wrong master key / tampering).
     /// </exception>
     public Secret<byte> Unwrap(string wrappedBase64) {
-        byte[] combined = Convert.FromBase64String(wrappedBase64);
+        Base64UrlString combined = Base64UrlString.Parse(wrappedBase64);
         try {
             using AesGcmKey aesKey = AesGcmKey.From(secret);
             try {
                 // AesGcmKey.Decrypt validates packet length and wraps
                 // AuthenticationTagMismatchException as CryptographicException.
-                return aesKey.Decrypt(combined);
+                return aesKey.Decrypt(combined.ToBytes());
             }
             catch(CryptographicException ex) {
                 // Re-throw with a message that pinpoints the master-key layer,
@@ -71,7 +71,7 @@ public readonly struct MasterKey(Secret<byte> secret) : IDisposable {
             }
         }
         finally {
-            CryptographicOperations.ZeroMemory(combined);
+            CryptographicOperations.ZeroMemory(combined.ToBytes());
         }
     }
 
@@ -79,7 +79,7 @@ public readonly struct MasterKey(Secret<byte> secret) : IDisposable {
         Secret<byte> secret = default;
         try {
             // 1. MasterKey ile anahtarı çöz
-             secret = Unwrap(wrappedBase64);
+            secret = Unwrap(wrappedBase64);
 
             // 2. Ham secret'ı motor (AesGcmKey) haline getir
             AesGcmKey aesKey = AesGcmKey.From(secret);
@@ -90,7 +90,7 @@ public readonly struct MasterKey(Secret<byte> secret) : IDisposable {
         catch(Exception) {
             if(secret != default) {
                 secret.Dispose();
-            } 
+            }
             throw;
         }
     }
