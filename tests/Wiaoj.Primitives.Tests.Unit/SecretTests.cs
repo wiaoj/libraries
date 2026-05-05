@@ -168,28 +168,7 @@ public sealed class SecretTests {
     #endregion
 
     #region 4. Transformations (ToBytes, DeriveKey)
-
-    [Fact]
-    public void ToBytes_FromSecretChar_ShouldEncodeCorrectly() {
-        string pass = "ABC";
-        using Secret<char> charSecret = Secret<char>.Parse(pass);
-
-        // UTF8'e çevir
-        using Secret<byte> byteSecret = charSecret.ToBytes(Encoding.UTF8);
-
-        Assert.Equal(3, byteSecret.Length);
-        byteSecret.Expose(span => {
-            Assert.Equal((byte)'A', span[0]);
-            Assert.Equal((byte)'C', span[2]);
-        });
-    }
-
-    [Fact]
-    public void ToBytes_CalledOnSecretByte_ShouldThrow() {
-        using Secret<byte> byteSecret = Secret<byte>.Generate(10);
-        Assert.Throws<NotSupportedException>(() => byteSecret.ToBytes(Encoding.UTF8));
-    }
-
+     
     [Fact]
     public void DeriveKey_ShouldBeDeterministic() {
         // HKDF deterministiktir. Aynı Input Key Material (IKM) ve aynı Salt, aynı çıktıyı üretmelidir.

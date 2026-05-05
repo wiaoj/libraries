@@ -42,7 +42,7 @@ public readonly partial record struct NanoId :
     /// <summary>
     /// The maximum permitted length for a <see cref="NanoId"/> to prevent excessive memory allocation or denial-of-service attacks.
     /// </summary>
-    internal const int MaxAllowedLength = 128;
+    public const int MaxAllowedLength = 128;
 
     /// <summary>
     /// SIMD-optimized search set containing valid characters for the standard URL-safe NanoId.

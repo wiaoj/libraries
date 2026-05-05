@@ -54,6 +54,32 @@ public static partial class Preca {
     }
 
     /// <summary>
+    /// Validates that the specified numeric value is less than or equal to the maximum allowed value, using a custom exception factory and a state object.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to validate.</typeparam>
+    /// <typeparam name="TState">The type of the state object used to create the exception.</typeparam>
+    /// <typeparam name="TException">The type of exception to throw.</typeparam>
+    /// <param name="argument">The numeric value to validate.</param>
+    /// <param name="maximum">The maximum allowed value (inclusive).</param>
+    /// <param name="exceptionFactory">A factory function that takes a state and creates the exception.</param>
+    /// <param name="state">The state object to pass to the exception factory.</param>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfGreaterThan<T, TState, TException>(T argument,
+                                                                 T maximum,
+                                                                 [NotNull] Func<TState, TException> exceptionFactory,
+                                                                 [NotNull] TState state)
+        where T : IComparisonOperators<T, T, bool>
+        where TException : Exception {
+        Preca.ThrowIfNull(argument, nameof(argument));
+        Preca.ThrowIfNull(maximum, nameof(maximum));
+        Preca.ThrowIfNull(exceptionFactory);
+        if(argument > maximum) {
+            Thrower.ThrowFromFactory(exceptionFactory, state);
+        }
+    }
+
+    /// <summary>
     /// Validates that the specified numeric value is less than or equal to the maximum allowed value, throwing a specific exception type.
     /// </summary>
     /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparable{T}"/>.</typeparam>

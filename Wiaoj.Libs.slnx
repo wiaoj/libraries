@@ -57,6 +57,14 @@
     <Project Path="src/Extensions/Results/Wiaoj.Results.AspNetCore/Wiaoj.Results.AspNetCore.csproj" Id="9c567ec4-bf87-485f-9c00-5ac4f4bb307f" />
     <Project Path="src/Extensions/Results/Wiaoj.Results/Wiaoj.Results.csproj" />
   </Folder>
+  <Folder Name="/src/Extensions/Security/">
+    <File Path="src/Extensions/Security/README.md" />
+    <Project Path="src/Extensions/Security/Wiaoj.Security.Abstractions/Wiaoj.Security.Abstractions.csproj" Id="993d20a4-ac0c-4388-bdf5-063de886762c" />
+    <Project Path="src/Extensions/Security/Wiaoj.Security.DependencyInjection/Wiaoj.Security.DependencyInjection.csproj" Id="48594c87-409e-4051-bf16-778b1b4f4b50" />
+    <Project Path="src/Extensions/Security/Wiaoj.Security.EntityFrameworkCore/Wiaoj.Security.EntityFrameworkCore.csproj" Id="c8f561a3-3ba5-44a2-b48d-20734a93a464" />
+    <Project Path="src/Extensions/Security/Wiaoj.Security.Rotation/Wiaoj.Security.Rotation.csproj" Id="d18accfa-ccf5-4604-b637-e90ac02ec3f1" />
+    <Project Path="src/Extensions/Security/Wiaoj.Security/Wiaoj.Security.csproj" />
+  </Folder>
   <Folder Name="/src/Extensions/Wiaoj.Threading/">
     <Project Path="src/Extensions/Wiaoj.Threading/Wiaoj.Concurrency.csproj" />
   </Folder>

@@ -1,0 +1,50 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.Security.EntityFrameworkCore</RootNamespace>
+	  <AssemblyName>Wiaoj.Security.EntityFrameworkCore</AssemblyName>
+
+	  <PackageId>Wiaoj.Security.EntityFrameworkCore</PackageId>
+	  <Version>0.0.1-alpha.2</Version>
+	  <Authors>wiaoj</Authors>
+	  <PackageProjectUrl>https://github.com/wiaoj/libraries</PackageProjectUrl>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+
+	  <RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
+	  <RepositoryType>git</RepositoryType>
+	  <RepositoryBranch>master</RepositoryBranch>
+
+	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	  <IsPackable>true</IsPackable>
+	  <IncludeSymbols>true</IncludeSymbols>
+	  <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+	  <Optimize>true</Optimize>
+	  <IsAotCompatible>true</IsAotCompatible>
+	  <IsTrimmable>true</IsTrimmable>
+
+	  <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+	  <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+	  <EnableAotAnalyzer>true</EnableAotAnalyzer>
+
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\README.md" Pack="true" PackagePath="\" Condition="Exists('..\README.md')" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Wiaoj.Security.DependencyInjection\Wiaoj.Security.DependencyInjection.csproj" />
+  </ItemGroup>
+
+</Project>

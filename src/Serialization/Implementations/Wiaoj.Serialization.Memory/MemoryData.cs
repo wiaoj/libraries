@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Collections;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -7,14 +8,19 @@ namespace Wiaoj.Serialization.Memory;
 /// <summary>
 /// Yüksek performanslı bellek okuma/yazma motoru. Zero-copy işlemler için kullanılır.
 /// </summary>
-public readonly struct MemoryData {
+public readonly struct MemoryData : IEquatable<MemoryData> {
     private readonly ReadOnlyMemory<byte> _memory;
 
-    public MemoryData(ReadOnlyMemory<byte> memory) => _memory = memory;
-    public MemoryData(byte[] array) => _memory = array;
+    public MemoryData(ReadOnlyMemory<byte> memory) {
+        this._memory = memory;
+    }
 
-    public int Length => _memory.Length;
-    public ReadOnlySpan<byte> Span => _memory.Span;
+    public MemoryData(byte[] array) {
+        this._memory = array;
+    }
+
+    public int Length => this._memory.Length;
+    public ReadOnlySpan<byte> Span => this._memory.Span;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void EnsureBlittable<T>() {
@@ -46,31 +52,69 @@ public readonly struct MemoryData {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T ReadAs<T>() {
         EnsureBlittable<T>();
-        if(_memory.Length < Unsafe.SizeOf<T>())
+        if(this._memory.Length < Unsafe.SizeOf<T>())
             throw new ArgumentOutOfRangeException(nameof(T), "Buffer is too small.");
 
-        return Unsafe.ReadUnaligned<T>(ref MemoryMarshal.GetReference(_memory.Span));
+        return Unsafe.ReadUnaligned<T>(ref MemoryMarshal.GetReference(this._memory.Span));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref readonly T ReadAsRef<T>() where T : struct {
         EnsureBlittable<T>();
-        if(_memory.Length < Unsafe.SizeOf<T>())
+        if(this._memory.Length < Unsafe.SizeOf<T>())
             throw new ArgumentOutOfRangeException("Buffer is too small.");
 
-        return ref MemoryMarshal.Cast<byte, T>(_memory.Span)[0];
+        return ref MemoryMarshal.Cast<byte, T>(this._memory.Span)[0];
     }
 
     // --- DÖNÜŞÜMLER ---
-    public override string ToString() => Convert.ToBase64String(_memory.Span);
-    public static MemoryData FromString(string data) => new MemoryData(Convert.FromBase64String(data));
-    public byte[] ToArray() => _memory.ToArray();
+    public override string ToString() {
+        return Convert.ToBase64String(this._memory.Span);
+    }
 
-    public static implicit operator ReadOnlySpan<byte>(MemoryData data) => data._memory.Span;
-    public static implicit operator ReadOnlyMemory<byte>(MemoryData data) => data._memory; 
-    
-    public static implicit operator string(MemoryData data) => data.ToString();
-    public static explicit operator byte[](MemoryData data) => data.ToArray();
+    public static MemoryData FromString(string data) {
+        return new(Convert.FromBase64String(data));
+    }
+
+    public byte[] ToArray() {
+        return this._memory.ToArray();
+    }
+
+    public static implicit operator ReadOnlySpan<byte>(MemoryData data) {
+        return data._memory.Span;
+    }
+
+    public static implicit operator ReadOnlyMemory<byte>(MemoryData data) {
+        return data._memory;
+    }
+
+    public static implicit operator string(MemoryData data) {
+        return data.ToString();
+    }
+
+    public static explicit operator byte[](MemoryData data) {
+        return data.ToArray();
+    }
+
+    public override bool Equals(object? obj) {
+        return obj is MemoryData other && Equals(other);
+    }
+
+    public bool Equals(MemoryData other) {
+        return this._memory.Span.SequenceEqual(other._memory.Span);
+    }
+
+    public override int GetHashCode() {
+        return StructuralComparisons.StructuralEqualityComparer.GetHashCode(this._memory.ToArray());
+    }
+
+    public static bool operator ==(MemoryData left, MemoryData right) {
+        return left.Equals(right);
+    }
+
+    public static bool operator !=(MemoryData left, MemoryData right) {
+        return !left.Equals(right);
+    }
 }
 
 /* TODO:@wiaoj

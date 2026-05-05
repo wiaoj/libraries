@@ -1491,96 +1491,297 @@
 //#endregion
 
 
-using System;
-using System.IO;
-using System.Runtime.InteropServices;
+//using System.Security.Cryptography;
+//using System.Text;
+//using Wiaoj.Primitives;
+//using Wiaoj.Primitives.Cryptography.Symmetric;
+
+
+//Example1_StringEncryptionAndDecryption();
+//Console.WriteLine(new string('-', 50));
+
+//Example2_ByteAndSecretEncryption();
+//Console.WriteLine(new string('-', 50));
+
+//Example3_KeyExportAndImport();
+//Console.WriteLine(new string('-', 50));
+
+//// --- Örnek 1: Key (Anahtar) Oluşturma ---
+//// Rastgele bir 256-bit anahtar oluşturuyoruz.
+//using AesGcmKey key = AesGcmKey.Generate256();
+//Console.WriteLine($"Anahtar oluşturuldu: {key}");
+
+//// --- Örnek 2: String Şifreleme ve Çözme ---
+//string secretMessage = "Merhaba, bu gizli bir mesajdır!";
+//Console.WriteLine($"\nOrijinal mesaj: {secretMessage}");
+
+//// Şifreleme
+//byte[] encryptedPacket = key.Encrypt(secretMessage);
+//Console.WriteLine($"Şifrelenmiş paket (hex): {Convert.ToHexString(encryptedPacket)}");
+
+//// Şifre çözme
+//string decryptedMessage = key.DecryptToString(encryptedPacket);
+//Console.WriteLine($"Çözülen mesaj: {decryptedMessage}");
+
+//// --- Örnek 3: Secret<T> ile Güvenli Veri İşleme ---
+//// Decrypt metodu size doğrudan bir byte dizisi yerine Secret<byte> döner.
+//// Bu sayede plaintext, kullanılmadığı anda bellekten silinebilir.
+//using(Secret<byte> secretData = key.Decrypt(encryptedPacket)) {
+//    // Veriye sadece callback (Expose) ile erişebiliriz.
+//    string data = secretData.Expose(span => Encoding.UTF8.GetString(span));
+//    Console.WriteLine($"\nSecret<T> üzerinden okunan: {data}");
+//}
+//// 'secretData' burada dispose edildiğinde içerisindeki plaintext bellekten güvenlice silinir.
+
+//// --- Örnek 4: Hata Yönetimi ---
+//try {
+//    Console.WriteLine("\nKurcalanmış paket ile şifre çözme denemesi:");
+//    byte[] tamperedPacket = (byte[])encryptedPacket.Clone();
+//    tamperedPacket[^1] ^= 0xFF; // Son byte'ı değiştirerek paketi bozuyoruz
+
+//    key.Decrypt(tamperedPacket);
+//}
+//catch(CryptographicException) {
+//    Console.WriteLine("Hata yakalandı: Kimlik doğrulama etiketi geçersiz (Paket bozulmuş).");
+//}
+
+//// --- Örnek 5: Key'i Dışa Aktarma (Export) ---
+//// Not: Bu yöntemleri sadece anahtarı güvenli bir şekilde saklamanız gerektiğinde kullanın.
+//string hexKey = key.ToHexString().ToString();
+//Console.WriteLine($"\nAnahtarın hex hali (Log'lamayın!): {hexKey}");
+
+//// --- Örnek 6: Stream Desteği ---
+//using MemoryStream ms = new(Encoding.UTF8.GetBytes("Büyük veri bloğu..."));
+//byte[] streamEncrypted = await AesGcmKeyExtensions.EncryptAsync(key, ms);
+//Console.WriteLine($"\nStream şifrelendi, toplam bayt: {streamEncrypted.Length}");
+
+//Console.WriteLine("\nİşlemler başarıyla tamamlandı.");
+
+
+///// <summary>
+///// Örnek 1: Temel metin (string) şifreleme ve çözme işlemleri.
+///// </summary>
+//static void Example1_StringEncryptionAndDecryption() {
+//    Console.WriteLine("[Örnek 1] Metin Şifreleme (String Encryption)");
+
+//    // 1. 256-bit (32 byte) güvenli bir AES anahtarı oluşturuyoruz. (using ile sızıntıyı önlüyoruz)
+//    using AesGcmKey key = AesGcmKey.Generate256();
+
+//    string originalText = "Çok gizli şirket verileri ve şifreler: 123456";
+//    Console.WriteLine($"Orijinal Metin: {originalText}");
+
+//    // 2. Metni şifreliyoruz. (Çıktı: 12 byte Nonce + 16 byte Tag + Ciphertext)
+//    byte[] encryptedPacket = key.Encrypt(originalText);
+//    Console.WriteLine($"Şifrelenmiş Veri (Base64): {Convert.ToBase64String(encryptedPacket)}");
+
+//    // 3. Şifrelenmiş veriyi çözüyoruz.
+//    string decryptedText = key.DecryptToString(encryptedPacket);
+//    Console.WriteLine($"Çözülen Metin: {decryptedText}");
+//}
+
+///// <summary>
+///// Örnek 2: Byte dizisi ve güvenli bellek (Secret<byte>) kullanarak şifreleme.
+///// </summary>
+//static void Example2_ByteAndSecretEncryption() {
+//    Console.WriteLine("[Örnek 2] Byte ve Secret<byte> Şifreleme");
+
+//    using AesGcmKey key = AesGcmKey.Generate128();
+
+//    // Rastgele bir veri oluşturalım
+//    byte[] sensitiveData = [0x01, 0x02, 0x03, 0xFF, 0xAA, 0xBB];
+//    Console.WriteLine($"Orijinal Byte'lar: {BitConverter.ToString(sensitiveData)}");
+
+//    // Byte dizisini şifrele
+//    byte[] encryptedPacket = key.Encrypt(sensitiveData);
+
+//    // Şifreyi çözerken bize doğrudan bir Secret<byte> dönüyor, bu yüzden using kullanmalıyız!
+//    using Secret<byte> decryptedSecret = key.Decrypt(encryptedPacket);
+
+//    // Secret içindeki veriyi okumak için "Expose" metodunu kullanmak zorundayız (Bellek güvenliği)
+//    decryptedSecret.Expose(decryptedSpan => {
+//        Console.WriteLine($"Çözülen Byte'lar: {BitConverter.ToString(decryptedSpan.ToArray())}");
+//    });
+//}
+
+///// <summary>
+///// Örnek 3: Anahtarı dışa aktarma (Export) ve dışarıdan içeri alma (Import)
+///// </summary>
+//static void Example3_KeyExportAndImport() {
+//    Console.WriteLine("[Örnek 3] Anahtar Dışa/İçe Aktarma (Export/Import)");
+
+//    string plainText = "Bu mesaj transfer edilecek anahtarla çözülecek.";
+//    byte[] encryptedPacket;
+//    Base64String exportedKeyBase64; // Sizin kütüphanenize ait olan Base64String tipi
+
+//    // 1. Orijinal anahtarı oluştur ve veriyi şifrele
+//    using(AesGcmKey originalKey = AesGcmKey.Generate192()) // 192-bit
+//    {
+//        encryptedPacket = originalKey.Encrypt(plainText);
+
+//        // Anahtarı veritabanına veya konfigürasyona kaydetmek için dışa aktarıyoruz
+//        exportedKeyBase64 = originalKey.ToBase64String();
+//        Console.WriteLine($"Dışa Aktarılan Anahtar: {exportedKeyBase64}");
+//    } // originalKey burada Dispose oldu ve bellekten silindi.
+
+//    // 2. Başka bir yerde/zamanda anahtarı tekrar yükle (Import)
+//    using AesGcmKey importedKey = AesGcmKey.From(exportedKeyBase64);
+//    string decryptedText = importedKey.DecryptToString(encryptedPacket);
+//    Console.WriteLine($"İçe Aktarılan Anahtarla Çözülen Metin: {decryptedText}");
+//}
+
+
+using System.Security.Cryptography;
 using System.Text;
-using System.Buffers;
-using Wiaoj.Primitives; // NanoId için
-using Wiaoj.Primitives.Obfuscation;
+using Wiaoj.Primitives;
+using Wiaoj.Primitives.Cryptography.Symmetric;
 
-// 1. Setup: Tüm Algoritmaları Hazırla
-// Seed'i Span üzerinden güvenli alıyoruz
-ReadOnlySpan<byte> seed = "ThisIsA16ByteSecretKey12345678901"u8;
-var options = new FeistelObfuscatorOptions { Seed = seed.ToArray() };
+internal class Program {
+    private static async Task Main(string[] args) {
+        Console.Title = "Wiaoj.Primitives.Cryptography Demo";
 
-using var feistel = new FeistelBase62Obfuscator(options);
-var xorShift = new XorShiftObfuscator(0xDEADBEEF, 0xCAFEBABE);
-var sbox = new SBoxObfuscator(0x42);
-var bitStream = new BitStreamObfuscator(1337222222);
+        PrintHeader("WIAOJ.PRIMITIVES KÜTÜPHANESİ DEMO");
 
-// 2. IO & Path Setup
-string outputDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ObfuscatedFiles");
-if(Directory.Exists(outputDir)) Directory.Delete(outputDir, true);
-Directory.CreateDirectory(outputDir);
+        // 1. Temel Şifreleme (String)
+        RunExample("String Şifreleme", Example_StringEncryption);
 
-string sourcePath = Path.Combine(outputDir, "source.txt");
+        // 2. Güvenli Bellek (Secret<T>) Kullanımı
+        RunExample("Secret<T> Güvenli Bellek İşlemleri", Example_SecretBufferOperations);
 
-// 3. Kaynak Dosya Oluşturma (100 adet 128-char NanoId)
-// 1. Yazma işlemi için tek bir geçici buffer ayırıyoruz (Stack üzerinde)
-Span<char> idBuffer = stackalloc char[128];
+        // 3. Anahtar Yönetimi (Export/Import)
+        RunExample("Anahtar (Key) Dışa/İçe Aktarma", Example_KeyExportImport);
 
-using(var sw = new StreamWriter(sourcePath, false, Encoding.UTF8)) {
-    for(int i = 0; i < 100_000; i++) {
-        // 2. String üretmiyoruz, doğrudan stack'teki buffer'ı dolduruyoruz
-        if(NanoId.TryGenerate(idBuffer, 128)) {
-            // 3. StreamWriter.Write(ReadOnlySpan<char>) kullanarak 
-            // ara bir string kopyası oluşturmadan doğrudan stream'e basıyoruz
-            sw.Write(idBuffer);
+        // 4. Stream Desteği
+        await RunExampleAsync("Stream Üzerinden Büyük Veri Şifreleme", Example_StreamEncryption);
 
-            // Eğer her ID'den sonra alt satıra geçsin istersen:
-            // sw.WriteLine(idBuffer); 
+        // 5. Hata Yönetimi (Tampering Detection)
+        RunExample("Bozulmuş Paket Hata Yönetimi", Example_TamperingDetection);
+
+        Console.WriteLine("\n" + new string('=', 60));
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("Tüm senaryolar başarıyla test edildi.");
+        Console.ResetColor();
+    }
+
+    #region Örnekler
+
+    private static void Example_StringEncryption() {
+        using AesGcmKey key = AesGcmKey.Generate256();
+        string secret = "Bu çok gizli bir metin!";
+
+        byte[] packet = key.Encrypt(secret);
+        string decrypted = key.DecryptToString(packet);
+
+        Console.WriteLine($"Orijinal: '{secret}'");
+        Console.WriteLine($"Şifreli (Base64):          {Convert.ToBase64String(packet)}");
+        Console.WriteLine($"Şifreli (Base64String):    {Base64String.FromBytes(packet)}");
+        Console.WriteLine($"Şifreli (Base64UrlString): {Base64UrlString.FromBytes(packet)}");
+        Console.WriteLine($"Şifreli (Base64String):    {Base64String.FromBytes(Base64UrlString.FromBytes(packet).ToBytes())}");
+        Console.WriteLine($"Şifreli (Hex): {HexString.FromBytes(packet)}");
+        Console.WriteLine($"Çözülen: '{decrypted}'");
+    }
+
+    private static void Example_SecretBufferOperations() {
+        using AesGcmKey key = AesGcmKey.Generate128();
+        byte[] rawData = Encoding.UTF8.GetBytes("Hassas byte dizisi verisi");
+
+        byte[] packet = key.Encrypt(rawData);
+
+        // Secret<T> kullanarak veriyi sadece ihtiyaç anında açıyoruz
+        using Secret<byte> secret = key.Decrypt(packet);
+
+        secret.Expose(span => {
+            Console.WriteLine($"Secret içindeki veri: {Encoding.UTF8.GetString(span)}");
+        });
+    }
+
+    private static void Example_KeyExportImport() {
+        // 1. Anahtarı oluştur ve dışa aktar
+        using AesGcmKey originalKey = AesGcmKey.Generate256();
+        Base64String exported1 = originalKey.ToBase64String();
+
+        // 2. Anahtarı başka bir instance'a yükle
+        using AesGcmKey loadedKey1 = AesGcmKey.From(exported1);
+
+        Console.WriteLine($"Anahtar Export Edildi: {exported1}");
+        Console.WriteLine($"Anahtar Boyutu: {loadedKey1.KeySizeInBits}-bit");
+
+        Base64UrlString exported2 = originalKey.ToBase64UrlString();
+
+        // 2. Anahtarı başka bir instance'a yükle
+        using AesGcmKey loadedKey2 = AesGcmKey.From(exported2);
+
+        Console.WriteLine($"Anahtar Export Edildi: {exported2}");
+        Console.WriteLine($"Anahtar Boyutu: {loadedKey1.KeySizeInBits}-bit");
+
+        HexString exported3 = originalKey.ToHexString();
+
+        // 2. Anahtarı başka bir instance'a yükle
+        using AesGcmKey loadedKey3 = AesGcmKey.From(exported3);
+
+        Console.WriteLine($"Anahtar Export Edildi: {exported3}");
+        Console.WriteLine($"Anahtar Boyutu: {loadedKey1.KeySizeInBits}-bit");
+    }
+
+    private static async Task Example_StreamEncryption() {
+        using AesGcmKey key = AesGcmKey.Generate256();
+        string originalText = NanoId.NewId(128); // Test verisi
+
+        using MemoryStream source = new(Encoding.UTF8.GetBytes(originalText));
+
+        // 1. Şifrele
+        byte[] packet = await key.EncryptAsync(source);
+        Console.WriteLine($"Şifreli paket boyutu: {packet.Length} byte");
+
+        // 2. DecryptToAsync ile şifreyi çöz ve bir stream'e yaz
+        using MemoryStream destination = new();
+        await key.DecryptToAsync(packet, destination);
+
+        // 3. Çözülmüş veriyi stream'den oku ve doğrula
+        destination.Position = 0;
+        using StreamReader reader = new(destination, Encoding.UTF8);
+        string decryptedText = await reader.ReadToEndAsync();
+
+        Console.WriteLine($"Çözülen metin: {decryptedText}");
+        Console.WriteLine($"Doğrulama: {(originalText == decryptedText ? "BAŞARILI" : "HATA!")}");
+    }
+
+    private static void Example_TamperingDetection() {
+        using AesGcmKey key = AesGcmKey.Generate256();
+        byte[] packet = key.Encrypt("Değiştirilecek veri");
+
+        // Paketi boz (örneğin nonce veya tag kısmını)
+        packet[20] ^= 0x01;
+
+        try {
+            key.Decrypt(packet);
+        }
+        catch(CryptographicException e) {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"Beklenen hata alındı: {e.Message}");
+            Console.ResetColor();
         }
     }
+
+    #endregion
+
+    #region Helpers
+
+    private static void RunExample(string title, Action action) {
+        PrintHeader(title);
+        action();
+        Console.WriteLine();
+    }
+
+    private static async Task RunExampleAsync(string title, Func<Task> action) {
+        PrintHeader(title);
+        await action();
+        Console.WriteLine();
+    }
+
+    private static void PrintHeader(string title) {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"\n>>> {title.ToUpper()}");
+        Console.ResetColor();
+    }
+    #endregion
 }
-
-Console.WriteLine(">>> source.txt (100 x 128-char NanoId) oluşturuldu.");
-
-
-// 4. Obfuscation İşlemi (Performans Odaklı Stream İşleme)
-using var sourceStream = File.OpenRead(sourcePath);
-using var swFeistel = new StreamWriter(Path.Combine(outputDir, "feistel.txt"));
-using var swXor = new StreamWriter(Path.Combine(outputDir, "xorshift.txt"));
-using var swSBox = new StreamWriter(Path.Combine(outputDir, "sbox.txt"));
-using var swBit = new StreamWriter(Path.Combine(outputDir, "bitstream.txt"));
-
-byte[] buffer = new byte[16];
-Span<char> charBuf = stackalloc char[128]; // BitStream 128 char gerektirir
-int bytesRead;
-
-Console.WriteLine(">>> İşlem başlatıldı...");
-
-while((bytesRead = sourceStream.Read(buffer)) > 0) {
-    // 16 byte'a tamamla (Padding)
-    if(bytesRead < 16) Array.Clear(buffer, bytesRead, 16 - bytesRead);
-
-    // Binary veriyi Int128 olarak yorumla (Allocation yapmaz)
-    Int128 value = MemoryMarshal.Read<Int128>(buffer);
-
-    // --- Feistel ---
-    if(feistel.TryEncode(value, charBuf, out int w1)) {
-        swFeistel.Write(charBuf[..w1]);
-        swFeistel.Write(' ');
-    }
-
-    // --- XorShift ---
-    if(xorShift.TryEncode(value, charBuf, out int w2)) {
-        swXor.Write(charBuf[..w2]);
-        swXor.Write(' ');
-    }
-
-    // --- SBox ---
-    if(sbox.TryEncode(value, charBuf, out int w3)) {
-        swSBox.Write(charBuf[..w3]);
-        swSBox.Write(' ');
-    }
-
-    // --- BitStream ---
-    if(bitStream.TryEncode(value, charBuf, out int w4)) {
-        swBit.Write(charBuf[..w4]);
-        swBit.Write(' ');
-    }
-}
-
-// Flush & Close işlemleri using blokları sonunda otomatik yapılacak
-Console.WriteLine(">>> Tamamlandı! Dosyalar 'ObfuscatedFiles' klasöründe.");

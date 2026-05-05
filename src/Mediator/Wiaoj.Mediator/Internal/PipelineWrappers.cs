@@ -39,7 +39,7 @@ internal static class PipelineWrappers {
         Type responseType,
         Type exceptionHandlerInterfaceType) {
 
-        // Added BindingFlags to ensure we can find the method even if it's private/internal
+        // Add BindingFlags to ensure we can find the method even if it's private/internal
         return typeof(PipelineWrappers)
             .GetMethod(nameof(WrapWithExceptionHandlerCore), BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(requestType, responseType)

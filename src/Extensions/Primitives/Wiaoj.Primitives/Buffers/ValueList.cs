@@ -21,7 +21,7 @@ namespace Wiaoj.Primitives.Buffers;
 /// <typeparam name="T">The type of elements in the list. Must be non-nullable.</typeparam>
 [StructLayout(LayoutKind.Auto)]
 [DebuggerDisplay("Count = {Count}, Capacity = {Capacity}")]
-public ref struct ValueList<T> where T : notnull {
+public ref struct ValueList<T> : IDisposable {
     private Span<T> _span;
     private T[]? _rented;
     private int _pos;
@@ -49,7 +49,7 @@ public ref struct ValueList<T> where T : notnull {
 
     /// <summary>Gets the total capacity of the internal buffer.</summary>
     public readonly int Capacity => this._span.Length;
-     
+
 
     /// <summary>
     /// Returns a <see cref="Span{T}"/> representing the active elements of the list.

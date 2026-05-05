@@ -25,7 +25,7 @@ public readonly unsafe struct Secret<T> :
     IEquatable<Secret<T>>,
     IEquatable<ReadOnlySpan<T>>
     where T : unmanaged {
-    private readonly T?* _ptr;
+    private readonly T* _ptr;
     private readonly int _length;
     private readonly DisposeState _disposeState;
 
@@ -61,7 +61,7 @@ public readonly unsafe struct Secret<T> :
     public int Length => this._length;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Secret(T?* pointer, int length) {
+    private Secret(T* pointer, int length) {
         this._ptr = pointer;
         this._length = length;
         this._disposeState = new DisposeState();
@@ -78,7 +78,7 @@ public readonly unsafe struct Secret<T> :
     public static Secret<byte> Generate(int byteCount) {
         Preca.ThrowIfNegativeOrZero(byteCount);
 
-        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)byteCount);
+        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)byteCount);
         try {
             RandomNumberGenerator.Fill(new Span<byte>(ptr, byteCount));
             return new Secret<byte>(ptr, byteCount);
@@ -96,7 +96,7 @@ public readonly unsafe struct Secret<T> :
         if(source.IsEmpty) return Empty;
 
         int byteCount = source.Length * sizeof(T);
-        T?* ptr = (T?*)NativeMemory.AllocZeroed((nuint)byteCount);
+        T* ptr = (T*)NativeMemory.AllocZeroed((nuint)byteCount);
 
         try {
             Span<T> destinationSpan = new(ptr, source.Length);
@@ -128,7 +128,7 @@ public readonly unsafe struct Secret<T> :
         int requiredLength = base64.GetDecodedLength();
         if(requiredLength is 0) return Secret<byte>.Empty;
 
-        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)requiredLength);
+        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)requiredLength);
         try {
             if(base64.TryDecode(new Span<byte>(ptr, requiredLength), out int bytesWritten) && bytesWritten == requiredLength) {
                 return new Secret<byte>(ptr, requiredLength);
@@ -149,7 +149,7 @@ public readonly unsafe struct Secret<T> :
         int requiredLength = hex.GetDecodedLength();
         if(requiredLength is 0) return Secret<byte>.Empty;
 
-        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)requiredLength);
+        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)requiredLength);
         try {
             if(hex.TryDecode(new Span<byte>(ptr, requiredLength), out int bytesWritten) && bytesWritten == requiredLength) {
                 return new Secret<byte>(ptr, requiredLength);
@@ -172,7 +172,7 @@ public readonly unsafe struct Secret<T> :
         if(requiredLength is 0)
             return Secret<byte>.Empty;
 
-        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)requiredLength);
+        byte* ptr = (byte*)NativeMemory.AllocZeroed((nuint)requiredLength);
         try {
             if(base32.TryDecode(new Span<byte>(ptr, requiredLength), out int bytesWritten) && bytesWritten == requiredLength) {
                 return new Secret<byte>(ptr, requiredLength);
@@ -254,7 +254,7 @@ public readonly unsafe struct Secret<T> :
         if(this._ptr is not null) {
             this._disposeState?.ThrowIfDisposingOrDisposed(nameof(Secret<>));
         }
-;
+
         Preca.ThrowIfNull(action);
         action(this._ptr is null ? [] : new ReadOnlySpan<T>(this._ptr, this._length));
     }
@@ -288,79 +288,13 @@ public readonly unsafe struct Secret<T> :
     /// <summary>
     /// Provides safe, scoped access to the secret data with a state object and returns a result, preventing closure allocations.
     /// </summary>
-    public TResult Expose<TState, TResult>(TState state, Func<TState, ReadOnlySpan<T>, TResult> func) where TState : allows ref struct {
-
+    public TResult Expose<TState, TResult>(TState state, Func<TState, ReadOnlySpan<T>, TResult> func) where TState : allows ref struct { 
         if(this._ptr is not null) {
             this._disposeState?.ThrowIfDisposingOrDisposed(nameof(Secret<>));
         }
         Preca.ThrowIfNull(func);
         return func(state, this._ptr is null ? [] : new ReadOnlySpan<T>(this._ptr, this._length));
-    }
-
-    /// <summary>
-    /// Securely converts this <see cref="Secret{T}"/> of chars into a <see cref="Secret{T}"/> of bytes using the specified encoding.
-    /// This method is only available when <typeparamref name="T"/> is <see cref="char"/>.
-    /// </summary>
-    public Secret<byte> ToBytes(Encoding encoding) {
-        Preca.ThrowIf(
-            typeof(T) != typeof(char),
-            () => new NotSupportedException("ToBytes conversion is only supported for Secret<char>."));
-        Preca.ThrowIfNull(encoding);
-
-        if(this._ptr is null || this._length is 0) return Secret<byte>.Empty;
-
-        this._disposeState?.ThrowIfDisposingOrDisposed(nameof(Secret<>));
-
-        if(this._length is 0) return Secret<byte>.Empty;
-
-        ReadOnlySpan<char> charSpan = new((char*)this._ptr, this._length);
-        int byteCount = encoding.GetByteCount(charSpan);
-        byte?* ptr = (byte?*)NativeMemory.AllocZeroed((nuint)byteCount);
-        try {
-            encoding.GetBytes(charSpan, new Span<byte>(ptr, byteCount));
-            return new Secret<byte>(ptr, byteCount);
-        }
-        catch {
-            NativeMemory.Free(ptr);
-            throw;
-        }
-    }
-
-
-
-    /// <summary>
-    /// Derives a new key from this secret using a standard key derivation function (HKDF-SHA256).
-    /// This is a convenience overload that accepts a <see cref="Secret{T}"/> as the salt.
-    /// </summary>
-    public Secret<byte> DeriveKey(in Secret<byte> salt, int outputByteCount) {
-        if(typeof(T) != typeof(byte))
-            throw new NotSupportedException("Key derivation is only supported for Secret<byte>.");
-
-        this._disposeState.ThrowIfDisposingOrDisposed(nameof(Secret<>));
-        salt._disposeState.ThrowIfDisposingOrDisposed(nameof(salt));
-
-        ReadOnlySpan<byte> saltSpan = new(salt._ptr, salt.Length);
-        return DeriveKeyFromSpan(saltSpan, outputByteCount);
-    }
-
-    /// <summary>
-    /// Derives a new key from this secret using a standard key derivation function (HKDF-SHA256) and a span-based salt.
-    /// This method is only available when <typeparamref name="T"/> is <see cref="byte"/>.
-    /// </summary>
-    public Secret<byte> DeriveKeyFromSpan(ReadOnlySpan<byte> salt, int outputByteCount) {
-        if(typeof(T) != typeof(byte))
-            throw new NotSupportedException("Key derivation is only supported for Secret<byte>.");
-        Preca.ThrowIfNegativeOrZero(outputByteCount);
-        this._disposeState.ThrowIfDisposingOrDisposed(nameof(Secret<>));
-
-        Secret<byte> derivedKey = Generate(outputByteCount);
-        ReadOnlySpan<byte> ikmSpan = new(this._ptr, this._length);
-        Span<byte> outputSpan = new(derivedKey._ptr, derivedKey._length);
-
-        HKDF.DeriveKey(HashAlgorithmName.SHA256, ikmSpan, outputSpan, salt, null);
-
-        return derivedKey;
-    }
+    } 
 
     #endregion
 
@@ -377,11 +311,10 @@ public readonly unsafe struct Secret<T> :
     /// <summary>
     /// Securely clears and frees the unmanaged memory holding the secret.
     /// </summary>
-    public void Dispose() {
-
+    public void Dispose() { 
         if(this._ptr is null) return;
 
-        if(this._ptr is not null && this._disposeState.TryBeginDispose()) {
+        if(this._disposeState.TryBeginDispose()) {
             try {
                 CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(new Span<T>(this._ptr, this._length)));
                 NativeMemory.Free(this._ptr);
@@ -505,7 +438,7 @@ public readonly unsafe struct Secret<T> :
         if(ifOne.Length is 0) return Empty;
 
         int byteLength = ifOne.Length * sizeof(T);
-        T?* ptr = (T?*)NativeMemory.AllocZeroed((nuint)byteLength);
+        T* ptr = (T*)NativeMemory.AllocZeroed((nuint)byteLength);
         Secret<T> result = new(ptr, ifOne.Length);
 
         byte* p1 = (byte*)ifOne._ptr;

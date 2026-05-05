@@ -23,7 +23,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(argument, paramName);
         Preca.ThrowIfNull(minimum, nameof(minimum));
 
-        if (argument < minimum) {
+        if(argument < minimum) {
             Thrower.ThrowPrecaArgumentOutOfRangeException(paramName, argument, PrecaMessages.Numeric.GetMinimumMessage(minimum));
         }
     }
@@ -48,8 +48,34 @@ public static partial class Preca {
         Preca.ThrowIfNull(minimum, nameof(minimum));
         Preca.ThrowIfNull(exceptionFactory);
 
-        if (argument < minimum) {
+        if(argument < minimum) {
             Thrower.ThrowFromFactory(exceptionFactory);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the specified numeric value is greater than or equal to the minimum allowed value, using a custom exception factory and a state object to avoid allocations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to validate.</typeparam>
+    /// <typeparam name="TState">The type of the state object used to create the exception.</typeparam>
+    /// <typeparam name="TException">The type of exception to throw.</typeparam>
+    /// <param name="argument">The numeric value to validate.</param>
+    /// <param name="minimum">The minimum allowed value (inclusive).</param>
+    /// <param name="exceptionFactory">A factory function that takes a state and creates the exception.</param>
+    /// <param name="state">The state object to pass to the exception factory.</param>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfLessThan<T, TState, TException>(T argument,
+                                                              T minimum,
+                                                              [NotNull] Func<TState, TException> exceptionFactory,
+                                                              [NotNull] TState state)
+        where T : IComparisonOperators<T, T, bool>
+        where TException : Exception {
+        Preca.ThrowIfNull(argument, nameof(argument));
+        Preca.ThrowIfNull(minimum, nameof(minimum));
+        Preca.ThrowIfNull(exceptionFactory);
+        if(argument < minimum) {
+            Thrower.ThrowFromFactory(exceptionFactory, state);
         }
     }
 
@@ -71,7 +97,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(argument, paramName);
         Preca.ThrowIfNull(minimum, nameof(minimum));
 
-        if (argument < minimum) {
+        if(argument < minimum) {
             Thrower.ThrowException<TException>();
         }
     }
