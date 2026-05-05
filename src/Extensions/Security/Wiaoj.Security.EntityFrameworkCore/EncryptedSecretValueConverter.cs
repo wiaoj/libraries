@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion; 
 
 namespace Wiaoj.Security.EntityFrameworkCore;
 /// <summary>
@@ -20,8 +20,7 @@ public sealed class EncryptedSecretValueConverter<TContext> : ValueConverter<Enc
             secret => $"{secret.KeyVersion.Value}:{secret.Blob.ToStorageString()}",
 
             // DB -> C# (Reading): Split by ":" and reconstruct the object
-            dbValue => Parse(dbValue),
-            new ConverterMappingHints(size: 255)) {
+            dbValue => Parse(dbValue)) {
     }
 
     /// <summary>
@@ -30,9 +29,11 @@ public sealed class EncryptedSecretValueConverter<TContext> : ValueConverter<Enc
     /// <param name="dbValue">The raw string value from the database (format: 'version:base64').</param>
     /// <returns>A restored instance of <see cref="EncryptedSecret{TContext}"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the database value is not in the expected format.</exception>
-    private static EncryptedSecret<TContext> Parse(string dbValue) {
+    private static EncryptedSecret<TContext> Parse(string dbValue) { 
         if(string.IsNullOrWhiteSpace(dbValue)) {
-            return default;
+            throw new InvalidOperationException(
+                $"The database value for EncryptedSecret<{typeof(TContext).Name}> is empty or whitespace. " +
+                "This usually indicates data corruption or an uninitialized column.");
         }
 
         ReadOnlySpan<char> span = dbValue.AsSpan();
@@ -99,6 +100,27 @@ public static class EncryptedSecretMappingExtensions {
     public static PropertyBuilder<EncryptedSecret<TContext>> HasEncryptedSecretConversion<TContext>(
         this PropertyBuilder<EncryptedSecret<TContext>> propertyBuilder)
         where TContext : ISecretContext {
+        propertyBuilder.IsRequired();
+        return propertyBuilder.HasConversion(
+            new EncryptedSecretValueConverter<TContext>(),
+            new EncryptedSecretValueComparer<TContext>()
+        );
+    }
+
+    /// <summary>
+    /// Configures the property to use the <see cref="EncryptedSecretValueConverter{TContext}"/> 
+    /// and <see cref="EncryptedSecretValueComparer{TContext}"/> for seamless database mapping.
+    /// </summary>
+    /// <remarks>
+    /// This extension method bundles both the value conversion (storing as 'version:base64') 
+    /// and the value comparison logic (ensuring EF Core correctly tracks changes for the immutable record struct).
+    /// </remarks>
+    /// <typeparam name="TContext">The secret context type associated with the <see cref="EncryptedSecret{TContext}"/>.</typeparam>
+    /// <param name="propertyBuilder">The builder for the property being configured.</param>
+    /// <returns>The same builder instance so that multiple calls can be chained.</returns>
+    public static PropertyBuilder<EncryptedSecret<TContext>?> HasNullableEncryptedSecretConversion<TContext>(
+        this PropertyBuilder<EncryptedSecret<TContext>?> propertyBuilder)
+        where TContext : ISecretContext {
 
         return propertyBuilder.HasConversion(
             new EncryptedSecretValueConverter<TContext>(),
@@ -112,6 +134,16 @@ public static class EncryptedSecretMappingExtensions {
     /// </summary>
     public static PropertiesConfigurationBuilder<EncryptedSecret<TContext>> HaveEncryptedSecretConversion<TContext>(
         this PropertiesConfigurationBuilder<EncryptedSecret<TContext>> builder)
+        where TContext : ISecretContext {
+        return builder.HaveConversion<EncryptedSecretValueConverter<TContext>, EncryptedSecretValueComparer<TContext>>();
+    }
+
+    /// <summary>
+    /// Configures all properties of type EncryptedSecret to use the custom converter and comparer.
+    /// Used within ConfigureConventions.
+    /// </summary>
+    public static PropertiesConfigurationBuilder<EncryptedSecret<TContext>?> HaveEncryptedSecretConversion<TContext>(
+        this PropertiesConfigurationBuilder<EncryptedSecret<TContext>?> builder)
         where TContext : ISecretContext {
         return builder.HaveConversion<EncryptedSecretValueConverter<TContext>, EncryptedSecretValueComparer<TContext>>();
     }
