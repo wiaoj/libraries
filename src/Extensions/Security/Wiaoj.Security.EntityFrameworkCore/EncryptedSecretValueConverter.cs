@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Wiaoj.Security.EntityFrameworkCore;
@@ -68,16 +69,47 @@ public sealed class EncryptedSecretValueComparer<TContext> : ValueComparer<Encry
     /// </remarks>
     public EncryptedSecretValueComparer() : base(
         // 1. Equality: Are the contents of the two objects identical?
-        (left, right) =>
-             left.KeyVersion.Value == right.KeyVersion.Value &&
-             left.Blob.ToStorageString() == right.Blob.ToStorageString(), // You can also use SequenceEqual if Blob exposes a byte array.
+        (left, right) => left.Equals(right),
 
         // 2. HashCode: How should the hash value be calculated? (Used for dictionaries/HashSets)
-        secret => HashCode.Combine(secret.KeyVersion.Value, secret.Blob.ToStorageString()),
+        secret => secret.GetHashCode(),
 
         // 3. Snapshot: How should EF Core take a copy of this object for change tracking?
         // Since EncryptedSecret is assumed to be IMMUTABLE, returning the reference directly is safe.
         // If it were mutable, a new instance (deep copy) would need to be created here.
         secret => secret) {
+    }
+}
+
+public static class EncryptedSecretMappingExtensions {
+    /// <summary>
+    /// Configures the property to use the <see cref="EncryptedSecretValueConverter{TContext}"/> 
+    /// and <see cref="EncryptedSecretValueComparer{TContext}"/> for seamless database mapping.
+    /// </summary>
+    /// <remarks>
+    /// This extension method bundles both the value conversion (storing as 'version:base64') 
+    /// and the value comparison logic (ensuring EF Core correctly tracks changes for the immutable record struct).
+    /// </remarks>
+    /// <typeparam name="TContext">The secret context type associated with the <see cref="EncryptedSecret{TContext}"/>.</typeparam>
+    /// <param name="propertyBuilder">The builder for the property being configured.</param>
+    /// <returns>The same builder instance so that multiple calls can be chained.</returns>
+    public static PropertyBuilder<EncryptedSecret<TContext>> HasEncryptedSecretConversion<TContext>(
+        this PropertyBuilder<EncryptedSecret<TContext>> propertyBuilder)
+        where TContext : ISecretContext {
+
+        return propertyBuilder.HasConversion(
+            new EncryptedSecretValueConverter<TContext>(),
+            new EncryptedSecretValueComparer<TContext>()
+        );
+    }
+
+    /// <summary>
+    /// Configures all properties of type EncryptedSecret to use the custom converter and comparer.
+    /// Used within ConfigureConventions.
+    /// </summary>
+    public static PropertiesConfigurationBuilder<EncryptedSecret<TContext>> HaveEncryptedSecretConversion<TContext>(
+        this PropertiesConfigurationBuilder<EncryptedSecret<TContext>> builder)
+        where TContext : ISecretContext {
+        return builder.HaveConversion<EncryptedSecretValueConverter<TContext>, EncryptedSecretValueComparer<TContext>>();
     }
 }
