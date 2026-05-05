@@ -16,7 +16,7 @@ public static class SecurityBuilderRotationExtensions {
     /// Registers the full lifecycle for a single secret domain:
     /// <list type="bullet">
     ///   <item><see cref="KeyRingLoader{TContext}"/> (scoped)</item>
-    ///   <item><see cref="ManagedSecretProtector{TContext}"/> (singleton, lazy via <c>AsyncLazy</c>)</item>
+    ///   <item><see cref="ManagedSecretProtector{TContext}"/> (singleton, lazy via <see cref="AsyncLazy{T}"/> where T is <see cref="ISecretProtector{TContext}"/>)</item>
     ///   <item><see cref="SecurityInitializationService{TContext}"/> — pre-warms on startup</item>
     ///   <item><see cref="KeyRotationService{TContext}"/> (scoped)</item>
     ///   <item><see cref="RotationBackgroundService{TContext}"/> — periodic rotation check</item>
