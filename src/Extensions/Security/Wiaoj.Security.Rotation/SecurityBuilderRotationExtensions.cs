@@ -1,10 +1,12 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Diagnostics.CodeAnalysis;
 using Wiaoj.Concurrency;
+using Wiaoj.Security;
 using Wiaoj.Security.DependencyInjection;
 
-namespace Wiaoj.Security;
+#pragma warning disable IDE0130
+namespace Microsoft.Extensions.DependencyInjection;
+#pragma warning restore IDE0130
 
 public static class SecurityBuilderRotationExtensions {
 
