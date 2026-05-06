@@ -12,6 +12,7 @@ Environment.SetEnvironmentVariable("MASTER_KEY", "r4_V1rtjRmgZDnYZZSYLXx7yFKP_4s
 // 2. Kütüphane servislerini ayağa kaldır
 builder.Services.AddWiaojSecurity(opts => {
     opts.KeySizeInBits = 256;
+    opts.RotationInterval = TimeSpan.FromMinutes(1);
 })
 .AddEnvironmentMasterKey("MASTER_KEY")
 .AddInMemoryKeyStore()

@@ -26,11 +26,17 @@ public sealed class EquatableArrayJsonConverterFactory : JsonConverterFactory {
     /// <param name="options">The serialization options to use.</param>
     /// <returns>A configured JSON converter for the specified type.</returns>
     [UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "AOT safety is provided by manual array parsing in the inner converter.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode", Justification = "The element converter is resolved dynamically but is compatible with the target element type.")]
     public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) {
         Type elementType = typeToConvert.GetGenericArguments()[0];
 
+        // 1. T tipi için uygun olan dönüştürücüyü JsonSerializerOptions üzerinden buluyoruz.
+        JsonConverter elementConverter = options.GetConverter(elementType);
+
+        // 2. Bulduğumuz elementConverter'ı Activator.CreateInstance içerisine argüman olarak veriyoruz.
         return (JsonConverter)Activator.CreateInstance(
-            typeof(EquatableArrayJsonConverter<>).MakeGenericType(elementType))!;
+            typeof(EquatableArrayJsonConverter<>).MakeGenericType(elementType),
+            elementConverter)!; // <-- Parametreyi buraya ekledik
     }
 }
 
