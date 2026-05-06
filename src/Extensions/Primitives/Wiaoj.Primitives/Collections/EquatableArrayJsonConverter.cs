@@ -30,13 +30,11 @@ public sealed class EquatableArrayJsonConverterFactory : JsonConverterFactory {
     public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) {
         Type elementType = typeToConvert.GetGenericArguments()[0];
 
-        // 1. T tipi için uygun olan dönüştürücüyü JsonSerializerOptions üzerinden buluyoruz.
         JsonConverter elementConverter = options.GetConverter(elementType);
 
-        // 2. Bulduğumuz elementConverter'ı Activator.CreateInstance içerisine argüman olarak veriyoruz.
         return (JsonConverter)Activator.CreateInstance(
             typeof(EquatableArrayJsonConverter<>).MakeGenericType(elementType),
-            elementConverter)!; // <-- Parametreyi buraya ekledik
+            elementConverter)!; 
     }
 }
 
