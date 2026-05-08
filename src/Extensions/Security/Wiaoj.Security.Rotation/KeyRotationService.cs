@@ -60,7 +60,7 @@ public sealed class KeyRotationService<TContext>
             return false;
         }
 
-        TimeSpan age = DateTime.UtcNow - current.CreatedAt;
+        TimeSpan age = this._timeProvider.GetUtcNow() - current.CreatedAt;
 
         if(!current.IsExpired(this._options.RotationInterval, this._timeProvider)) {
             this._logger.LogDebug(

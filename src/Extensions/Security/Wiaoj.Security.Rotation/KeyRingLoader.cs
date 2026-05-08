@@ -13,7 +13,8 @@ namespace Wiaoj.Security;
 /// </remarks>
 public sealed class KeyRingLoader<TContext>(IEncryptionKeyStore store,
                                             IMasterKeyProvider masterKeyProvider,
-                                            IOptions<KeyRotationOptions> options)
+                                            IOptions<KeyRotationOptions> options,
+                                            TimeProvider timeProvider)
     where TContext : ISecretContext {
     private readonly KeyRotationOptions _options = options.Value;
     private readonly string _contextName = typeof(TContext).Name;
@@ -51,7 +52,7 @@ public sealed class KeyRingLoader<TContext>(IEncryptionKeyStore store,
                 ContextName = this._contextName,
                 Version = 1,
                 WrappedKeyMaterial = wrapped,
-                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = timeProvider.GetUtcNow(),
             };
 
             await store.SaveKeyAsync(record, cancellationToken);

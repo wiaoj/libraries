@@ -12,7 +12,7 @@ namespace Wiaoj.Security;
 /// <c>ToString()</c>, which means the ciphertext can silently appear in logs,
 /// exception messages, or debug watches. <see cref="CipherBlob"/> overrides
 /// <c>ToString()</c> to return a safe sentinel and restricts the actual
-/// Base64 accessor to <c>internal</c> — only <see cref="SecretProtector{TContext}"/>
+/// Base64 accessor to <c>internal</c> — only <see cref="ISecretProtector{TContext}"/>
 /// can read the raw bytes.
 /// </para>
 /// <para>
@@ -46,15 +46,7 @@ public readonly record struct CipherBlob {
     }
 
     /// <summary>
-    /// Internal factory: used by <see cref="SecretProtector{TContext}"/> after completing encryption.
-    /// Skips re-validation because the value was just produced by <c>Convert.ToBase64String</c>.
-    /// </summary>
-    public static CipherBlob FromEncryptionResult(string base64) {
-        return new(Base64UrlString.Parse(base64));
-    }
-
-    /// <summary>
-    /// Internal factory: used by <see cref="SecretProtector{TContext}"/> after completing encryption.
+    /// Internal factory: used by <see cref="ISecretProtector{TContext}"/> after completing encryption.
     /// Skips re-validation because the value was just produced by <c>Convert.ToBase64String</c>.
     /// </summary>
     public static CipherBlob From(Base64UrlString base64) {

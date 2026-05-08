@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using Wiaoj.Security.DependencyInjection;
 
 namespace Wiaoj.Security;
 
@@ -20,73 +21,66 @@ namespace Wiaoj.Security;
 /// app.MapHealthChecks("/health/ready", new() { Predicate = r => r.Tags.Contains("ready") });
 /// </code>
 /// </remarks>
-public sealed class SecurityHealthCheck<TContext> : IHealthCheck
+public sealed class SecurityHealthCheck<TContext>(
+    ManagedSecretProtector<TContext> protector,
+    IEncryptionKeyStore store,
+    IOptions<KeyRotationOptions> options,
+    TimeProvider timeProvider) : IHealthCheck
     where TContext : ISecretContext {
-
-    private readonly ManagedSecretProtector<TContext> _protector;
-    private readonly IEncryptionKeyStore _store;
-    private readonly KeyRotationOptions _options;
+    private readonly KeyRotationOptions _options = options.Value;
     private readonly string _ctx = typeof(TContext).Name;
 
-    public SecurityHealthCheck(
-        ManagedSecretProtector<TContext> protector,
-        IEncryptionKeyStore store,
-        IOptions<KeyRotationOptions> options) {
-        _protector = protector;
-        _store = store;
-        _options = options.Value;
-    }
-
+    /// <inheritdoc/>
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default) {
         // ── 1. Is key ring initialized? ───────────────────────────────────────
-        if(!_protector.IsInitialized) {
+        if(!protector.IsInitialized) {
             return HealthCheckResult.Unhealthy(
-                $"[{_ctx}] Key ring has not been initialized. " +
+                $"[{this._ctx}] Key ring has not been initialized. " +
                 "SecurityInitializationService may have failed at startup.");
         }
 
         // ── 2. Can we read the current key version? ───────────────────────────
         KeyVersion currentVersion;
         try {
-            currentVersion = _protector.CurrentKeyVersion;
+            currentVersion = protector.CurrentKeyVersion;
         }
         catch(Exception ex) {
             return HealthCheckResult.Unhealthy(
-                $"[{_ctx}] Failed to read current key version.", ex);
+                $"[{this._ctx}] Failed to read current key version.", ex);
         }
 
         // ── 3. Is the active key overdue for rotation? ────────────────────────
         try {
             IReadOnlyList<EncryptionKeyRecord> records =
-                await _store.LoadKeysAsync(_ctx, cancellationToken);
+                await store.LoadKeysAsync(this._ctx, cancellationToken);
 
             EncryptionKeyRecord? active = records
                 .Where(r => !r.IsRetired && r.Version == currentVersion.Value)
                 .FirstOrDefault();
 
             if(active is not null) {
-                TimeSpan age = DateTimeOffset.UtcNow - active.CreatedAt;
-                TimeSpan rotationInterval = _options.RotationInterval;
+                TimeSpan age = timeProvider.GetUtcNow() - active.CreatedAt;
+                TimeSpan rotationInterval = this._options.RotationInterval;
 
-                var data = new Dictionary<string, object> {
-                    ["context"]           = _ctx,
-                    ["current_version"]   = currentVersion.Value,
-                    ["key_age_days"]      = (int)age.TotalDays,
+                Dictionary<string, object> data = new() {
+                    ["context"] = this._ctx,
+                    ["current_version"] = currentVersion.Value,
+                    ["key_age_days"] = (int)age.TotalDays,
                     ["rotation_interval"] = rotationInterval.ToString("d\\d"),
                 };
 
                 if(age > rotationInterval) {
                     return HealthCheckResult.Degraded(
-                        $"[{_ctx}] Key v{currentVersion} is overdue for rotation " +
+                        $"[{this._ctx}] Key v{currentVersion} is overdue for rotation " +
                         $"(age {(int)age.TotalDays}d, limit {(int)rotationInterval.TotalDays}d). " +
                         "Check RotationBackgroundService logs.",
                         data: data);
                 }
 
                 return HealthCheckResult.Healthy(
-                    $"[{_ctx}] Key v{currentVersion} active " +
+                    $"[{this._ctx}] Key v{currentVersion} active " +
                     $"({(int)age.TotalDays}d / {(int)rotationInterval.TotalDays}d).",
                     data: data);
             }
@@ -94,10 +88,10 @@ public sealed class SecurityHealthCheck<TContext> : IHealthCheck
         catch(Exception ex) {
             // Store unreachable → degraded, not unhealthy (in-memory ring still works)
             return HealthCheckResult.Degraded(
-                $"[{_ctx}] Could not verify key age (store unavailable). " +
+                $"[{this._ctx}] Could not verify key age (store unavailable). " +
                 $"Key ring is loaded at v{currentVersion}.", ex);
         }
 
-        return HealthCheckResult.Healthy($"[{_ctx}] Key ring loaded at v{currentVersion}.");
+        return HealthCheckResult.Healthy($"[{this._ctx}] Key ring loaded at v{currentVersion}.");
     }
 }

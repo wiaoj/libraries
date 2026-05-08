@@ -8,10 +8,11 @@ public sealed class FileMasterKeyProvider : IMasterKeyProvider {
 
     public FileMasterKeyProvider(string filePath) {
         if(string.IsNullOrWhiteSpace(filePath))
-            throw new ArgumentException("...", nameof(filePath));
+            throw new ArgumentException("File path must not be null or whitespace.", nameof(filePath));
         this._filePath = filePath;
     }
 
+    /// <inheritdoc/>
     public async ValueTask<MasterKey> GetMasterKeyAsync(CancellationToken cancellationToken = default) {
         if(!File.Exists(this._filePath))
             throw new FileNotFoundException($"Master key file not found at '{this._filePath}'.");

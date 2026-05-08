@@ -14,7 +14,7 @@ public sealed class EnvironmentMasterKeyProvider : IMasterKeyProvider {
         ArgumentException.ThrowIfNullOrWhiteSpace(variableName);
         this._variableName = variableName;
     }
-     
+
     /// <inheritdoc />
     public ValueTask<MasterKey> GetMasterKeyAsync(CancellationToken cancellationToken = default) {
         string? value = Environment.GetEnvironmentVariable(this._variableName);
@@ -24,26 +24,25 @@ public sealed class EnvironmentMasterKeyProvider : IMasterKeyProvider {
                 $"Master key environment variable '{this._variableName}' is not set or empty. " +
                 "Set it to a Base64-encoded 32-byte (256-bit) random value.");
 
-        Base64UrlString? keyBytes = null;
+        byte[]? keyBytes = null;
         try {
-            keyBytes = Base64UrlString.Parse(value);
-            var lenght = keyBytes.Value.GetDecodedLength();
-            if(lenght is not (16 or 24 or 32))
+            keyBytes = Base64UrlString.Parse(value).ToBytes();
+            if(keyBytes.Length is not (16 or 24 or 32))
                 throw new InvalidOperationException(
                     $"Master key must be 16, 24, or 32 bytes (128/192/256-bit AES). " +
-                    $"Got {lenght} bytes from '{this._variableName}'.");
+                    $"Got {keyBytes.Length} bytes from '{this._variableName}'.");
 
-            return ValueTask.FromResult(new MasterKey(Secret.From(keyBytes.Value.ToBytes())));
+            return ValueTask.FromResult(new MasterKey(Secret.From(keyBytes)));
         }
         catch(FormatException ex) {
             throw new InvalidOperationException(
                 $"Environment variable '{this._variableName}' is not valid Base64.", ex);
         }
         finally {
-            if(keyBytes.HasValue) {
-                // İşimiz bittiği an managed diziyi RAM'den temizliyoruz
-                CryptographicOperations.ZeroMemory(keyBytes.Value.ToBytes());
-            }
+            // Zero the same array we decoded into — ToBytes() is called only once above,
+            // so ZeroMemory operates on the actual key material, not a fresh copy.
+            if(keyBytes is not null)
+                CryptographicOperations.ZeroMemory(keyBytes);
         }
     }
 }

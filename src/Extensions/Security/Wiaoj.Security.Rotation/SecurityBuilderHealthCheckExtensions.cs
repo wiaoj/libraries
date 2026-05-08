@@ -63,7 +63,8 @@ public static class SecurityBuilderHealthCheckExtensions {
                 sp => new SecurityHealthCheck<TContext>(
                     sp.GetRequiredService<ManagedSecretProtector<TContext>>(),
                     sp.GetRequiredService<IEncryptionKeyStore>(),
-                    sp.GetRequiredService<IOptions<KeyRotationOptions>>()),
+                    sp.GetRequiredService<IOptions<KeyRotationOptions>>(),
+                    sp.GetRequiredService<TimeProvider>()),
                 failureStatus,
                 tags));
 
