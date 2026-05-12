@@ -94,33 +94,25 @@ public readonly record struct Base64UrlString :
         // padding eklemek ve karakterleri değiştirmek için string'in kopyasına ihtiyacımız var.
         int requiredLen = this._value.Length + 2; // En fazla 2 padding gelebilir
 
-        char[]? rented = null;
-        Span<char> buffer = requiredLen <= 1024
-            ? stackalloc char[requiredLen]
-            : (rented = ArrayPool<char>.Shared.Rent(requiredLen));
+        using ValueBuffer<char> buffer = ValueBuffer.CreateChar(1024, stackalloc char[requiredLen]);
 
-        try {
-            // String'i buffera kopyala
-            this._value.AsSpan().CopyTo(buffer);
-            int len = this._value.Length;
+        // String'i buffera kopyala
+        this._value.AsSpan().CopyTo(buffer);
+        int len = this._value.Length;
 
-            // Karakterleri geri değiştir: '-' -> '+', '_' -> '/'
-            for(int i = 0; i < len; i++) {
-                char c = buffer[i];
-                if(c == '-') buffer[i] = '+';
-                else if(c == '_') buffer[i] = '/';
-            }
-
-            // Padding ekle (mod 4)
-            while(len % 4 != 0) {
-                buffer[len++] = '=';
-            }
-
-            return Convert.TryFromBase64Chars(buffer[..len], destination, out bytesWritten);
+        // Karakterleri geri değiştir: '-' -> '+', '_' -> '/'
+        for(int i = 0; i < len; i++) {
+            char c = buffer[i];
+            if(c == '-') buffer[i] = '+';
+            else if(c == '_') buffer[i] = '/';
         }
-        finally {
-            if(rented is not null) ArrayPool<char>.Shared.Return(rented);
+
+        // Padding ekle (mod 4)
+        while(len % 4 != 0) {
+            buffer[len++] = '=';
         }
+
+        return Convert.TryFromBase64Chars(buffer[..len], destination, out bytesWritten);
     }
 
     public byte[] ToBytes() {

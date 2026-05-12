@@ -109,7 +109,7 @@ public readonly unsafe struct Secret<T> :
         }
 
         return new Secret<T>(ptr, source.Length);
-    }
+    } 
 
     /// <summary>
     /// Creates a new <see cref="Secret{T}"/> by reading all bytes from a stream.
@@ -343,7 +343,7 @@ public readonly unsafe struct Secret<T> :
                 this._disposeState.SetDisposed();
             }
         }
-    }
+    } 
 
     /// <summary>
     /// Compares two secrets in a way that is resistant to timing attacks.

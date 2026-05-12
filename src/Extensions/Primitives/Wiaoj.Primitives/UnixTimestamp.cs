@@ -36,8 +36,7 @@ public readonly record struct UnixTimestamp :
     IUtf8SpanFormattable,
     IAdditionOperators<UnixTimestamp, TimeSpan, UnixTimestamp>,
     ISubtractionOperators<UnixTimestamp, TimeSpan, UnixTimestamp>,
-    ISubtractionOperators<UnixTimestamp, UnixTimestamp, TimeSpan>,
-    IEqualityOperators<UnixTimestamp, long, bool>,
+    ISubtractionOperators<UnixTimestamp, UnixTimestamp, TimeSpan>, 
     IComparisonOperators<UnixTimestamp, UnixTimestamp, bool> {
 
     // -------------------------------------------------------------------------
@@ -386,19 +385,7 @@ public readonly record struct UnixTimestamp :
     public static bool operator <=(UnixTimestamp left, UnixTimestamp right) {
         return left._milliseconds <= right._milliseconds;
     }
-
-    // Equality with raw long (allows check like: timestamp == 0)
-
-    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
-    public static bool operator ==(UnixTimestamp left, long right) {
-        return left._milliseconds == right;
-    }
-
-    /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Inequality(TSelf, TOther)" />
-    public static bool operator !=(UnixTimestamp left, long right) {
-        return left._milliseconds != right;
-    }
-
+  
     /// <inheritdoc/>
     public int CompareTo(UnixTimestamp other) {
         return this._milliseconds.CompareTo(other._milliseconds);
@@ -413,7 +400,7 @@ public readonly record struct UnixTimestamp :
 
     // Casting - Primitive
     /// <summary>Implicitly converts to <see cref="long"/> (milliseconds) to allow easy math operations if needed.</summary>
-    public static implicit operator long(UnixTimestamp ts) {
+    public static explicit operator long(UnixTimestamp ts) {
         return ts._milliseconds;
     }
 
