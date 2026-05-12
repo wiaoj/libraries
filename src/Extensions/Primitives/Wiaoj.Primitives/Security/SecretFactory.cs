@@ -104,7 +104,7 @@ public static partial class SecretExtensions {
     extension(Secret<byte> secret) {
         /// <summary>
         /// Derives a new key from this secret using HKDF-SHA256.
-        /// This is a convenience overload that accepts a <see cref="Secret{byte}"/> as the salt.
+        /// This is a convenience overload that accepts a <see cref="Secret{T}"/> as the salt.
         /// </summary>
         public Secret<byte> DeriveKey(in Secret<byte> salt, int outputByteCount) {
             return salt.Expose(

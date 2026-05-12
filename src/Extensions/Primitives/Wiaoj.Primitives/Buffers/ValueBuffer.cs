@@ -7,7 +7,6 @@ namespace Wiaoj.Primitives.Buffers;
 public static class ValueBuffer {
     /// <summary>
     /// Rents a buffer from the shared ArrayPool without requiring a stack-allocated initial buffer.
-    /// Useful when you want an auto-disposing pool array and do not have stack memory available.
     /// </summary>
     /// <typeparam name="T">The type of items in the buffer.</typeparam>
     /// <param name="minimumLength">The minimum required length of the buffer.</param>
@@ -16,22 +15,51 @@ public static class ValueBuffer {
         return new ValueBuffer<T>(minimumLength, default);
     }
 
-    /// <summary>
-    /// Rents a byte buffer from the shared ArrayPool.
-    /// </summary>
+    /// <inheritdoc cref="Rent{T}(int)"/>
+    /// <param name="minimumLength">The total required length.</param> 
+    /// <param name="onDispose">
+    /// A callback invoked with the active span when the buffer is disposed,
+    /// before the rented array is cleared and returned to the pool.
+    /// </param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueBuffer<T> Rent<T>(int minimumLength, Action<Span<T>> onDispose) where T : unmanaged {
+        return new ValueBuffer<T>(minimumLength, default, onDispose);
+    }
+
+    /// <summary>Rents a byte buffer from the shared ArrayPool.</summary>
     /// <param name="minimumLength">The minimum required length of the buffer.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ValueBuffer<byte> Rent(int minimumLength) {
         return new ValueBuffer<byte>(minimumLength, default);
     }
 
-    /// <summary>
-    /// Rents a char buffer from the shared ArrayPool.
-    /// </summary>
+    /// <inheritdoc cref="Rent(int)"/>
+    /// <param name="minimumLength">The total required length.</param> 
+    /// <param name="onDispose">
+    /// A callback invoked with the active span when the buffer is disposed,
+    /// before the rented array is cleared and returned to the pool.
+    /// </param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueBuffer<byte> Rent(int minimumLength, Action<Span<byte>> onDispose) {
+        return new ValueBuffer<byte>(minimumLength, default, onDispose);
+    }
+
+    /// <summary>Rents a char buffer from the shared ArrayPool.</summary>
     /// <param name="minimumLength">The minimum required length of the buffer.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ValueBuffer<char> RentChar(int minimumLength) {
         return new ValueBuffer<char>(minimumLength, default);
+    }
+
+    /// <inheritdoc cref="RentChar(int)"/>
+    /// <param name="minimumLength">The total required length.</param> 
+    /// <param name="onDispose">
+    /// A callback invoked with the active span when the buffer is disposed,
+    /// before the rented array is cleared and returned to the pool.
+    /// </param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueBuffer<char> RentChar(int minimumLength, Action<Span<char>> onDispose) {
+        return new ValueBuffer<char>(minimumLength, default, onDispose);
     }
 
     /// <summary>
@@ -45,9 +73,19 @@ public static class ValueBuffer {
         return new ValueBuffer<T>(minimumLength, initialBuffer);
     }
 
-    /// <summary>
-    /// Creates a hybrid byte buffer using the provided span if sufficient, otherwise rents.
-    /// </summary>
+    /// <inheritdoc cref="Create{T}(int, Span{T})"/>
+    /// <param name="minimumLength">The total required length.</param>
+    /// <param name="initialBuffer">A stack-allocated buffer to use if possible.</param>
+    /// <param name="onDispose">
+    /// A callback invoked with the active span when the buffer is disposed,
+    /// before the rented array is cleared and returned to the pool.
+    /// </param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueBuffer<T> Create<T>(int minimumLength, Span<T> initialBuffer, Action<Span<T>> onDispose) where T : unmanaged {
+        return new ValueBuffer<T>(minimumLength, initialBuffer, onDispose);
+    }
+
+    /// <summary>Creates a hybrid byte buffer using the provided span if sufficient, otherwise rents.</summary>
     /// <param name="minimumLength">The total required length.</param>
     /// <param name="initialBuffer">A stack-allocated buffer to use if possible.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -55,14 +93,36 @@ public static class ValueBuffer {
         return new ValueBuffer<byte>(minimumLength, initialBuffer);
     }
 
-    /// <summary>
-    /// Creates a hybrid char buffer using the provided span if sufficient, otherwise rents.
-    /// </summary>
+    /// <inheritdoc cref="Create(int, Span{byte})"/>
+    /// <param name="minimumLength">The total required length.</param>
+    /// <param name="initialBuffer">A stack-allocated buffer to use if possible.</param>
+    /// <param name="onDispose">
+    /// A callback invoked with the active span when the buffer is disposed,
+    /// before the rented array is cleared and returned to the pool.
+    /// </param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueBuffer<byte> Create(int minimumLength, Span<byte> initialBuffer, Action<Span<byte>> onDispose) {
+        return new ValueBuffer<byte>(minimumLength, initialBuffer, onDispose);
+    }
+
+    /// <summary>Creates a hybrid char buffer using the provided span if sufficient, otherwise rents.</summary>
     /// <param name="minimumLength">The total required length.</param>
     /// <param name="initialBuffer">A stack-allocated buffer to use if possible.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ValueBuffer<char> CreateChar(int minimumLength, Span<char> initialBuffer) {
         return new ValueBuffer<char>(minimumLength, initialBuffer);
+    }
+
+    /// <inheritdoc cref="CreateChar(int, Span{char})"/>
+    /// <param name="minimumLength">The total required length.</param>
+    /// <param name="initialBuffer">A stack-allocated buffer to use if possible.</param>
+    /// <param name="onDispose">
+    /// A callback invoked with the active span when the buffer is disposed,
+    /// before the rented array is cleared and returned to the pool.
+    /// </param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueBuffer<char> CreateChar(int minimumLength, Span<char> initialBuffer, Action<Span<char>> onDispose) {
+        return new ValueBuffer<char>(minimumLength, initialBuffer, onDispose);
     }
 
     /// <summary>Creates a 32-byte buffer.</summary>
@@ -120,5 +180,15 @@ public static class ValueBufferExtensions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ValueBuffer<T> AsValueBuffer<T>(this Span<T> span) where T : unmanaged {
         return new ValueBuffer<T>(span);
+    }
+
+    /// <inheritdoc cref="AsValueBuffer{T}(Span{T})"/>  
+    /// <param name="span">The source span.</param>
+    /// <param name="onDispose">
+    /// A callback invoked with the active span when the buffer is disposed.
+    /// </param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueBuffer<T> AsValueBuffer<T>(this Span<T> span, Action<Span<T>> onDispose) where T : unmanaged {
+        return new ValueBuffer<T>(span, onDispose);
     }
 }

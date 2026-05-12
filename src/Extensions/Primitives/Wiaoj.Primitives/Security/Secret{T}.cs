@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Wiaoj.Primitives.Buffers;
 
 #pragma warning disable IDE0130
 namespace Wiaoj.Primitives;
@@ -117,7 +118,10 @@ public readonly unsafe struct Secret<T> :
     public static Secret<byte> From(Stream stream) {
         using MemoryStream ms = new();
         stream.CopyTo(ms);
-        return Secret<byte>.From(ms.GetBuffer().AsSpan(0, (int)ms.Length));
+        Span<byte> span = ms.GetBuffer().AsSpan(0, (int)ms.Length);
+        Secret<byte> result = Secret<byte>.From(span);
+        CryptographicOperations.ZeroMemory(span);
+        return result;
     }
 
     /// <summary>
@@ -192,7 +196,23 @@ public readonly unsafe struct Secret<T> :
     public static Secret<byte> From(string s, Encoding encoding) {
         Preca.ThrowIfNull(s);
         Preca.ThrowIfNull(encoding);
-        return Secret<byte>.From(encoding.GetBytes(s));
+        int byteCount = encoding.GetByteCount(s);
+
+        Span<byte> stack = stackalloc byte[256];
+        //using ValueBuffer<byte> buffer = ValueBuffer.Create(byteCount, stack);
+
+        //encoding.GetBytes(s, buffer.Span);
+
+        //Secret<byte> result = Secret<byte>.From(buffer.Span);
+
+        //CryptographicOperations.ZeroMemory(buffer.Span);
+        using ValueBuffer<byte> buffer = ValueBuffer.Create(
+            byteCount, stack,
+            CryptographicOperations.ZeroMemory);
+
+        encoding.GetBytes(s, buffer.Span);
+        return Secret<byte>.From(buffer.Span);
+         
     }
 
     /// <summary>
@@ -288,13 +308,13 @@ public readonly unsafe struct Secret<T> :
     /// <summary>
     /// Provides safe, scoped access to the secret data with a state object and returns a result, preventing closure allocations.
     /// </summary>
-    public TResult Expose<TState, TResult>(TState state, Func<TState, ReadOnlySpan<T>, TResult> func) where TState : allows ref struct { 
+    public TResult Expose<TState, TResult>(TState state, Func<TState, ReadOnlySpan<T>, TResult> func) where TState : allows ref struct {
         if(this._ptr is not null) {
             this._disposeState?.ThrowIfDisposingOrDisposed(nameof(Secret<>));
         }
         Preca.ThrowIfNull(func);
         return func(state, this._ptr is null ? [] : new ReadOnlySpan<T>(this._ptr, this._length));
-    } 
+    }
 
     #endregion
 
@@ -311,7 +331,7 @@ public readonly unsafe struct Secret<T> :
     /// <summary>
     /// Securely clears and frees the unmanaged memory holding the secret.
     /// </summary>
-    public void Dispose() { 
+    public void Dispose() {
         if(this._ptr is null) return;
 
         if(this._disposeState.TryBeginDispose()) {
@@ -352,7 +372,7 @@ public readonly unsafe struct Secret<T> :
     /// </summary>
     public bool Equals(ReadOnlySpan<T> other) {
         if(this._ptr is not null) {
-            this._disposeState?.ThrowIfDisposingOrDisposed(nameof(Secret<T>));
+            this._disposeState?.ThrowIfDisposingOrDisposed(nameof(Secret<>));
         }
 
         if(this.Length != other.Length) return false;
@@ -423,16 +443,16 @@ public readonly unsafe struct Secret<T> :
     /// <returns>Returns <paramref name="ifOne"/> if <paramref name="condition"/> is 1; otherwise, returns <paramref name="ifZero"/>.</returns>
     public static Secret<T> Select(in Secret<T> ifOne, in Secret<T> ifZero, int condition) {
         Preca.ThrowIf(
-            ifOne.Length != ifZero.Length, 
+            ifOne.Length != ifZero.Length,
             static () => new ArgumentException("Both secrets must have the same length for a constant-time selection."));
         Preca.ThrowIf(
-            condition is not 0 and not 1, 
+            condition is not 0 and not 1,
             static () => new ArgumentOutOfRangeException(nameof(condition), "Condition must be 0 or 1."));
 
-        if(ifOne._ptr is not null) 
+        if(ifOne._ptr is not null)
             ifOne._disposeState?.ThrowIfDisposingOrDisposed(nameof(ifOne));
 
-        if(ifZero._ptr is not null) 
+        if(ifZero._ptr is not null)
             ifZero._disposeState?.ThrowIfDisposingOrDisposed(nameof(ifZero));
 
         if(ifOne.Length is 0) return Empty;
@@ -447,11 +467,24 @@ public readonly unsafe struct Secret<T> :
 
         int mask = condition == 1 ? -1 : 0;
 
-        for(int i = 0; i < byteLength; i++) {
+        int i = 0;
+        int chunkSize = sizeof(nuint);
+        nuint umask = (nuint)(nint)mask;
+
+        for(; i <= byteLength - chunkSize; i += chunkSize) {
+            ((nuint*)(pDst + i))[0] =
+                (((nuint*)(p1 + i))[0] & umask) |
+                (((nuint*)(p0 + i))[0] & ~umask);
+        }
+        for(; i < byteLength; i++) {
             pDst[i] = (byte)((p1[i] & mask) | (p0[i] & ~mask));
         }
 
         return result;
+    }
+
+    public static Secret<T> Select(in Secret<T> ifTrue, in Secret<T> ifFalse, bool condition) {
+        return Select(ifTrue, ifFalse, condition ? 1 : 0);
     }
 
     #endregion
