@@ -10,11 +10,21 @@ public sealed class EfEncryptionKeyStore<TDbContext>(TDbContext dbContext, TimeP
     where TDbContext : DbContext, IEncryptionKeyDbContext {
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<EncryptionKeyRecord>> LoadKeysAsync(string contextName, CancellationToken cancellationToken = default) {
-        return await dbContext.EncryptionKeys
+    public async Task<IReadOnlyList<EncryptionKeyRecord>> LoadKeysAsync(string contextName,  CancellationToken cancellationToken = default) {
+        var query = dbContext.EncryptionKeys
             .Where(k => k.ContextName == contextName)
-            .OrderBy(k => k.Version)
-            .ToListAsync(cancellationToken);
+            .OrderByDescending(k => k.Version);
+
+        var results = await query.ToListAsync(cancellationToken);
+        
+        // Return in ascending order for KeyRing expectations
+        return [.. results.OrderBy(k => k.Version)];
+    }
+
+    /// <inheritdoc />
+    public async Task<EncryptionKeyRecord?> GetKeyAsync(string contextName, int version, CancellationToken cancellationToken = default) {
+        return await dbContext.EncryptionKeys
+            .FirstOrDefaultAsync(k => k.ContextName == contextName && k.Version == version, cancellationToken);
     }
 
     /// <inheritdoc />

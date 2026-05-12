@@ -9,8 +9,11 @@ namespace Wiaoj.Security;
 /// Register as Scoped — implementations typically depend on a scoped DbContext or similar.
 /// </remarks>
 public interface IEncryptionKeyStore {
-    /// <summary>Loads all key records for the given context (active + retired), ordered by version.</summary>
+    /// <summary>Loads key records for the given context, optionally limited to the most recent ones.</summary>
     Task<IReadOnlyList<EncryptionKeyRecord>> LoadKeysAsync(string contextName, CancellationToken ct = default);
+
+    /// <summary>Loads a specific key version for the given context.</summary>
+    Task<EncryptionKeyRecord?> GetKeyAsync(string contextName, int version, CancellationToken ct = default);
 
     /// <summary>Persists a newly generated key record.</summary>
     Task<EncryptionKeyRecord> SaveKeyAsync(EncryptionKeyRecord record, CancellationToken ct = default);

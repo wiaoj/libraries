@@ -1,4 +1,4 @@
-﻿using Wiaoj.Preconditions;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.Security;
 

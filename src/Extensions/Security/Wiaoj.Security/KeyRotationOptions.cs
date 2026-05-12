@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Security;
+namespace Wiaoj.Security;
 
 /// <summary>
 /// Configuration for the automatic key rotation system.

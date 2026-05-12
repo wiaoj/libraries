@@ -74,7 +74,7 @@ public class TestSecurityWorker(
     }
 }
 
-public class InMemoryKeyStore(TimeProvider timeProvider) : IEncryptionKeyStore {
+public sealed class InMemoryKeyStore(TimeProvider timeProvider) : IEncryptionKeyStore {
     private readonly List<EncryptionKeyRecord> _keys = [];
     public Task<IReadOnlyList<EncryptionKeyRecord>> LoadKeysAsync(string c, CancellationToken ct) {
         return Task.FromResult((IReadOnlyList<EncryptionKeyRecord>)this._keys);
@@ -89,6 +89,10 @@ public class InMemoryKeyStore(TimeProvider timeProvider) : IEncryptionKeyStore {
         var record = _keys.FirstOrDefault(x => x.Version == v);
         record?.RetiredAt = timeProvider.GetUtcNow();
         return Task.CompletedTask;
+    }
+
+    public Task<EncryptionKeyRecord?> GetKeyAsync(string contextName, int version, CancellationToken ct = default) {
+        return Task.FromResult(_keys.FirstOrDefault(x => x.Version == version));
     }
 }
 

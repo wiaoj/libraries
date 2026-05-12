@@ -64,6 +64,7 @@
     <Project Path="src/Extensions/Security/Wiaoj.Security.DependencyInjection/Wiaoj.Security.DependencyInjection.csproj" Id="48594c87-409e-4051-bf16-778b1b4f4b50" />
     <Project Path="src/Extensions/Security/Wiaoj.Security.EntityFrameworkCore/Wiaoj.Security.EntityFrameworkCore.csproj" Id="c8f561a3-3ba5-44a2-b48d-20734a93a464" />
     <Project Path="src/Extensions/Security/Wiaoj.Security.Rotation/Wiaoj.Security.Rotation.csproj" Id="d18accfa-ccf5-4604-b637-e90ac02ec3f1" />
+    <Project Path="src/Extensions/Security/Wiaoj.Security.Testing/Wiaoj.Security.Testing.csproj" Id="f3e28711-cdc1-40c7-a6dc-ed04dc88a532" />
     <Project Path="src/Extensions/Security/Wiaoj.Security/Wiaoj.Security.csproj" />
   </Folder>
   <Folder Name="/src/Extensions/Wiaoj.Threading/">

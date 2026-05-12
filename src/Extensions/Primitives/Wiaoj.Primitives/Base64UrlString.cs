@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.Buffers;
 using Wiaoj.Primitives.JsonConverters;
 
 namespace Wiaoj.Primitives;
@@ -54,34 +55,25 @@ public readonly record struct Base64UrlString :
         // Base64Url: Base64 with '-' and '_' instead of '+' and '/' and NO padding.
         int maxLen = Base64.GetMaxEncodedToUtf8Length(bytes.Length);
 
-        // Stackalloc safety: 1KB'a kadar stack, sonrası heap (ArrayPool)
-        byte[]? rented = null;
-        Span<byte> buffer = maxLen <= 1024
-            ? stackalloc byte[maxLen]
-            : (rented = ArrayPool<byte>.Shared.Rent(maxLen));
+        using ValueBuffer<byte> buffer = ValueBuffer.Create1024(stackalloc byte[maxLen]);
 
-        try {
-            OperationStatus status = Base64.EncodeToUtf8(bytes, buffer, out _, out int written, isFinalBlock: true);
-            if(status != OperationStatus.Done)
-                throw new InvalidOperationException("Failed to encode Base64.");
+        OperationStatus status = Base64.EncodeToUtf8(bytes, buffer, out _, out int written, isFinalBlock: true);
+        if(status != OperationStatus.Done)
+            throw new InvalidOperationException("Failed to encode Base64.");
 
-            // In-place replacement: '+' -> '-', '/' -> '_'
-            for(int i = 0; i < written; i++) {
-                if(buffer[i] == (byte)'+') buffer[i] = (byte)'-';
-                else if(buffer[i] == (byte)'/') buffer[i] = (byte)'_';
-            }
-
-            // Remove padding '='
-            int actualLen = written;
-            while(actualLen > 0 && buffer[actualLen - 1] == (byte)'=') {
-                actualLen--;
-            }
-
-            return new Base64UrlString(Encoding.UTF8.GetString(buffer[..actualLen]));
+        // In-place replacement: '+' -> '-', '/' -> '_'
+        for(int i = 0; i < written; i++) {
+            if(buffer[i] == (byte)'+') buffer[i] = (byte)'-';
+            else if(buffer[i] == (byte)'/') buffer[i] = (byte)'_';
         }
-        finally {
-            if(rented is not null) ArrayPool<byte>.Shared.Return(rented);
+
+        // Remove padding '='
+        int actualLen = written;
+        while(actualLen > 0 && buffer[actualLen - 1] == (byte)'=') {
+            actualLen--;
         }
+
+        return new Base64UrlString(Encoding.UTF8.GetString(buffer[..actualLen]));
     }
 
     #endregion
@@ -171,7 +163,7 @@ public readonly record struct Base64UrlString :
         // veya basitçe char span'e çevrilip yukarıdaki çağrılabilir (stackalloc ile).
         Span<char> chars = stackalloc char[s.Length];
         if(System.Text.Encoding.UTF8.TryGetChars(s, chars, out int charsWritten)) {
-            return TryParse(chars.Slice(0, charsWritten), out result);
+            return TryParse(chars[..charsWritten], out result);
         }
 
         result = default;

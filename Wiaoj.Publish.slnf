@@ -16,6 +16,7 @@
       "src\\Extensions\\Security\\Wiaoj.Security.DependencyInjection\\Wiaoj.Security.DependencyInjection.csproj",
       "src\\Extensions\\Security\\Wiaoj.Security.EntityFrameworkCore\\Wiaoj.Security.EntityFrameworkCore.csproj",
       "src\\Extensions\\Security\\Wiaoj.Security.Rotation\\Wiaoj.Security.Rotation.csproj",
+      "src\\Extensions\\Security\\Wiaoj.Security.Testing\\Wiaoj.Security.Testing.csproj",
       "src\\Extensions\\Wiaoj.Extensions\\Wiaoj.Extensions.csproj",
       "src\\Extensions\\Wiaoj.Threading\\Wiaoj.Concurrency.csproj",
       "src\\ObjectPool\\Wiaoj.ObjectPool\\Wiaoj.ObjectPool.csproj",

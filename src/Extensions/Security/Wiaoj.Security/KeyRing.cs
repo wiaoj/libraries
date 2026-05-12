@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Security;
+namespace Wiaoj.Security;
 
 /// <summary>
 /// An immutable collection of versioned <see cref="EncryptionKey"/> objects
