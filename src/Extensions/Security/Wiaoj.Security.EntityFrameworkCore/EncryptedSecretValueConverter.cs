@@ -10,6 +10,7 @@ namespace Wiaoj.Security.EntityFrameworkCore;
 /// <typeparam name="TContext">The secret context type associated with this secret.</typeparam>
 public sealed class EncryptedSecretValueConverter<TContext> : ValueConverter<EncryptedSecret<TContext>, string>
     where TContext : ISecretContext {
+    private const char StorageSeparator = ':';
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EncryptedSecretValueConverter{TContext}"/> class.
@@ -17,7 +18,7 @@ public sealed class EncryptedSecretValueConverter<TContext> : ValueConverter<Enc
     public EncryptedSecretValueConverter()
         : base(
             // C# -> DB (Writing): Concatenate version and blob with a ":" separator
-            secret => $"{secret.KeyVersion.Value}:{secret.Blob.ToStorageString()}",
+            secret => $"{secret.KeyVersion.Value}{StorageSeparator}{secret.Blob.ToStorageString()}",
 
             // DB -> C# (Reading): Split by ":" and reconstruct the object
             dbValue => Parse(dbValue)) {
@@ -37,7 +38,7 @@ public sealed class EncryptedSecretValueConverter<TContext> : ValueConverter<Enc
         }
 
         ReadOnlySpan<char> span = dbValue.AsSpan();
-        int colonIndex = span.IndexOf(':');
+        int colonIndex = span.IndexOf(StorageSeparator);
 
         if(colonIndex == -1) {
             throw new InvalidOperationException(

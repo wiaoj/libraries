@@ -25,14 +25,14 @@ public sealed class UnixTimestampSerializationTests {
 
     [Fact]
     public void TryParse_String_ShouldWork() {
-        Assert.True(UnixTimestamp.TryParse("100", out var ts) && ts == 100);
+        Assert.True(UnixTimestamp.TryParse("100", out var ts) && ts == UnixTimestamp.FromMilliseconds(100));
         Assert.False(UnixTimestamp.TryParse("invalid", out _));
         Assert.False(UnixTimestamp.TryParse((string?)null, out _));
     }
 
     [Fact]
     public void TryParse_Span_ShouldWork() {
-        Assert.True(UnixTimestamp.TryParse("999".AsSpan(), out var ts) && ts == 999);
+        Assert.True(UnixTimestamp.TryParse("999".AsSpan(), out var ts) && ts == UnixTimestamp.FromMilliseconds(999));
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class UnixTimestampSerializationTests {
     [Fact]
     public void Explicit_IUtf8SpanParsable_TryParse_ShouldWork() {
         byte[] valid = "500"u8.ToArray();
-        Assert.True(TestHelpers.TryParseUtf8Helper<UnixTimestamp>(valid, out var ts) && ts == 500);
+        Assert.True(TestHelpers.TryParseUtf8Helper<UnixTimestamp>(valid, out var ts) && ts == UnixTimestamp.FromMilliseconds(500));
     }
 
     [Fact]

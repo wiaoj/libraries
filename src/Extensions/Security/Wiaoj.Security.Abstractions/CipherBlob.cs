@@ -37,7 +37,7 @@ public readonly record struct CipherBlob {
     /// Creates a <see cref="CipherBlob"/> from an already-encrypted, Base64-encoded string.
     /// Call this when loading a persisted value from the database.
     /// </summary>
-    /// <param name="base64">The raw Base64 string produced by a previous <c>Protect</c> call.</param>
+    /// <param name="base64">The raw Base64Url string produced by a previous <c>Protect</c> call.</param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="base64"/> is null, empty, whitespace, or not valid Base64.
     /// </exception>
