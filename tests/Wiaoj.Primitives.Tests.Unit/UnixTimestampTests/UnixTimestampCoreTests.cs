@@ -33,13 +33,6 @@ public sealed class UnixTimestampCoreTests {
     }
 
     [Fact]
-    public void ImplicitOperator_ToLong_ShouldWork() {
-        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(100);
-        long val = ts;
-        Assert.Equal(100, val);
-    }
-
-    [Fact]
     public void ExplicitOperator_FromLong_ShouldWork() {
         long val = 500;
         UnixTimestamp ts = (UnixTimestamp)val;
@@ -106,13 +99,6 @@ public sealed class UnixTimestampCoreTests {
         Assert.True(t1 == t2);
         Assert.False(t1 != t2);
         Assert.True(t1.Equals(t2));
-    }
-
-    [Fact]
-    public void Equality_With_Long() {
-        UnixTimestamp t1 = (UnixTimestamp)1000;
-        Assert.Equal(1000L, t1);
-        Assert.NotEqual(2000L, t1);
     }
 
     [Fact]

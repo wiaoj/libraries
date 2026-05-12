@@ -21,7 +21,7 @@ namespace Wiaoj.Primitives;
 /// </remarks>
 /// <typeparam name="T">The unmanaged type to be stored in secure memory (e.g., byte, char, Guid).</typeparam>
 [DebuggerDisplay("{ToString(),nq}")]
-public readonly unsafe struct Secret<T> :
+public readonly unsafe partial struct Secret<T> :
     IDisposable,
     IEquatable<Secret<T>>,
     IEquatable<ReadOnlySpan<T>>
