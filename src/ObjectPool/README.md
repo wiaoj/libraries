@@ -1,8 +1,8 @@
 ﻿# Wiaoj.ObjectPool
 
-A high-performance, thread-safe, and fully asynchronous object pooling library for .NET.
+A high-performance, thread-safe, and unified asynchronous/synchronous object pooling library for .NET.
 
-`Wiaoj.ObjectPool` extends the capabilities of `Microsoft.Extensions.ObjectPool` by adding **true asynchronous support**, **blocking/bounded pools**, **factory pattern integration**, **leak detection**, and **zero-allocation leasing**. It is designed for high-throughput applications where garbage collection pressure must be minimized and resource management is critical.
+`Wiaoj.ObjectPool` extends the capabilities of `Microsoft.Extensions.ObjectPool` by providing a **unified API surface** for both sync and async pools. It introduces **true asynchronous support**, **blocking/bounded pools**, **factory pattern integration**, and **zero-allocation leasing**. It is designed for high-throughput applications where garbage collection pressure must be minimized and resource management is critical.
 
 [![NuGet](https://img.shields.io/nuget/v/Wiaoj.ObjectPool.svg)](https://www.nuget.org/packages/Wiaoj.ObjectPool)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -10,14 +10,13 @@ A high-performance, thread-safe, and fully asynchronous object pooling library f
 ## 🚀 Key Features
 
 - **⚡ True Async Support:** Native `IAsyncObjectPool<T>` with `ValueTask` support. Handles asynchronous creation (`CreateAsync`) and cleanup (`TryResetAsync`).
+- **🤝 Unified API:** Provides a consistent, clean API surface for both `Microsoft`'s standard synchronous pools and our custom asynchronous pools. No need to switch contexts!
 - **🏭 Factory Integration:** Seamlessly integrates with `IAsyncFactory<T>` for complex object creation logic using Dependency Injection.
 - **🛡️ Hybrid Operation Modes:**
   - **FIFO (Elastic):** Lock-free, extremely fast. Creates new objects instantly if the pool is empty.
   - **Bounded (Blocking):** Uses `SemaphoreSlim`. Waits asynchronously if the pool limit is reached. Ideal for resource throttling (e.g., DB connections).
 - **🧠 Smart Lifecycle Management:** Supports `IResettable` (Sync) and `IAsyncResettable` (Async) interfaces for self-managing objects.
-- **🔍 Leak Detection (Debug Only):** Automatically detects if a leased object is garbage collected without being returned, pinpointing the exact stack trace of the leak.
-- **✅ Return Validation:** Optional validation logic to ensure objects are returned to the pool in a clean/valid state.
-- **📦 Zero-Allocation Leasing:** Uses a `readonly struct` (`PooledObject<T>`) to manage the lease lifecycle, ensuring 0 heap allocations during `Get/Return` cycles.
+- **📦 True Zero-Allocation Leasing:** Uses a value-type `struct` (`PooledObject<T>`) to manage the lease lifecycle, ensuring **0 heap allocations** during `Get/Return` cycles.
 
 ---
 
@@ -33,11 +32,10 @@ dotnet add package Wiaoj.ObjectPool
 
 ## ⚡ Quick Start (Synchronous)
 
-For simple CPU-bound objects like `StringBuilder` or `List<T>`, use the standard synchronous pool.
+For simple CPU-bound objects like `StringBuilder` or `List<T>`, use the standard synchronous pool. Our library wraps it cleanly.
 
 ### 1. Register in DI
 ```csharp
-// Program.cs
 using Wiaoj.ObjectPool.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -73,11 +71,11 @@ public class StringService(IObjectPool<StringBuilder> pool)
 
 ## 🔥 Advanced Usage (Asynchronous)
 
-This is where `Wiaoj.ObjectPool` shines. Ideal for database connections, network streams, or any resource where creation/reset is costly and async.
+This is where `Wiaoj.ObjectPool` shines. Ideal for database connections, network streams, or any resource where creation/reset is costly and requires I/O.
 
 ### 1. Register Async Pool
 ```csharp
-builder.Services.AddAsyncObjectPool<MyDbConnection>(
+builder.Services.AddAsyncPool<MyDbConnection>(
     factory: async ct => await MyDbConnection.CreateAsync(ct),
     resetter: async conn => await conn.ResetStateAsync(),
     options => 
@@ -108,21 +106,11 @@ public class DataService(IAsyncObjectPool<MyDbConnection> dbPool)
 
 ---
 
-## 🧠 Defining Pool Logic: 4 Strategies
+## 🧠 Defining Pool Logic: Strategies
 
 `Wiaoj.ObjectPool` offers flexibility in how you define object creation and cleanup.
 
-### 1. The "Quick" Way (Lambdas)
-Great for simple objects where logic fits in one line.
-
-```csharp
-builder.Services.AddObjectPool<User>(
-    factory: () => new User(),
-    resetter: user => { user.Name = null; return true; }
-);
-```
-
-### 2. The "OOP" Way (IResettable) - **Recommended**
+### 1. The "OOP" Way (IResettable) - **Recommended**
 Best for objects that know how to clean themselves. No external logic required in `Program.cs`.
 
 **Step 1:** Implement `IResettable` (Sync) or `IAsyncResettable` (Async).
@@ -140,28 +128,20 @@ public class SocketClient : IAsyncResettable
 **Step 2:** Register
 ```csharp
 // No factory or resetter needed! 
-builder.Services.AddAsyncResettableObjectPool<SocketClient>(); 
+builder.Services.AddAsyncResettablePool<SocketClient>(); 
 ```
 
-### 3. The "Factory" Way (IAsyncFactory)
+### 2. The "Factory" Way (IAsyncFactory)
 Best when object creation is complex and already handled by an `IAsyncFactory<T>` implementation in your DI container.
 
 ```csharp
 // 1. You already have a factory registered
 builder.Services.AddSingleton<IAsyncFactory<MyService>, MyServiceFactory>();
 
-// 2. Register the pool (It automatically uses the registered factory!)
-builder.Services.AddAsyncObjectPoolFromFactory<MyService>(
-    resetter: async svc => await svc.ResetAsync()
+// 2. Register the pool (It automatically resolves the factory!)
+builder.Services.AddAsyncFactoryPool<MyService>(
+    resetter: async svc => { /* Custom reset logic */ return true; }
 );
-```
-
-### 4. The "Full Control" Way (Custom Policy)
-Best for complex dependencies where you need full control over the policy class.
-
-```csharp
-// Register a class implementing IPoolPolicy<T> or IAsyncPoolPolicy<T>
-builder.Services.AddAsyncObjectPool(new MyComplexPolicy());
 ```
 
 ---
@@ -172,46 +152,27 @@ You can control the pool's behavior via `ObjectPoolOptions.AccessMode`:
 
 | Mode | Description | Best For |
 | :--- | :--- | :--- |
-| **FIFO (Default)** | **Lock-Free / Elastic.** If the pool is empty, it immediately creates a new object. It never blocks the thread. | CPU-bound objects (`StringBuilder`, buffers) where latency matters most. |
-| **Bounded** | **Throttled / Blocking.** If the pool reaches `MaximumRetained` limit, `GetAsync()` will **await** until an object is returned. | Limited resources (DB Connections, Throttled API Clients) to prevent system overload. |
+| **FIFO (Default)** | **Lock-Free / Elastic.** If the pool is empty, it immediately creates a new object. Limits only apply when returning to the pool. | CPU-bound objects (`StringBuilder`, buffers) where latency matters most. |
+| **Bounded** | **Throttled / Blocking.** If the pool reaches the `MaximumRetained` limit, `LeaseAsync()` will **await** until an object is returned. | Limited resources (DB Connections, Throttled API Clients) to prevent system overload. |
 
 ---
 
-## 🛡️ Developer Experience: Safety Nets
+## ⚠️ Best Practices: Zero-Allocation Leasing
 
-These features are **active only in DEBUG builds** and have **zero performance impact** in Release.
+To achieve `0` heap allocations during the `Lease` operation, `PooledObject<T>` is designed as a `struct` (Value Type). 
 
-### 1. Leak Detection
-If you forget to dispose a `PooledObject`, the library will catch it during Garbage Collection and log a fatal error with the stack trace.
+**Important Rule:** Do NOT copy the leased struct or pass it by value to other methods. Doing so could result in double-disposal. Always use it tightly within a `using` or `await using` block.
 
-**Code with Bug:**
+**Correct:**
 ```csharp
-var lease = pool.Lease(); // forgot 'using' or 'Dispose()'
-// ... variable goes out of scope ...
+await using var lease = await pool.LeaseAsync();
+var client = lease.Item;
 ```
 
-**Output Window:**
-```text
-[WIAOJ.OBJECTPOOLING LEAK DETECTED]
-Object 'StringBuilder' leaked! It was collected without Dispose().
-Origin:
-    at MyApp.Services.MyService.Method() in C:\Projects\MyApp\Service.cs:line 42
-```
-
-### 2. Return Validation
-Ensure "dirty" objects don't pollute your pool.
-
+**Incorrect:**
 ```csharp
-builder.Services.AddObjectPool<List<string>>(options => 
-{
-#if DEBUG
-    options.OnReturnValidation = obj => 
-    {
-        var list = (List<string>)obj;
-        if (list.Count > 0) throw new InvalidOperationException("List was not cleared!");
-    };
-#endif
-});
+var lease1 = pool.Lease();
+var lease2 = lease1; // ❌ DO NOT DO THIS! (Copies the struct)
 ```
 
 ---

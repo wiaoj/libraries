@@ -1,40 +1,59 @@
-﻿using Wiaoj.ObjectPool.Internal;
+﻿using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Wiaoj.ObjectPool;
+
 /// <summary>
-/// A disposable struct that wraps a leased object from an <see cref="IObjectPool{T}"/>,
-/// ensuring it is returned to the pool when disposed. This type is safe to use in
-/// both synchronous and asynchronous contexts.
+/// A zero-allocation, disposable struct that wraps a leased object from an object pool.
+/// ensuring it is returned to the pool when disposed.
 /// </summary>
 /// <remarks>
-/// This struct is a lightweight handle to a heap-allocated lease state. It can be copied freely,
-/// and all copies will point to the same underlying lease. The leased object will be returned
-/// to the pool exactly once when the first copy's <see cref="Dispose"/> method is called.
+/// IMPORTANT: This is a value type (struct). Do NOT copy this object or pass it by value.
+/// It is designed to be used strictly within a 'using' or 'await using' statement.
 /// </remarks>
-/// <typeparam name="T">The type of the object being pooled.</typeparam>
-public readonly struct PooledObject<T> : IDisposable, IAsyncDisposable where T : class {
-    private readonly Lease<T>? _lease;
+public struct PooledObject<T> : IDisposable, IAsyncDisposable where T : class {
+    private T? _item;
+     
+    private readonly IObjectPool<T>? _syncPool;
+    private readonly IAsyncObjectPool<T>? _asyncPool;
 
+    // Senkron havuzlar için internal constructor
     internal PooledObject(T item, IObjectPool<T> pool) {
-        this._lease = new Lease<T>(item, pool);
+        _item = item;
+        _syncPool = pool;
+        _asyncPool = null;
+    }
+
+    // Asenkron havuzlar için internal constructor
+    internal PooledObject(T item, IAsyncObjectPool<T> pool) {
+        _item = item;
+        _syncPool = null;
+        _asyncPool = pool;
     }
 
     /// <summary>
     /// Gets the underlying pooled object instance.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">
-    /// Thrown if this property is accessed after the object has been returned to the pool.
-    /// </exception>
-    public T Item =>
-            this._lease is null
-                ? throw new ObjectDisposedException(nameof(PooledObject<>), "This PooledObject is uninitialized.")
-                : this._lease.Item;
+    public readonly T Item =>
+        _item ?? throw new ObjectDisposedException(nameof(PooledObject<>), "This object has already been returned to the pool.");
 
     /// <summary>
-    /// Returns the wrapped object to its pool. This operation is thread-safe and idempotent.
+    /// Returns the wrapped object to its pool.
     /// </summary>
     public void Dispose() {
-        this._lease?.ReturnToPool();
+        // Interlocked.Exchange, _item'ı null yapar ve eski değerini döndürür.
+        // Bu sayede aynı değişken üzerinde iki kere Dispose() çağrılırsa çökme veya çift iade engellenir.
+        T? item = Interlocked.Exchange(ref _item, null);
+
+        if(item is not null) {
+            if(_syncPool is not null) {
+                _syncPool.Return(item);
+            }
+            else {
+                _asyncPool?.Return(item);
+            }
+        }
     }
 
     /// <summary>

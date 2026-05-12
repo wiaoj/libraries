@@ -2,7 +2,7 @@
 using Wiaoj.Concurrency;
 
 namespace Wiaoj.ObjectPool.Internal.AsyncObjectPool;
-internal sealed class FifoAsyncObjectPool<T> : IAsyncObjectPool<T>, IObjectPool<T> where T : class {
+internal sealed class FifoAsyncObjectPool<T> : IAsyncObjectPool<T> where T : class {
     private readonly ConcurrentQueue<T> _queue = new();
     private readonly IAsyncPoolPolicy<T> _policy;
     private readonly ObjectPoolOptions _options;
@@ -81,17 +81,5 @@ internal sealed class FifoAsyncObjectPool<T> : IAsyncObjectPool<T>, IObjectPool<
         else if (item is IAsyncDisposable ad) {
             _ = ad.DisposeAsync();
         }
-    }
-
-    T IObjectPool<T>.Get() {
-        throw new NotSupportedException("Use GetAsync");
-    }
-
-    PooledObject<T> IObjectPool<T>.Lease() {
-        throw new NotSupportedException("Use LeaseAsync");
-    }
-
-    void IObjectPool<T>.Return(T obj) {
-        Return(obj);
     }
 }
