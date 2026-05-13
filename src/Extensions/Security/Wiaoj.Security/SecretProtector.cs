@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Wiaoj.Preconditions;
@@ -17,8 +17,9 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
     private readonly KeyRing<TContext> _keyRing;
     private readonly DisposeState _disposeState = new();
 
-    // Cache tag to avoid allocating a new KVP on every encrypt/decrypt call.
+    // Cache tag and AAD bytes to avoid allocating on every call.
     private static readonly KeyValuePair<string, object?> _contextTag = SecurityMeter.ContextTag<TContext>();
+    private static readonly byte[] _contextAad = Encoding.UTF8.GetBytes(typeof(TContext).Name);
 
 
     /// <param name="keyRing">The key ring. This protector takes ownership and disposes it.</param>
@@ -43,7 +44,7 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
         try {
 
             EncryptionKey currentKey = EnsureActiveKey();
-            byte[] packet = currentKey.Encrypt(plainSecret);
+            byte[] packet = currentKey.Encrypt(plainSecret, _contextAad);
 
             try {
                 Base64UrlString encoded = Base64UrlString.FromBytes(packet);
@@ -91,7 +92,8 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
 
             byte[] combined = Base64UrlString.Parse(encrypted.Blob.RawBase64).ToBytes();
             try {
-                Secret<byte> result = key.Decrypt(combined);
+                // Strictly decrypt with Context-specific AAD
+                Secret<byte> result = key.Decrypt(combined, _contextAad);
 
                 SecurityMeter.UnprotectCount.Add(1, _contextTag);
                 SecurityMeter.UnprotectDuration.Record(

@@ -47,6 +47,7 @@ Wiaoj.Security solves the problem of encrypting sensitive fields (webhook secret
 Key design goals:
 
 - **Type safety** — phantom type contexts (`ISecretContext`) prevent secrets from different domains from being mixed up at compile time.
+- **Context binding (AAD)** — Every ciphertext is cryptographically bound to its `ISecretContext` name using AES-GCM Associated Data. This prevents cross-domain attacks even if keys are leaked or reused.
 - **Log safety** — `CipherBlob` and `EncryptedSecret<T>` override `ToString()` to return safe sentinels; raw ciphertext never leaks into logs.
 - **Key wrapping** — Data Encryption Keys (DEKs) are stored in the database wrapped (encrypted) with a master key. The master key never touches the database.
 - **Automatic rotation** — a background service checks key age on a configurable interval and rotates when a key exceeds its `RotationInterval`.
@@ -581,12 +582,13 @@ The master key **never** appears in the database.
 
 ## Security Notes
 
+- **AES-GCM authentication:** Every ciphertext includes a 128-bit authentication tag. Tampered or corrupt blobs throw `CryptographicException` on decryption.
+- **Strict Context Identity:** Since the `TContext` type name is used as Associated Authenticated Data (AAD), renaming a context class (e.g. `WebhookPayloadContext` to `PayloadContext`) will cause decryption to fail for all existing records. Do not rename context classes without a data migration plan.
 - **Master key storage:** In production, always source the master key from a KMS (Azure Key Vault, AWS KMS, HashiCorp Vault). The environment variable and configuration providers are for development and staging only.
 - **Key material in memory:** DEKs and the master key are held in unmanaged memory (`Secret<T>`) and zeroed on disposal via `CryptographicOperations.ZeroMemory`. Do not copy key bytes into managed arrays without zeroing them immediately after use.
 - **Log safety:** `CipherBlob.ToString()` returns `"[CIPHER_BLOB]"`. `EncryptedSecret<T>.ToString()` returns `"[ENCRYPTED_SECRET<TContext> key_vN]"`. Neither ever includes ciphertext.
 - **Retired keys:** Keep retired keys in the database until `IDataRotator<T>.IsCompleteAsync()` returns `true`. Deleting a retired key before all data has been re-encrypted will make those records permanently unreadable.
 - **Compile-time domain isolation:** An `EncryptedSecret<WebhookSigningContext>` cannot be accidentally decrypted by an `ISecretProtector<PaymentGatewayContext>` — the type system prevents this at compile time.
-- **AES-GCM authentication:** Every ciphertext includes a 128-bit authentication tag. Tampered or corrupt blobs throw `CryptographicException` on decryption.
 
 ---
 

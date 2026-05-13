@@ -1,4 +1,4 @@
-﻿using Wiaoj.Primitives;
+using Wiaoj.Primitives;
 using Wiaoj.Primitives.Cryptography.Symmetric;
 
 namespace Wiaoj.Security;
@@ -32,18 +32,18 @@ public sealed class EncryptionKey : IDisposable {
     /// Encrypts <paramref name="plaintext"/> and returns a packet:
     /// <c>| nonce (12 B) | tag (16 B) | ciphertext (N B) |</c>
     /// </summary>
-    internal byte[] Encrypt(ReadOnlySpan<byte> plaintext) {
+    internal byte[] Encrypt(ReadOnlySpan<byte> plaintext, ReadOnlySpan<byte> associatedData = default) {
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(EncryptionKey));
-        return this._key.Encrypt(plaintext);
+        return this._key.Encrypt(plaintext, associatedData);
     }
 
     /// <summary>
     /// Decrypts a packet produced by <see cref="Encrypt"/>.
     /// Returns a <see cref="Secret{T}"/> in secure unmanaged memory — caller must dispose.
     /// </summary>
-    internal Secret<byte> Decrypt(ReadOnlySpan<byte> packet) {
+    internal Secret<byte> Decrypt(ReadOnlySpan<byte> packet, ReadOnlySpan<byte> associatedData = default) {
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(EncryptionKey));
-        return this._key.Decrypt(packet);
+        return this._key.Decrypt(packet, associatedData);
     }
 
     /// <summary>Securely erases the key material. After disposal this instance must not be used.</summary>
