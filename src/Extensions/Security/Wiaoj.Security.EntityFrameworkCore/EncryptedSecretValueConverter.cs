@@ -1,137 +1,194 @@
-﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
+﻿using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion; 
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Wiaoj.Security.EntityFrameworkCore;
+
 /// <summary>
 /// Maps the <see cref="EncryptedSecret{TContext}"/> object to a single string column 
 /// in the database using the "Version:Base64Blob" format.
 /// </summary>
-/// <typeparam name="TContext">The secret context type associated with this secret.</typeparam>
 public sealed class EncryptedSecretValueConverter<TContext> : ValueConverter<EncryptedSecret<TContext>, string>
     where TContext : ISecretContext {
     private const char StorageSeparator = ':';
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="EncryptedSecretValueConverter{TContext}"/> class.
-    /// </summary>
     public EncryptedSecretValueConverter()
         : base(
-            // C# -> DB (Writing): Concatenate version and blob with a ":" separator
             secret => $"{secret.KeyVersion.Value}{StorageSeparator}{secret.Blob.ToStorageString()}",
-
-            // DB -> C# (Reading): Split by ":" and reconstruct the object
             dbValue => Parse(dbValue)) {
     }
 
-    /// <summary>
-    /// Parses the string value stored in the database back into an <see cref="EncryptedSecret{TContext}"/>.
-    /// </summary>
-    /// <param name="dbValue">The raw string value from the database (format: 'version:base64').</param>
-    /// <returns>A restored instance of <see cref="EncryptedSecret{TContext}"/>.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the database value is not in the expected format.</exception>
-    private static EncryptedSecret<TContext> Parse(string dbValue) { 
-        if(string.IsNullOrWhiteSpace(dbValue)) {
+    private static EncryptedSecret<TContext> Parse(string dbValue) {
+        if(string.IsNullOrWhiteSpace(dbValue))
             throw new InvalidOperationException(
-                $"The database value for EncryptedSecret<{typeof(TContext).Name}> is empty or whitespace. " +
-                "This usually indicates data corruption or an uninitialized column.");
-        }
+                $"The database value for EncryptedSecret<{typeof(TContext).Name}> is empty or whitespace.");
 
         ReadOnlySpan<char> span = dbValue.AsSpan();
         int colonIndex = span.IndexOf(StorageSeparator);
 
-        if(colonIndex == -1) {
+        if(colonIndex == -1)
             throw new InvalidOperationException(
-                $"Invalid EncryptedSecret format for context {typeof(TContext).Name}. " +
-                "Expected format is 'version:base64'.");
-        }
+                $"Invalid EncryptedSecret format for context {typeof(TContext).Name}. Expected 'version:base64'.");
 
         int version = int.Parse(span[..colonIndex]);
         string base64 = span[(colonIndex + 1)..].ToString();
-
         return EncryptedSecret<TContext>.FromPersisted(base64, version);
     }
 }
 
 /// <summary>
-/// Defines how Entity Framework Core should compare <see cref="EncryptedSecret{TContext}"/> instances 
-/// for value equality, hash code generation, and snapshotting during change tracking.
+/// Defines EF Core change tracking behavior for <see cref="EncryptedSecret{TContext}"/>.
 /// </summary>
-/// <typeparam name="TContext">The secret context type associated with this secret.</typeparam>
 public sealed class EncryptedSecretValueComparer<TContext> : ValueComparer<EncryptedSecret<TContext>>
     where TContext : ISecretContext {
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="EncryptedSecretValueComparer{TContext}"/> class 
-    /// with custom equality, hash code, and snapshot expressions.
-    /// </summary>
-    /// <remarks>
-    /// The snapshot expression assumes that <see cref="EncryptedSecret{TContext}"/> is immutable. 
-    /// Therefore, it safely returns the same instance instead of creating a deep copy.
-    /// </remarks>
     public EncryptedSecretValueComparer() : base(
-        // 1. Equality: Are the contents of the two objects identical?
         (left, right) => left.Equals(right),
-
-        // 2. HashCode: How should the hash value be calculated? (Used for dictionaries/HashSets)
         secret => secret.GetHashCode(),
-
-        // 3. Snapshot: How should EF Core take a copy of this object for change tracking?
-        // Since EncryptedSecret is assumed to be IMMUTABLE, returning the reference directly is safe.
-        // If it were mutable, a new instance (deep copy) would need to be created here.
         secret => secret) {
     }
 }
 
-/// <summary>
-/// 
-/// </summary>
 public static class EncryptedSecretMappingExtensions {
+
+    // ─── PropertyBuilder (Entity Properties) ────────────────────────────────
+
     /// <summary>
-    /// Configures the property to use the <see cref="EncryptedSecretValueConverter{TContext}"/> 
-    /// and <see cref="EncryptedSecretValueComparer{TContext}"/> for seamless database mapping.
+    /// Configures a required <see cref="EncryptedSecret{TContext}"/> entity property.
     /// </summary>
-    /// <remarks>
-    /// This extension method bundles both the value conversion (storing as 'version:base64') 
-    /// and the value comparison logic (ensuring EF Core correctly tracks changes for the immutable record struct).
-    /// </remarks>
-    /// <typeparam name="TContext">The secret context type associated with the <see cref="EncryptedSecret{TContext}"/>.</typeparam>
-    /// <param name="propertyBuilder">The builder for the property being configured.</param>
-    /// <returns>The same builder instance so that multiple calls can be chained.</returns>
     public static PropertyBuilder<EncryptedSecret<TContext>> HasEncryptedSecretConversion<TContext>(
         this PropertyBuilder<EncryptedSecret<TContext>> propertyBuilder)
         where TContext : ISecretContext {
         propertyBuilder.IsRequired();
         return propertyBuilder.HasConversion(
             new EncryptedSecretValueConverter<TContext>(),
-            new EncryptedSecretValueComparer<TContext>()
-        );
+            new EncryptedSecretValueComparer<TContext>());
     }
 
     /// <summary>
-    /// Configures the property to use the <see cref="EncryptedSecretValueConverter{TContext}"/> 
-    /// and <see cref="EncryptedSecretValueComparer{TContext}"/> for seamless database mapping.
+    /// Configures an optional <see cref="EncryptedSecret{TContext}"/> entity property.
     /// </summary>
-    /// <remarks>
-    /// This extension method bundles both the value conversion (storing as 'version:base64') 
-    /// and the value comparison logic (ensuring EF Core correctly tracks changes for the immutable record struct).
-    /// </remarks>
-    /// <typeparam name="TContext">The secret context type associated with the <see cref="EncryptedSecret{TContext}"/>.</typeparam>
-    /// <param name="propertyBuilder">The builder for the property being configured.</param>
-    /// <returns>The same builder instance so that multiple calls can be chained.</returns>
     public static PropertyBuilder<EncryptedSecret<TContext>?> HasEncryptedSecretConversion<TContext>(
         this PropertyBuilder<EncryptedSecret<TContext>?> propertyBuilder)
         where TContext : ISecretContext {
-
         return propertyBuilder.HasConversion(
             new EncryptedSecretValueConverter<TContext>(),
-            new EncryptedSecretValueComparer<TContext>()
-        );
+            new EncryptedSecretValueComparer<TContext>());
+    }
+
+    // ─── ComplexTypePropertyBuilder (EF Core 8+ Complex Types) ──────────────
+
+    /// <summary>
+    /// Configures a required <see cref="EncryptedSecret{TContext}"/> property
+    /// inside an EF Core 8+ complex type.
+    /// <example>
+    /// <code>
+    /// builder.ComplexProperty(x => x.SigningConfig, cp => {
+    ///     cp.Property(x => x.Secret).HasEncryptedSecretConversion();
+    /// });
+    /// </code>
+    /// </example>
+    /// </summary>
+    public static ComplexTypePropertyBuilder<EncryptedSecret<TContext>> HasEncryptedSecretConversion<TContext>(
+        this ComplexTypePropertyBuilder<EncryptedSecret<TContext>> propertyBuilder)
+        where TContext : ISecretContext {
+        propertyBuilder.IsRequired();
+        return propertyBuilder.HasConversion(
+            new EncryptedSecretValueConverter<TContext>(),
+            new EncryptedSecretValueComparer<TContext>());
     }
 
     /// <summary>
-    /// Configures all properties of type EncryptedSecret to use the custom converter and comparer.
-    /// Used within ConfigureConventions.
+    /// Configures an optional <see cref="EncryptedSecret{TContext}"/> property
+    /// inside an EF Core 8+ complex type.
+    /// </summary>
+    public static ComplexTypePropertyBuilder<EncryptedSecret<TContext>?> HasEncryptedSecretConversion<TContext>(
+        this ComplexTypePropertyBuilder<EncryptedSecret<TContext>?> propertyBuilder)
+        where TContext : ISecretContext {
+        return propertyBuilder.HasConversion(
+            new EncryptedSecretValueConverter<TContext>(),
+            new EncryptedSecretValueComparer<TContext>());
+    }
+
+    // ─── OwnedNavigationBuilder (Owned Entities) ────────────────────────────
+
+    /// <summary>
+    /// Configures a required <see cref="EncryptedSecret{TContext}"/> property
+    /// inside an owned entity navigation.
+    /// <example>
+    /// <code>
+    /// builder.OwnsOne(x => x.SigningConfig, owned => {
+    ///     owned.HasEncryptedSecret(x => x.Secret);
+    ///     owned.HasEncryptedSecret(x => x.PreviousSecret);
+    /// });
+    /// </code>
+    /// </example>
+    /// </summary>
+    public static OwnedNavigationBuilder<TOwner, TDependant> HasEncryptedSecret<TOwner, TDependant, TContext>(
+        this OwnedNavigationBuilder<TOwner, TDependant> builder,
+        Expression<Func<TDependant, EncryptedSecret<TContext>>> propertyExpression)
+        where TOwner : class
+        where TDependant : class
+        where TContext : ISecretContext {
+        builder.Property(propertyExpression).HasEncryptedSecretConversion();
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures an optional <see cref="EncryptedSecret{TContext}"/> property
+    /// inside an owned entity navigation.
+    /// </summary>
+    public static OwnedNavigationBuilder<TOwner, TDependant> HasEncryptedSecret<TOwner, TDependant, TContext>(
+        this OwnedNavigationBuilder<TOwner, TDependant> builder,
+        Expression<Func<TDependant, EncryptedSecret<TContext>?>> propertyExpression)
+        where TOwner : class
+        where TDependant : class
+        where TContext : ISecretContext {
+        builder.Property(propertyExpression).HasEncryptedSecretConversion();
+        return builder;
+    }
+
+    // ─── EntityTypeBuilder Shorthands ───────────────────────────────────────
+
+    /// <summary>
+    /// Shorthand to configure a required <see cref="EncryptedSecret{TContext}"/> 
+    /// directly on an entity type builder without nesting into Property().
+    /// <example>
+    /// <code>
+    /// builder.HasEncryptedSecret(x => x.SigningSecret);
+    /// builder.HasEncryptedSecret(x => x.PreviousSigningSecret); // optional
+    /// </code>
+    /// </example>
+    /// </summary>
+    public static EntityTypeBuilder<TEntity> HasEncryptedSecret<TEntity, TContext>(
+        this EntityTypeBuilder<TEntity> builder,
+        Expression<Func<TEntity, EncryptedSecret<TContext>>> propertyExpression)
+        where TEntity : class
+        where TContext : ISecretContext {
+        builder.Property(propertyExpression).HasEncryptedSecretConversion();
+        return builder;
+    }
+
+    /// <summary>
+    /// Shorthand to configure an optional <see cref="EncryptedSecret{TContext}"/>
+    /// directly on an entity type builder.
+    /// </summary>
+    public static EntityTypeBuilder<TEntity> HasEncryptedSecret<TEntity, TContext>(
+        this EntityTypeBuilder<TEntity> builder,
+        Expression<Func<TEntity, EncryptedSecret<TContext>?>> propertyExpression)
+        where TEntity : class
+        where TContext : ISecretContext {
+        builder.Property(propertyExpression).HasEncryptedSecretConversion();
+        return builder;
+    }
+
+    // ─── ModelBuilder Conventions (Global) ──────────────────────────────────
+
+    /// <summary>
+    /// Globally applies <see cref="EncryptedSecretValueConverter{TContext}"/> to all
+    /// required properties of type <see cref="EncryptedSecret{TContext}"/> in the model.
+    /// Call inside <c>ConfigureConventions</c>.
     /// </summary>
     public static PropertiesConfigurationBuilder<EncryptedSecret<TContext>> HaveEncryptedSecretConversion<TContext>(
         this PropertiesConfigurationBuilder<EncryptedSecret<TContext>> builder)
@@ -140,8 +197,9 @@ public static class EncryptedSecretMappingExtensions {
     }
 
     /// <summary>
-    /// Configures all properties of type EncryptedSecret to use the custom converter and comparer.
-    /// Used within ConfigureConventions.
+    /// Globally applies <see cref="EncryptedSecretValueConverter{TContext}"/> to all
+    /// optional properties of type <see cref="EncryptedSecret{TContext}"/> in the model.
+    /// Call inside <c>ConfigureConventions</c>.
     /// </summary>
     public static PropertiesConfigurationBuilder<EncryptedSecret<TContext>?> HaveEncryptedSecretConversion<TContext>(
         this PropertiesConfigurationBuilder<EncryptedSecret<TContext>?> builder)
