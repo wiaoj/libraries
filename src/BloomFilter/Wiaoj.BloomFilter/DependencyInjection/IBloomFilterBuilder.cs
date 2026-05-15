@@ -1,4 +1,4 @@
-﻿using Wiaoj.BloomFilter;
+using Wiaoj.BloomFilter;
 
 #pragma warning disable IDE0130
 namespace Microsoft.Extensions.DependencyInjection;
@@ -18,7 +18,21 @@ public interface IBloomFilterBuilder {
     /// </summary>
     BloomFilterOptions Options { get; }
 
+    /// <summary>
+    /// Enables automatic periodic saving of dirty Bloom Filters to the configured storage.
+    /// </summary>
+    /// <returns>The builder instance for chaining.</returns>
     IBloomFilterBuilder AddAutoSave();
+
+    /// <summary>
+    /// Enables background warming up of all registered filters during application startup.
+    /// </summary>
+    /// <returns>The builder instance for chaining.</returns>
     IBloomFilterBuilder AddWarmUp();
+
+    /// <summary>
+    /// Enables automatic background reseeding of filters when they are found to be empty or corrupted.
+    /// </summary>
+    /// <returns>The builder instance for chaining.</returns>
     IBloomFilterBuilder AddAutoReseed();
 }

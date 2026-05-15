@@ -1,11 +1,11 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.IO.Compression;
 
 namespace Wiaoj.BloomFilter.Internal;
 
 /// <summary>
-/// File-system implementation with support for compression and atomic writes.
+/// File-system implementation of <see cref="IBloomFilterStorage"/> with support for compression and atomic writes.
 /// </summary>
 public class FileSystemBloomFilterStorage : IBloomFilterStorage {
     private readonly string _baseDirectory;
@@ -15,6 +15,11 @@ public class FileSystemBloomFilterStorage : IBloomFilterStorage {
     private readonly ILogger<FileSystemBloomFilterStorage> _logger;
     private const string Ext = ".wbf";
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileSystemBloomFilterStorage"/> class.
+    /// </summary>
+    /// <param name="options">The Bloom Filter options containing storage settings.</param>
+    /// <param name="logger">The logger for storage operations.</param>
     public FileSystemBloomFilterStorage(IOptions<BloomFilterOptions> options, ILogger<FileSystemBloomFilterStorage> logger) {
         StorageOptions opts = options.Value.Storage;
         this._logger = logger;
@@ -31,6 +36,7 @@ public class FileSystemBloomFilterStorage : IBloomFilterStorage {
         if(!Directory.Exists(this._baseDirectory)) Directory.CreateDirectory(this._baseDirectory);
     }
 
+    /// <inheritdoc/>
     public async ValueTask SaveAsync(string filterName, BloomFilterConfiguration config, Stream source, CancellationToken ct = default) {
         var finalPath = GetPath(filterName);
         var tempPath = finalPath + ".tmp";
@@ -58,6 +64,7 @@ public class FileSystemBloomFilterStorage : IBloomFilterStorage {
         }
     }
 
+    /// <inheritdoc/>
     public ValueTask<(BloomFilterConfiguration Config, Stream DataStream)?> LoadStreamAsync(string filterName, CancellationToken ct = default) {
         try {
             var path = GetPath(filterName);
@@ -80,6 +87,7 @@ public class FileSystemBloomFilterStorage : IBloomFilterStorage {
         }
     }
 
+    /// <inheritdoc/>
     public Task DeleteAsync(string filterName, CancellationToken cancellationToken = default) {
         try {
             var pattern = $"{filterName}*{Ext}";

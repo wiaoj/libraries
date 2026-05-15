@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Wiaoj.BloomFilter.Extensions;
 using Wiaoj.Primitives;
 
@@ -20,6 +20,9 @@ public static class BloomFilterHeader {
     /// </summary>
     public const int HeaderSize = 4 + 4 + 8 + 8 + 4 + 8;
 
+    /// <summary>
+    /// The current protocol version of the Bloom Filter header.
+    /// </summary>
     public const int Version = 1;
 
     /// <summary>
@@ -29,6 +32,13 @@ public static class BloomFilterHeader {
         WriteHeader(stream, checksum, config, Encoding.UTF8);
     }
 
+    /// <summary>
+    /// Writes the standard header to the specified stream using a specific encoding.
+    /// </summary>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="checksum">The data checksum.</param>
+    /// <param name="config">The filter configuration.</param>
+    /// <param name="encoding">The encoding for the header (optional).</param>
     public static void WriteHeader(
         Stream stream,
         ulong checksum,
@@ -58,6 +68,16 @@ public static class BloomFilterHeader {
         return TryReadHeader(stream, out checksum, out sizeInBits, out hashCount, out fingerprint, Encoding.UTF8);
     }
 
+    /// <summary>
+    /// Attempts to read and validate the header from the stream using a specific encoding.
+    /// </summary>
+    /// <param name="stream">The stream to read from.</param>
+    /// <param name="checksum">The read checksum.</param>
+    /// <param name="sizeInBits">The read bit size.</param>
+    /// <param name="hashCount">The read hash function count.</param>
+    /// <param name="fingerprint">The read configuration fingerprint.</param>
+    /// <param name="encoding">The encoding to use.</param>
+    /// <returns><c>true</c> if the header was read successfully; otherwise, <c>false</c>.</returns>
     public static bool TryReadHeader(Stream stream,
                                      out ulong checksum,
                                      out long sizeInBits,
@@ -85,10 +105,18 @@ public static class BloomFilterHeader {
     }
 }
 
+/// <summary>
+/// Data transfer object representing the header information of a Bloom Filter.
+/// </summary>
+/// <param name="Checksum">The data checksum.</param>
+/// <param name="SizeInBits">The total bit size.</param>
+/// <param name="HashCount">The hash function count.</param>
+/// <param name="Fingerprint">The configuration fingerprint.</param>
+/// <param name="CreatedAt">The creation timestamp.</param>
 public sealed record BloomFilterHeaderDto(
     ulong Checksum,
     long SizeInBits,
     int HashCount,
     ulong Fingerprint,
     UnixTimestamp CreatedAt
-);
+);

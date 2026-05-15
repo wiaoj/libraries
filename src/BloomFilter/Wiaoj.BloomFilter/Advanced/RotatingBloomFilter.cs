@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Text;
 using Wiaoj.BloomFilter.Internal;
 using Wiaoj.Concurrency;
@@ -7,6 +7,7 @@ using Wiaoj.Primitives;
 using Wiaoj.Primitives.Buffers;
 
 namespace Wiaoj.BloomFilter.Advanced;
+
 /// <summary>
 /// A time-windowed, persistent Bloom Filter that rotates underlying shards based on a Time-To-Live (TTL).
 /// Automatically discards old data to maintain a clean sliding window (e.g., "Unique Users in Last 7 Days").
@@ -20,10 +21,15 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
     private Shard[] _shards;
     private long _shardCounter;
 
+    /// <inheritdoc/>
     public string Name => Configuration.Name;
+
+    /// <inheritdoc/>
     public BloomFilterConfiguration Configuration { get; }
 
-    // Herhangi bir aktif shard kirliyse filtremiz de kirlidir (Diske yazılmalı)
+    /// <summary>
+    /// Gets a value indicating whether any of the active shards have been modified and require persistence.
+    /// </summary>
     public bool IsDirty {
         get {
             var currentShards = Atomic.Read(ref _shards);
@@ -34,13 +40,16 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         }
     }
 
-    // İç yapı: Filtrenin kendisi ve ne zaman çöpe gideceği (Expiration)
+    // Internal structure representing a shard and its expiration timestamp.
     private readonly record struct Shard(IPersistentBloomFilter Filter, UnixTimestamp Expiration);
 
     /// <summary>
-    /// Initializes a rotating filter.
-    /// Example: windowSize = 7 Days, shardCount = 7 means one shard per day.
+    /// Initializes a new instance of the <see cref="RotatingBloomFilter"/> class.
     /// </summary>
+    /// <param name="baseConfig">The base configuration for individual shards.</param>
+    /// <param name="context">The shared context containing logging, storage, and factory services.</param>
+    /// <param name="windowSize">The total time window to cover (e.g., 7 days).</param>
+    /// <param name="shardCount">The number of shards to split the window into (e.g., 7 shards for 7 days).</param>
     public RotatingBloomFilter(
         BloomFilterConfiguration baseConfig,
         BloomFilterContext context,
@@ -58,27 +67,27 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
 
         long itemsPerShard = (long)Math.Ceiling((double)baseConfig.ExpectedItems / shardCount);
 
-        // ZAMAN HİZALAMASI (Time Alignment): Başlangıç noktasını pürüzsüz yap
-        // Örn: Günlük shard açıyorsak, tam gece yarısına hizala.
+        // Time Alignment: Ensure the start point is smooth (e.g., align to midnight for daily shards).
         UnixTimestamp alignedNow = AlignTimestamp(context.TimeProvider.GetUnixTimestamp(), _shardDuration);
 
-        // Başlangıç için shard'ları önceden ayır (Pre-allocate)
+        // Pre-allocate shards for the initial window.
         for(int i = 0; i < shardCount; i++) {
             var expiration = alignedNow + (_shardDuration * (i + 1));
             _shards[i] = CreateShard(expiration, itemsPerShard);
         }
     }
 
+    /// <inheritdoc/>
     public bool Add(ReadOnlySpan<byte> item) {
         _disposeState.ThrowIfDisposingOrDisposed(Name);
 
-        // ZAMAN KONTROLÜ: Eğer aktif pencere dolduysa, yenisini aç
+        // Ensure the active time window is current; rotate shards if necessary.
         EnsureActiveShard();
 
         _lock.EnterReadLock();
         try {
             var currentShards = Atomic.Read(ref _shards);
-            // Ekleme İŞLEMİ DAİMA EN YENİ (AKTİF) SHARD'A YAPILIR
+            // Additions are always performed on the newest (active) shard.
             return currentShards[^1].Filter.Add(item);
         }
         finally {
@@ -86,16 +95,17 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         }
     }
 
+    /// <inheritdoc/>
     public bool Contains(ReadOnlySpan<byte> item) {
         _disposeState.ThrowIfDisposingOrDisposed(Name);
 
-        // Okuma yapmadan önce de shard'ların güncel olduğundan emin ol
+        // Ensure shards are up-to-date before searching.
         EnsureActiveShard();
 
         _lock.EnterReadLock();
         try {
             var currentShards = Atomic.Read(ref _shards);
-            // SIFIR-ALLOCATION TARAMA: En yeni veriden en eskiye doğru tara
+            // Zero-allocation search: iterate from newest to oldest data.
             for(int i = currentShards.Length - 1; i >= 0; i--) {
                 if(currentShards[i].Filter.Contains(item)) return true;
             }
@@ -106,22 +116,20 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         }
     }
 
-    // --- ZAMAN PENCERESİ ROTASYON MANTIĞI ---
-
     private void EnsureActiveShard() {
         var now = _context.TimeProvider.GetUnixTimestamp();
         var currentShards = Atomic.Read(ref _shards);
 
-        // Hızlı, kilit-siz (lock-free) kontrol. Süre dolmadıysa direkt çık.
+        // Fast lock-free check. If the active shard has not expired, exit.
         if(now <= currentShards[^1].Expiration) return;
 
         _lock.EnterWriteLock();
         try {
-            // Double-check: Başka thread bizden önce rotasyon yapmış olabilir
+            // Double-check: another thread might have performed the rotation.
             currentShards = Atomic.Read(ref _shards);
             if(now <= currentShards[^1].Expiration) return;
 
-            // Kaç tane shard'ın süresi doldu? (Eğer uygulama uzun süre kapalı kaldıysa birden fazla atlanabilir)
+            // Determine how many shards have expired (multiple shards may be skipped if the app was offline).
             int shifts = 1;
             while(now > currentShards[^1].Expiration + (_shardDuration * shifts) && shifts < currentShards.Length) {
                 shifts++;
@@ -130,26 +138,26 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
             var newShards = new Shard[currentShards.Length];
             long itemsPerShard = currentShards[0].Filter.Configuration.ExpectedItems;
 
-            // 1. Ölen Shard'ları Temizle (RAM ve Diskten at)
+            // 1. Cleanup expired shards (release memory and persistent storage).
             for(int i = 0; i < shifts; i++) {
                 var deadFilter = currentShards[i].Filter;
 
-                // RAM'den sil
+                // Dispose in-memory resources.
                 if(deadFilter is IDisposable d) d.Dispose();
 
-                // Diskten tamamen sil (Storage varsa) Fire-and-Forget
+                // Permanently delete from storage provider (Fire-and-Forget).
                 if(_context.Storage != null) {
                     _ = _context.Storage.DeleteAsync(deadFilter.Name, CancellationToken.None);
                 }
             }
 
-            // 2. Kalan hayattaki shard'ları sola kaydır (Eskitiyoruz)
+            // 2. Shift remaining active shards to the left.
             int remaining = currentShards.Length - shifts;
             if(remaining > 0) {
                 Array.Copy(currentShards, shifts, newShards, 0, remaining);
             }
 
-            // 3. En sağa yepyeni Shard'lar üret (Gelecek için)
+            // 3. Create fresh shards for the future at the end of the array.
             var baseExpiration = remaining > 0 ? currentShards[^1].Expiration : AlignTimestamp(now, _shardDuration);
 
             for(int i = remaining; i < newShards.Length; i++) {
@@ -157,7 +165,7 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
                 newShards[i] = CreateShard(expiration, itemsPerShard);
             }
 
-            // Atomik olarak canlıya al
+            // Atomically swap the shard array.
             Atomic.Write(ref _shards, newShards);
         }
         finally {
@@ -168,14 +176,14 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
     private Shard CreateShard(UnixTimestamp expiration, long expectedItems) {
         long nextId = Interlocked.Increment(ref _shardCounter);
 
-        var config = new BloomFilterConfiguration(
+        var config = _context.ConfigFactory.Create(
             FilterName.Parse($"{Configuration.Name.Value}_W{nextId}"),
             expectedItems,
             Configuration.ErrorRate,
             Configuration.HashSeed + (uint)nextId
         );
 
-        // Akıllı Katman Üretici (Boyuta göre InMemory veya Sharded)
+        // Intelligent Layer Factory: selects InMemory or Sharded based on size.
         long totalBytes = (config.SizeInBits + 7) / 8;
         IPersistentBloomFilter filter = (totalBytes > _context.Options.Lifecycle.ShardingThresholdBytes)
             ? new ShardedBloomFilter(config.WithShardCount((int)BitOperations.RoundUpToPowerOf2((uint)Math.Ceiling((double)totalBytes / _context.Options.Lifecycle.ShardingThresholdBytes))), _context)
@@ -196,13 +204,12 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         return UnixTimestamp.FromMilliseconds(ms - mod);
     }
 
-    // --- Diske Kayıt ve Yükleme İşlemleri (IPersistentBloomFilter) ---
-
+    /// <inheritdoc/>
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
         _disposeState.ThrowIfDisposingOrDisposed(Name);
         var currentShards = Atomic.Read(ref _shards);
 
-        // Sadece kirlenen aktif shard'ları kaydet
+        // Persist only the active shards that have pending modifications.
         var saveTasks = currentShards
             .Where(s => s.Filter.IsDirty)
             .Select(s => s.Filter.SaveAsync(cancellationToken).AsTask());
@@ -210,6 +217,7 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         await Task.WhenAll(saveTasks);
     }
 
+    /// <inheritdoc/>
     public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
         _disposeState.ThrowIfDisposingOrDisposed(Name);
         var currentShards = Atomic.Read(ref _shards);
@@ -218,8 +226,7 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         await Task.WhenAll(reloadTasks);
     }
 
-    // --- Boilerplate (String/Char Overloads & Dispose & GetPopCount) ---
-
+    /// <inheritdoc/>
     public bool Add(ReadOnlySpan<char> item) {
         int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
         using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
@@ -227,6 +234,7 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         return Add(buffer.Slice(0, written));
     }
 
+    /// <inheritdoc/>
     public bool Contains(ReadOnlySpan<char> item) {
         int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
         using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
@@ -234,6 +242,7 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         return Contains(buffer.Slice(0, written));
     }
 
+    /// <inheritdoc/>
     public long GetPopCount() {
         _lock.EnterReadLock();
         try {
@@ -247,6 +256,9 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         }
     }
 
+    /// <summary>
+    /// Releases all resources used by the Rotating Bloom Filter and its underlying shards.
+    /// </summary>
     public void Dispose() {
         if(_disposeState.TryBeginDispose()) {
             _lock.EnterWriteLock();

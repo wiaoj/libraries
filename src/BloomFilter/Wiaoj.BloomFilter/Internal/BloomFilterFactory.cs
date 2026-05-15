@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Numerics;
 using Wiaoj.BloomFilter.Advanced;
@@ -9,6 +9,7 @@ using Wiaoj.Primitives;
 namespace Wiaoj.BloomFilter.Internal;
 
 internal sealed class BloomFilterFactory(
+    IBloomFilterConfigurationFactory configFactory,
     IOptionsMonitor<BloomFilterOptions> optionsMonitor,
     ILoggerFactory loggerFactory,
     IEnumerable<IAutoBloomFilterSeeder> autoSeeders,
@@ -32,15 +33,16 @@ internal sealed class BloomFilterFactory(
             memoryStreamPool,
             loggerFactory.CreateLogger(name.Value),
             currentOptions,
-            timeProvider
+            timeProvider,
+            configFactory
         );
 
         // BloomFilter Configuration
-        BloomFilterConfiguration config = new(
+        BloomFilterConfiguration config = configFactory.Create(
             name,
             definition.ExpectedItems,
-            Percentage.FromDouble(definition.ErrorRate),
-            currentOptions.Performance.GlobalHashSeed
+            definition.ErrorRate,
+            currentOptions.Performance.GlobalHashSeed == 0 ? null : currentOptions.Performance.GlobalHashSeed
         );
 
         // Filtreyi Tipe Göre Factory Et

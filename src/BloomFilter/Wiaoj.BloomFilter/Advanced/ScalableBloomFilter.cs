@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Numerics;
 using System.Text;
 using Wiaoj.BloomFilter.Internal;
@@ -10,7 +10,8 @@ using Wiaoj.Primitives.Buffers;
 namespace Wiaoj.BloomFilter.Advanced;
 
 /// <summary>
-/// A scalable, persistent Bloom Filter that automatically layers new filters when saturated.
+/// A scalable, persistent Bloom Filter that automatically layers new filters when the current active layer reaches a saturation threshold.
+/// This implementation allows the filter to grow dynamically while maintaining a target false positive rate.
 /// </summary>
 public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
     private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
@@ -18,14 +19,18 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
     private readonly GrowthRate _growthRate;
     private readonly Percentage _saturationThreshold;
     private readonly DisposeState _disposeState = new();
-
-    // DİKKAT: Artık arayüz üzerinden tutuyoruz (InMemory veya Sharded olabilir!)
+     
     private IPersistentBloomFilter[] _layers;
 
+    /// <inheritdoc/>
     public string Name => this.Configuration.Name;
+
+    /// <inheritdoc/>
     public BloomFilterConfiguration Configuration { get; }
 
-    // Herhangi bir katman kirliyse ana filtre de kirlidir (Diske yazılması gerekir)
+    /// <summary>
+    /// Gets a value indicating whether any of the underlying layers have been modified and require persistence.
+    /// </summary>
     public bool IsDirty {
         get {
             IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
@@ -36,6 +41,13 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScalableBloomFilter"/> class.
+    /// </summary>
+    /// <param name="baseConfig">The initial configuration for the first layer.</param>
+    /// <param name="context">The shared context containing logging, storage, and factory services.</param>
+    /// <param name="growthRate">The multiplier used to increase capacity for each new layer. Defaults to <see cref="GrowthRate.Double"/>.</param>
+    /// <param name="saturationThreshold">The fill ratio at which a new layer is triggered. Defaults to 50%.</param>
     public ScalableBloomFilter(
         BloomFilterConfiguration baseConfig,
         BloomFilterContext context,
@@ -49,26 +61,28 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         this._context = context;
         this._growthRate = growthRate.Value == 0 ? GrowthRate.Double : growthRate;
         this._saturationThreshold = saturationThreshold.IsZero ? Percentage.Half : saturationThreshold;
-
-        // İlk katmanı Provider'ın kurallarına göre oluştur (Akıllı Factory Metodu)
+         
         this._layers = [CreateLayer(baseConfig, 0)];
     }
+
     private long _addCount = 0;
+
+    /// <inheritdoc/>
     public bool Add(ReadOnlySpan<byte> item) {
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
 
         IPersistentBloomFilter[] layers = Atomic.Read(ref this._layers);
 
-        // 1. Contains (Arama - Tüm katmanlar)
+        // 1. Search - Check all layers from newest to oldest
         for(int i = layers.Length - 1; i >= 0; i--) {
             if(layers[i].Contains(item)) return false;
         }
 
-        // 2. Ekleme (Sadece son katman)
+        // 2. Add - Only add to the latest (active) layer
         IPersistentBloomFilter activeLayer = layers[^1];
         bool added = activeLayer.Add(item);
 
-        // 3. Ölçeklendirme Kontrolü (Her 1000 eklemede bir kontrol et, performansı bozma)
+        // 3. Scaling Check - Periodically check for saturation (every 1000 additions to minimize overhead)
         if(added && Interlocked.Increment(ref _addCount) % 1000 == 0) {
             CheckAndScale(activeLayer);
         }
@@ -83,49 +97,10 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         }
     }
 
-    //public bool Add(ReadOnlySpan<byte> item) {
-    //    this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
-
-    //    this._lock.EnterReadLock();
-    //    try {
-    //        IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
-    //        for(int i = currentLayers.Length - 1; i >= 0; i--) {
-    //            if(currentLayers[i].Contains(item)) return false;
-    //        }
-    //    }
-    //    finally {
-    //        this._lock.ExitReadLock();
-    //    }
-
-    //    bool needsScale = false;
-
-    //    this._lock.EnterReadLock();
-    //    try {
-    //        IPersistentBloomFilter activeLayer = Atomic.Read(ref this._layers)[^1];
-
-    //        // Sadece aktif katmana ekle!
-    //        if(activeLayer.Add(item)) {
-    //            // Sadece ekleme başarılıysa doluluk kontrolü yap
-    //            Percentage fillRatio = Percentage.FromDouble(activeLayer.GetPopCount() / activeLayer.Configuration.SizeInBits);
-    //            if(fillRatio >= this._saturationThreshold) {
-    //                needsScale = true;
-    //            }
-    //        }
-    //    }
-    //    finally {
-    //        this._lock.ExitReadLock();
-    //    }
-
-    //    if(needsScale) {
-    //        ScaleUp();
-    //    }
-
-    //    return true;
-    //}
-
+    /// <inheritdoc/>
     public bool Contains(ReadOnlySpan<byte> item) {
         IPersistentBloomFilter[] layers = Atomic.Read(ref this._layers);
-        // En yeni katmandan geriye doğru git (L4, L3, L2...)
+        // Search from the newest layer backwards (L4, L3, L2...)
         for(int i = layers.Length - 1; i >= 0; i--) {
             if(layers[i].Contains(item)) return true;
         }
@@ -139,19 +114,19 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
             IPersistentBloomFilter activeLayer = currentLayers[^1];
 
             Percentage fillRatio = Percentage.FromDouble((double)activeLayer.GetPopCount() / activeLayer.Configuration.SizeInBits);
-            if(fillRatio < this._saturationThreshold) return; // Double-check
+            if(fillRatio < this._saturationThreshold) return; // Double-check under lock
 
-            // Nüfusu belirtilen oranda büyüt
+            // Increase expected items by the growth rate
             long newExpectedItems = (long)(activeLayer.Configuration.ExpectedItems * this._growthRate.Value);
 
-            var newConfig = new BloomFilterConfiguration(
+            var newConfig = this._context.ConfigFactory.Create(
                 FilterName.Parse($"{this.Configuration.Name.Value}_L{currentLayers.Length}"),
                 newExpectedItems,
                 activeLayer.Configuration.ErrorRate,
                 activeLayer.Configuration.HashSeed + (uint)currentLayers.Length
             );
 
-            // Katmanı akıllı factory ile oluştur
+            // Create new layer using the intelligent factory
             IPersistentBloomFilter newLayer = CreateLayer(newConfig, currentLayers.Length);
 
             var newLayers = new IPersistentBloomFilter[currentLayers.Length + 1];
@@ -166,8 +141,8 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
     }
 
     /// <summary>
-    /// Akıllı Katman Fabrikası: Tıpkı BloomFilterProvider gibi, boyuta bakarak
-    /// ShardedBloomFilter veya InMemoryBloomFilter döndürür.
+    /// Intelligent Layer Factory: Similar to BloomFilterProvider, determines whether to 
+    /// create a ShardedBloomFilter or InMemoryBloomFilter based on the calculated size.
     /// </summary>
     private IPersistentBloomFilter CreateLayer(BloomFilterConfiguration config, int layerIndex) {
         long totalBytes = (config.SizeInBits + 7) / 8;
@@ -183,15 +158,14 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         return new InMemoryBloomFilter(config, this._context);
     }
 
-    // --- Diske Kayıt ve Yükleme İşlemleri (IPersistentBloomFilter) ---
-
+    /// <inheritdoc/>
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
 
         IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
 
-        // Sadece kirlenmiş (yeni veri eklenmiş) katmanları kaydet.
-        // Paralel olarak I/O işlemlerini yap!
+        // Only save layers that have been modified (dirty state).
+        // Perform I/O operations in parallel.
         IEnumerable<Task> saveTasks = currentLayers
             .Where(l => l.IsDirty)
             .Select(l => l.SaveAsync(cancellationToken).AsTask());
@@ -199,6 +173,7 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         await Task.WhenAll(saveTasks);
     }
 
+    /// <inheritdoc/>
     public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
 
@@ -208,8 +183,7 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         await Task.WhenAll(reloadTasks);
     }
 
-    // --- Boilerplate (String/Char Overloads & Dispose) ---
-
+    /// <inheritdoc/>
     public bool Add(ReadOnlySpan<char> item) {
         int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
         using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
@@ -217,6 +191,7 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         return Add(buffer.Slice(0, written));
     }
 
+    /// <inheritdoc/>
     public bool Contains(ReadOnlySpan<char> item) {
         int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
         using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
@@ -224,6 +199,7 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         return Contains(buffer.Slice(0, written));
     }
 
+    /// <inheritdoc/>
     public long GetPopCount() {
         this._lock.EnterReadLock();
         try {
@@ -237,6 +213,9 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         }
     }
 
+    /// <summary>
+    /// Releases all resources used by the Scalable Bloom Filter and its underlying layers.
+    /// </summary>
     public void Dispose() {
         if(this._disposeState.TryBeginDispose()) {
             this._lock.EnterWriteLock();

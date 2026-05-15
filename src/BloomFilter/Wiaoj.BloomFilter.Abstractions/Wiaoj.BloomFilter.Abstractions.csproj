@@ -6,11 +6,18 @@
     <Nullable>enable</Nullable>
 	<RootNamespace>Wiaoj.BloomFilter</RootNamespace>
 	<AssemblyName>Wiaoj.BloomFilter.Abstractions</AssemblyName>
+	  <PackageId>Wiaoj.BloomFilter.Abstractions</PackageId>
+	  
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
-  <ItemGroup> 
-	  <ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
-	  <ProjectReference Include="..\..\Extensions\Wiaoj.Threading\Wiaoj.Concurrency.csproj" />
+  <ItemGroup>
+	  <None Include="..\README.md" Pack="true" PackagePath="\" Condition="Exists('..\README.md')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
   </ItemGroup>
 
 </Project>

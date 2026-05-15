@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.IO.Hashing;
 using System.Runtime.Intrinsics;
@@ -56,7 +56,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
         // Allocate memory from pool
         this._bits = new PooledBitArray(config.SizeInBits);
 
-        this._logger.LogFilterInitialized(this.Name, config.ExpectedItems, config.ErrorRate.Value, config.SizeInBits);
+        this._logger.LogFilterInitialized(this.Name, config.ExpectedItems, config.ErrorRate, config.SizeInBits);
 
         this._timeProvider = context.TimeProvider;
         this.LastSavedAt = this._timeProvider.GetUtcNow();

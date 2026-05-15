@@ -1,4 +1,4 @@
-﻿using System.IO.Hashing;
+using System.IO.Hashing;
 using System.Text;
 using Wiaoj.Concurrency;
 
@@ -29,7 +29,7 @@ internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
 
         for(int i = 0; i < this._shardCount; i++) {
             string shardName = $"{config.Name}_s{i}";
-            BloomFilterConfiguration shardConfig = new(shardName, itemsPerShard, config.ErrorRate, config.HashSeed);
+            BloomFilterConfiguration shardConfig = context.ConfigFactory.Create(shardName, itemsPerShard, config.ErrorRate, config.HashSeed);
 
             this._shards[i] = new InMemoryBloomFilter(shardConfig, context);
         }

@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter;
 /// <summary>
 /// Defines the contract for storage providers responsible for persisting Bloom Filter snapshots.
 /// Implementations can support various backends such as Redis, File System, Cloud Blob Storage, or SQL.
@@ -24,5 +24,11 @@ public interface IBloomFilterStorage {
     /// Returns a tuple containing the configuration and the data stream if found; otherwise, <c>null</c>.
     /// </returns>
     ValueTask<(BloomFilterConfiguration Config, Stream DataStream)?> LoadStreamAsync(string filterName, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Deletes the persistent data associated with the specified filter name from the storage.
+    /// </summary>
+    /// <param name="filterName">The name of the filter to delete.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task representing the asynchronous deletion operation.</returns>
     Task DeleteAsync(string filterName, CancellationToken cancellationToken = default);
 }

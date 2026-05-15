@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Wiaoj.Preconditions;
 
 namespace Wiaoj.BloomFilter;
@@ -7,6 +7,9 @@ namespace Wiaoj.BloomFilter;
 /// </summary>
 [DebuggerDisplay("x{Value}")]
 public readonly record struct GrowthRate {
+    /// <summary>
+    /// Gets the raw numeric value of the growth rate.
+    /// </summary>
     public double Value { get; }
 
     /// <summary> Default growth rate of x2.0 </summary>
@@ -19,6 +22,12 @@ public readonly record struct GrowthRate {
         this.Value = value;
     }
 
+    /// <summary>
+    /// Creates a <see cref="GrowthRate"/> from a double value.
+    /// </summary>
+    /// <param name="value">The growth multiplier. Must be strictly greater than 1.0.</param>
+    /// <returns>A validated <see cref="GrowthRate"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if value is less than or equal to 1.0.</exception>
     public static GrowthRate FromDouble(double value) {
         Preca.ThrowIfLessThanOrEqualTo(
             value,
@@ -28,10 +37,18 @@ public readonly record struct GrowthRate {
         return new GrowthRate(value);
     }
 
+    /// <summary>
+    /// Implicitly converts a <see cref="GrowthRate"/> to a double.
+    /// </summary>
+    /// <param name="rate">The growth rate to convert.</param>
     public static implicit operator double(GrowthRate rate) {
         return rate.Value;
     }
 
+    /// <summary>
+    /// Explicitly converts a double to a <see cref="GrowthRate"/>.
+    /// </summary>
+    /// <param name="value">The double value to convert.</param>
     public static explicit operator GrowthRate(double value) {
         return FromDouble(value);
     }
