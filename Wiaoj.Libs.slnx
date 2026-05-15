@@ -14,6 +14,7 @@
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/BloomFilter/">
+    <File Path="src/BloomFilter/README.md" />
     <Project Path="src/BloomFilter/Wiaoj.BloomFilter.Abstractions/Wiaoj.BloomFilter.Abstractions.csproj" />
     <Project Path="src/BloomFilter/Wiaoj.BloomFilter/Wiaoj.BloomFilter.csproj" />
   </Folder>
