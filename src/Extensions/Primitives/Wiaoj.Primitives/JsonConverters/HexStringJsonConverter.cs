@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -12,6 +12,10 @@ public sealed class HexStringJsonConverter : JsonConverter<HexString> {
     /// <inheritdoc/>
     public override HexString Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if(reader.TokenType == JsonTokenType.String) {
+            if (reader.ValueIsEscaped) {
+                string? s = reader.GetString();
+                return s is null ? HexString.Empty : HexString.Parse(s);
+            }
             if(reader.HasValueSequence) {
                 long len = reader.ValueSequence.Length;
                 if(len <= 256) {

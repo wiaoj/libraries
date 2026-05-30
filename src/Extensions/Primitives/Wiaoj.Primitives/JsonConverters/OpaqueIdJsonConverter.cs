@@ -13,6 +13,7 @@ public sealed class OpaqueIdJsonConverter : JsonConverter<OpaqueId> {
     /// <inheritdoc/>
     public override OpaqueId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if(reader.TokenType == JsonTokenType.String) {
+            if(reader.ValueIsEscaped) { string s = reader.GetString(); return s == null ? OpaqueId.Empty : (OpaqueId.TryParse(s, out OpaqueId res) ? res : OpaqueId.Empty); }
             ReadOnlySpan<byte> utf8Bytes = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
 
             // Stackalloc ile char çevrimi

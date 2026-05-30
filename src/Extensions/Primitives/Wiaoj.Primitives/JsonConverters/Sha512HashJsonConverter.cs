@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
@@ -30,7 +30,7 @@ public sealed class Sha512HashJsonConverter : JsonConverter<Sha512Hash> {
 
         // Optimization: 64 bytes = 128 hex characters. 
         // We use the span directly if it's a single contiguous segment.
-        if(reader.HasValueSequence || reader.ValueSpan.Length != 128) {
+        if(reader.HasValueSequence || reader.ValueIsEscaped || reader.ValueSpan.Length != 128) {
             return ParseHex(reader.GetString());
         }
 

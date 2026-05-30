@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
@@ -30,7 +30,7 @@ public sealed class Md5HashJsonConverter : JsonConverter<Md5Hash> {
 
         // Optimization: 16 bytes = 32 hex characters. 
         // We use the span directly if it's a single contiguous segment.
-        if(reader.HasValueSequence || reader.ValueSpan.Length != 32) {
+        if(reader.HasValueSequence || reader.ValueIsEscaped || reader.ValueSpan.Length != 32) {
             return ParseString(reader.GetString());
         }
 

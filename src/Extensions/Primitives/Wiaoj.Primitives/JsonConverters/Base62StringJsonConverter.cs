@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -8,11 +8,18 @@ public sealed class Base62StringJsonConverter : JsonConverter<Base62String> {
     /// <inheritdoc/>
     public override Base62String Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if(reader.TokenType == JsonTokenType.String) {
-            // Try to read directly from UTF-8 span for performance
-            ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
+            if (!reader.ValueIsEscaped) {
+                // Try to read directly from UTF-8 span for performance
+                ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
 
-            if(Base62String.TryParse(span, out Base62String result)) {
-                return result;
+                if(Base62String.TryParse(span, out Base62String result)) {
+                    return result;
+                }
+            } else {
+                string? text = reader.GetString();
+                if (text != null && Base62String.TryParse(text, out Base62String result)) {
+                    return result;
+                }
             }
 
             // If the string is invalid Base62, we should throw to inform the deserializer
