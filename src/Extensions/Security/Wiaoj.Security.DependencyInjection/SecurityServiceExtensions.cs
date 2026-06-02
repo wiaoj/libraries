@@ -157,4 +157,36 @@ public static class SecurityServiceExtensions {
         builder.Services.TryAddSingleton<IMasterKeyProvider, TProvider>();
         return builder;
     }
+
+    // ── Previous master key (Type B rewrap window) ────────────────────────────
+
+    /// <summary>
+    /// Registers <see cref="EnvironmentPreviousMasterKeyProvider"/> so that
+    /// <c>MasterKeyRewrapService</c> can unwrap legacy DEKs during a master-key rotation.
+    /// Returns <see langword="null"/> at runtime if the variable is unset, which the rewrap
+    /// service treats as "no rotation pending".
+    /// </summary>
+    /// <param name="variableName">
+    /// Environment variable holding the Base64-encoded previous master key.
+    /// Default: <c>APP_MASTER_KEY_PREVIOUS</c>.
+    /// </param>
+    public static ISecurityBuilder AddEnvironmentPreviousMasterKey(
+        this ISecurityBuilder builder,
+        string variableName = "APP_MASTER_KEY_PREVIOUS") {
+        builder.Services.TryAddSingleton<IPreviousMasterKeyProvider>(
+            _ => new EnvironmentPreviousMasterKeyProvider(variableName));
+        return builder;
+    }
+
+    /// <summary>
+    /// Registers a custom <see cref="IPreviousMasterKeyProvider"/> for the Type B rewrap window
+    /// (Azure Key Vault prior version, AWS KMS schedule, etc.).
+    /// </summary>
+    public static ISecurityBuilder AddPreviousMasterKeyProvider<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TProvider>(
+        this ISecurityBuilder builder)
+        where TProvider : class, IPreviousMasterKeyProvider {
+        builder.Services.TryAddSingleton<IPreviousMasterKeyProvider, TProvider>();
+        return builder;
+    }
 }

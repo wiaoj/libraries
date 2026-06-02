@@ -66,6 +66,10 @@ public static class SecurityBuilderRotationExtensions {
         // Periodic rotation check — singleton, creates its own scope per tick.
         services.AddHostedService<RotationBackgroundService<TContext>>();
 
+        // Master-key (Type B) rewrap — opt-in via IPreviousMasterKeyProvider; the service throws
+        // a clear InvalidOperationException if invoked without one registered.
+        services.TryAddScoped<MasterKeyRewrapService<TContext>>();
+
         return builder;
     }
 

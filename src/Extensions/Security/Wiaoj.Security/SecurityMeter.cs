@@ -96,6 +96,36 @@ public static class SecurityMeter {
             unit: "ms",
             description: "Duration of a full key rotation cycle in milliseconds.");
 
+    // ── Master-key Rewrap (Type B) ────────────────────────────────────────────
+
+    /// <summary>Total number of completed master-key rewrap cycles.</summary>
+    public static readonly Counter<long> RewrapCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.security.rewrap.count",
+            unit: "{rewraps}",
+            description: "Total number of successful master-key (Type B) rewrap cycles.");
+
+    /// <summary>Total number of failed master-key rewrap cycles.</summary>
+    public static readonly Counter<long> RewrapErrorCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.security.rewrap.error.count",
+            unit: "{rewraps}",
+            description: "Total number of failed master-key rewrap cycles.");
+
+    /// <summary>Number of individual key records re-wrapped during rewrap cycles.</summary>
+    public static readonly Counter<long> RewrapKeyCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.security.rewrap.key.count",
+            unit: "{keys}",
+            description: "Number of individual encryption key records re-wrapped with the new master key.");
+
+    /// <summary>Duration of a full master-key rewrap cycle in milliseconds.</summary>
+    public static readonly Histogram<double> RewrapDuration =
+        _meter.CreateHistogram<double>(
+            "wiaoj.security.rewrap.duration",
+            unit: "ms",
+            description: "Duration of a full master-key rewrap cycle in milliseconds.");
+
     // ── Key Ring ──────────────────────────────────────────────────────────────
 
     /// <summary>Total number of key ring reloads (startup + post-rotation).</summary>

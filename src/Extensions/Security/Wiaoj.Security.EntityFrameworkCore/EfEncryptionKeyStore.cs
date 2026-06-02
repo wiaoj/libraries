@@ -35,6 +35,17 @@ public sealed class EfEncryptionKeyStore<TDbContext>(TDbContext dbContext, TimeP
     }
 
     /// <inheritdoc />
+    public async Task UpdateWrappedKeyAsync(string contextName, int version, string newWrappedKeyMaterial, CancellationToken cancellationToken = default) {
+        EncryptionKeyRecord record = await dbContext.EncryptionKeys
+            .FirstOrDefaultAsync(k => k.ContextName == contextName && k.Version == version, cancellationToken)
+            ?? throw new KeyNotFoundException(
+                $"No key found for context '{contextName}' version {version}.");
+
+        record.WrappedKeyMaterial = newWrappedKeyMaterial;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task RetireKeyAsync(string contextName, int version, CancellationToken cancellationToken = default) {
         EncryptionKeyRecord? record = await dbContext.EncryptionKeys
             .FirstOrDefaultAsync(k => k.ContextName == contextName && k.Version == version, cancellationToken)
