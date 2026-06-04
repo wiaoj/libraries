@@ -1,4 +1,4 @@
-﻿using Wiaoj.Concurrency.Extensions;
+using Wiaoj.Concurrency.Extensions;
 
 namespace Wiaoj.Concurrency;
 
@@ -39,6 +39,7 @@ public class StripedLock<TKey> where TKey : notnull {
         // Eğer stripes sayısı 2'nin kuvveti ise (örneğin 128), modül (%) yerine
         // çok daha hızlı olan bitwise AND (&) operasyonunu kullanabiliriz.
         // 128 = 10000000 (binary), 127 = 01111111 (binary)
-        return key.GetHashCode() & (this._locks.Length - 1);
+        uint hash = (uint)key.GetHashCode();
+        return (int)(hash & (uint)(this._locks.Length - 1));
     }
 }
