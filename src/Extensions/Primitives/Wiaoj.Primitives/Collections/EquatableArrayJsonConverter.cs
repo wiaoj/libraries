@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.Buffers;
@@ -8,6 +8,8 @@ namespace Wiaoj.Primitives.Collections;
 /// <summary>
 /// A factory class that creates JSON converters for <see cref="EquatableArray{T}"/> types.
 /// </summary>
+[RequiresDynamicCode("This factory uses MakeGenericType which is not compatible with Native AOT. Provide the converter explicitly in JsonSerializerOptions.")]
+[RequiresUnreferencedCode("This factory uses Reflection which is not compatible with Trimming. Provide the converter explicitly in JsonSerializerOptions.")]
 public sealed class EquatableArrayJsonConverterFactory : JsonConverterFactory {
 
     /// <summary>
@@ -25,8 +27,7 @@ public sealed class EquatableArrayJsonConverterFactory : JsonConverterFactory {
     /// <param name="typeToConvert">The type of the <see cref="EquatableArray{T}"/> to convert.</param>
     /// <param name="options">The serialization options to use.</param>
     /// <returns>A configured JSON converter for the specified type.</returns>
-    [UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "AOT safety is provided by manual array parsing in the inner converter.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode", Justification = "The element converter is resolved dynamically but is compatible with the target element type.")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(EquatableArrayJsonConverter<>))] 
     public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) {
         Type elementType = typeToConvert.GetGenericArguments()[0];
 
