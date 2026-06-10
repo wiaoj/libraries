@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
@@ -38,12 +38,18 @@ public readonly record struct Range<T> : IEquatable<Range<T>>, IEqualityOperator
         Preca.ThrowIfNull(min);
         Preca.ThrowIfNull(max);
 
-        if(min is double dMin) Preca.ThrowIfNaN(dMin);
-        if(max is double dMax) Preca.ThrowIfNaN(dMax);
-        if(min is float fMin) Preca.ThrowIfNaN(fMin);
-        if(max is float fMax) Preca.ThrowIfNaN(fMax);
-        if(min is Half hMin) Preca.ThrowIfNaN(hMin);
-        if(max is Half hMax) Preca.ThrowIfNaN(hMax);
+        if(typeof(T) == typeof(double)) {
+            Preca.ThrowIfNaN(Unsafe.As<T, double>(ref min));
+            Preca.ThrowIfNaN(Unsafe.As<T, double>(ref max));
+        }
+        else if(typeof(T) == typeof(float)) {
+            Preca.ThrowIfNaN(Unsafe.As<T, float>(ref min));
+            Preca.ThrowIfNaN(Unsafe.As<T, float>(ref max));
+        }
+        else if(typeof(T) == typeof(Half)) {
+            Preca.ThrowIfNaN(Unsafe.As<T, Half>(ref min));
+            Preca.ThrowIfNaN(Unsafe.As<T, Half>(ref max));
+        }
 
 
         Preca.ThrowIf(
@@ -197,6 +203,16 @@ public readonly record struct Range<T> : IEquatable<Range<T>>, IEqualityOperator
         T newMin = this.Min.CompareTo(other.Min) < 0 ? this.Min : other.Min;
         T newMax = this.Max.CompareTo(other.Max) > 0 ? this.Max : other.Max;
         return new Range<T>(newMin, newMax);
+    }
+
+    /// <summary>
+    /// Allows implicit conversion from a tuple to a <see cref="Range{T}"/>.
+    /// Enables syntax like: <c>Range&lt;int&gt; r = (10, 50);</c>
+    /// </summary>
+    /// <param name="tuple">A tuple containing the Min and Max boundaries.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator Range<T>((T Min, T Max) tuple) {
+        return Range<T>.Create(tuple.Min, tuple.Max);
     }
 
     /// <inheritdoc/>
