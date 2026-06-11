@@ -94,6 +94,46 @@ public readonly record struct HexString :
         return FromBytes(encoding.GetBytes(text));
     }
 
+    /// <summary>
+    /// Encodes a span of bytes into a lowercase hexadecimal string using a high-performance, low-allocation method.
+    /// </summary>
+    /// <param name="bytes">The raw bytes to encode.</param>
+    /// <returns>A new <see cref="HexString"/> instance containing the lowercase encoded data.</returns>
+    [SkipLocalsInit]
+    public static HexString FromBytesLower(ReadOnlySpan<byte> bytes) {
+        if(bytes.IsEmpty)
+            return Empty;
+
+        return new HexString(string.Create(bytes.Length * 2, bytes, (chars, source) => {
+            Convert.TryToHexStringLower(source, chars, out _);
+        }));
+    }
+
+    /// <summary>
+    /// Encodes a plain UTF-8 string into a lowercase HexString.
+    /// Example: FromUtf8Lower("hello") -> "68656c6c6f"
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>A lowercase hex string representing the UTF-8 bytes of the input text.</returns>
+    public static HexString FromUtf8Lower(string text) {
+        if(string.IsNullOrEmpty(text))
+            return Empty;
+        return FromBytesLower(Encoding.UTF8.GetBytes(text));
+    }
+
+    /// <summary>
+    /// Encodes a string using the specified encoding into a lowercase HexString.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <param name="encoding">The encoding to use.</param>
+    /// <returns>A lowercase hex string representing the bytes of the input text.</returns>
+    public static HexString FromLower(string text, Encoding encoding) {
+        if(string.IsNullOrEmpty(text))
+            return Empty;
+        ArgumentNullException.ThrowIfNull(encoding);
+        return FromBytesLower(encoding.GetBytes(text));
+    }
+
     #endregion
 
     #region Parsing (From Text)

@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -294,6 +294,15 @@ public unsafe struct Sha512Hash
     /// <returns>A <see cref="HexString"/> representation of the SHA512 hash.</returns>
     public HexString ToHexString() {
         return HexString.FromBytes(AsSpan());
+    }
+
+    /// <summary>
+    /// Encodes the hash bytes into a lowercase <see cref="HexString"/>.
+    /// This avoids the extra allocation caused by calling <c>ToHexString().ToLower()</c>.
+    /// </summary>
+    /// <returns>A lowercase <see cref="HexString"/> representation of the SHA512 hash.</returns>
+    public HexString ToHexStringLower() {
+        return HexString.FromBytesLower(AsSpan());
     }
 
     /// <summary>

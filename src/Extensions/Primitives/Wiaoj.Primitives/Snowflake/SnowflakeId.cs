@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Buffers.Text;
 using System.ComponentModel;
@@ -393,6 +393,15 @@ public readonly struct SnowflakeId :
         Span<byte> buffer = stackalloc byte[8];
         BinaryPrimitives.WriteInt64BigEndian(buffer, this._value);
         return HexString.FromBytes(buffer);
+    }
+
+    /// <summary>
+    /// Converts the SnowflakeId to a lowercase type-safe HexString.
+    /// </summary>
+    public HexString ToHexStringLower() {
+        Span<byte> buffer = stackalloc byte[8];
+        BinaryPrimitives.WriteInt64BigEndian(buffer, this._value);
+        return HexString.FromBytesLower(buffer);
     }
 
     /// <summary>

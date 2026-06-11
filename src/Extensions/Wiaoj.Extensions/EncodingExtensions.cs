@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.Extensions;
@@ -23,6 +23,13 @@ public static class EncodingExtensions {
         /// </summary>
         public HexString ToHex() {
             return HexString.FromUtf8(text);
+        }
+
+        /// <summary>
+        /// Encodes the string to a lowercase <see cref="HexString"/> using UTF-8 encoding.
+        /// </summary>
+        public HexString ToHexLower() {
+            return HexString.FromUtf8Lower(text);
         }
 
         /// <summary>
@@ -60,6 +67,13 @@ public static class EncodingExtensions {
         /// </summary>
         public HexString ToHex() {
             return HexString.FromBytes(bytes);
+        }
+
+        /// <summary>
+        /// Encodes the byte array to a lowercase <see cref="HexString"/>.
+        /// </summary>
+        public HexString ToHexLower() {
+            return HexString.FromBytesLower(bytes);
         }
     }
 

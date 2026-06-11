@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -136,6 +136,15 @@ public readonly record struct GuidV7 :
         Span<byte> bytes = stackalloc byte[16];
         this._value.TryWriteBytes(bytes, bigEndian: true, out _);
         return HexString.FromBytes(bytes);
+    }
+
+    /// <summary>
+    /// Encodes the GUID bytes as a lowercase <see cref="HexString"/> (32 hex chars, no dashes).
+    /// </summary>
+    public HexString ToHexStringLower() {
+        Span<byte> bytes = stackalloc byte[16];
+        this._value.TryWriteBytes(bytes, bigEndian: true, out _);
+        return HexString.FromBytesLower(bytes);
     }
 
     /// <summary>

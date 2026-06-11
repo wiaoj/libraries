@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
@@ -549,6 +549,19 @@ public sealed class AesGcmKey : IDisposable {
     public HexString ToHexString() {
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(AesGcmKey));
         return this._key.Expose(HexString.FromBytes);
+    }
+
+    /// <summary>
+    /// Exports the key material as a lowercase <see cref="HexString"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Use with caution.</b> The result should only be written to secure storage.
+    /// Never log or include in error messages.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">Thrown when this key has been disposed.</exception>
+    public HexString ToHexStringLower() {
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(AesGcmKey));
+        return this._key.Expose(HexString.FromBytesLower);
     }
 
     /// <summary>

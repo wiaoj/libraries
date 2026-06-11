@@ -168,6 +168,15 @@ public unsafe struct HmacSha256Hash
         return HexString.FromBytes(AsSpan());
     }
 
+    /// <summary>
+    /// Encodes the hash bytes into a lowercase <see cref="HexString"/>.
+    /// This avoids the extra allocation caused by calling <c>ToHexString().ToLower()</c>.
+    /// </summary>
+    /// <returns>A lowercase <see cref="HexString"/> representation of the HMAC-SHA256 hash.</returns>
+    public HexString ToHexStringLower() {
+        return HexString.FromBytesLower(AsSpan());
+    }
+
     /// <summary>Converts the hash to its <see cref="Base64String"/> representation.</summary>
     public Base64String ToBase64String() {
         return Base64String.FromBytes(AsSpan());

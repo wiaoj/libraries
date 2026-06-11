@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Numerics;
@@ -298,6 +298,15 @@ public readonly struct XxHash3
     /// <summary>Encodes the hash bytes into a type-safe <see cref="HexString"/>.</summary>
     public HexString ToHexString() {
         return HexString.FromBytes(AsSpan());
+    }
+
+    /// <summary>
+    /// Encodes the hash bytes into a lowercase <see cref="HexString"/>.
+    /// This avoids the extra allocation caused by calling <c>ToHexString().ToLower()</c>.
+    /// </summary>
+    /// <returns>A lowercase <see cref="HexString"/> representation of the XXHash3 hash.</returns>
+    public HexString ToHexStringLower() {
+        return HexString.FromBytesLower(AsSpan());
     }
 
     /// <summary>Encodes the hash bytes into a type-safe <see cref="Base64String"/>.</summary>
