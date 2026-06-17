@@ -152,8 +152,12 @@ public class MyDbContext : DbContext, IOutboxDbContext
 > ```csharp
 > services.AddDbContextFactory<MyDbContext>((sp, options) => options
 >     .UseNpgsql(connectionString)
->     .UseDddInterceptors(sp)); // audit + domain event / outbox interceptors
+>     .UseDddInterceptors<MyDbContext>(sp)); // attaches only MyDbContext's interceptors
 > ```
+>
+> Only the interceptors belonging to the specified context are attached, so in a
+> multi-context app each context opts in independently and no per-save context
+> filtering is needed.
 
 ---
 

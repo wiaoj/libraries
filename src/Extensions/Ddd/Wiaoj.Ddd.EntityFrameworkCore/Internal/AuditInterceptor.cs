@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.Internal;
-public sealed class AuditInterceptor(TimeProvider timeProvider) : SaveChangesInterceptor, IDddInterceptor {
+public sealed class AuditInterceptor(TimeProvider timeProvider) : SaveChangesInterceptor {
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) {
         DbContext? context = eventData.Context;
 

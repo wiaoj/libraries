@@ -30,7 +30,7 @@ internal sealed class DomainEventDispatcherInterceptor<TContext>(
     IOptions<OutboxOptions> options,
     OutboxInstanceInfo instanceInfo,
     TimeProvider timeProvider,
-    ILogger<DomainEventDispatcherInterceptor<TContext>> logger) : SaveChangesInterceptor, IDddInterceptor where TContext : DbContext {
+    ILogger<DomainEventDispatcherInterceptor<TContext>> logger) : SaveChangesInterceptor where TContext : DbContext {
 
     private readonly int _maxIterations = options.Value.MaxDomainEventDispatchAttempts;
 
@@ -43,8 +43,8 @@ internal sealed class DomainEventDispatcherInterceptor<TContext>(
        InterceptionResult<int> result,
        CancellationToken cancellationToken = default) {
 
-        // EF auto-discovery attaches every registered interceptor to every context; only act on our own.
-        if(eventData.Context is not TContext context) {
+        // This interceptor is attached only to its own TContext, so a null check is sufficient.
+        if(eventData.Context is not { } context) {
             return await base.SavingChangesAsync(eventData, result, cancellationToken);
         }
 
@@ -83,7 +83,7 @@ internal sealed class DomainEventDispatcherInterceptor<TContext>(
         int result,
         CancellationToken cancellationToken = default) {
 
-        if(eventData.Context is TContext context
+        if(eventData.Context is { } context
             && _pendingMessages.TryGetValue(context, out List<OutboxMessage>? messages)) {
             _pendingMessages.Remove(context);
 
@@ -98,7 +98,7 @@ internal sealed class DomainEventDispatcherInterceptor<TContext>(
 
     public override void SaveChangesFailed(DbContextErrorEventData eventData) {
         // Commit failed: drop staged messages so they are never published; the DB rows were rolled back too.
-        if(eventData.Context is TContext context) {
+        if(eventData.Context is { } context) {
             _pendingMessages.Remove(context);
         }
 
@@ -106,7 +106,7 @@ internal sealed class DomainEventDispatcherInterceptor<TContext>(
     }
 
     public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default) {
-        if(eventData.Context is TContext context) {
+        if(eventData.Context is { } context) {
             _pendingMessages.Remove(context);
         }
 
