@@ -140,12 +140,10 @@ public class MyDbContext : DbContext, IOutboxDbContext
         base.OnModelCreating(modelBuilder);
     }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        // This is crucial! It injects Audit and Dispatcher interceptors.
-        // In a real app, pass the IServiceProvider from DI.
-        // optionsBuilder.UseDddInterceptors(serviceProvider); 
-    }
+    // No interceptor wiring needed: the Audit and Domain Event Dispatcher
+    // interceptors are registered as singletons and auto-discovered by EF Core
+    // from the application service provider. This works the same whether you use
+    // AddDbContext, AddDbContextPool, or AddDbContextFactory.
 }
 ```
 
@@ -169,6 +167,32 @@ Unlike other libraries that force a specific JSON library, **Wiaoj.Ddd** leverag
 *   `MessagePack` (For smaller payload size)
 *   `MongoDB.Bson`
 *   `YamlDotNet`
+
+### DbContext Registration Modes
+
+The Outbox and Domain Event infrastructure (interceptors, dispatcher, background
+processor) is registered as stateless singletons and works identically across
+**all** EF Core DbContext registration modes — `AddDbContext` (scoped),
+`AddDbContextPool` (pooled), and `AddDbContextFactory`.
+
+There is one constraint to be aware of:
+
+*   **Repositories and `IUnitOfWork` require scoped registration (`AddDbContext`).**
+    `EfcoreRepository<TContext, ...>` resolves its `DbContext` from DI, so it only
+    works when the context is registered as a scoped service. Under
+    `AddDbContextFactory`/pooled, the context is created by the factory and is not
+    available in the container, so repositories cannot be constructed.
+*   **Pre-commit handlers should write through `IUnitOfWork` for cross-mode safety.**
+    A pre-commit handler that injects `TContext` (or a repository bound to it)
+    directly will receive the wrong/no context under factory/pooled mode, so its
+    changes would not join the active transaction. Injecting `IUnitOfWork` resolves
+    the *live* context (the one being saved) via the ambient holder, so staged
+    changes — including plain `Add` without an inner `SaveChanges` — commit
+    atomically with the aggregate in every mode.
+
+> **Rule of thumb:** if you use repositories or the Unit of Work, register your
+> `DbContext` with `AddDbContext`. If you only need the Outbox/event dispatching,
+> any registration mode works.
 
 ### ⚠️ Known Limitations
 *   **Outbox Concurrency:** The built-in `OutboxProcessor` in this package uses a simple polling mechanism intended for **single-instance deployments**. If you deploy multiple replicas (e.g., Kubernetes), you may encounter race conditions where the same message is processed twice.
