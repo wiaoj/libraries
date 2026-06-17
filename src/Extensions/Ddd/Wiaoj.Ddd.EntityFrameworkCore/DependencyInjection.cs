@@ -44,16 +44,18 @@ public static class DependencyInjection {
             // Scoped holder seeded by the dispatcher interceptor so pre-commit handlers resolve the live context.
             builder.Services.TryAddScoped<DddAmbientUnitOfWork>();
 
-            // Interceptors are stateless singletons registered as ISaveChangesInterceptor so EF Core
-            // auto-discovers them from the application service provider. This works identically for
+            // Interceptors are stateless singletons registered as IInterceptor so EF Core auto-discovers
+            // them from the application service provider. EF resolves injected interceptors via
+            // GetServices<IInterceptor>(), so the registration type must be IInterceptor (not the more
+            // specific ISaveChangesInterceptor) or they are silently ignored. This works identically for
             // AddDbContext (scoped), AddDbContextPool (pooled), and AddDbContextFactory registrations,
             // so callers no longer need to wire interceptors manually.
             // TryAddEnumerable de-duplicates by implementation type: the context-agnostic AuditInterceptor
             // is added once, while DomainEventDispatcherInterceptor<TContext> is added once per context type.
             builder.Services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<ISaveChangesInterceptor, AuditInterceptor>());
+                ServiceDescriptor.Singleton<IInterceptor, AuditInterceptor>());
             builder.Services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<ISaveChangesInterceptor, DomainEventDispatcherInterceptor<TContext>>());
+                ServiceDescriptor.Singleton<IInterceptor, DomainEventDispatcherInterceptor<TContext>>());
 
             DddEfCoreOptionsBuilder optionsBuilder = new(builder.Services);
 
