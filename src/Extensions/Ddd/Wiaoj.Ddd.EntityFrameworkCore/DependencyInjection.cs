@@ -44,18 +44,11 @@ public static class DependencyInjection {
             // Scoped holder seeded by the dispatcher interceptor so pre-commit handlers resolve the live context.
             builder.Services.TryAddScoped<DddAmbientUnitOfWork>();
 
-            // Interceptors are stateless singletons registered as IInterceptor so EF Core auto-discovers
-            // them from the application service provider. EF resolves injected interceptors via
-            // GetServices<IInterceptor>(), so the registration type must be IInterceptor (not the more
-            // specific ISaveChangesInterceptor) or they are silently ignored. This works identically for
-            // AddDbContext (scoped), AddDbContextPool (pooled), and AddDbContextFactory registrations,
-            // so callers no longer need to wire interceptors manually.
-            // TryAddEnumerable de-duplicates by implementation type: the context-agnostic AuditInterceptor
-            // is added once, while DomainEventDispatcherInterceptor<TContext> is added once per context type.
-            builder.Services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<IInterceptor, AuditInterceptor>());
-            builder.Services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<IInterceptor, DomainEventDispatcherInterceptor<TContext>>());
+            // Stateless singletons attached per-context via UseDddInterceptors<TContext>. AuditInterceptor is
+            // context-agnostic (one shared instance); the dispatcher is one instance per context type so each
+            // context only receives its own — no per-save context filtering required.
+            builder.Services.TryAddSingleton<AuditInterceptor>();
+            builder.Services.TryAddSingleton<DomainEventDispatcherInterceptor<TContext>>();
 
             DddEfCoreOptionsBuilder optionsBuilder = new(builder.Services);
 
@@ -237,13 +230,17 @@ public static class DependencyInjection {
         /// <remarks>
         /// EF Core does not reliably auto-discover DI-registered interceptors for every registration mode
         /// (notably <c>AddDbContextFactory</c> and pooling), so this explicit hook guarantees the
-        /// interceptors run regardless of how the context is registered. It is non-generic and simply
-        /// forwards every registered <see cref="IInterceptor"/> to the options builder.
+        /// interceptors run regardless of how the context is registered. Only the interceptors belonging to
+        /// <typeparamref name="TContext"/> are attached (the shared audit interceptor and this context's
+        /// dispatcher), so contexts that do not opt in are never touched.
         /// </remarks>
+        /// <typeparam name="TContext">The concrete <see cref="DbContext"/> being configured.</typeparam>
         /// <param name="serviceProvider">The service provider supplied to the AddDbContext(Factory) delegate.</param>
         /// <returns>The options builder for chaining.</returns>
-        public DbContextOptionsBuilder UseDddInterceptors(IServiceProvider serviceProvider) {
-            return optionsBuilder.AddInterceptors(serviceProvider.GetServices<IInterceptor>());
+        public DbContextOptionsBuilder UseDddInterceptors<TContext>(IServiceProvider serviceProvider) where TContext : DbContext {
+            return optionsBuilder.AddInterceptors(
+                serviceProvider.GetRequiredService<AuditInterceptor>(),
+                serviceProvider.GetRequiredService<DomainEventDispatcherInterceptor<TContext>>());
         }
     }
 }
