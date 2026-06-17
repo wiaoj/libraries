@@ -30,7 +30,7 @@ internal sealed class DomainEventDispatcherInterceptor<TContext>(
     IOptions<OutboxOptions> options,
     OutboxInstanceInfo instanceInfo,
     TimeProvider timeProvider,
-    ILogger<DomainEventDispatcherInterceptor<TContext>> logger) : SaveChangesInterceptor where TContext : DbContext {
+    ILogger<DomainEventDispatcherInterceptor<TContext>> logger) : SaveChangesInterceptor, IDddInterceptor where TContext : DbContext {
 
     private readonly int _maxIterations = options.Value.MaxDomainEventDispatchAttempts;
 
