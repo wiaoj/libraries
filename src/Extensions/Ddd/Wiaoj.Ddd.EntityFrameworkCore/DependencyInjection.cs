@@ -38,14 +38,22 @@ public static class DependencyInjection {
             where TContext : DbContext {
             Preca.ThrowIfNull(configure);
 
-            builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);  
-            builder.Services.TryAddSingleton<OutboxChannel<TContext>>(); 
+            builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);
+            builder.Services.TryAddSingleton<OutboxChannel<TContext>>();
 
-            builder.Services.TryAddScoped<AuditInterceptor>();
-            builder.Services.TryAddScoped<ISaveChangesInterceptor>(sp => sp.GetRequiredService<AuditInterceptor>());
+            // Scoped holder seeded by the dispatcher interceptor so pre-commit handlers resolve the live context.
+            builder.Services.TryAddScoped<DddAmbientUnitOfWork>();
 
-            builder.Services.TryAddScoped<DomainEventDispatcherInterceptor<TContext>>();
-            builder.Services.TryAddScoped<ISaveChangesInterceptor>(sp => sp.GetRequiredService<DomainEventDispatcherInterceptor<TContext>>());
+            // Interceptors are stateless singletons registered as ISaveChangesInterceptor so EF Core
+            // auto-discovers them from the application service provider. This works identically for
+            // AddDbContext (scoped), AddDbContextPool (pooled), and AddDbContextFactory registrations,
+            // so callers no longer need to wire interceptors manually.
+            // TryAddEnumerable de-duplicates by implementation type: the context-agnostic AuditInterceptor
+            // is added once, while DomainEventDispatcherInterceptor<TContext> is added once per context type.
+            builder.Services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<ISaveChangesInterceptor, AuditInterceptor>());
+            builder.Services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<ISaveChangesInterceptor, DomainEventDispatcherInterceptor<TContext>>());
 
             DddEfCoreOptionsBuilder optionsBuilder = new(builder.Services);
 
@@ -77,9 +85,15 @@ public static class DependencyInjection {
         /// <param name="lifetime">The ServiceLifetime (Scoped, Transient, Singleton) to register the service with.</param>
         /// <returns>The IDddBuilder instance for chaining.</returns>
         public IDddBuilder AddUnitOfWork<TContext>(ServiceLifetime lifetime) where TContext : DbContext, IUnitOfWork {
+            builder.Services.TryAddScoped<DddAmbientUnitOfWork>();
+
+            // Prefer the ambient context (set by the dispatcher interceptor during pre-commit handling) so
+            // handlers join the active transaction even when TContext is not scope-registered (factory/pooled).
+            // Outside a dispatch scope the ambient is empty and we fall back to the registered DbContext.
             ServiceDescriptor descriptor = new(
                 typeof(IUnitOfWork),
-                provider => provider.GetRequiredService<TContext>(),
+                provider => provider.GetRequiredService<DddAmbientUnitOfWork>().Current
+                    ?? provider.GetRequiredService<TContext>(),
                 lifetime
             );
             builder.Services.Add(descriptor);
@@ -208,22 +222,6 @@ public static class DependencyInjection {
         /// <param name="lifetime">The ServiceLifetime to register the services with.</param>
         public IDddBuilder AddRepositoriesFromAssemblyContaining<TContext, TMarker>(ServiceLifetime lifetime) where TContext : DbContext {
             return AddRepositoriesFromAssemblies<TContext>(builder, lifetime, [typeof(TMarker).Assembly]);
-        }
-    }
-     
-    /// <param name="optionsBuilder">The DbContext options builder.</param>
-    extension(DbContextOptionsBuilder optionsBuilder) {
-        /// <summary>
-        /// Registers all necessary DDD interceptors (like AuditInterceptor and DomainEventDispatcherInterceptor)
-        /// from the service provider. This is the recommended way to add DDD capabilities to your DbContext.
-        /// This method is safe to use with Scoped interceptors when used with AddDbContext.
-        /// </summary>
-        /// <param name="serviceProvider">The scoped service provider, passed from the AddDbContext delegate.</param>
-        /// <returns>The options builder for chaining.</returns>
-        public DbContextOptionsBuilder UseDddInterceptors<TContext>(IServiceProvider serviceProvider) where TContext : DbContext {
-            return optionsBuilder.AddInterceptors(
-                serviceProvider.GetRequiredService<AuditInterceptor>(),
-                serviceProvider.GetRequiredService<DomainEventDispatcherInterceptor<TContext>>());
         }
     }
 }
