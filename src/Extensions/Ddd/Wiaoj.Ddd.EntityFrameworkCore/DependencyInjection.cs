@@ -226,4 +226,24 @@ public static class DependencyInjection {
             return AddRepositoriesFromAssemblies<TContext>(builder, lifetime, [typeof(TMarker).Assembly]);
         }
     }
+
+    /// <param name="optionsBuilder">The DbContext options builder.</param>
+    extension(DbContextOptionsBuilder optionsBuilder) {
+        /// <summary>
+        /// Attaches the DDD interceptors (audit + domain event dispatcher / outbox) that were registered
+        /// in DI by <c>AddEntityFrameworkCore</c>. Call this inside your <c>AddDbContext</c> or
+        /// <c>AddDbContextFactory</c> delegate, passing the delegate's service provider.
+        /// </summary>
+        /// <remarks>
+        /// EF Core does not reliably auto-discover DI-registered interceptors for every registration mode
+        /// (notably <c>AddDbContextFactory</c> and pooling), so this explicit hook guarantees the
+        /// interceptors run regardless of how the context is registered. It is non-generic and simply
+        /// forwards every registered <see cref="IInterceptor"/> to the options builder.
+        /// </remarks>
+        /// <param name="serviceProvider">The service provider supplied to the AddDbContext(Factory) delegate.</param>
+        /// <returns>The options builder for chaining.</returns>
+        public DbContextOptionsBuilder UseDddInterceptors(IServiceProvider serviceProvider) {
+            return optionsBuilder.AddInterceptors(serviceProvider.GetServices<IInterceptor>());
+        }
+    }
 }

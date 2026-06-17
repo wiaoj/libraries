@@ -140,12 +140,20 @@ public class MyDbContext : DbContext, IOutboxDbContext
         base.OnModelCreating(modelBuilder);
     }
 
-    // No interceptor wiring needed: the Audit and Domain Event Dispatcher
-    // interceptors are registered as singletons and auto-discovered by EF Core
-    // from the application service provider. This works the same whether you use
-    // AddDbContext, AddDbContextPool, or AddDbContextFactory.
 }
 ```
+
+> **Attach the interceptors when registering the DbContext.** EF Core does not
+> reliably auto-discover DI-registered interceptors for every mode (notably
+> `AddDbContextFactory` and pooling), so call `UseDddInterceptors(sp)` inside the
+> registration delegate. This works the same for `AddDbContext`,
+> `AddDbContextPool`, and `AddDbContextFactory`:
+>
+> ```csharp
+> services.AddDbContextFactory<MyDbContext>((sp, options) => options
+>     .UseNpgsql(connectionString)
+>     .UseDddInterceptors(sp)); // audit + domain event / outbox interceptors
+> ```
 
 ---
 
