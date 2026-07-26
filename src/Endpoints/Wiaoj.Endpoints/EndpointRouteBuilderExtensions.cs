@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 using System.Reflection;
 using Wiaoj.Endpoints;
 using Wiaoj.Endpoints.Internal;
@@ -20,11 +20,6 @@ public static class EndpointRouteBuilderExtensions {
     /// <typeparam name="TMarker">Any type in the target assembly.</typeparam>
     /// <param name="app">The endpoint route builder (e.g. <c>WebApplication</c>).</param>
     /// <returns>The same <see cref="IEndpointRouteBuilder"/> for chaining.</returns>
-    /// <example>
-    /// <code>
-    /// app.MapEndpoints&lt;Program&gt;();
-    /// </code>
-    /// </example>
     public static IEndpointRouteBuilder MapEndpoints<TMarker>(this IEndpointRouteBuilder app) {
         return app.MapEndpoints(typeof(TMarker).Assembly);
     }

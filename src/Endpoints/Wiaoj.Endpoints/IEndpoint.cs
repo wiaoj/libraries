@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 
 namespace Wiaoj.Endpoints; 
@@ -16,18 +16,6 @@ namespace Wiaoj.Endpoints;
 /// Without the attribute, the root <see cref="IEndpointRouteBuilder"/> is passed directly.
 /// </para>
 /// </summary>
-/// <example>
-/// <code>
-/// [RoutePrefix("/orders")]
-/// public sealed class OrderEndpoints : IEndpoint {
-///     public void Map(IEndpointRouteBuilder app) {
-///         app.MapGet("/",      GetAll);
-///         app.MapGet("/{id}", GetById);
-///         app.MapPost("/",    Create);
-///     }
-/// }
-/// </code>
-/// </example>
 public interface IEndpoint {
 
     /// <summary>

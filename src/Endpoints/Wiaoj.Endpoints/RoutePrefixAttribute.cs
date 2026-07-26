@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 
 namespace Wiaoj.Endpoints; 
 /// <summary>
@@ -14,19 +14,6 @@ namespace Wiaoj.Endpoints;
 /// is passed directly and the module is responsible for its own full route paths.
 /// </para>
 /// </summary>
-/// <example>
-/// <code>
-/// // GET /orders, GET /orders/{id}, POST /orders
-/// [RoutePrefix("/orders")]
-/// public sealed class OrderEndpoints : IEndpoint {
-///     public void Map(IEndpointRouteBuilder app) {
-///         app.MapGet("/",      GetAll);
-///         app.MapGet("/{id}", GetById);
-///         app.MapPost("/",    Create);
-///     }
-/// }
-/// </code>
-/// </example>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class RoutePrefixAttribute : Attribute {
 
