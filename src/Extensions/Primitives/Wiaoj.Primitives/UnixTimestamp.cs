@@ -1,4 +1,4 @@
-﻿using System.Buffers.Text;
+using System.Buffers.Text;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -181,6 +181,16 @@ public readonly record struct UnixTimestamp :
     // -------------------------------------------------------------------------
     // FLUENT ARITHMETIC
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Adds the specified <see cref="TimeSpan"/> to this instance.
+    /// </summary>
+    /// <param name="timeSpan">The time interval to add. Can be negative.</param>
+    /// <returns>A new <see cref="UnixTimestamp"/> representing the future or past instant.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UnixTimestamp Add(TimeSpan timeSpan) {
+        return this + timeSpan;
+    }
 
     /// <summary>
     /// Adds the specified number of milliseconds to this instance.
