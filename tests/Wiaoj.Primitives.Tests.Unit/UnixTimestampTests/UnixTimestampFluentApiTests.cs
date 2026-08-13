@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Primitives.Tests.Unit.UnixTimestampTests;
+namespace Wiaoj.Primitives.Tests.Unit.UnixTimestampTests;
 
 public sealed class UnixTimestampFluentApiTests {
     [Fact]
@@ -32,6 +32,13 @@ public sealed class UnixTimestampFluentApiTests {
         UnixTimestamp ts = UnixTimestamp.FromMilliseconds(0);
         Assert.Equal(86400000, ts.AddDays(1).TotalMilliseconds);
         Assert.Equal(129600000, ts.AddDays(1.5).TotalMilliseconds);
+    }
+
+    [Fact]
+    public void Add_TimeSpan_ShouldWork() {
+        UnixTimestamp ts = UnixTimestamp.FromMilliseconds(1000);
+        Assert.Equal(3000, ts.Add(TimeSpan.FromSeconds(2)).TotalMilliseconds);
+        Assert.Equal(500, ts.Add(TimeSpan.FromMilliseconds(-500)).TotalMilliseconds);
     }
 
     [Fact]
