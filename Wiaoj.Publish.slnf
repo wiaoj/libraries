@@ -4,6 +4,9 @@
     "projects": [
       "src\\BloomFilter\\Wiaoj.BloomFilter\\Wiaoj.BloomFilter.csproj",
       "src\\BloomFilter\\Wiaoj.BloomFilter.Abstractions\\Wiaoj.BloomFilter.Abstractions.csproj",
+      "src\\DistributedCounter\\Wiaoj.DistributedCounter\\Wiaoj.DistributedCounter.csproj",
+      "src\\DistributedCounter\\Wiaoj.DistributedCounter.Abstractions\\Wiaoj.DistributedCounter.Abstractions.csproj",
+      "src\\DistributedCounter\\Wiaoj.DistributedCounter.Redis\\Wiaoj.DistributedCounter.Redis.csproj",
       "src\\Extensions\\Abstractions\\Wiaoj.Abstractions\\Wiaoj.Abstractions.csproj",
       "src\\Extensions\\Ddd\\Wiaoj.Ddd\\Wiaoj.Ddd.csproj",
       "src\\Extensions\\Ddd\\Wiaoj.Ddd.Tyto\\Wiaoj.Ddd.Tyto.csproj",
