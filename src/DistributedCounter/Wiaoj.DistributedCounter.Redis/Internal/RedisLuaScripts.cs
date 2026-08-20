@@ -1,4 +1,5 @@
 ﻿namespace Wiaoj.DistributedCounter.Redis.Internal;
+
 internal static class RedisLuaScripts { 
     public const string IncrementWithExpire = @"
         local current = redis.call('INCRBY', KEYS[1], ARGV[1])
@@ -26,7 +27,7 @@ internal static class RedisLuaScripts {
 
         if new_val <= limit then
             redis.call('INCRBY', KEYS[1], ARGV[1])
-            if ARGV[3] and ARGV[3] ~= '0' then
+            if current == 0 and ARGV[3] and ARGV[3] ~= '0' then
                 redis.call('PEXPIRE', KEYS[1], ARGV[3])
             end
             return new_val
@@ -43,7 +44,7 @@ internal static class RedisLuaScripts {
 
         if new_val >= min_limit then
             redis.call('DECRBY', KEYS[1], ARGV[1])
-            if ARGV[3] and ARGV[3] ~= '0' then
+            if current == 0 and ARGV[3] and ARGV[3] ~= '0' then
                 redis.call('PEXPIRE', KEYS[1], ARGV[3])
             end
             return new_val
