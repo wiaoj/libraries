@@ -1,6 +1,7 @@
-using System.Text;
-using Wiaoj.Primitives;
 using System.Security.Cryptography;
+using System.Text;
+using Wiaoj.Preconditions;
+using Wiaoj.Primitives;
 
 namespace Wiaoj.Security.Testing;
 
@@ -10,6 +11,7 @@ namespace Wiaoj.Security.Testing;
 /// </summary>
 /// <typeparam name="TContext">The secret context.</typeparam>
 public sealed class FakeSecretProtector<TContext> : ISecretProtector<TContext> where TContext : ISecretContext {
+    private const int DummyHeaderLength = 28; // 12 Nonce + 16 Tag = 28 bytes to satisfy CipherBlob validation
 
     /// <summary>
     /// If set to true, any Protect/Unprotect call will throw a <see cref="CryptographicException"/>.
@@ -24,50 +26,60 @@ public sealed class FakeSecretProtector<TContext> : ISecretProtector<TContext> w
     public int ActiveVersion { get; set; } = 1;
 
     /// <summary>Fixed key version used for all "protections" in this fake.</summary>
-    public KeyVersion CurrentKeyVersion => KeyVersion.Of(ActiveVersion);
+    public KeyVersion CurrentKeyVersion => KeyVersion.Of(this.ActiveVersion);
 
     /// <summary>
-    /// Simply Base64-encodes the plaintext. No real encryption occurs.
+    /// Simply encodes the plaintext with a dummy AES-GCM header. No real encryption occurs.
     /// </summary>
     public EncryptedSecret<TContext> Protect(string plaintext) {
-        ArgumentNullException.ThrowIfNull(plaintext);
-        if (ShouldFail) throw new CryptographicException("Fake failure triggered.");
+        Preca.ThrowIfNull(plaintext);
+        if(this.ShouldFail) throw new CryptographicException("Fake failure triggered.");
 
-        CipherBlob blob = CipherBlob.From(Base64UrlString.FromBytes(Encoding.UTF8.GetBytes(plaintext)));
-        return EncryptedSecret<TContext>.Create(blob, keyVersion: this.CurrentKeyVersion);
+        byte[] plainBytes = Encoding.UTF8.GetBytes(plaintext);
+        return Protect(plainBytes.AsSpan());
     }
 
     /// <summary>
-    /// Simply Base64-encodes the plaintext. No real encryption occurs.
+    /// Simply encodes the plaintext bytes with a dummy AES-GCM header. No real encryption occurs.
     /// </summary>
     public EncryptedSecret<TContext> Protect(ReadOnlySpan<byte> plaintextBytes) {
-        if(plaintextBytes.IsEmpty)
-            throw new ArgumentException("Plaintext bytes cannot be empty.", nameof(plaintextBytes));
-        
-        if (ShouldFail) throw new CryptographicException("Fake failure triggered.");
+        Preca.ThrowIfEmpty(plaintextBytes);
+        if(this.ShouldFail) throw new CryptographicException("Fake failure triggered.");
 
-        CipherBlob blob = CipherBlob.From(Base64UrlString.FromBytes(plaintextBytes));
+        // 28 byte sahte header + plaintext ekleyerek CipherBlob'un 38 karakter sınırını geçmesini sağlıyoruz:
+        byte[] fakePacket = new byte[DummyHeaderLength + plaintextBytes.Length];
+        plaintextBytes.CopyTo(fakePacket.AsSpan(DummyHeaderLength));
+
+        CipherBlob blob = CipherBlob.From(Base64UrlString.FromBytes(fakePacket));
         return EncryptedSecret<TContext>.Create(blob, keyVersion: this.CurrentKeyVersion);
     }
 
     /// <summary>
-    /// Decodes the Base64 "ciphertext" back to plaintext.
+    /// Decodes the fake ciphertext back to plaintext by stripping the dummy header.
     /// </summary>
     public Secret<byte> Unprotect(in EncryptedSecret<TContext> encrypted) {
-        if (ShouldFail) throw new CryptographicException("Fake failure triggered.");
+        if(this.ShouldFail) throw new CryptographicException("Fake failure triggered.");
 
-        // We assume the blob was created by this fake (Base64Url of plaintext)
-        Base64UrlString raw = Base64UrlString.Parse(encrypted.Blob.RawBase64);
-        return Secret.From(raw.ToBytes());
+        byte[] fakePacket = Base64UrlString.Parse(encrypted.Blob.RawBase64Url).ToBytes();
+        try {
+            // Başındaki 28 byte sahte header'ı atıp orijinal plaintext'i çıkarıyoruz:
+            ReadOnlySpan<byte> plainSpan = fakePacket.AsSpan(DummyHeaderLength);
+            return Secret.From(plainSpan);
+        }
+        finally {
+            CryptographicOperations.ZeroMemory(fakePacket);
+        }
     }
 
     /// <summary>Returns true when the encrypted data's version is older than the current <see cref="ActiveVersion"/>.</summary>
-    public bool NeedsRotation(in EncryptedSecret<TContext> encrypted) => encrypted.KeyVersion.Value < ActiveVersion;
+    public bool NeedsRotation(in EncryptedSecret<TContext> encrypted) {
+        return encrypted.KeyVersion.Value < this.ActiveVersion;
+    }
 
     /// <summary>Re-protects the data using the current <see cref="ActiveVersion"/>.</summary>
     public EncryptedSecret<TContext> Rotate(in EncryptedSecret<TContext> encrypted) {
-        if (!NeedsRotation(encrypted)) return encrypted;
-        
+        if(!NeedsRotation(encrypted)) return encrypted;
+
         using Secret<byte> plain = Unprotect(encrypted);
         return plain.Expose(Protect);
     }

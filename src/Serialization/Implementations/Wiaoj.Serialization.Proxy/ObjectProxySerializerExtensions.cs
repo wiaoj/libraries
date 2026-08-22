@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Preconditions;
 using Wiaoj.Serialization.Proxy;
@@ -9,13 +9,13 @@ namespace Wiaoj.Serialization.DependencyInjection;
 public static class ObjectProxySerializerExtensions {
     #region UseProxy (Keyed & Keyless)
 
-    public static ISerializerConfigurator<KeylessRegistration> UseProxy(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<KeylessRegistration> UseProxy(this ISerializationBuilder builder,
         Action<ObjectProxyRegistry>? configure = null) {
         return builder.UseProxy<KeylessRegistration>(configure);
     }
 
     public static ISerializerConfigurator<TKey> UseProxy<TKey>(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<ObjectProxyRegistry>? configure = null)
         where TKey : ISerializerKey {
 
@@ -41,13 +41,13 @@ public static class ObjectProxySerializerExtensions {
     #region TryUseProxy
 
     public static ISerializerConfigurator<KeylessRegistration> TryUseProxy(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<ObjectProxyRegistry>? configure = null) {
         return builder.TryUseProxy<KeylessRegistration>(configure);
     }
 
     public static ISerializerConfigurator<TKey> TryUseProxy<TKey>(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<ObjectProxyRegistry>? configure = null)
         where TKey : ISerializerKey {
 

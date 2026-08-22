@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IO;
 using System.IO.Compression;
@@ -8,8 +8,9 @@ using Wiaoj.Serialization.Compression.Abstractions;
 using Wiaoj.Serialization.Compression.Compressors;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Wiaoj.Serialization.DependencyInjection;
+namespace Wiaoj.Serialization;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
+
 /// <summary>
 /// Provides extension methods to add compression capabilities to a serializer configuration.
 /// </summary> 

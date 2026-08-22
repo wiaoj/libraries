@@ -1,7 +1,9 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -24,10 +26,15 @@ namespace Wiaoj.Primitives;
 [JsonConverter(typeof(OpaqueIdJsonConverter))]
 public readonly struct OpaqueId :
     IEquatable<OpaqueId>,
+    IComparable<OpaqueId>,
+    IComparable,
+    IParsable<OpaqueId>,
     ISpanParsable<OpaqueId>,
-    ISpanFormattable,
     IUtf8SpanParsable<OpaqueId>,
-    IUtf8SpanFormattable {
+    ISpanFormattable,
+    IUtf8SpanFormattable,
+    IFormattable,
+    IComparisonOperators<OpaqueId, OpaqueId, bool> {
     private static readonly Lock _configLock = new();
 
     private static IObfuscator Obfuscator {
@@ -110,12 +117,24 @@ public readonly struct OpaqueId :
 
     /// <summary>Parses a <see cref="string"/> into an <see cref="OpaqueId"/>.</summary>
     public static OpaqueId Parse(string s) {
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 
     /// <summary>Parses a <see cref="ReadOnlySpan{Char}"/> into an <see cref="OpaqueId"/>.</summary>
     public static OpaqueId Parse(ReadOnlySpan<char> s) {
         return TryParse(s, out OpaqueId r) ? r : throw new FormatException("Invalid OpaqueId format.");
+    }
+
+    /// <summary>Parses a UTF-8 encoded byte span into an <see cref="OpaqueId"/>.</summary>
+    public static OpaqueId Parse(ReadOnlySpan<byte> utf8Text) {
+        return TryParse(utf8Text, out OpaqueId r) ? r : throw new FormatException("Invalid OpaqueId UTF-8 format.");
+    }
+
+    /// <summary>Tries to parse a string into an <see cref="OpaqueId"/>.</summary>
+    public static bool TryParse([NotNullWhen(true)] string? s, out OpaqueId result) {
+        if(s is null) { result = default; return false; }
+        return TryParse(s.AsSpan(), out result);
     }
 
     /// <summary>Tries to parse a <see cref="ReadOnlySpan{Char}"/> into an <see cref="OpaqueId"/>.</summary>
@@ -128,11 +147,6 @@ public readonly struct OpaqueId :
             return true;
         }
         result = default; return false;
-    }
-
-    /// <summary>Parses a UTF-8 encoded byte span into an <see cref="OpaqueId"/>.</summary>
-    public static OpaqueId Parse(ReadOnlySpan<byte> utf8Text) {
-        return TryParse(utf8Text, out OpaqueId r) ? r : throw new FormatException("Invalid OpaqueId UTF-8 format.");
     }
 
     /// <summary>Tries to parse a UTF-8 encoded byte span into an <see cref="OpaqueId"/>.</summary>
@@ -149,47 +163,26 @@ public readonly struct OpaqueId :
 
     #endregion
 
-    /// <summary>
-    /// Writes the 128-bit internal value to the destination span in little-endian format.
-    /// </summary>
-    /// <param name="destination">The destination span of bytes.</param>
-    /// <returns><see langword="true"/> if the bytes were written; otherwise <see langword="false"/>.</returns>
-    public bool TryWriteBytes(Span<byte> destination) {
-        return MemoryMarshal.TryWrite(destination, in this._innerValue);
-    }
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
 
-    /// <summary>
-    /// Creates an <see cref="OpaqueId"/> from a byte span (little-endian).
-    /// </summary>
-    /// <param name="source">The source span of bytes.</param>
-    /// <param name="result">The resulting <see cref="OpaqueId"/>.</param>
-    /// <returns><see langword="true"/> if successful.</returns>
-    public static bool TryReadBytes(ReadOnlySpan<byte> source, out OpaqueId result) {
-        if(source.Length < 16) {
-            result = default;
-            return false;
-        }
-        result = new OpaqueId(MemoryMarshal.Read<Int128>(source));
-        return true;
-    }
+    static OpaqueId IParsable<OpaqueId>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<OpaqueId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out OpaqueId result) => TryParse(s, out result);
+    static OpaqueId ISpanParsable<OpaqueId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<OpaqueId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out OpaqueId result) => TryParse(s, out result);
+    static OpaqueId IUtf8SpanParsable<OpaqueId>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<OpaqueId>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out OpaqueId result) => TryParse(utf8Text, out result);
 
-    /// <summary>
-    /// Writes the ID to an <see cref="System.Buffers.IBufferWriter{T}"/> as raw bytes.
-    /// </summary>
-    public void WriteTo(IBufferWriter<byte> writer) {
-        Span<byte> span = writer.GetSpan(16);
-        MemoryMarshal.TryWrite(span, in this._innerValue);
-        writer.Advance(16);
-    }
+    #endregion
 
     #region Formatting
 
     /// <summary>Returns the obfuscated string representation of this <see cref="OpaqueId"/>.</summary>
-    public override string ToString() {
-        return ToString(null, null);
-    }
+    public override string ToString() => ToString(null, null);
 
     /// <summary>Returns the obfuscated string representation using the provided format.</summary>
+    public string ToString(string? format) => ToString(format, null);
+
+    /// <summary>Returns the obfuscated string representation using the provided format and provider.</summary>
     public string ToString(string? format, IFormatProvider? formatProvider) {
         if(this._innerValue == 0) return "0";
         Span<char> buffer = stackalloc char[32];
@@ -197,6 +190,12 @@ public readonly struct OpaqueId :
     }
 
     /// <summary>Tries to format this <see cref="OpaqueId"/> into the provided destination span.</summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+
+    /// <summary>Tries to format this <see cref="OpaqueId"/> into the provided destination span using the specified format.</summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+
+    /// <summary>Tries to format this <see cref="OpaqueId"/> into the provided destination span using the specified format and provider.</summary>
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         if(this._innerValue == 0) {
             if(destination.Length < 1) { charsWritten = 0; return false; }
@@ -205,108 +204,117 @@ public readonly struct OpaqueId :
         return Obfuscator.TryEncode(this._innerValue, destination, out charsWritten);
     }
 
+    /// <summary>Tries to format this <see cref="OpaqueId"/> into the provided destination UTF-8 byte span.</summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+
+    /// <summary>Tries to format this <see cref="OpaqueId"/> into the provided destination UTF-8 byte span using the specified format.</summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+
+    /// <summary>Tries to format this <see cref="OpaqueId"/> into the provided destination UTF-8 byte span using the specified format and provider.</summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        Span<char> charBuffer = stackalloc char[32];
+        if(!TryFormat(charBuffer, out int charsWritten, format, provider)) {
+            bytesWritten = 0; return false;
+        }
+        return Encoding.UTF8.TryGetBytes(charBuffer[..charsWritten], utf8Destination, out bytesWritten);
+    }
+
     #endregion
 
-    #region Operators & Equality
+    #region Operators, Comparison & Equality
 
     /// <summary>Implicitly converts a <see cref="SnowflakeId"/> to an <see cref="OpaqueId"/>.</summary>
-    public static implicit operator OpaqueId(SnowflakeId id) {
-        return new(id);
-    }
+    public static implicit operator OpaqueId(SnowflakeId id) => new(id);
 
     /// <summary>Implicitly converts a <see cref="Guid"/> to an <see cref="OpaqueId"/>.</summary>
-    public static implicit operator OpaqueId(Guid guid) {
-        return new(guid);
-    }
+    public static implicit operator OpaqueId(Guid guid) => new(guid);
 
     /// <summary>Implicitly converts a <see cref="long"/> to an <see cref="OpaqueId"/>.</summary>
-    public static implicit operator OpaqueId(long id) {
-        return new(id);
-    }
+    public static implicit operator OpaqueId(long id) => new(id);
 
     /// <summary>Explicitly converts an <see cref="OpaqueId"/> to a <see cref="SnowflakeId"/>.</summary>
-    public static explicit operator SnowflakeId(OpaqueId pid) {
-        return pid.AsSnowflake();
-    }
+    public static explicit operator SnowflakeId(OpaqueId pid) => pid.AsSnowflake();
 
     /// <summary>Explicitly converts an <see cref="OpaqueId"/> to a <see cref="Guid"/>.</summary>
-    public static explicit operator Guid(OpaqueId pid) {
-        return pid.AsGuid();
-    }
+    public static explicit operator Guid(OpaqueId pid) => pid.AsGuid();
 
     /// <summary>Explicitly converts an <see cref="OpaqueId"/> to a <see cref="long"/>.</summary>
-    public static explicit operator long(OpaqueId pid) {
-        return (long)(ulong)pid._innerValue;
-    }
+    public static explicit operator long(OpaqueId pid) => (long)(ulong)pid._innerValue;
 
     /// <summary>Explicitly converts an <see cref="OpaqueId"/> to an <see cref="Int128"/>.</summary>
-    public static explicit operator Int128(OpaqueId pid) {
-        return pid._innerValue;
-    }
+    public static explicit operator Int128(OpaqueId pid) => pid._innerValue;
 
     /// <summary>
     /// Indicates whether the current <see cref="OpaqueId"/> is equal to another <see cref="OpaqueId"/>.
     /// </summary>
-    /// <param name="other">The <see cref="OpaqueId"/> to compare with this instance.</param>
-    /// <returns><see langword="true"/> if the current object is equal to the other parameter; otherwise, <see langword="false"/>.</returns>
-    public bool Equals(OpaqueId other) {
-        return this._innerValue == other._innerValue;
-    }
+    public bool Equals(OpaqueId other) => this._innerValue == other._innerValue;
 
     /// <inheritdoc cref="Equals(OpaqueId)"/>
-    public override bool Equals(object? obj) {
-        return obj is OpaqueId other && Equals(other);
-    }
+    public override bool Equals(object? obj) => obj is OpaqueId other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        return this._innerValue.GetHashCode();
+    public override int GetHashCode() => this._innerValue.GetHashCode();
+
+    /// <inheritdoc/>
+    public int CompareTo(OpaqueId other) => this._innerValue.CompareTo(other._innerValue);
+
+    /// <inheritdoc/>
+    public int CompareTo(object? obj) {
+        if(obj is null) return 1;
+        if(obj is OpaqueId other) return CompareTo(other);
+        throw new ArgumentException($"Object must be of type {nameof(OpaqueId)}.", nameof(obj));
     }
 
-    /// <inheritdoc cref="Equals(OpaqueId)"/>
-    public static bool operator ==(OpaqueId left, OpaqueId right) {
-        return left.Equals(right);
-    }
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
+    public static bool operator >(OpaqueId left, OpaqueId right) => left.CompareTo(right) > 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
+    public static bool operator <(OpaqueId left, OpaqueId right) => left.CompareTo(right) < 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
+    public static bool operator >=(OpaqueId left, OpaqueId right) => left.CompareTo(right) >= 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
+    public static bool operator <=(OpaqueId left, OpaqueId right) => left.CompareTo(right) <= 0;
 
     /// <inheritdoc cref="Equals(OpaqueId)"/>
-    public static bool operator !=(OpaqueId left, OpaqueId right) {
-        return !left.Equals(right);
-    }
+    public static bool operator ==(OpaqueId left, OpaqueId right) => left.Equals(right);
+
+    /// <inheritdoc cref="Equals(OpaqueId)"/>
+    public static bool operator !=(OpaqueId left, OpaqueId right) => !left.Equals(right);
 
     #endregion
 
-    #region Interface Implementations
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
 
-    static OpaqueId IParsable<OpaqueId>.Parse(string s, IFormatProvider? p) {
-        return Parse(s);
-    }
+    /// <summary>
+    /// Gets an equality comparer that performs equality comparisons on <see cref="OpaqueId"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<OpaqueId> OrdinalComparer => OpaqueIdOrdinalComparer.Instance;
 
-    static bool IParsable<OpaqueId>.TryParse(string? s, IFormatProvider? p, out OpaqueId r) {
-        return TryParse(s.AsSpan(), out r);
-    }
+    private sealed class OpaqueIdOrdinalComparer : IEqualityComparer<OpaqueId>, IAlternateEqualityComparer<ReadOnlySpan<char>, OpaqueId> {
+        public static OpaqueIdOrdinalComparer Instance { get; } = new();
 
-    static OpaqueId ISpanParsable<OpaqueId>.Parse(ReadOnlySpan<char> s, IFormatProvider? p) {
-        return Parse(s);
-    }
+        public bool Equals(OpaqueId x, OpaqueId y) => x._innerValue == y._innerValue;
 
-    static bool ISpanParsable<OpaqueId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? p, out OpaqueId r) {
-        return TryParse(s, out r);
-    }
+        public int GetHashCode(OpaqueId obj) => obj._innerValue.GetHashCode();
 
-    static OpaqueId IUtf8SpanParsable<OpaqueId>.Parse(ReadOnlySpan<byte> b, IFormatProvider? p) {
-        return Parse(b);
-    }
-
-    static bool IUtf8SpanParsable<OpaqueId>.TryParse(ReadOnlySpan<byte> b, IFormatProvider? p, out OpaqueId r) {
-        return TryParse(b, out r);
-    }
-
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> dest, out int written, ReadOnlySpan<char> format, IFormatProvider? p) {
-        Span<char> charBuffer = stackalloc char[32];
-        if(!TryFormat(charBuffer, out int charsWritten, format, p)) {
-            written = 0; return false;
+        public bool Equals(ReadOnlySpan<char> alternate, OpaqueId other) {
+            if(OpaqueId.TryParse(alternate, out OpaqueId parsed)) {
+                return parsed._innerValue == other._innerValue;
+            }
+            return false;
         }
-        return Encoding.UTF8.TryGetBytes(charBuffer[..charsWritten], dest, out written);
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(OpaqueId.TryParse(alternate, out OpaqueId parsed)) {
+                return parsed._innerValue.GetHashCode();
+            }
+            return 0;
+        }
+
+        public OpaqueId Create(ReadOnlySpan<char> alternate) => OpaqueId.Parse(alternate);
     }
 
     #endregion

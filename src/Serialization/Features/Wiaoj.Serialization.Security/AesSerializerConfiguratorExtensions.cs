@@ -1,16 +1,21 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IO;
 using System.Runtime.Versioning;
 using Wiaoj.Extensions.DependencyInjection;
 using Wiaoj.Primitives;
-using Wiaoj.Serialization.DependencyInjection;
+using Wiaoj.Serialization.Security;
 using Wiaoj.Serialization.Security.Abstractions;
 using Wiaoj.Serialization.Security.Extensions;
 
-namespace Wiaoj.Serialization.Security;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Serialization;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 
+/// <summary>
+/// Provides extension methods to add authenticated encryption capabilities to a serializer configuration.
+/// </summary>
 public static class EncryptionSerializerExtensions {
     private static ISerializerConfigurator<TKey> AddAuthenticatedEncryption<TKey>(
         this ISerializerConfigurator<TKey> configurator,

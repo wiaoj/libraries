@@ -12,6 +12,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Extensions\Wiaoj.Threading\Wiaoj.Concurrency.csproj" />
+    <ProjectReference Include="..\..\src\Extensions\Concurrency\Wiaoj.Concurrency\Wiaoj.Concurrency.csproj" />
   </ItemGroup>
 </Project>

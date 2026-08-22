@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Wiaoj.Webhooks.DistributedCounter</RootNamespace>
+    <AssemblyName>Wiaoj.Webhooks.DistributedCounter</AssemblyName>
+    <PackageId>Wiaoj.Webhooks.DistributedCounter</PackageId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\DistributedCounter\Wiaoj.DistributedCounter.Abstractions\Wiaoj.DistributedCounter.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+    <ProjectReference Include="..\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
+    <ProjectReference Include="..\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+  </ItemGroup>
+
+</Project>

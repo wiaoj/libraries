@@ -6,13 +6,13 @@ namespace Wiaoj.Serialization.DependencyInjection;
 #pragma warning restore IDE0130
 
 public static class MemorySerializerExtensions {
-    public static ISerializerConfigurator<TKey> UseMemorySerializer<TKey>(this IWiaojSerializationBuilder builder)
+    public static ISerializerConfigurator<TKey> UseMemorySerializer<TKey>(this ISerializationBuilder builder)
         where TKey : ISerializerKey {
         return builder.AddSerializer(sp => new MemorySerializer<TKey>());
     }
 
     // Sadece unmanaged tipler için özelleşmiş kayıt metodu
-    public static ISerializerConfigurator<TKey> UseMemorySerializer<TKey, TMessage>(this IWiaojSerializationBuilder builder)
+    public static ISerializerConfigurator<TKey> UseMemorySerializer<TKey, TMessage>(this ISerializationBuilder builder)
         where TKey : ISerializerKey
         where TMessage : unmanaged {
         // Boot-time kontrolü: Uygulama ayağa kalkarken burada patlar, kullanıcı hatasını anlar

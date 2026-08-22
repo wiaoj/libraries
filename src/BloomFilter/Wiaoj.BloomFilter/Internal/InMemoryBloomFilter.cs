@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Logging;
 using System.Buffers;
-using System.IO.Hashing;
 using System.Runtime.Intrinsics;
 using System.Text;
 using Wiaoj.BloomFilter.Diagnostics;
-using Wiaoj.BloomFilter.Extensions;
 using Wiaoj.Concurrency;
 using Wiaoj.ObjectPool;
 using Wiaoj.Primitives;
@@ -68,7 +66,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
         this._memoryLock.EnterReadLock();
         try {
 
-            BloomHasher.ComputeBaseHashes(item, Configuration.HashSeed, out ulong h1, out ulong h2);
+            BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
             bool atLeastOneSet = false;
             long size = this.Configuration.SizeInBits;
@@ -116,9 +114,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
         this._memoryLock.EnterReadLock();
         try {
-            ulong hash64 = XxHash3.HashToUInt64(item);
-            ulong h1 = hash64;
-            ulong h2 = (hash64 >> 32) | (hash64 << 32);
+            BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
             long size = this.Configuration.SizeInBits;
             int k = this.Configuration.HashFunctionCount;

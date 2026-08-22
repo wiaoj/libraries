@@ -1,18 +1,18 @@
-﻿using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
 using System.Reflection;
-using Wiaoj.Ddd;
 using Wiaoj.Ddd.EntityFrameworkCore;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
 using Wiaoj.Preconditions;
 
-#pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Microsoft.EntityFrameworkCore;
-#pragma warning restore IDE0130 // Namespace does not match folder structure
-public static class DependencyInjection {
+namespace Wiaoj.Ddd;
+
+/// <summary>
+/// EF Core extension methods for <see cref="IDddBuilder"/>.
+/// </summary>
+public static class DddEfCoreBuilderExtensions {
     /// <param name="builder">The DDD builder.</param>
     extension(IDddBuilder builder) {
         /// <summary>
@@ -217,30 +217,6 @@ public static class DependencyInjection {
         /// <param name="lifetime">The ServiceLifetime to register the services with.</param>
         public IDddBuilder AddRepositoriesFromAssemblyContaining<TContext, TMarker>(ServiceLifetime lifetime) where TContext : DbContext {
             return AddRepositoriesFromAssemblies<TContext>(builder, lifetime, [typeof(TMarker).Assembly]);
-        }
-    }
-
-    /// <param name="optionsBuilder">The DbContext options builder.</param>
-    extension(DbContextOptionsBuilder optionsBuilder) {
-        /// <summary>
-        /// Attaches the DDD interceptors (audit + domain event dispatcher / outbox) that were registered
-        /// in DI by <c>AddEntityFrameworkCore</c>. Call this inside your <c>AddDbContext</c> or
-        /// <c>AddDbContextFactory</c> delegate, passing the delegate's service provider.
-        /// </summary>
-        /// <remarks>
-        /// EF Core does not reliably auto-discover DI-registered interceptors for every registration mode
-        /// (notably <c>AddDbContextFactory</c> and pooling), so this explicit hook guarantees the
-        /// interceptors run regardless of how the context is registered. Only the interceptors belonging to
-        /// <typeparamref name="TContext"/> are attached (the shared audit interceptor and this context's
-        /// dispatcher), so contexts that do not opt in are never touched.
-        /// </remarks>
-        /// <typeparam name="TContext">The concrete <see cref="DbContext"/> being configured.</typeparam>
-        /// <param name="serviceProvider">The service provider supplied to the AddDbContext(Factory) delegate.</param>
-        /// <returns>The options builder for chaining.</returns>
-        public DbContextOptionsBuilder UseDddInterceptors<TContext>(IServiceProvider serviceProvider) where TContext : DbContext {
-            return optionsBuilder.AddInterceptors(
-                serviceProvider.GetRequiredService<AuditInterceptor>(),
-                serviceProvider.GetRequiredService<DomainEventDispatcherInterceptor<TContext>>());
         }
     }
 }

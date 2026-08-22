@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -21,5 +21,19 @@ public sealed class CronExpressionJsonConverter : JsonConverter<CronExpression> 
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, CronExpression value, JsonSerializerOptions options) {
         writer.WriteStringValue(value.Value);
+    }
+
+    /// <inheritdoc/>
+    public override CronExpression ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        string? propName = reader.GetString();
+        if(propName is not null && CronExpression.TryParse(propName, out CronExpression result)) {
+            return result;
+        }
+        throw new JsonException($"Invalid property name format for CronExpression: '{propName}'.");
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, CronExpression value, JsonSerializerOptions options) {
+        writer.WritePropertyName(value.Value);
     }
 }

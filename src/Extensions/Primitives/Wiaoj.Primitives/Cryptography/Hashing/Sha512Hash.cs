@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -16,11 +17,23 @@ namespace Wiaoj.Primitives.Cryptography.Hashing;
 [StructLayout(LayoutKind.Sequential)]
 [JsonConverter(typeof(JsonConverters.Sha512HashJsonConverter))]
 public unsafe struct Sha512Hash
-    : IEquatable<Sha512Hash>,
+    : IFixedBinaryValue<Sha512Hash>,
+    IEquatable<Sha512Hash>,
+    IComparable<Sha512Hash>,
+    IComparable,
+    IParsable<Sha512Hash>,
+    ISpanParsable<Sha512Hash>,
+    IUtf8SpanParsable<Sha512Hash>,
     ISpanFormattable,
     IUtf8SpanFormattable,
-    IEqualityOperators<Sha512Hash, Sha512Hash, bool> {
+    IFormattable,
+    IEqualityOperators<Sha512Hash, Sha512Hash, bool>,
+    IComparisonOperators<Sha512Hash, Sha512Hash, bool> {
     internal const int HashSizeInBytes = 64;
+
+    /// <inheritdoc/>
+    public static int SizeInBytes => HashSizeInBytes;
+
     private fixed byte _bytes[HashSizeInBytes];
 
     internal Sha512Hash(ReadOnlySpan<byte> source) {
@@ -112,8 +125,8 @@ public unsafe struct Sha512Hash
     /// Parses a hexadecimal string into a Sha512Hash.
     /// </summary>
     public static Sha512Hash Parse(string s) {
-        Preca.ThrowIfNull(s);
-        if(!TryParse(s, out Sha512Hash result)) {
+        ArgumentNullException.ThrowIfNull(s);
+        if(!TryParse(s.AsSpan(), out Sha512Hash result)) {
             throw new FormatException($"Input string must represent exactly {HashSizeInBytes} bytes (128 hex characters).");
         }
         return result;
@@ -130,14 +143,21 @@ public unsafe struct Sha512Hash
     }
 
     /// <summary>
+    /// Parses a UTF-8 encoded hexadecimal byte span into a <see cref="Sha512Hash"/>.
+    /// </summary>
+    public static Sha512Hash Parse(ReadOnlySpan<byte> utf8Text) {
+        if(!TryParse(utf8Text, out Sha512Hash result)) {
+            throw new FormatException("Invalid UTF-8 hexadecimal sequence for Sha512Hash.");
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Tries to parse a hexadecimal string into a Sha512Hash.
     /// </summary>
-    public static bool TryParse(string? s, out Sha512Hash result) {
-        if(HexString.TryParse(s, out HexString hex)) {
-            return TryParse(hex, out result);
-        }
-        result = default;
-        return false;
+    public static bool TryParse([NotNullWhen(true)] string? s, out Sha512Hash result) {
+        if(s is null) { result = default; return false; }
+        return TryParse(s.AsSpan(), out result);
     }
 
     /// <summary>
@@ -146,6 +166,20 @@ public unsafe struct Sha512Hash
     public static bool TryParse(ReadOnlySpan<char> s, out Sha512Hash result) {
         if(HexString.TryParse(s, out HexString hex)) {
             return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to parse a UTF-8 encoded byte span into a <see cref="Sha512Hash"/>.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out Sha512Hash result) {
+        if(utf8Text.Length == HashSizeInBytes * 2) {
+            Span<char> chars = stackalloc char[HashSizeInBytes * 2];
+            if(Encoding.UTF8.GetChars(utf8Text, chars) == HashSizeInBytes * 2) {
+                return TryParse(chars, out result);
+            }
         }
         result = default;
         return false;
@@ -164,6 +198,34 @@ public unsafe struct Sha512Hash
         hex.TryDecode(buffer, out _);
         result = new Sha512Hash(buffer);
         return true;
+    }
+
+    #endregion
+
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static Sha512Hash IParsable<Sha512Hash>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<Sha512Hash>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Sha512Hash result) {
+        return TryParse(s, out result);
+    }
+
+    static Sha512Hash ISpanParsable<Sha512Hash>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<Sha512Hash>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Sha512Hash result) {
+        return TryParse(s, out result);
+    }
+
+    static Sha512Hash IUtf8SpanParsable<Sha512Hash>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<Sha512Hash>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Sha512Hash result) {
+        return TryParse(utf8Text, out result);
     }
 
     #endregion
@@ -313,6 +375,14 @@ public unsafe struct Sha512Hash
         return Base64String.FromBytes(AsSpan());
     }
 
+    /// <summary>
+    /// Encodes the hash bytes into a type-safe <see cref="Base64UrlString"/>.
+    /// </summary>
+    /// <returns>A <see cref="Base64UrlString"/> representation of the SHA512 hash.</returns>
+    public Base64UrlString ToBase64UrlString() {
+        return Base64UrlString.FromBytes(AsSpan());
+    }
+
     /// <summary>Encodes the hash bytes into a type-safe <see cref="Base32String"/>.</summary>
     public Base32String ToBase32String() {
         return Base32String.FromBytes(AsSpan());
@@ -324,30 +394,70 @@ public unsafe struct Sha512Hash
     }
 
     /// <summary>
-    /// Returns the hash as a hexadecimal string.
+    /// Returns the hash as an uppercase hexadecimal string.
     /// </summary>
     public override string ToString() {
         return Convert.ToHexString(AsSpan());
     }
 
-    // IFormattable — format "x" = lowercase hex, default = uppercase
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+    /// <summary>
+    /// Returns the string representation of the hash using the specified format.
+    /// </summary>
+    public string ToString(string? format) {
+        return ToString(format, null);
+    }
+
+    /// <summary>
+    /// Returns the string representation of the hash using the specified format and provider.
+    /// </summary>
+    public string ToString(string? format, IFormatProvider? formatProvider) {
         return format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
     }
 
-    // ISpanFormattable — zero-alloc hex write
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Attempts to format the hash as an uppercase hexadecimal string into the destination character span.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) {
+        return TryFormat(destination, out charsWritten, default, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination character span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
+        return TryFormat(destination, out charsWritten, format, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination character span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         int required = HashSizeInBytes * 2;
         if(destination.Length < required) { charsWritten = 0; return false; }
         bool lower = format.Equals("x", StringComparison.Ordinal);
-        bool ok = lower
+        return lower
             ? Convert.TryToHexStringLower(AsSpan(), destination, out charsWritten)
             : Convert.TryToHexString(AsSpan(), destination, out charsWritten);
-        return ok;
     }
 
-    // IUtf8SpanFormattable — write hex as UTF-8 bytes (ASCII)
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Attempts to format the hash as an uppercase UTF-8 hexadecimal byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
+        return TryFormat(utf8Destination, out bytesWritten, default, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) {
+        return TryFormat(utf8Destination, out bytesWritten, format, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         int required = HashSizeInBytes * 2;
         if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
         Span<char> charBuf = stackalloc char[required];
@@ -362,13 +472,13 @@ public unsafe struct Sha512Hash
 
     #endregion
 
-    #region Equality
+    #region Equality & Comparison
 
     /// <summary>
     /// Compares two hashes for equality in a way that is resistant to timing attacks.
     /// </summary>
     public bool Equals(Sha512Hash other) {
-        return CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
+        return FixedBinaryValueOps.Equals(this, other);
     }
 
     /// <inheritdoc/>
@@ -381,9 +491,37 @@ public unsafe struct Sha512Hash
     /// It is suitable for use in collections like dictionaries and hash sets.
     /// </summary>
     public override int GetHashCode() {
-        HashCode hash = new();
-        hash.AddBytes(AsSpan());
-        return hash.ToHashCode();
+        return FixedBinaryValueOps.GetHashCode(this);
+    }
+
+    /// <inheritdoc/>
+    public int CompareTo(Sha512Hash other) {
+        return FixedBinaryValueOps.CompareTo(this, other);
+    }
+
+    /// <inheritdoc/>
+    public int CompareTo(object? obj) {
+        return FixedBinaryValueOps.CompareToObject(this, obj);
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
+    public static bool operator >(Sha512Hash left, Sha512Hash right) {
+        return left.CompareTo(right) > 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
+    public static bool operator <(Sha512Hash left, Sha512Hash right) {
+        return left.CompareTo(right) < 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
+    public static bool operator >=(Sha512Hash left, Sha512Hash right) {
+        return left.CompareTo(right) >= 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
+    public static bool operator <=(Sha512Hash left, Sha512Hash right) {
+        return left.CompareTo(right) <= 0;
     }
 
     /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
@@ -397,6 +535,82 @@ public unsafe struct Sha512Hash
     }
 
     #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs ordinal comparisons on <see cref="Sha512Hash"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Sha512Hash> OrdinalComparer => Sha512HashOrdinalComparer.Instance;
+
+    /// <summary>
+    /// Gets an equality comparer that performs case-insensitive ordinal comparisons on <see cref="Sha512Hash"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Sha512Hash> OrdinalIgnoreCaseComparer => Sha512HashOrdinalIgnoreCaseComparer.Instance;
+
+    private sealed class Sha512HashOrdinalComparer : IEqualityComparer<Sha512Hash>, IAlternateEqualityComparer<ReadOnlySpan<char>, Sha512Hash> {
+        public static Sha512HashOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(Sha512Hash x, Sha512Hash y) {
+            return x.Equals(y);
+        }
+
+        public int GetHashCode(Sha512Hash obj) {
+            return obj.GetHashCode();
+        }
+
+        public bool Equals(ReadOnlySpan<char> alternate, Sha512Hash other) {
+            if(Sha512Hash.TryParse(alternate, out Sha512Hash parsed)) {
+                return parsed.Equals(other);
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(Sha512Hash.TryParse(alternate, out Sha512Hash parsed)) {
+                return parsed.GetHashCode();
+            }
+            return 0;
+        }
+
+        public Sha512Hash Create(ReadOnlySpan<char> alternate) {
+            return Sha512Hash.Parse(alternate);
+        }
+    }
+
+    private sealed class Sha512HashOrdinalIgnoreCaseComparer : IEqualityComparer<Sha512Hash>, IAlternateEqualityComparer<ReadOnlySpan<char>, Sha512Hash> {
+        public static Sha512HashOrdinalIgnoreCaseComparer Instance { get; } = new();
+
+        public bool Equals(Sha512Hash x, Sha512Hash y) {
+            return x.Equals(y);
+        }
+
+        public int GetHashCode(Sha512Hash obj) {
+            return obj.GetHashCode();
+        }
+
+        public bool Equals(ReadOnlySpan<char> alternate, Sha512Hash other) {
+            if(Sha512Hash.TryParse(alternate, out Sha512Hash parsed)) {
+                return parsed.Equals(other);
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(Sha512Hash.TryParse(alternate, out Sha512Hash parsed)) {
+                return parsed.GetHashCode();
+            }
+            return 0;
+        }
+
+        public Sha512Hash Create(ReadOnlySpan<char> alternate) {
+            return Sha512Hash.Parse(alternate);
+        }
+    }
+
+    #endregion
 }
 
 /// <summary>
@@ -406,9 +620,20 @@ public static partial class Sha512HashExtensions {
     extension(Sha512Hash) {
         /// <summary>
         /// Asynchronously computes the SHA512 hash of a stream without loading it all into memory.
-        /// This method does not use the 'async' keyword directly to remain compatible with the 'unsafe' struct context.
         /// </summary>
-        public static async ValueTask<Sha512Hash> ComputeAsync(Stream stream, CancellationToken cancellationToken = default) {
+        /// <param name="stream">The source stream to hash.</param>
+        /// <returns>A task containing the computed <see cref="Sha512Hash"/>.</returns>
+        public static ValueTask<Sha512Hash> ComputeAsync(Stream stream) {
+            return ComputeAsync(stream, CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Asynchronously computes the SHA512 hash of a stream without loading it all into memory.
+        /// </summary>
+        /// <param name="stream">The source stream to hash.</param>
+        /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
+        /// <returns>A task containing the computed <see cref="Sha512Hash"/>.</returns>
+        public static async ValueTask<Sha512Hash> ComputeAsync(Stream stream, CancellationToken cancellationToken) {
             Preca.ThrowIfNull(stream);
 
             if(stream.CanSeek) stream.Position = 0;
@@ -418,13 +643,12 @@ public static partial class Sha512HashExtensions {
             try {
                 await SHA512.HashDataAsync(stream, buffer.AsMemory(0, Sha512Hash.HashSizeInBytes), cancellationToken);
 
-
                 return new Sha512Hash(buffer.AsSpan(0, Sha512Hash.HashSizeInBytes));
             }
             finally {
                 ArrayPool<byte>.Shared.Return(buffer);
 
-                if(stream.CanSeek) 
+                if(stream.CanSeek)
                     stream.Position = 0;
             }
         }

@@ -1,22 +1,47 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace Wiaoj.Serialization.SystemTextJson;
 
-public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options)
+[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
+    Justification = "Native AOT and trimming compatibility are supported when JsonSerializerOptions is configured with a JsonSerializerContext or IJsonTypeInfoResolver.")]
+[UnconditionalSuppressMessage("Aot", "IL3050:RequiresDynamicCode",
+    Justification = "Native AOT and trimming compatibility are supported when JsonSerializerOptions is configured with a JsonSerializerContext or IJsonTypeInfoResolver.")]
+public sealed class SystemTextJsonSerializer<TKey>
     : ISerializer<TKey>,
 #pragma warning disable WS0001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
       IAsyncEnumerableSerializer<TKey> where TKey : ISerializerKey
 #pragma warning restore WS0001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 {
+    private readonly JsonSerializerOptions _options;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SystemTextJsonSerializer{TKey}"/> class using default <see cref="JsonSerializerOptions"/>.
+    /// </summary>
+    public SystemTextJsonSerializer() : this(new JsonSerializerOptions()) { }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SystemTextJsonSerializer{TKey}"/> class with the specified <see cref="JsonSerializerOptions"/>.
+    /// </summary>
+    /// <param name="options">The <see cref="JsonSerializerOptions"/> to use.</param>
+    public SystemTextJsonSerializer(JsonSerializerOptions options) {
+        Preca.ThrowIfNull(options);
+        this._options = options;
+    }
+
+    /// <summary>
+    /// Gets the configured <see cref="JsonSerializerOptions"/> used by this serializer.
+    /// </summary>
+    public JsonSerializerOptions Options => this._options;
+
     /// <inheritdoc />  
     public string SerializeToString<TValue>(TValue value) {
         Preca.ThrowIfNull(value);
         try {
             // Use value.GetType() to correctly handle polymorphism (e.g., serializing a derived type via a base type variable).
-            return JsonSerializer.Serialize(value, value.GetType(), options);
+            return JsonSerializer.Serialize(value, value.GetType(), this._options);
         }
         catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not configured for JSON serialization.", ex);
@@ -28,7 +53,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNull(value);
         Preca.ThrowIfNull(type);
         try {
-            return JsonSerializer.Serialize(value, type, options);
+            return JsonSerializer.Serialize(value, type, this._options);
         }
         catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' or one of its members is not configured for JSON serialization.", ex);
@@ -39,7 +64,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
     public byte[] Serialize<TValue>(TValue value) {
         Preca.ThrowIfNull(value);
         try {
-            return JsonSerializer.SerializeToUtf8Bytes(value, options);
+            return JsonSerializer.SerializeToUtf8Bytes(value, this._options);
         }
         catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not configured for JSON serialization.", ex);
@@ -52,7 +77,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNull(value);
         try {
             using Utf8JsonWriter jsonWriter = new(writer);
-            JsonSerializer.Serialize(jsonWriter, value, options);
+            JsonSerializer.Serialize(jsonWriter, value, this._options);
         }
         catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' or one of its members is not configured for JSON serialization.", ex);
@@ -63,7 +88,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
     public TValue? DeserializeFromString<TValue>(string data) {
         Preca.ThrowIfNullOrWhiteSpace(data);
         try {
-            return JsonSerializer.Deserialize<TValue>(data, options);
+            return JsonSerializer.Deserialize<TValue>(data, this._options);
         }
         catch(JsonException ex) {
             throw new DeserializationFormatException($"The input string is not a valid JSON representation for the target type '{typeof(TValue).FullName}'.", ex);
@@ -75,7 +100,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNullOrWhiteSpace(data);
         Preca.ThrowIfNull(type);
         try {
-            return JsonSerializer.Deserialize(data, type, options);
+            return JsonSerializer.Deserialize(data, type, this._options);
         }
         catch(JsonException ex) {
             throw new DeserializationFormatException($"The input string is not a valid JSON representation for the target type '{type.FullName}'.", ex);
@@ -86,7 +111,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
     public TValue? Deserialize<TValue>(byte[] data) {
         Preca.ThrowIfNull(data);
         try {
-            return JsonSerializer.Deserialize<TValue>(data, options);
+            return JsonSerializer.Deserialize<TValue>(data, this._options);
         }
         catch(JsonException ex) {
             throw new DeserializationFormatException($"The input byte array is not a valid JSON representation for the target type '{typeof(TValue).FullName}'.", ex);
@@ -98,7 +123,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNull(data);
         Preca.ThrowIfNull(type);
         try {
-            return JsonSerializer.Deserialize(data, type, options);
+            return JsonSerializer.Deserialize(data, type, this._options);
         }
         catch(JsonException ex) {
             throw new DeserializationFormatException($"The input byte array is not a valid JSON representation for the target type '{type.FullName}'.", ex);
@@ -109,7 +134,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
     public TValue? Deserialize<TValue>(in ReadOnlySequence<byte> sequence) {
         try {
             Utf8JsonReader reader = new(sequence);
-            return JsonSerializer.Deserialize<TValue>(ref reader, options);
+            return JsonSerializer.Deserialize<TValue>(ref reader, this._options);
         }
         catch(JsonException ex) {
             throw new DeserializationFormatException($"The input byte sequence is not a valid JSON representation for the target type '{typeof(TValue).FullName}'.", ex);
@@ -121,7 +146,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNull(type);
         try {
             Utf8JsonReader reader = new(sequence);
-            return JsonSerializer.Deserialize(ref reader, type, options);
+            return JsonSerializer.Deserialize(ref reader, type, this._options);
         }
         catch(JsonException ex) {
             throw new DeserializationFormatException($"The input byte sequence is not a valid JSON representation for the target type '{type.FullName}'.", ex);
@@ -174,7 +199,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNull(stream);
         Preca.ThrowIfNull(value);
         try {
-            await JsonSerializer.SerializeAsync(stream, value, value.GetType(), options, cancellationToken);
+            await JsonSerializer.SerializeAsync(stream, value, value.GetType(), this._options, cancellationToken);
         }
         catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{value.GetType().FullName}' is not supported by the async JSON serializer.", ex);
@@ -187,7 +212,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNull(value);
         Preca.ThrowIfNull(type);
         try {
-            await JsonSerializer.SerializeAsync(stream, value, type, options, cancellationToken);
+            await JsonSerializer.SerializeAsync(stream, value, type, this._options, cancellationToken);
         }
         catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The type '{type.FullName}' is not supported by the async JSON serializer.", ex);
@@ -198,7 +223,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
     public async ValueTask<TValue?> DeserializeAsync<TValue>(Stream stream, CancellationToken cancellationToken) {
         Preca.ThrowIfNull(stream);
         try {
-            return await JsonSerializer.DeserializeAsync<TValue>(stream, options, cancellationToken);
+            return await JsonSerializer.DeserializeAsync<TValue>(stream, this._options, cancellationToken);
         }
         catch(JsonException ex) {
             throw new DeserializationFormatException($"The input stream does not contain a valid JSON representation for the target type '{typeof(TValue).FullName}'.", ex);
@@ -210,7 +235,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNull(stream);
         Preca.ThrowIfNull(type);
         try {
-            return await JsonSerializer.DeserializeAsync(stream, type, options, cancellationToken);
+            return await JsonSerializer.DeserializeAsync(stream, type, this._options, cancellationToken);
         }
         catch(JsonException ex) {
             throw new DeserializationFormatException($"The input stream does not contain a valid JSON representation for the target type '{type.FullName}'.", ex);
@@ -237,7 +262,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
         Preca.ThrowIfNull(stream);
         Preca.ThrowIfNull(values);
         try {
-            await JsonSerializer.SerializeAsync(stream, values, options, cancellationToken);
+            await JsonSerializer.SerializeAsync(stream, values, this._options, cancellationToken);
         }
         catch(NotSupportedException ex) {
             throw new UnsupportedTypeException($"The async enumerable of type '{typeof(TValue).FullName}' is not supported by the JSON serializer.", ex);
@@ -250,7 +275,7 @@ public sealed class SystemTextJsonSerializer<TKey>(JsonSerializerOptions options
 
         IAsyncEnumerable<TValue?> sourceEnumerable;
         try {
-            sourceEnumerable = JsonSerializer.DeserializeAsyncEnumerable<TValue>(stream, options, cancellationToken);
+            sourceEnumerable = JsonSerializer.DeserializeAsyncEnumerable<TValue>(stream, this._options, cancellationToken);
         }
         catch(Exception ex) when(ex is JsonException or NotSupportedException) {
             throw new DeserializationFormatException("Failed to start deserializing the async JSON enumerable. The stream might be empty or malformed at the start.", ex);

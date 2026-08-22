@@ -53,4 +53,4 @@ public class BloomFilterSeeder(IServiceProvider serviceProvider, ILogger<BloomFi
         IBloomFilter<TTag> typedFilter = serviceProvider.GetRequiredService<IBloomFilter<TTag>>();
         return SeedAsync(FilterName.Parse(typedFilter.Name), source, serializer, cancellationToken);
     }
-}
+}

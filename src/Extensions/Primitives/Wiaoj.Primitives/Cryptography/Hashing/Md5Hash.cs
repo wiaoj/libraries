@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -11,24 +12,52 @@ using Wiaoj.Primitives.JsonConverters;
 namespace Wiaoj.Primitives.Cryptography.Hashing;
 
 /// <summary>
-/// Represents a 16-byte MD5 hash. 
-/// This struct guarantees the correct size and provides high-performance, 
-/// allocation-free operations for computing and comparing hashes.
+/// Represents an immutable, fixed-size 16-byte (128-bit) MD5 hash.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Zero Heap Allocation:</b> Utilizes an inline fixed-size byte buffer to store the hash directly within the struct, 
+/// minimizing Garbage Collector (GC) pressure in high-throughput paths.
+/// </para>
+/// <para>
+/// <b>Side-Channel Resistance:</b> Equality comparisons (<see cref="Equals(Md5Hash)"/> and operator <c>==</c>) 
+/// are implemented using <see cref="CryptographicOperations.FixedTimeEquals"/> to mitigate timing attacks.
+/// </para>
+/// </remarks>
 [DebuggerDisplay("{ToString(),nq}")]
 [StructLayout(LayoutKind.Sequential)]
 [JsonConverter(typeof(Md5HashJsonConverter))]
 public unsafe struct Md5Hash
-    : IEquatable<Md5Hash>,
+    : IFixedBinaryValue<Md5Hash>,
+    IEquatable<Md5Hash>,
+    IComparable<Md5Hash>,
+    IComparable,
+    IParsable<Md5Hash>,
+    ISpanParsable<Md5Hash>,
+    IUtf8SpanParsable<Md5Hash>,
     ISpanFormattable,
     IUtf8SpanFormattable,
-    IEqualityOperators<Md5Hash, Md5Hash, bool> {
-    internal const int HashSizeInBytes = 16; // MD5 is 128 bits = 16 bytes
+    IFormattable,
+    IEqualityOperators<Md5Hash, Md5Hash, bool>,
+    IComparisonOperators<Md5Hash, Md5Hash, bool> {
+
+    /// <summary>The size of the MD5 hash in bytes (16 bytes / 128 bits).</summary>
+    internal const int HashSizeInBytes = 16;
+
+    /// <inheritdoc/>
+    public static int SizeInBytes => HashSizeInBytes;
+
+
     private fixed byte _bytes[HashSizeInBytes];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Md5Hash"/> struct from a 16-byte span.
+    /// </summary>
+    /// <param name="source">A span containing exactly 16 bytes of hash data.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="source"/> length is not exactly 16 bytes.</exception>
     internal Md5Hash(ReadOnlySpan<byte> source) {
         if(source.Length != HashSizeInBytes) {
-            throw new ArgumentException("Source span must be exactly 16 bytes long.", nameof(source));
+            throw new ArgumentException($"Source span must be exactly {HashSizeInBytes} bytes long.", nameof(source));
         }
 
         fixed(byte* p = this._bytes) {
@@ -39,24 +68,29 @@ public unsafe struct Md5Hash
     #region Factory Methods
 
     /// <summary>
-    /// Represents an MD5 hash consisting of all zero bytes.
+    /// Represents an empty (zero-filled) 16-byte MD5 hash.
     /// </summary>
     public static readonly Md5Hash Empty = default;
 
     /// <summary>
-    /// Creates a Md5Hash instance from a 16-byte span.
+    /// Creates a <see cref="Md5Hash"/> instance from a 16-byte read-only span.
     /// </summary>
+    /// <param name="source">A span containing exactly 16 bytes of hash data.</param>
+    /// <returns>A valid <see cref="Md5Hash"/> instance.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="source"/> is not exactly 16 bytes long.</exception>
     public static Md5Hash FromBytes(ReadOnlySpan<byte> source) {
         return new Md5Hash(source);
     }
 
     /// <summary>
-    /// Creates a Md5Hash instance from a hexadecimal string representation.
+    /// Creates a <see cref="Md5Hash"/> instance from a valid <see cref="HexString"/>.
     /// </summary>
-    /// <exception cref="FormatException">The input is not a valid 32-character hexadecimal string.</exception>
+    /// <param name="hex">The hex-encoded string representing the 16-byte hash (32 hex characters).</param>
+    /// <returns>A new <see cref="Md5Hash"/> instance.</returns>
+    /// <exception cref="FormatException">Thrown when <paramref name="hex"/> does not decode to exactly 16 bytes.</exception>
     public static Md5Hash From(HexString hex) {
         if(hex.GetDecodedLength() != HashSizeInBytes) {
-            throw new FormatException("Source HexString must represent exactly 16 bytes (32 hex characters).");
+            throw new FormatException($"Source HexString must represent exactly {HashSizeInBytes} bytes (32 hex characters).");
         }
 
         Span<byte> buffer = stackalloc byte[HashSizeInBytes];
@@ -65,23 +99,29 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Creates a Md5Hash instance from a Base64String.
+    /// Creates a <see cref="Md5Hash"/> instance from a valid <see cref="Base64String"/>.
     /// </summary>
+    /// <param name="base64">The Base64-encoded string representing the 16-byte hash.</param>
+    /// <returns>A new <see cref="Md5Hash"/> instance.</returns>
+    /// <exception cref="FormatException">Thrown when <paramref name="base64"/> does not decode to exactly 16 bytes.</exception>
     public static Md5Hash From(Base64String base64) {
         if(base64.GetDecodedLength() != HashSizeInBytes) {
-            throw new FormatException("Source Base64String must represent exactly 16 bytes.");
+            throw new FormatException($"Source Base64String must represent exactly {HashSizeInBytes} bytes.");
         }
 
         Span<byte> buffer = stackalloc byte[HashSizeInBytes];
         if(!base64.TryDecode(buffer, out int written) || written != HashSizeInBytes) {
-            throw new FormatException("Failed to decode Base64 into Hash.");
+            throw new FormatException("Failed to decode Base64 into MD5 hash.");
         }
         return new Md5Hash(buffer);
     }
 
     /// <summary>
-    /// Creates a hash instance from a valid <see cref="Base32String"/>.
+    /// Creates a <see cref="Md5Hash"/> instance from a valid <see cref="Base32String"/>.
     /// </summary>
+    /// <param name="base32">The Base32-encoded string representing the 16-byte hash.</param>
+    /// <returns>A new <see cref="Md5Hash"/> instance.</returns>
+    /// <exception cref="FormatException">Thrown when <paramref name="base32"/> does not decode to exactly 16 bytes.</exception>
     public static Md5Hash From(Base32String base32) {
         Span<byte> buffer = stackalloc byte[HashSizeInBytes];
         if(base32.TryDecode(buffer, out int written) && written == HashSizeInBytes) {
@@ -91,8 +131,11 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Creates a hash instance from a valid <see cref="Base62String"/>.
+    /// Creates a <see cref="Md5Hash"/> instance from a valid <see cref="Base62String"/>.
     /// </summary>
+    /// <param name="base62">The Base62-encoded string representing the 16-byte hash.</param>
+    /// <returns>A new <see cref="Md5Hash"/> instance.</returns>
+    /// <exception cref="FormatException">Thrown when <paramref name="base62"/> represents a value exceeding 16 bytes.</exception>
     public static Md5Hash From(Base62String base62) {
         byte[] bytes = base62.ToBytes();
 
@@ -110,19 +153,26 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Parses a hexadecimal string into a Md5Hash.
+    /// Parses a 32-character hexadecimal string into an <see cref="Md5Hash"/>.
     /// </summary>
+    /// <param name="s">The hexadecimal string to parse.</param>
+    /// <returns>The parsed <see cref="Md5Hash"/> instance.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="s"/> is null.</exception>
+    /// <exception cref="FormatException">Thrown when <paramref name="s"/> is not a valid 32-character hexadecimal string.</exception>
     public static Md5Hash Parse(string s) {
-        Preca.ThrowIfNull(s);
-        if(!TryParse(s, out Md5Hash result)) {
+        ArgumentNullException.ThrowIfNull(s);
+        if(!TryParse(s.AsSpan(), out Md5Hash result)) {
             throw new FormatException($"Input string must represent exactly {HashSizeInBytes} bytes (32 hex characters).");
         }
         return result;
     }
 
     /// <summary>
-    /// Parses a span of characters into a Md5Hash. (Zero-allocation)
+    /// Parses a 32-character hexadecimal span into an <see cref="Md5Hash"/> without heap allocations.
     /// </summary>
+    /// <param name="s">The span of characters to parse.</param>
+    /// <returns>The parsed <see cref="Md5Hash"/> instance.</returns>
+    /// <exception cref="FormatException">Thrown when <paramref name="s"/> is not a valid 32-character hexadecimal sequence.</exception>
     public static Md5Hash Parse(ReadOnlySpan<char> s) {
         if(!TryParse(s, out Md5Hash result)) {
             throw new FormatException($"Input span must represent exactly {HashSizeInBytes} bytes (32 hex characters).");
@@ -131,18 +181,25 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Tries to parse a hexadecimal string into a Md5Hash.
+    /// Parses a UTF-8 encoded hexadecimal byte span into an <see cref="Md5Hash"/>.
     /// </summary>
-    public static bool TryParse(string? s, out Md5Hash result) {
-        if(HexString.TryParse(s, out HexString hex)) {
-            return TryParse(hex, out result);
+    public static Md5Hash Parse(ReadOnlySpan<byte> utf8Text) {
+        if(!TryParse(utf8Text, out Md5Hash result)) {
+            throw new FormatException("Invalid UTF-8 hexadecimal sequence for Md5Hash.");
         }
-        result = default;
-        return false;
+        return result;
     }
 
     /// <summary>
-    /// Tries to parse a span of characters into a Md5Hash.
+    /// Attempts to parse a hexadecimal string into an <see cref="Md5Hash"/>.
+    /// </summary>
+    public static bool TryParse([NotNullWhen(true)] string? s, out Md5Hash result) {
+        if(s is null) { result = default; return false; }
+        return TryParse(s.AsSpan(), out result);
+    }
+
+    /// <summary>
+    /// Attempts to parse a hexadecimal span into an <see cref="Md5Hash"/> without heap allocations.
     /// </summary>
     public static bool TryParse(ReadOnlySpan<char> s, out Md5Hash result) {
         if(HexString.TryParse(s, out HexString hex)) {
@@ -153,8 +210,25 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Tries to create a Md5Hash instance from a hexadecimal string representation.
+    /// Attempts to parse a UTF-8 encoded byte span into an <see cref="Md5Hash"/>.
     /// </summary>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out Md5Hash result) {
+        if(utf8Text.Length == HashSizeInBytes * 2) {
+            Span<char> chars = stackalloc char[HashSizeInBytes * 2];
+            if(Encoding.UTF8.GetChars(utf8Text, chars) == HashSizeInBytes * 2) {
+                return TryParse(chars, out result);
+            }
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Attempts to parse a <see cref="HexString"/> into an <see cref="Md5Hash"/>.
+    /// </summary>
+    /// <param name="hex">The hex-encoded string to parse.</param>
+    /// <param name="result">When this method returns, contains the parsed hash if successful; otherwise, default.</param>
+    /// <returns><see langword="true"/> if <paramref name="hex"/> represents exactly 16 bytes; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(HexString hex, out Md5Hash result) {
         if(hex.GetDecodedLength() != HashSizeInBytes) {
             result = default;
@@ -169,19 +243,52 @@ public unsafe struct Md5Hash
 
     #endregion
 
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static Md5Hash IParsable<Md5Hash>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<Md5Hash>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Md5Hash result) {
+        return TryParse(s, out result);
+    }
+
+    static Md5Hash ISpanParsable<Md5Hash>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<Md5Hash>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Md5Hash result) {
+        return TryParse(s, out result);
+    }
+
+    static Md5Hash IUtf8SpanParsable<Md5Hash>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<Md5Hash>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Md5Hash result) {
+        return TryParse(utf8Text, out result);
+    }
+
+    #endregion
+
     #region High-Performance Computation
 
     /// <summary>
-    /// Computes the MD5 hash for the contents of a <see cref="Secret{Byte}"/>.
+    /// Computes the MD5 hash for the contents of a secure <see cref="Secret{Byte}"/>.
     /// </summary>
+    /// <param name="secret">The secret byte data to hash.</param>
+    /// <returns>A new <see cref="Md5Hash"/> containing the digest.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="secret"/> is null.</exception>
     public static Md5Hash Compute(Secret<byte> secret) {
         Preca.ThrowIfNull(secret);
         return secret.Expose(span => Compute(span));
     }
 
     /// <summary>
-    /// Computes the MD5 hash of a span of bytes. This method is allocation-free.
+    /// Computes the MD5 hash of a byte span without heap allocations.
     /// </summary>
+    /// <param name="data">The byte span to hash.</param>
+    /// <returns>A new <see cref="Md5Hash"/> containing the digest.</returns>
     [SkipLocalsInit]
     public static Md5Hash Compute(ReadOnlySpan<byte> data) {
         Span<byte> hashBuffer = stackalloc byte[HashSizeInBytes];
@@ -190,8 +297,12 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Computes the MD5 hash for the contents of a <see cref="Secret{Char}"/> using the specified encoding.
+    /// Computes the MD5 hash for the contents of a secure <see cref="Secret{Char}"/> using the specified encoding.
     /// </summary>
+    /// <param name="secret">The secret character data to hash.</param>
+    /// <param name="encoding">The character encoding used to convert the secret characters to bytes.</param>
+    /// <returns>A new <see cref="Md5Hash"/> containing the digest.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="secret"/> or <paramref name="encoding"/> is null.</exception>
     public static Md5Hash Compute(Secret<char> secret, Encoding encoding) {
         Preca.ThrowIfNull(secret);
         Preca.ThrowIfNull(encoding);
@@ -217,20 +328,26 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Computes the MD5 hash of a string using UTF-8 encoding by default.
+    /// Computes the MD5 hash of a string using UTF-8 encoding.
     /// </summary>
+    /// <param name="text">The string to hash.</param>
+    /// <returns>A new <see cref="Md5Hash"/> containing the digest.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="text"/> is null.</exception>
     public static Md5Hash Compute(string text) {
         return Compute(text, Encoding.UTF8);
     }
 
     /// <summary>
-    /// Computes the MD5 hash of a string using the specified encoding.
+    /// Computes the MD5 hash of a string using the specified character encoding.
     /// </summary>
+    /// <param name="text">The string to hash.</param>
+    /// <param name="encoding">The character encoding to use.</param>
+    /// <returns>A new <see cref="Md5Hash"/> containing the digest.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="text"/> or <paramref name="encoding"/> is null.</exception>
     public static Md5Hash Compute(string text, Encoding encoding) {
         Preca.ThrowIfNull(text);
         Preca.ThrowIfNull(encoding);
 
-        // Optimize for common short strings using stack allocation
         int maxByteCount = encoding.GetMaxByteCount(text.Length);
         if(maxByteCount <= 256) {
             Span<byte> buffer = stackalloc byte[maxByteCount];
@@ -248,6 +365,7 @@ public unsafe struct Md5Hash
     /// <summary>
     /// Provides safe, scoped access to the hash bytes as a <see cref="ReadOnlySpan{Byte}"/>.
     /// </summary>
+    /// <param name="action">The delegate receiving the read-only span.</param>
     public void Expose(Action<ReadOnlySpan<byte>> action) {
         fixed(byte* p = this._bytes) {
             action(new ReadOnlySpan<byte>(p, HashSizeInBytes));
@@ -257,6 +375,9 @@ public unsafe struct Md5Hash
     /// <summary>
     /// Provides safe, scoped access to the hash bytes and returns a result.
     /// </summary>
+    /// <typeparam name="TResult">The type of the result returned by the delegate.</typeparam>
+    /// <param name="func">The delegate receiving the read-only span and returning a result.</param>
+    /// <returns>The result computed by <paramref name="func"/>.</returns>
     public TResult Expose<TResult>(Func<ReadOnlySpan<byte>, TResult> func) {
         fixed(byte* p = this._bytes) {
             return func(new ReadOnlySpan<byte>(p, HashSizeInBytes));
@@ -264,17 +385,19 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Copies the hash bytes to a destination span.
+    /// Copies the hash bytes into a destination span.
     /// </summary>
+    /// <param name="destination">The destination span. Must be at least 16 bytes long.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="destination"/> is shorter than 16 bytes.</exception>
     public void CopyTo(Span<byte> destination) {
         if(destination.Length < HashSizeInBytes) {
-            throw new ArgumentException("Destination span must be at least 16 bytes long.", nameof(destination));
+            throw new ArgumentException($"Destination span must be at least {HashSizeInBytes} bytes long.", nameof(destination));
         }
         AsSpan().CopyTo(destination);
     }
 
     /// <summary>
-    /// Attempts to copy the hash bytes to the specified destination span.
+    /// Attempts to copy the hash bytes into the specified destination span.
     /// </summary>
     /// <param name="destination">The span to copy the bytes into.</param>
     /// <returns><see langword="true"/> if the copy was successful; otherwise, <see langword="false"/>.</returns>
@@ -285,73 +408,133 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
-    /// Returns a <see cref="ReadOnlySpan{Byte}"/> view of the hash bytes.
+    /// Returns a direct <see cref="ReadOnlySpan{Byte}"/> view over the inline hash bytes.
     /// </summary>
+    /// <returns>A 16-byte <see cref="ReadOnlySpan{Byte}"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ReadOnlySpan<byte> AsSpan() {
         return new ReadOnlySpan<byte>(Unsafe.AsPointer(ref Unsafe.AsRef(in this._bytes[0])), HashSizeInBytes);
     }
 
     /// <summary>
-    /// Returns the hash as a type-safe HexString.
+    /// Encodes the hash bytes into an uppercase <see cref="HexString"/>.
     /// </summary>
+    /// <returns>An uppercase <see cref="HexString"/> representation of the hash.</returns>
     public HexString ToHexString() {
         return HexString.FromBytes(AsSpan());
     }
 
     /// <summary>
-    /// Encodes the hash bytes into a lowercase <see cref="HexString"/>.
-    /// This avoids the extra allocation caused by calling <c>ToHexString().ToLower()</c>.
+    /// Encodes the hash bytes into a lowercase <see cref="HexString"/> without string allocations.
     /// </summary>
-    /// <returns>A lowercase <see cref="HexString"/> representation of the MD5 hash.</returns>
+    /// <returns>A lowercase <see cref="HexString"/> representation of the hash.</returns>
     public HexString ToHexStringLower() {
         return HexString.FromBytesLower(AsSpan());
     }
 
     /// <summary>
-    /// Returns the hash as a type-safe Base64String.
+    /// Encodes the hash bytes into a type-safe <see cref="Base64String"/>.
     /// </summary>
+    /// <returns>A <see cref="Base64String"/> representation of the hash.</returns>
     public Base64String ToBase64String() {
         return Base64String.FromBytes(AsSpan());
     }
 
-    /// <summary>Encodes the hash bytes into a type-safe <see cref="Base32String"/>.</summary>
+    /// <summary>
+    /// Encodes the hash bytes into a type-safe, URL-safe <see cref="Base64UrlString"/>.
+    /// </summary>
+    /// <returns>A <see cref="Base64UrlString"/> representation of the hash.</returns>
+    public Base64UrlString ToBase64UrlString() {
+        return Base64UrlString.FromBytes(AsSpan());
+    }
+
+    /// <summary>
+    /// Encodes the hash bytes into a type-safe <see cref="Base32String"/>.
+    /// </summary>
+    /// <returns>A <see cref="Base32String"/> representation of the hash.</returns>
     public Base32String ToBase32String() {
         return Base32String.FromBytes(AsSpan());
     }
 
-    /// <summary>Encodes the hash bytes into a type-safe <see cref="Base62String"/>.</summary>
+    /// <summary>
+    /// Encodes the hash bytes into a type-safe <see cref="Base62String"/>.
+    /// </summary>
+    /// <returns>A <see cref="Base62String"/> representation of the hash.</returns>
     public Base62String ToBase62String() {
         return Base62String.FromBytes(AsSpan());
     }
 
     /// <summary>
-    /// Returns the hash as a hexadecimal string (Legacy support).
+    /// Returns the uppercase hexadecimal string representation of the hash.
     /// </summary>
+    /// <returns>An uppercase 32-character hexadecimal string.</returns>
     public override string ToString() {
         return Convert.ToHexString(AsSpan());
     }
 
-    // IFormattable — "x" = lowercase hex, default = uppercase
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+    /// <summary>
+    /// Returns the string representation of the hash using the specified format.
+    /// </summary>
+    public string ToString(string? format) {
+        return ToString(format, null);
+    }
+
+    /// <summary>
+    /// Returns the string representation of the hash using the specified format and provider.
+    /// </summary>
+    public string ToString(string? format, IFormatProvider? formatProvider) {
         return format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
     }
 
-    // ISpanFormattable
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Attempts to format the hash as an uppercase hexadecimal string into the destination character span.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) {
+        return TryFormat(destination, out charsWritten, default, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination character span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
+        return TryFormat(destination, out charsWritten, format, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination character span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         int required = HashSizeInBytes * 2;
         if(destination.Length < required) { charsWritten = 0; return false; }
-        return format.Equals("x", StringComparison.Ordinal)
+        bool lower = format.Equals("x", StringComparison.Ordinal);
+        return lower
             ? Convert.TryToHexStringLower(AsSpan(), destination, out charsWritten)
             : Convert.TryToHexString(AsSpan(), destination, out charsWritten);
     }
 
-    // IUtf8SpanFormattable
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Attempts to format the hash as an uppercase UTF-8 hexadecimal byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
+        return TryFormat(utf8Destination, out bytesWritten, default, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) {
+        return TryFormat(utf8Destination, out bytesWritten, format, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         int required = HashSizeInBytes * 2;
         if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
         Span<char> charBuf = stackalloc char[required];
-        bool ok = format.Equals("x", StringComparison.Ordinal)
+        bool lower = format.Equals("x", StringComparison.Ordinal);
+        bool ok = lower
             ? Convert.TryToHexStringLower(AsSpan(), charBuf, out _)
             : Convert.TryToHexString(AsSpan(), charBuf, out _);
         if(!ok) { bytesWritten = 0; return false; }
@@ -361,13 +544,15 @@ public unsafe struct Md5Hash
 
     #endregion
 
-    #region Equality
+    #region Equality & Comparison
 
     /// <summary>
-    /// Compares two hashes for equality in a way that is resistant to timing attacks.
+    /// Determines whether two <see cref="Md5Hash"/> instances are equal using a constant-time algorithm.
     /// </summary>
+    /// <param name="other">The other hash to compare against.</param>
+    /// <returns><see langword="true"/> if both hashes contain identical byte sequences; otherwise, <see langword="false"/>.</returns>
     public bool Equals(Md5Hash other) {
-        return CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
+        return FixedBinaryValueOps.Equals(this, other);
     }
 
     /// <inheritdoc/>
@@ -377,9 +562,37 @@ public unsafe struct Md5Hash
 
     /// <inheritdoc/>
     public override int GetHashCode() {
-        HashCode hash = new();
-        hash.AddBytes(AsSpan());
-        return hash.ToHashCode();
+        return FixedBinaryValueOps.GetHashCode(this);
+    }
+
+    /// <inheritdoc/>
+    public int CompareTo(Md5Hash other) {
+        return FixedBinaryValueOps.CompareTo(this, other);
+    }
+
+    /// <inheritdoc/>
+    public int CompareTo(object? obj) {
+        return FixedBinaryValueOps.CompareToObject(this, obj);
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
+    public static bool operator >(Md5Hash left, Md5Hash right) {
+        return left.CompareTo(right) > 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
+    public static bool operator <(Md5Hash left, Md5Hash right) {
+        return left.CompareTo(right) < 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
+    public static bool operator >=(Md5Hash left, Md5Hash right) {
+        return left.CompareTo(right) >= 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
+    public static bool operator <=(Md5Hash left, Md5Hash right) {
+        return left.CompareTo(right) <= 0;
     }
 
     /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
@@ -393,6 +606,82 @@ public unsafe struct Md5Hash
     }
 
     #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs ordinal comparisons on <see cref="Md5Hash"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Md5Hash> OrdinalComparer => Md5HashOrdinalComparer.Instance;
+
+    /// <summary>
+    /// Gets an equality comparer that performs case-insensitive ordinal comparisons on <see cref="Md5Hash"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Md5Hash> OrdinalIgnoreCaseComparer => Md5HashOrdinalIgnoreCaseComparer.Instance;
+
+    private sealed class Md5HashOrdinalComparer : IEqualityComparer<Md5Hash>, IAlternateEqualityComparer<ReadOnlySpan<char>, Md5Hash> {
+        public static Md5HashOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(Md5Hash x, Md5Hash y) {
+            return x.Equals(y);
+        }
+
+        public int GetHashCode(Md5Hash obj) {
+            return obj.GetHashCode();
+        }
+
+        public bool Equals(ReadOnlySpan<char> alternate, Md5Hash other) {
+            if(Md5Hash.TryParse(alternate, out Md5Hash parsed)) {
+                return parsed.Equals(other);
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(Md5Hash.TryParse(alternate, out Md5Hash parsed)) {
+                return parsed.GetHashCode();
+            }
+            return 0;
+        }
+
+        public Md5Hash Create(ReadOnlySpan<char> alternate) {
+            return Md5Hash.Parse(alternate);
+        }
+    }
+
+    private sealed class Md5HashOrdinalIgnoreCaseComparer : IEqualityComparer<Md5Hash>, IAlternateEqualityComparer<ReadOnlySpan<char>, Md5Hash> {
+        public static Md5HashOrdinalIgnoreCaseComparer Instance { get; } = new();
+
+        public bool Equals(Md5Hash x, Md5Hash y) {
+            return x.Equals(y);
+        }
+
+        public int GetHashCode(Md5Hash obj) {
+            return obj.GetHashCode();
+        }
+
+        public bool Equals(ReadOnlySpan<char> alternate, Md5Hash other) {
+            if(Md5Hash.TryParse(alternate, out Md5Hash parsed)) {
+                return parsed.Equals(other);
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(Md5Hash.TryParse(alternate, out Md5Hash parsed)) {
+                return parsed.GetHashCode();
+            }
+            return 0;
+        }
+
+        public Md5Hash Create(ReadOnlySpan<char> alternate) {
+            return Md5Hash.Parse(alternate);
+        }
+    }
+
+    #endregion
 }
 
 /// <summary>
@@ -402,8 +691,23 @@ public static partial class Md5HashExtensions {
     extension(Md5Hash) {
         /// <summary>
         /// Asynchronously computes the MD5 hash of a stream.
+        /// Resets the stream position before and after computation if seekable.
         /// </summary>
-        public static async ValueTask<Md5Hash> ComputeAsync(Stream stream, CancellationToken cancellationToken = default) {
+        /// <param name="stream">The source stream to hash.</param>
+        /// <returns>A task containing the computed <see cref="Md5Hash"/>.</returns>
+        public static ValueTask<Md5Hash> ComputeAsync(Stream stream) {
+            return ComputeAsync(stream, CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Asynchronously computes the MD5 hash of a stream.
+        /// Resets the stream position before and after computation if seekable.
+        /// </summary>
+        /// <param name="stream">The source stream to hash.</param>
+        /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
+        /// <returns>A task containing the computed <see cref="Md5Hash"/>.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> is null.</exception>
+        public static async ValueTask<Md5Hash> ComputeAsync(Stream stream, CancellationToken cancellationToken) {
             Preca.ThrowIfNull(stream);
 
             if(stream.CanSeek) stream.Position = 0;

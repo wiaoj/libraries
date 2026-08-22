@@ -144,4 +144,74 @@ public static partial class Preca {
             Thrower.ThrowContains(argument, invalidChar, paramName);
         }
     }
+
+    // ── String Equality Guards ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Validates that the specified string equals the expected string using the provided comparison rule.
+    /// </summary>
+    /// <param name="argument">The string to validate.</param>
+    /// <param name="expected">The expected string value.</param>
+    /// <param name="comparison">The string comparison rule (default: <see cref="StringComparison.Ordinal"/>).</param>
+    /// <param name="paramName">The name of the parameter being validated (automatically populated by the compiler).</param>
+    /// <exception cref="PrecaArgumentException">Thrown when <paramref name="argument"/> does not equal <paramref name="expected"/>.</exception>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfNotEqual(
+        string? argument,
+        string expected,
+        StringComparison comparison = StringComparison.Ordinal,
+        [CallerArgumentExpression(nameof(argument))] string? paramName = null) {
+
+        if(!string.Equals(argument, expected, comparison)) {
+            Thrower.ThrowNotEqual(argument, expected, paramName);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the specified string equals the expected string, using a type-safe custom exception factory.
+    /// </summary>
+    /// <typeparam name="TException">The type of exception to throw. Must inherit from Exception and be non-null.</typeparam>
+    /// <param name="argument">The string to validate.</param>
+    /// <param name="expected">The expected string value.</param>
+    /// <param name="exceptionFactory">A factory function that creates the exception to throw. Cannot be null.</param>
+    /// <param name="comparison">The string comparison rule (default: <see cref="StringComparison.Ordinal"/>).</param>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="exceptionFactory"/> is null.</exception>
+    /// <exception cref="Exception">Thrown when <paramref name="argument"/> does not equal <paramref name="expected"/>.</exception>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfNotEqual<TException>(
+        string? argument,
+        string expected,
+        [NotNull] Func<TException> exceptionFactory,
+        StringComparison comparison = StringComparison.Ordinal)
+        where TException : notnull, Exception {
+
+        Preca.ThrowIfNull(exceptionFactory);
+
+        if(!string.Equals(argument, expected, comparison)) {
+            Thrower.ThrowFromFactory(exceptionFactory);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the specified string equals the expected string, throwing a specific exception type.
+    /// </summary>
+    /// <typeparam name="TException">The type of exception to throw. Must have a parameterless constructor.</typeparam>
+    /// <param name="argument">The string to validate.</param>
+    /// <param name="expected">The expected string value.</param>
+    /// <param name="comparison">The string comparison rule (default: <see cref="StringComparison.Ordinal"/>).</param>
+    /// <exception cref="Exception">Thrown when <paramref name="argument"/> does not equal <paramref name="expected"/>.</exception>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfNotEqual<TException>(
+        string? argument,
+        string expected,
+        StringComparison comparison = StringComparison.Ordinal)
+        where TException : Exception, new() {
+
+        if(!string.Equals(argument, expected, comparison)) {
+            Thrower.ThrowException<TException>();
+        }
+    }
 }

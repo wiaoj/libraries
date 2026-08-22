@@ -15,8 +15,7 @@ public static class CollectionExtensions {
             }
 
             list.Capacity = Math.Max(list.Capacity, list.Count + totalCount);
-
-            // Elemanları ekle
+             
             foreach (IEnumerable<T> c in collections) {
                 if (c is null) continue;
 

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Text.Json;
 using Wiaoj.Primitives;
 using Xunit;
@@ -113,7 +113,7 @@ public class NanoIdTests {
 
     [Fact]
     public void TryParse_NullOrEmpty_ReturnsFalse() {
-        Assert.False(NanoId.TryParse(null, out _));
+        Assert.False(NanoId.TryParse((string?)null, out _));
         Assert.False(NanoId.TryParse(string.Empty, out _));
     }
 

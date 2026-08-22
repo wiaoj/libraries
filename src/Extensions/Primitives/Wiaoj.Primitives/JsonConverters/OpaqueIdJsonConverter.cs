@@ -29,6 +29,7 @@ public sealed class OpaqueIdJsonConverter : JsonConverter<OpaqueId> {
         return OpaqueId.Empty;
     }
 
+    /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, OpaqueId value, JsonSerializerOptions options) {
         // 64-bit ID'ler ~11 char, 128-bit ID'ler ~22 char tutar. 
         // 64 char buffer fazlasıyla yeterli ve güvenlidir.

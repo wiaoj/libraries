@@ -7,5 +7,5 @@ public interface ISerializerConfigurator<out TKey> where TKey : ISerializerKey {
     /// <summary>
     /// Gets the main builder to continue the registration chain.
     /// </summary>
-    IWiaojSerializationBuilder Builder { get; }
+    ISerializationBuilder Builder { get; }
 }

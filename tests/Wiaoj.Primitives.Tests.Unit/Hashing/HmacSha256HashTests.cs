@@ -1,10 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Primitives.Tests.Unit.Hashing;
+
 public sealed class HmacSha256HashTests {
     // Testlerde kullanmak için rastgele byte dizisi üreten yardımcı metot
     private static byte[] GetRandomBytes(int length = 32) {
@@ -43,7 +42,7 @@ public sealed class HmacSha256HashTests {
     [Fact]
     public void Empty_ShouldReturnZeroFilledHash() {
         // Arrange
-        var empty = HmacSha256Hash.Empty;
+        HmacSha256Hash empty = HmacSha256Hash.Empty;
 
         // Act
         byte[] bytes = empty.AsSpan().ToArray();
@@ -90,6 +89,61 @@ public sealed class HmacSha256HashTests {
         Assert.False(hash1 == hash2);
         Assert.True(hash1 != hash2);
         Assert.NotEqual(hash1.GetHashCode(), hash2.GetHashCode());
+    }
+
+    #endregion
+
+    #region Sıralama (Comparison) Testleri
+
+    [Fact]
+    public void CompareTo_SmallerFirstByteDiffers_ShouldReturnNegative() {
+        // Arrange
+        byte[] smaller = new byte[32]; smaller[0] = 0x01;
+        byte[] larger = new byte[32]; larger[0] = 0x02;
+        HmacSha256Hash a = new(smaller);
+        HmacSha256Hash b = new(larger);
+
+        // Assert
+        Assert.True(a.CompareTo(b) < 0);
+        Assert.True(b.CompareTo(a) > 0);
+        Assert.Equal(0, a.CompareTo(a));
+    }
+
+    [Fact]
+    public void ComparisonOperators_ShouldReflectByteOrdering() {
+        // Arrange
+        byte[] smaller = new byte[32]; smaller[0] = 0x01;
+        byte[] larger = new byte[32]; larger[0] = 0x02;
+        HmacSha256Hash a = new(smaller);
+        HmacSha256Hash b = new(larger);
+
+        // Assert
+        Assert.True(a < b);
+        Assert.True(b > a);
+        Assert.True(a <= b);
+        Assert.True(a <= a);
+        Assert.True(b >= a);
+        Assert.True(a >= a);
+        Assert.False(a > b);
+        Assert.False(b < a);
+    }
+
+    [Fact]
+    public void CompareTo_Object_NullShouldReturnPositive() {
+        // Arrange
+        HmacSha256Hash a = HmacSha256Hash.Compute("key"u8.ToArray(), "data");
+
+        // Act & Assert
+        Assert.True(((IComparable)a).CompareTo(null) > 0);
+    }
+
+    [Fact]
+    public void CompareTo_Object_WrongTypeShouldThrow() {
+        // Arrange
+        HmacSha256Hash a = HmacSha256Hash.Compute("key"u8.ToArray(), "data");
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => ((IComparable)a).CompareTo("not-a-hash"));
     }
 
     #endregion
@@ -167,6 +221,6 @@ public sealed class HmacSha256HashTests {
 
         // Act & Assert
         await Assert.ThrowsAnyAsync<ArgumentNullException>(() => HmacSha256Hash.ComputeAsync(nullStream, key).AsTask());
-    } 
+    }
     #endregion
 }

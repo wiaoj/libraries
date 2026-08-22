@@ -1,5 +1,6 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Buffers.Text;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -55,8 +56,6 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
 
     /// <inheritdoc/>
     public override void WriteAsPropertyName(Utf8JsonWriter writer, UnixTimestamp value, JsonSerializerOptions options) {
-        // Property keys in JSON must always be strings.
-        // We format the long to string.
-        writer.WritePropertyName(value.ToString("R"));
+        writer.WritePropertyName(value.TotalMilliseconds.ToString(CultureInfo.InvariantCulture));
     }
 }

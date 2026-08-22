@@ -1,12 +1,13 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using Wiaoj.BloomFilter; 
+using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Internal;
 
-#pragma warning disable IDE0130
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.BloomFilter;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
 /// Provides extension methods for <see cref="IBloomFilterBuilder"/> to configure and register Bloom Filters.
@@ -50,9 +51,9 @@ public static class BloomFilterBuilderExtensions {
     /// <returns>The builder for chaining.</returns>
     public static IBloomFilterBuilder RegisterFilter(this IBloomFilterBuilder builder, string name) {
         builder.Services.TryAddKeyedSingleton<IBloomFilter>(name, (sp, key) => {
-            var factory = sp.GetRequiredService<BloomFilterFactory>();
-            var registry = sp.GetRequiredService<IBloomFilterRegistry>();
-            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            BloomFilterFactory factory = sp.GetRequiredService<BloomFilterFactory>();
+            IBloomFilterRegistry registry = sp.GetRequiredService<IBloomFilterRegistry>();
+            ILoggerFactory loggerFactory = sp.GetRequiredService<ILoggerFactory>();
             return new LazyBloomFilterProxy(key?.ToString() ?? string.Empty, factory, registry, loggerFactory);
         });
 
@@ -82,7 +83,7 @@ public static class BloomFilterBuilderExtensions {
         builder.AddFilter(name, expectedItems, errorRate, configure);
 
         builder.Services.TryAddSingleton<IBloomFilter<TTag>>(sp => {
-            var innerFilter = sp.GetRequiredKeyedService<IBloomFilter>(name);
+            IBloomFilter innerFilter = sp.GetRequiredKeyedService<IBloomFilter>(name);
             return new TypedBloomFilterWrapper<TTag>(innerFilter);
         });
 
@@ -102,7 +103,7 @@ public static class BloomFilterBuilderExtensions {
         builder.RegisterFilter(filterName);
 
         builder.Services.TryAddSingleton<IBloomFilter<TTag>>(sp => {
-            var innerFilter = sp.GetRequiredKeyedService<IBloomFilter>(filterName);
+            IBloomFilter innerFilter = sp.GetRequiredKeyedService<IBloomFilter>(filterName);
             return new TypedBloomFilterWrapper<TTag>(innerFilter);
         });
 
@@ -141,4 +142,4 @@ public static class BloomFilterBuilderExtensions {
         builder.Services.AddHostedService<BloomFilterAutoSaveService>();
         return builder;
     }
-}
+}

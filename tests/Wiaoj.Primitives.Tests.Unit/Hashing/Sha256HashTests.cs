@@ -1,10 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Primitives.Tests.Unit.Hashing;
+
 public sealed class Sha256HashTests {
     private static byte[] GetRandomBytes(int length = 32) {
         byte[] buffer = new byte[length];
@@ -41,7 +40,7 @@ public sealed class Sha256HashTests {
     [Fact]
     public void Empty_ShouldReturnZeroFilledHash() {
         // Arrange
-        var empty = Sha256Hash.Empty;
+        Sha256Hash empty = Sha256Hash.Empty;
 
         // Act
         byte[] bytes = empty.AsSpan().ToArray();
@@ -91,6 +90,61 @@ public sealed class Sha256HashTests {
 
     #endregion
 
+    #region Sıralama (Comparison) Testleri
+
+    [Fact]
+    public void CompareTo_SmallerFirstByteDiffers_ShouldReturnNegative() {
+        // Arrange
+        byte[] smaller = new byte[32]; smaller[0] = 0x01;
+        byte[] larger = new byte[32]; larger[0] = 0x02;
+        Sha256Hash a = new(smaller);
+        Sha256Hash b = new(larger);
+
+        // Assert
+        Assert.True(a.CompareTo(b) < 0);
+        Assert.True(b.CompareTo(a) > 0);
+        Assert.Equal(0, a.CompareTo(a));
+    }
+
+    [Fact]
+    public void ComparisonOperators_ShouldReflectByteOrdering() {
+        // Arrange
+        byte[] smaller = new byte[32]; smaller[0] = 0x01;
+        byte[] larger = new byte[32]; larger[0] = 0x02;
+        Sha256Hash a = new(smaller);
+        Sha256Hash b = new(larger);
+
+        // Assert
+        Assert.True(a < b);
+        Assert.True(b > a);
+        Assert.True(a <= b);
+        Assert.True(a <= a);
+        Assert.True(b >= a);
+        Assert.True(a >= a);
+        Assert.False(a > b);
+        Assert.False(b < a);
+    }
+
+    [Fact]
+    public void CompareTo_Object_NullShouldReturnPositive() {
+        // Arrange
+        Sha256Hash a = Sha256Hash.Compute("x");
+
+        // Act & Assert
+        Assert.True(((IComparable)a).CompareTo(null) > 0);
+    }
+
+    [Fact]
+    public void CompareTo_Object_WrongTypeShouldThrow() {
+        // Arrange
+        Sha256Hash a = Sha256Hash.Compute("x");
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => ((IComparable)a).CompareTo("not-a-hash"));
+    }
+
+    #endregion
+
     #region Hesaplama (Computation) Testleri
 
     [Fact]
@@ -129,7 +183,7 @@ public sealed class Sha256HashTests {
     }
 
     #endregion
-     
+
     #region Asenkron Stream (ComputeAsync) Testleri
 
     [Fact]

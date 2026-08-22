@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Primitives.Snowflake;
+namespace Wiaoj.Primitives.Snowflake;
 /// <summary>
 /// Represents the number of bits allocated for the sequence part of a Snowflake ID.
 /// Encapsulates validation logic to ensure the bit count is within the safe range (1-22).
@@ -65,10 +65,12 @@ public readonly record struct SequenceBits : IComparable<SequenceBits> {
         return bits.Value;
     }
 
+    /// <inheritdoc/>
     public override string ToString() {
         return this.Value.ToString();
     }
 
+    /// <inheritdoc/>
     public int CompareTo(SequenceBits other) {
         return this.Value.CompareTo(other.Value);
     }

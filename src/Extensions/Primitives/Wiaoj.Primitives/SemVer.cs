@@ -1,8 +1,9 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 
 namespace Wiaoj.Primitives;
 
@@ -15,12 +16,15 @@ namespace Wiaoj.Primitives;
 /// and supports the full precedence and comparison rules of the SemVer 2.0.0 standard.
 /// </remarks>
 [DebuggerDisplay("{ToString(),nq}")]
+[JsonConverter(typeof(Wiaoj.Primitives.JsonConverters.SemVerJsonConverter))]
 public readonly record struct SemVer :
     IComparable<SemVer>,
     IComparable,
     ISpanParsable<SemVer>,
+    IUtf8SpanParsable<SemVer>,
     ISpanFormattable,
     IUtf8SpanFormattable,
+    IFormattable,
     IComparisonOperators<SemVer, SemVer, bool>,
     IMinMaxValue<SemVer> {
 
@@ -112,7 +116,7 @@ public readonly record struct SemVer :
     /// Creates a <see cref="SemVer"/> instance from a <see cref="System.Version"/> object.
     /// </summary>
     public static SemVer FromVersion(Version version) {
-        ArgumentNullException.ThrowIfNull(version);
+        Preca.ThrowIfNull(version);
         string metadata = version.Revision > -1 ? $"rev.{version.Revision}" : string.Empty;
         return new SemVer(version.Major, version.Minor, version.Build, string.Empty, metadata);
     }
@@ -127,21 +131,26 @@ public readonly record struct SemVer :
 
     #endregion
 
-    #region Parsing (Public & Explicit Interface Implementation)
-
-    // --- Public API (Clean, No IFormatProvider) ---
+    #region Parsing
 
     /// <summary>
     /// Parses a string into a <see cref="SemVer"/>.
     /// </summary>
+    /// <param name="s">The string to parse.</param>
+    /// <returns>A valid <see cref="SemVer"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="s"/> is null.</exception>
+    /// <exception cref="FormatException">Thrown if the input is not a valid semantic version string.</exception>
     public static SemVer Parse(string s) {
-        ArgumentNullException.ThrowIfNull(s);
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 
     /// <summary>
     /// Parses a span of characters into a <see cref="SemVer"/>.
     /// </summary>
+    /// <param name="s">The character span to parse.</param>
+    /// <returns>A valid <see cref="SemVer"/>.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not a valid semantic version string.</exception>
     public static SemVer Parse(ReadOnlySpan<char> s) {
         if(TryParseInternal(s, out SemVer result)) {
             return result;
@@ -150,8 +159,24 @@ public readonly record struct SemVer :
     }
 
     /// <summary>
+    /// Parses a UTF-8 byte span into a <see cref="SemVer"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 byte span to parse.</param>
+    /// <returns>A valid <see cref="SemVer"/>.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not a valid semantic version string.</exception>
+    public static SemVer Parse(ReadOnlySpan<byte> utf8Text) {
+        if(TryParse(utf8Text, out SemVer result)) {
+            return result;
+        }
+        throw new FormatException("The input is not a valid UTF-8 semantic version sequence.");
+    }
+
+    /// <summary>
     /// Tries to parse a string into a <see cref="SemVer"/>.
     /// </summary>
+    /// <param name="s">The string to parse.</param>
+    /// <param name="result">When this method returns, contains the parsed result if successful.</param>
+    /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse([NotNullWhen(true)] string? s, out SemVer result) {
         if(s is null) {
             result = default;
@@ -163,29 +188,53 @@ public readonly record struct SemVer :
     /// <summary>
     /// Tries to parse a span of characters into a <see cref="SemVer"/>.
     /// </summary>
+    /// <param name="s">The character span to parse.</param>
+    /// <param name="result">When this method returns, contains the parsed result if successful.</param>
+    /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, out SemVer result) {
         return TryParseInternal(s, out result);
     }
 
-    // --- Explicit Interface Implementation (Hidden from Public API) ---
-    // These satisfy the interfaces but don't clutter IntelliSense.
-    // We ignore the IFormatProvider because SemVer is culture-invariant.
+    /// <summary>
+    /// Tries to parse a UTF-8 byte span into a <see cref="SemVer"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 byte span to parse.</param>
+    /// <param name="result">When this method returns, contains the parsed result if successful.</param>
+    /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out SemVer result) {
+        if(utf8Text.IsEmpty) {
+            result = default;
+            return false;
+        }
 
-    static SemVer IParsable<SemVer>.Parse(string s, IFormatProvider? provider) {
-        return Parse(s);
+        // SemVer is ASCII
+        Span<char> chars = stackalloc char[utf8Text.Length <= 128 ? utf8Text.Length : 128];
+        char[]? rented = utf8Text.Length > 128 ? System.Buffers.ArrayPool<char>.Shared.Rent(utf8Text.Length) : null;
+        Span<char> buf = rented is not null ? rented.AsSpan(0, utf8Text.Length) : chars;
+        try {
+            if(System.Text.Encoding.UTF8.GetChars(utf8Text, buf) == utf8Text.Length) {
+                return TryParseInternal(buf, out result);
+            }
+            result = default;
+            return false;
+        }
+        finally {
+            if(rented is not null) System.Buffers.ArrayPool<char>.Shared.Return(rented);
+        }
     }
 
-    static bool IParsable<SemVer>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SemVer result) {
-        return TryParse(s, out result);
-    }
+    #endregion
 
-    static SemVer ISpanParsable<SemVer>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        return Parse(s);
-    }
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
 
-    static bool ISpanParsable<SemVer>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SemVer result) {
-        return TryParse(s, out result);
-    }
+    static SemVer IParsable<SemVer>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<SemVer>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SemVer result) => TryParse(s, out result);
+    static SemVer ISpanParsable<SemVer>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<SemVer>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SemVer result) => TryParse(s, out result);
+    static SemVer IUtf8SpanParsable<SemVer>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<SemVer>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out SemVer result) => TryParse(utf8Text, out result);
+
+    #endregion
 
     // --- Internal Logic ---
 
@@ -262,8 +311,6 @@ public readonly record struct SemVer :
             return true;
         }
     }
-
-    #endregion
 
     #region Comparison (IComparable, IComparisonOperators)
 
@@ -356,70 +403,90 @@ public readonly record struct SemVer :
         return 1;
     }
 
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
     public static bool operator >(SemVer left, SemVer right) {
         return left.CompareTo(right) > 0;
     }
 
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
     public static bool operator >=(SemVer left, SemVer right) {
         return left.CompareTo(right) >= 0;
     }
 
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
     public static bool operator <(SemVer left, SemVer right) {
         return left.CompareTo(right) < 0;
     }
 
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
     public static bool operator <=(SemVer left, SemVer right) {
         return left.CompareTo(right) <= 0;
     }
 
     #endregion
 
-    #region Formatting (ISpanFormattable)
+    #region Formatting (ISpanFormattable, IUtf8SpanFormattable, IFormattable)
 
     /// <inheritdoc/>
     /// <remarks>
     /// Supports: G (Default), f (Full), s (Stable), m (MajorMinor), M (Major).
     /// </remarks>
-    public override string ToString() {
-        return ToString("G");
-    }
+    public override string ToString() => ToString("G");
 
     /// <summary>
     /// Formats the SemVer instance to a string using the specified format.
     /// </summary>
-    public string ToString(string? format) {
-        // Mantığı buraya taşıdık.
-        // Stackalloc ile allocation yapmadan küçük buffer deniyoruz.
+    public string ToString(string? format) => ToString(format, null);
+
+    /// <summary>
+    /// Formats the SemVer instance to a string using the specified format and format provider.
+    /// </summary>
+    public string ToString(string? format, IFormatProvider? formatProvider) {
         Span<char> buffer = stackalloc char[128];
         if(TryFormatInternal(buffer, out int charsWritten, format.AsSpan())) {
             return buffer[..charsWritten].ToString();
         }
 
-        // Sığmazsa string.Create ile oluşturuyoruz.
         int requiredLength = GetRequiredLength(format.AsSpan());
         return string.Create(requiredLength, this, (span, state) => {
             state.TryFormatInternal(span, out _, format.AsSpan());
         });
     }
 
-    // Explicit implementation to satisfy IFormattable
-    // Bu metot artık yukarıdaki public metoda yönlendiriyor.
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
-        return ToString(format);
-    }
+    /// <summary>
+    /// Tries to format the SemVer instance into the destination character span.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
 
-    // Explicit implementation to satisfy ISpanFormattable
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        // Provider ignored
+    /// <summary>
+    /// Tries to format the SemVer instance into the destination character span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the SemVer instance into the destination character span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         return TryFormatInternal(destination, out charsWritten, format);
     }
 
-    // IUtf8SpanFormattable — write formatted semver as UTF-8 bytes
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Tries to format the SemVer instance into the destination UTF-8 byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the SemVer instance into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the SemVer instance into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         int required = GetRequiredLength(format.IsEmpty ? "G".AsSpan() : format);
         if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
         Span<char> charBuf = stackalloc char[required <= 128 ? required : 128];
-        // fallback for large versions
         char[]? rented = required > 128 ? System.Buffers.ArrayPool<char>.Shared.Rent(required) : null;
         Span<char> buf = rented is not null ? rented.AsSpan(0, required) : charBuf;
         try {
@@ -432,9 +499,41 @@ public readonly record struct SemVer :
         }
     }
 
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
-        return TryFormatInternal(destination, out charsWritten, format);
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs equality comparisons on <see cref="SemVer"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<SemVer> OrdinalComparer => SemVerOrdinalComparer.Instance;
+
+    private sealed class SemVerOrdinalComparer : IEqualityComparer<SemVer>, IAlternateEqualityComparer<ReadOnlySpan<char>, SemVer> {
+        public static SemVerOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(SemVer x, SemVer y) => x.Equals(y);
+
+        public int GetHashCode(SemVer obj) => obj.GetHashCode();
+
+        public bool Equals(ReadOnlySpan<char> alternate, SemVer other) {
+            if(SemVer.TryParse(alternate, out SemVer parsed)) {
+                return parsed.Equals(other);
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(SemVer.TryParse(alternate, out SemVer parsed)) {
+                return parsed.GetHashCode();
+            }
+            return 0;
+        }
+
+        public SemVer Create(ReadOnlySpan<char> alternate) => SemVer.Parse(alternate);
     }
+
+    #endregion
 
     // --- Internal Formatting Logic ---
 
@@ -537,8 +636,6 @@ public readonly record struct SemVer :
             };
         }
     }
-
-    #endregion
 
     // A zero-allocation enumerator for splitting a span.
     private ref struct SpanSplitEnumerator {

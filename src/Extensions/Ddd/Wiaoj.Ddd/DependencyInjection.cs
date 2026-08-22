@@ -1,42 +1,14 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
-using Wiaoj.Ddd;
 using Wiaoj.Ddd.DomainEvents;
-using Wiaoj.Ddd.Internal;
 using Wiaoj.Preconditions;
 
-#pragma warning disable IDE0130 
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130 
+namespace Wiaoj.Ddd;
+
 /// <summary>
-/// Provides extension methods for setting up DDD (Domain-Driven Design) architecture services and event handlers.
+/// Provides extension methods for configuring event handlers and domain services on <see cref="IDddBuilder"/>.
 /// </summary>
-public static class DependencyInjection {
-    extension(IServiceCollection services) {
-        /// <summary>
-        /// Adds DDD architecture services to the specified <see cref="IServiceCollection"/>.
-        /// Initializes the <see cref="IDddBuilder"/> and default dispatcher.
-        /// </summary>
-        /// <param name="configure">An action to configure the DDD builder (e.g., adding handlers, repositories).</param>
-        /// <returns>The <see cref="IDddBuilder"/> instance for further configuration chaining.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="configure"/> is null.</exception>
-        public IDddBuilder AddDdd(Action<IDddBuilder> configure) {
-            Preca.ThrowIfNull(configure);
-
-            // Builder pattern: Ensure builder exists or create a new one.
-            if(services.FirstOrDefault(x => x.ServiceType == typeof(IDddBuilder))?.ImplementationInstance is not DddBuilder builder) {
-                builder = new DddBuilder(services);
-                services.AddSingleton<IDddBuilder>(builder);
-
-                // Register default InMemory dispatcher if no other dispatcher is registered.
-                services.TryAddScoped<IDomainEventDispatcher, InMemoryDomainEventDispatcher>();
-            }
-
-            configure(builder);
-            return builder;
-        }
-    }
-
+public static class DddBuilderExtensions {
     extension(IDddBuilder builder) {
         #region Pre-Commit Handler Extensions
 
@@ -146,7 +118,6 @@ public static class DependencyInjection {
         public IDddBuilder ScanPreDomainEventHandlers(ServiceLifetime defaultLifetime, params IEnumerable<Assembly> assemblies) {
             Preca.ThrowIfNull(assemblies);
 
-            // Reflectively find the AddPreDomainEventHandler method to invoke it generically later.
             MethodInfo addMethod = typeof(IDddBuilder).GetMethod(nameof(IDddBuilder.AddPreDomainEventHandler))
                 ?? throw new InvalidOperationException($"Method '{nameof(IDddBuilder.AddPreDomainEventHandler)}' not found on IDddBuilder.");
 
@@ -176,7 +147,6 @@ public static class DependencyInjection {
         public IDddBuilder ScanPostDomainEventHandlers(ServiceLifetime defaultLifetime, params IEnumerable<Assembly> assemblies) {
             Preca.ThrowIfNull(assemblies);
 
-            // Reflectively find the AddPostDomainEventHandler method to invoke it generically later.
             MethodInfo addMethod = typeof(IDddBuilder).GetMethod(nameof(IDddBuilder.AddPostDomainEventHandler))
                  ?? throw new InvalidOperationException($"Method '{nameof(IDddBuilder.AddPostDomainEventHandler)}' not found on IDddBuilder.");
 
@@ -220,23 +190,16 @@ public static class DependencyInjection {
             MethodInfo addMethod,
             ServiceLifetime lifetime) {
             foreach(Assembly assembly in assemblies) {
-                // Select only concrete classes (no abstracts, no interfaces)
                 IEnumerable<Type> types = assembly.GetTypes()
                     .Where(t => t.IsClass && !t.IsAbstract && !t.IsInterface);
 
                 foreach(Type type in types) {
-                    // Find interfaces implemented by the type that match the open generic interface
                     IEnumerable<Type> interfaces = type.GetInterfaces()
                         .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == openInterfaceType);
 
                     foreach(Type handlerInterface in interfaces) {
-                        // Extract the Event type from the interface (e.g., IPreDomainEventHandler<UserCreated> -> UserCreated)
                         Type eventType = handlerInterface.GetGenericArguments()[0];
-
-                        // Construct the generic method: AddPreDomainEventHandler<TEvent, THandler>
                         MethodInfo genericMethod = addMethod.MakeGenericMethod(eventType, type);
-
-                        // Invoke the builder method
                         genericMethod.Invoke(dddBuilder, [lifetime]);
                     }
                 }

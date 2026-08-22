@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Wiaoj.Webhooks</RootNamespace>
+    <AssemblyName>Wiaoj.Webhooks</AssemblyName>
+    <PackageId>Wiaoj.Webhooks</PackageId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Extensions\Concurrency\Wiaoj.Concurrency\Wiaoj.Concurrency.csproj" />
+    <ProjectReference Include="..\..\Extensions\Wiaoj.Extensions\Wiaoj.Extensions.csproj" />
+    <ProjectReference Include="..\..\Serialization\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Serialization\Core\Wiaoj.Serialization.DependencyInjection\Wiaoj.Serialization.DependencyInjection.csproj" />
+    <ProjectReference Include="..\..\Serialization\Implementations\Wiaoj.Serialization.SystemTextJson\Wiaoj.Serialization.SystemTextJson.csproj" />
+    <ProjectReference Include="..\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

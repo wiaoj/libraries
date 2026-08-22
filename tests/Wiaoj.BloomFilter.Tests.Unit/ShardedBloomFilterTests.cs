@@ -63,4 +63,27 @@ public sealed class ShardedBloomFilterTests {
             Arg.Any<Stream>(),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public void ShardedFilter_WithCustomHashSeed_Should_Distribute_And_Find_Items() {
+        // Arrange: 4 shard ve özel seed
+        long customSeed = 0x7769616F6A5F6266;
+        BloomFilterConfiguration config = new BloomFilterConfiguration("sharded-seed", 1000, Percentage.FromDouble(0.01))
+            .WithShardCount(4)
+            .WithHashSeed(customSeed);
+
+        ILoggerFactory loggerFactory = Substitute.For<ILoggerFactory>();
+        loggerFactory.CreateLogger(Arg.Any<string>()).Returns(NullLogger.Instance);
+
+        ShardedBloomFilter shardedFilter = new(
+            config, null, loggerFactory, new BloomFilterOptions(), TimeProvider.System);
+
+        string[] testItems = ["order-1", "order-2", "order-3", "order-4", "order-5"];
+
+        // Act & Assert
+        foreach(string item in testItems) {
+            shardedFilter.Add(item.AsSpan());
+            Assert.True(shardedFilter.Contains(item.AsSpan()), $"Sharded filter failed to contain '{item}' with seed {customSeed:X}");
+        }
+    }
 }

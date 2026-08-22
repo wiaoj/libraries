@@ -1,17 +1,27 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
+using Wiaoj.Preconditions;
+using Wiaoj.Serialization;
+using Wiaoj.Serialization.DependencyInjection;
+using Wiaoj.Serialization.DependencyInjection.Internal;
 
-namespace Wiaoj.Serialization.DependencyInjection; 
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Microsoft.Extensions.DependencyInjection;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
+
+/// <summary>
+/// Service collection extension methods for registering Wiaoj serialization infrastructure.
+/// </summary>
 public static class ServiceCollectionExtensions {
     /// <summary>
     /// Adds Wiaoj serializer support to the service collection.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
-    /// <param name="configurationBuilder">A delegate to configure serializers using <see cref="WiaojSerializationBuilder"/>.</param>
+    /// <param name="configurationBuilder">A delegate to configure serializers using <see cref="SerializationBuilder"/>.</param>
     /// <returns>The updated service collection.</returns>
-    public static IServiceCollection AddWiaojSerializer(this IServiceCollection services, Action<IWiaojSerializationBuilder> configurationBuilder) {
+    public static IServiceCollection AddWiaojSerializer(this IServiceCollection services, Action<ISerializationBuilder> configurationBuilder) {
         Preca.ThrowIfNull(services);
         Preca.ThrowIfNull(configurationBuilder);
-        WiaojSerializationBuilder builder = new(services);
+        SerializationBuilder builder = new(services);
         configurationBuilder(builder);
         builder.AddSerializerProvider();
         builder.Build();
@@ -19,6 +29,11 @@ public static class ServiceCollectionExtensions {
         return services;
     }
 
+    /// <summary>
+    /// Adds Wiaoj serializer support to the service collection with default configuration.
+    /// </summary>
+    /// <param name="services">The service collection to configure.</param>
+    /// <returns>The updated service collection.</returns>
     public static IServiceCollection AddWiaojSerializer(this IServiceCollection services) {
         return AddWiaojSerializer(services, (_) => { });
     }

@@ -1,5 +1,6 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.JsonConverters;
@@ -20,9 +21,15 @@ namespace Wiaoj.Primitives;
 [JsonConverter(typeof(UrnJsonConverter))]
 public readonly record struct Urn :
     IEquatable<Urn>,
+    IComparable<Urn>,
+    IComparable,
+    IParsable<Urn>,
     ISpanParsable<Urn>,
+    IUtf8SpanParsable<Urn>,
     ISpanFormattable,
-    IUtf8SpanFormattable {
+    IUtf8SpanFormattable,
+    IFormattable,
+    IComparisonOperators<Urn, Urn, bool> {
 
     private const string Prefix = "urn";
     private const char Separator = ':';
@@ -273,57 +280,57 @@ public readonly record struct Urn :
     /// Parses a string into a <see cref="Urn"/>.
     /// </summary>
     /// <param name="s">The string to parse.</param>
-    /// <param name="provider">Format provider (optional).</param>
     /// <returns>The parsed Urn.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="s"/> is null.</exception>
     /// <exception cref="FormatException">Thrown if the format is invalid.</exception>
-    public static Urn Parse(string s, IFormatProvider? provider = null) {
-        return TryParse(s, provider, out Urn result) ? result : throw new FormatException($"Invalid URN format: '{s}'. Expected 'urn:<nid>:<nss>'.");
-    }
-
-    /// <summary>
-    /// Tries to parse a string into a <see cref="Urn"/>.
-    /// </summary>
-    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Urn result) {
-        if(s is null) { result = default; return false; }
-        return TryParse(s.AsSpan(), provider, out result);
+    public static Urn Parse(string s) {
+        Preca.ThrowIfNull(s);
+        return TryParse(s.AsSpan(), out Urn result) ? result : throw new FormatException($"Invalid URN format: '{s}'. Expected 'urn:<nid>:<nss>'.");
     }
 
     /// <summary>
     /// Parses a ReadOnlySpan into a <see cref="Urn"/>.
     /// </summary>
-    public static Urn Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null) {
-        return TryParse(s, provider, out Urn result) ? result : throw new FormatException($"Invalid URN format: '{s}'.");
+    public static Urn Parse(ReadOnlySpan<char> s) {
+        return TryParse(s, out Urn result) ? result : throw new FormatException($"Invalid URN format: '{s}'.");
+    }
+
+    /// <summary>
+    /// Parses a UTF-8 byte span into a <see cref="Urn"/>.
+    /// </summary>
+    public static Urn Parse(ReadOnlySpan<byte> utf8Text) {
+        if(TryParse(utf8Text, out Urn result)) {
+            return result;
+        }
+        throw new FormatException("Invalid UTF-8 sequence for Urn.");
+    }
+
+    /// <summary>
+    /// Tries to parse a string into a <see cref="Urn"/>.
+    /// </summary>
+    public static bool TryParse([NotNullWhen(true)] string? s, out Urn result) {
+        if(s is null) { result = default; return false; }
+        return TryParse(s.AsSpan(), out result);
     }
 
     /// <summary>
     /// Tries to parse a ReadOnlySpan into a <see cref="Urn"/>.
     /// </summary>
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Urn result) {
-        // Validation Rules:
-        // 1. Must start with "urn:" (Case-insensitive)
-        // 2. Must have at least one NID char
-        // 3. Must have at least one NSS char
-
+    public static bool TryParse(ReadOnlySpan<char> s, out Urn result) {
         if(s.Length < 7 || !s.StartsWith("urn:", StringComparison.OrdinalIgnoreCase)) {
             result = default; return false;
         }
 
-        // Find separator after "urn:"
         int secondColon = s[PrefixLength..].IndexOf(Separator);
-
-        // NID empty check
         if(secondColon < 1) {
             result = default; return false;
         }
 
-        secondColon += PrefixLength; // Adjust index to absolute position
-
-        // NSS empty check
+        secondColon += PrefixLength;
         if(secondColon >= s.Length - 1) {
             result = default; return false;
         }
 
-        // Validate NID Chars (Allocation-free check)
         ReadOnlySpan<char> nid = s[PrefixLength..secondColon];
         foreach(char c in nid) {
             if(!IsAlphaNumericOrHyphen(c)) {
@@ -335,9 +342,41 @@ public readonly record struct Urn :
         return true;
     }
 
+    /// <summary>
+    /// Tries to parse a UTF-8 byte span into a <see cref="Urn"/>.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out Urn result) {
+        if(utf8Text.IsEmpty) { result = default; return false; }
+        Span<char> chars = stackalloc char[utf8Text.Length <= 128 ? utf8Text.Length : 128];
+        char[]? rented = utf8Text.Length > 128 ? System.Buffers.ArrayPool<char>.Shared.Rent(utf8Text.Length) : null;
+        Span<char> buf = rented is not null ? rented.AsSpan(0, utf8Text.Length) : chars;
+        try {
+            if(System.Text.Encoding.UTF8.GetChars(utf8Text, buf) == utf8Text.Length) {
+                return TryParse(buf, out result);
+            }
+            result = default;
+            return false;
+        }
+        finally {
+            if(rented is not null) System.Buffers.ArrayPool<char>.Shared.Return(rented);
+        }
+    }
+
+    #endregion
+
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static Urn IParsable<Urn>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<Urn>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Urn result) => TryParse(s, out result);
+    static Urn ISpanParsable<Urn>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<Urn>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Urn result) => TryParse(s, out result);
+    static Urn IUtf8SpanParsable<Urn>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<Urn>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Urn result) => TryParse(utf8Text, out result);
+
     #endregion
 
     #region Helpers & Formatting
+
     private static void ValidateNid(string nid) {
         foreach(char c in nid) {
             if(!IsAlphaNumericOrHyphen(c))
@@ -356,16 +395,27 @@ public readonly record struct Urn :
     /// <summary>
     /// Returns the string representation of the URN.
     /// </summary>
-    public override string ToString() {
-        return this.Value;
-    }
+    public override string ToString() => this.Value;
 
     /// <summary>
     /// Returns the string representation using the specified format.
     /// </summary>
-    public string ToString(string? format, IFormatProvider? formatProvider) {
-        return this.Value;
-    }
+    public string ToString(string? format) => this.Value;
+
+    /// <summary>
+    /// Returns the string representation using the specified format and format provider.
+    /// </summary>
+    public string ToString(string? format, IFormatProvider? formatProvider) => this.Value;
+
+    /// <summary>
+    /// Tries to format the value of the current instance into the destination character span.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the value of the current instance into the destination character span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
 
     /// <summary>
     /// Tries to format the value of the current instance into the provided span of characters.
@@ -386,8 +436,20 @@ public readonly record struct Urn :
         return true;
     }
 
-    // IUtf8SpanFormattable — URN is ASCII-safe, byte count == char count
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Tries to format the value into the destination UTF-8 byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the value into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the value into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         if(string.IsNullOrEmpty(this._value)) { bytesWritten = 0; return true; }
         if(utf8Destination.Length < this._value.Length) { bytesWritten = 0; return false; }
         bytesWritten = System.Text.Encoding.UTF8.GetBytes(this._value.AsSpan(), utf8Destination);
@@ -397,18 +459,83 @@ public readonly record struct Urn :
     /// <summary>
     /// Implicitly converts a <see cref="Urn"/> to a <see cref="string"/>.
     /// </summary>
-    public static implicit operator string(Urn urn) {
-        return urn.Value;
-    }
+    public static implicit operator string(Urn urn) => urn.Value;
 
     /// <inheritdoc/>
-    public bool Equals(Urn other) {
-        return string.Equals(this.Value, other.Value, StringComparison.Ordinal);
-    }
+    public bool Equals(Urn other) => string.Equals(this.Value, other.Value, StringComparison.Ordinal);
 
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        return this.Value.GetHashCode(StringComparison.Ordinal);
+    public override int GetHashCode() => this.Value.GetHashCode(StringComparison.Ordinal);
+
+    #endregion
+
+    #region Comparison & Operators
+
+    /// <inheritdoc/>
+    public int CompareTo(Urn other) => string.Compare(this.Value, other.Value, StringComparison.Ordinal);
+
+    /// <inheritdoc/>
+    public int CompareTo(object? obj) {
+        if(obj is null) return 1;
+        if(obj is Urn other) return CompareTo(other);
+        throw new ArgumentException($"Object must be of type {nameof(Urn)}.", nameof(obj));
     }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
+    public static bool operator >(Urn left, Urn right) => left.CompareTo(right) > 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
+    public static bool operator <(Urn left, Urn right) => left.CompareTo(right) < 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
+    public static bool operator >=(Urn left, Urn right) => left.CompareTo(right) >= 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
+    public static bool operator <=(Urn left, Urn right) => left.CompareTo(right) <= 0;
+
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs ordinal comparisons on <see cref="Urn"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Urn> OrdinalComparer => UrnOrdinalComparer.Instance;
+
+    /// <summary>
+    /// Gets an equality comparer that performs case-insensitive ordinal comparisons on <see cref="Urn"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Urn> OrdinalIgnoreCaseComparer => UrnOrdinalIgnoreCaseComparer.Instance;
+
+    private sealed class UrnOrdinalComparer : IEqualityComparer<Urn>, IAlternateEqualityComparer<ReadOnlySpan<char>, Urn> {
+        public static UrnOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(Urn x, Urn y) => string.Equals(x.Value, y.Value, StringComparison.Ordinal);
+
+        public int GetHashCode(Urn obj) => obj.Value.GetHashCode(StringComparison.Ordinal);
+
+        public bool Equals(ReadOnlySpan<char> alternate, Urn other) => alternate.SequenceEqual(other.Value.AsSpan());
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.Ordinal);
+
+        public Urn Create(ReadOnlySpan<char> alternate) => Urn.Parse(alternate);
+    }
+
+    private sealed class UrnOrdinalIgnoreCaseComparer : IEqualityComparer<Urn>, IAlternateEqualityComparer<ReadOnlySpan<char>, Urn> {
+        public static UrnOrdinalIgnoreCaseComparer Instance { get; } = new();
+
+        public bool Equals(Urn x, Urn y) => string.Equals(x.Value, y.Value, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode(Urn obj) => string.GetHashCode(obj.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+
+        public bool Equals(ReadOnlySpan<char> alternate, Urn other) => alternate.Equals(other.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.OrdinalIgnoreCase);
+
+        public Urn Create(ReadOnlySpan<char> alternate) => Urn.Parse(alternate);
+    }
+
     #endregion
 }

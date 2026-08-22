@@ -9,90 +9,92 @@ namespace Wiaoj.Security;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Lazy initialization:</b> The inner <see cref="SecretProtector{TContext}"/> is created
-/// on demand via <see cref="AsyncLazy{T}"/>. The DI factory no longer blocks the thread pool
-/// with <c>.GetAwaiter().GetResult()</c>. Instead, <see cref="SecurityInitializationService{TContext}"/>
-/// pre-warms the lazy during <c>IHostedService.StartAsync</c>, so by the time the application
-/// starts accepting requests the key ring is already loaded.
+/// <b>Lazy Initialization:</b> The inner <see cref="SecretProtector{TContext}"/> is created on demand via <see cref="AsyncLazy{T}"/>.
+/// <see cref="SecurityInitializationService{TContext}"/> pre-warms the key ring during application startup (<c>IHostedService.StartAsync</c>).
 /// </para>
 /// <para>
-/// <b>Hot reload:</b> <see cref="ReloadAsync"/> atomically replaces the inner lazy with a
-/// newly loaded one, disposes the old lazy (which disposes the old protector and its key ring),
-/// and leaves concurrent readers unaffected — they either see the old or the new protector,
-/// both of which are valid.
+/// <b>Atomic Hot-Reload:</b> <see cref="ReloadAsync"/> atomically replaces the inner protector with a freshly loaded key ring
+/// and safely disposes the old instance without dropping or blocking in-flight cryptographic operations.
 /// </para>
 /// <para>
-/// <b>Thread safety:</b> The lazy reference is <see langword="volatile"/>. Concurrent reloads
-/// are serialised by a <see cref="SemaphoreSlim"/>.
-/// </para>
-/// <para>
-/// <b>Sync interface methods:</b> After the first successful initialization,
-/// <see cref="AsyncLazy{T}.IsValueCreated"/> is <see langword="true"/> and
-/// <c>GetValueAsync().GetAwaiter().GetResult()</c> returns the cached value without
-/// entering the thread pool — it is effectively free.
+/// <b>Thread Safety:</b> The protector reference is volatile and concurrent reloads are serialized via a <see cref="SemaphoreSlim"/>.
 /// </para>
 /// </remarks>
-public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext>, IAsyncDisposable
+/// <typeparam name="TContext">The phantom type representing the secret domain context.</typeparam>
+public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext>, IDisposable, IAsyncDisposable
     where TContext : ISecretContext {
 
-    // volatile: readers always see the latest reference after a reload swap.
     private volatile AsyncLazy<SecretProtector<TContext>> _lazy;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly SemaphoreSlim _reloadLock = new(1, 1);
-    private bool _disposed;
+    private readonly DisposeState _disposeState = new();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ManagedSecretProtector{TContext}"/> class.
+    /// </summary>
+    /// <param name="lazy">The lazy evaluator that produces the inner <see cref="SecretProtector{TContext}"/>.</param>
+    /// <param name="scopeFactory">The service scope factory used to resolve scoped loaders during reload.</param>
     public ManagedSecretProtector(
         AsyncLazy<SecretProtector<TContext>> lazy,
         IServiceScopeFactory scopeFactory) {
         this._lazy = lazy;
         this._scopeFactory = scopeFactory;
     }
-     
-    /// <summary>
-    /// <see langword="true"/> when the key ring has been successfully loaded at least once.
-    /// Used by <see cref="SecurityHealthCheck{TContext}"/>.
-    /// </summary>
-    public bool IsInitialized => _lazy.IsValueCreated;
 
     /// <summary>
-    /// Ensures the inner <see cref="SecretProtector{TContext}"/> has been created.
-    /// Called by <see cref="SecurityInitializationService{TContext}"/> at startup.
-    /// Safe to call multiple times — subsequent calls are free.
+    /// Gets a value indicating whether the key ring has been successfully loaded at least once.
     /// </summary>
-    public async ValueTask EnsureInitializedAsync(CancellationToken ct = default) {
-        await this._lazy.GetValueAsync(ct);
+    public bool IsInitialized => this._lazy.IsValueCreated;
+
+    /// <summary>
+    /// Ensures the inner protector is fully initialized. Safe to invoke multiple times.
+    /// </summary>
+    /// <param name="cancellationToken">A token to observe while waiting for initialization.</param>
+    /// <returns>A <see cref="ValueTask"/> representing the initialization operation.</returns>
+    public async ValueTask EnsureInitializedAsync(CancellationToken cancellationToken = default) {
+        await this._lazy.GetValueAsync(cancellationToken);
     }
-     
+
+    /// <inheritdoc/>
     public KeyVersion CurrentKeyVersion => this.Inner.CurrentKeyVersion;
 
+    /// <inheritdoc/>
     public EncryptedSecret<TContext> Protect(ReadOnlySpan<byte> plainSecret) {
         return this.Inner.Protect(plainSecret);
     }
 
+    /// <inheritdoc/>
     public EncryptedSecret<TContext> Protect(string plainText) {
         return this.Inner.Protect(plainText);
     }
 
+    /// <inheritdoc/>
     public Secret<byte> Unprotect(in EncryptedSecret<TContext> encrypted) {
         return this.Inner.Unprotect(encrypted);
     }
 
+    /// <inheritdoc/>
     public bool NeedsRotation(in EncryptedSecret<TContext> encrypted) {
         return this.Inner.NeedsRotation(encrypted);
     }
 
+    /// <inheritdoc/>
     public EncryptedSecret<TContext> Rotate(in EncryptedSecret<TContext> encrypted) {
         return this.Inner.Rotate(encrypted);
-    } 
+    }
 
     /// <summary>
-    /// Reloads the <see cref="KeyRing{TContext}"/> from the database and atomically
-    /// replaces the inner <see cref="SecretProtector{TContext}"/>.
+    /// Reloads the <see cref="KeyRing{TContext}"/> from the store and atomically replaces the active protector instance.
     /// </summary>
-    public async Task ReloadAsync(CancellationToken ct = default) {
-        await this._reloadLock.WaitAsync(ct);
+    /// <param name="cancellationToken">A token to observe while waiting for the reload operation to complete.</param>
+    /// <returns>A task representing the asynchronous reload operation.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when this protector has been disposed.</exception>
+    public async Task ReloadAsync(CancellationToken cancellationToken = default) {
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(ManagedSecretProtector<TContext>));
+
+        await this._reloadLock.WaitAsync(cancellationToken);
         try {
-            IServiceScopeFactory scopeFactory = this._scopeFactory; // avoid closure over `this`
+            IServiceScopeFactory scopeFactory = this._scopeFactory;
 
             AsyncLazy<SecretProtector<TContext>> newLazy = new(async innerCt => {
                 await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
@@ -102,16 +104,12 @@ public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext
                 return new SecretProtector<TContext>(ring);
             });
 
-            // Pre-warm before the atomic swap: if this throws, the old lazy is untouched.
-            await newLazy.GetValueAsync(ct);
+            // Pre-warm before atomic reference swap
+            await newLazy.GetValueAsync(cancellationToken);
 
-            // Atomic reference swap — volatile write, so readers see the new lazy immediately.
             AsyncLazy<SecretProtector<TContext>> old = this._lazy;
             this._lazy = newLazy;
 
-            // Dispose the old lazy: disposes the old SecretProtector → disposes its KeyRing
-            // → zeroes all key material. Readers that captured `old` before the swap finish
-            // safely; disposal only affects future accesses through the old reference.
             await old.DisposeAsync();
         }
         finally {
@@ -121,26 +119,44 @@ public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext
 
     // ── Disposal ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Performs asynchronous disposal of the protector and its key ring resources.
+    /// </summary>
+    /// <returns>A <see cref="ValueTask"/> representing the disposal operation.</returns>
     public async ValueTask DisposeAsync() {
-        if(!this._disposed) {
-            this._disposed = true;
-            await this._lazy.DisposeAsync();
-            this._reloadLock.Dispose();
+        if(this._disposeState.TryBeginDispose()) {
+            try {
+                await this._lazy.DisposeAsync();
+                this._reloadLock.Dispose();
+            }
+            finally {
+                this._disposeState.SetDisposed();
+            }
+        }
+        else {
+            await this._disposeState.WaitForDisposedAsync();
         }
     }
 
-    // ── Private ───────────────────────────────────────────────────────────────
-
     /// <summary>
-    /// Returns the inner protector synchronously.
-    /// After <see cref="EnsureInitializedAsync"/> has completed, <see cref="AsyncLazy{T}.IsValueCreated"/>
-    /// is <see langword="true"/> and this is equivalent to a field read — no thread-pool involvement.
-    /// If called before initialization (i.e., outside the normal startup flow), this blocks until the
-    /// lazy has completed, which is acceptable as a last-resort guard.
+    /// Synchronously disposes the protector and securely clears active key ring resources.
     /// </summary>
+    public void Dispose() {
+        if(this._disposeState.TryBeginDispose()) {
+            try {
+                DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            finally {
+                this._disposeState.SetDisposed();
+            }
+        }
+    }
+
+    // ── Private Helpers ───────────────────────────────────────────────────────
+
     private SecretProtector<TContext> Inner {
         get {
-            ObjectDisposedException.ThrowIf(this._disposed, this);
+            this._disposeState.ThrowIfDisposingOrDisposed(nameof(ManagedSecretProtector<TContext>));
             return this._lazy.GetValueAsync().GetAwaiter().GetResult();
         }
     }

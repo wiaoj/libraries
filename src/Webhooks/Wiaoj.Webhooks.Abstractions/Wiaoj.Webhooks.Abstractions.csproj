@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.Webhooks</RootNamespace>
+	  <AssemblyName>Wiaoj.Webhooks.Abstractions</AssemblyName>
+	  <PackageId>Wiaoj.Webhooks.Abstractions</PackageId>
+  
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
+    <ProjectReference Include="..\..\Extensions\Security\Wiaoj.Security.Abstractions\Wiaoj.Security.Abstractions.csproj" />
+  </ItemGroup> 
+
+</Project>

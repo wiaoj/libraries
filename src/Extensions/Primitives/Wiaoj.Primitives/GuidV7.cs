@@ -26,8 +26,11 @@ public readonly record struct GuidV7 :
     IComparable<GuidV7>,
     IComparable,
     ISpanParsable<GuidV7>,
+    IUtf8SpanParsable<GuidV7>,
     ISpanFormattable,
-    IUtf8SpanFormattable {
+    IUtf8SpanFormattable,
+    IFormattable,
+    IComparisonOperators<GuidV7, GuidV7, bool> {
 
     private readonly Guid _value;
 
@@ -169,22 +172,38 @@ public readonly record struct GuidV7 :
     /// <summary>
     /// Parses a string into a <see cref="GuidV7"/>.
     /// Accepts any standard GUID format (D, N, B, P, X).
-    /// </summary>
+    /// <summary>Parses a string into a <see cref="GuidV7"/>.</summary>
+    /// <param name="s">The string to parse.</param>
+    /// <returns>A valid <see cref="GuidV7"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="s"/> is null.</exception>
     /// <exception cref="FormatException">The string is not a valid version-7 GUID.</exception>
     public static GuidV7 Parse(string s) {
-        ArgumentNullException.ThrowIfNull(s);
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 
     /// <summary>Parses a character span into a <see cref="GuidV7"/>.</summary>
+    /// <param name="s">The character span to parse.</param>
+    /// <returns>A valid <see cref="GuidV7"/>.</returns>
     /// <exception cref="FormatException">The span is not a valid version-7 GUID.</exception>
     public static GuidV7 Parse(ReadOnlySpan<char> s) {
         if(TryParse(s, out GuidV7 result)) return result;
         throw new FormatException($"'{s}' is not a valid GuidV7. Ensure the GUID is version 7.");
     }
 
+    /// <summary>
+    /// Parses a UTF-8 byte span into a <see cref="GuidV7"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 byte span to parse.</param>
+    /// <returns>A valid <see cref="GuidV7"/>.</returns>
+    /// <exception cref="FormatException">The UTF-8 sequence is not a valid version-7 GUID.</exception>
+    public static GuidV7 Parse(ReadOnlySpan<byte> utf8Text) {
+        if(TryParse(utf8Text, out GuidV7 result)) return result;
+        throw new FormatException("Invalid UTF-8 sequence for GuidV7.");
+    }
+
     /// <summary>Tries to parse a string into a <see cref="GuidV7"/>.</summary>
-    /// <returns><see langword="false"/> if the string is not a GUID or not version 7.</returns>
+    /// <returns><see langword="true"/> if parsed successfully; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse([NotNullWhen(true)] string? s, out GuidV7 result) {
         if(s is null) { result = default; return false; }
         return TryParse(s.AsSpan(), out result);
@@ -200,26 +219,31 @@ public readonly record struct GuidV7 :
         return true;
     }
 
-    // Explicit interface implementations (IFormatProvider hidden from public API)
-    static GuidV7 IParsable<GuidV7>.Parse(string s, IFormatProvider? provider) {
-        return Parse(s);
-    }
-
-    static bool IParsable<GuidV7>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out GuidV7 result) {
-        return TryParse(s, out result);
-    }
-
-    static GuidV7 ISpanParsable<GuidV7>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        return Parse(s);
-    }
-
-    static bool ISpanParsable<GuidV7>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out GuidV7 result) {
-        return TryParse(s, out result);
+    /// <summary>Tries to parse a UTF-8 byte span into a <see cref="GuidV7"/>.</summary>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out GuidV7 result) {
+        if(!System.Buffers.Text.Utf8Parser.TryParse(utf8Text, out Guid guid, out _) || guid.Version != 7) {
+            result = default;
+            return false;
+        }
+        result = new GuidV7(guid);
+        return true;
     }
 
     #endregion
 
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static GuidV7 IParsable<GuidV7>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<GuidV7>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out GuidV7 result) => TryParse(s, out result);
+    static GuidV7 ISpanParsable<GuidV7>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<GuidV7>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out GuidV7 result) => TryParse(s, out result);
+    static GuidV7 IUtf8SpanParsable<GuidV7>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<GuidV7>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out GuidV7 result) => TryParse(utf8Text, out result);
+
+    #endregion
+
     #region Formatting
+
     /// <summary>
     /// Creates a URN using this GuidV7 and a specified namespace.
     /// <para>Example: <c>ToUrn("user") -> urn:user:01968e3a-b4c2-7f00-a1b2-c3d4e5f60718</c></para>
@@ -229,44 +253,53 @@ public readonly record struct GuidV7 :
         return Urn.Create(nid, this._value);
     }
 
-
     /// <summary>Returns the standard hyphenated GUID string (format "D").</summary>
     /// <example>01968e3a-b4c2-7f00-a1b2-c3d4e5f60718</example>
-    public override string ToString() {
-        return this._value.ToString("D");
-    }
+    public override string ToString() => this._value.ToString("D");
 
     /// <summary>
     /// Returns the GUID string using the specified format specifier.
     /// Supported: D (default, hyphenated), N (no dashes), B (braces), P (parens), X (hex struct).
     /// </summary>
-    public string ToString(string? format) {
-        return this._value.ToString(format ?? "D");
-    }
+    public string ToString(string? format) => this._value.ToString(format ?? "D");
 
     /// <summary>
-    /// Tries to format the value of the current <see cref="GuidV7"/> instance into the provided span of characters.
+    /// Formats the GUID using the specified format and format provider.
     /// </summary>
-    /// <param name="destination">The span in which to write this instance's value formatted as a span of characters.</param>
-    /// <param name="charsWritten">When this method returns, contains the number of characters that were written in <paramref name="destination"/>.</param>
-    /// <param name="format">A read-only span that contains the character format string (e.g., "D", "N", "B", "P", "X").</param>
-    /// <returns><see langword="true"/> if the formatting was successful; otherwise, <see langword="false"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default) {
-        return this._value.TryFormat(destination, out charsWritten, format);
-    }
+    public string ToString(string? format, IFormatProvider? formatProvider) => this._value.ToString(format ?? "D", formatProvider);
 
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
-        return ToString(format);
-    }
+    /// <summary>
+    /// Tries to format the value into the destination character span.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
 
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Tries to format the value into the destination character span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the value into the destination character span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         string fmt = format.IsEmpty ? "D" : format.ToString();
         return this._value.TryFormat(destination, out charsWritten, fmt);
     }
 
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        // "D" = 36 chars, "N" = 32, "B"/"P" = 38, "X" = ~68. 68 covers all.
+    /// <summary>
+    /// Tries to format the value into the destination UTF-8 byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the value into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the value into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         Span<char> charBuf = stackalloc char[68];
         string fmt = format.IsEmpty ? "D" : format.ToString();
         if(!this._value.TryFormat(charBuf, out int charsWritten, fmt)) {
@@ -283,52 +316,36 @@ public readonly record struct GuidV7 :
     #region Comparison & Operators
 
     /// <inheritdoc/>
-    public int CompareTo(GuidV7 other) {
-        return this._value.CompareTo(other._value);
-    }
+    public int CompareTo(GuidV7 other) => this._value.CompareTo(other._value);
 
     /// <inheritdoc/>
-    int IComparable.CompareTo(object? obj) {
+    public int CompareTo(object? obj) {
         if(obj is null) return 1;
         if(obj is GuidV7 other) return CompareTo(other);
         throw new ArgumentException($"Object must be of type {nameof(GuidV7)}.", nameof(obj));
     }
 
     /// <inheritdoc/>
-    public bool Equals(GuidV7 other) {
-        return this._value == other._value;
-    }
+    public bool Equals(GuidV7 other) => this._value == other._value;
 
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        return this._value.GetHashCode();
-    }
+    public override int GetHashCode() => this._value.GetHashCode();
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
-    public static bool operator >(GuidV7 left, GuidV7 right) {
-        return left.CompareTo(right) > 0;
-    }
+    public static bool operator >(GuidV7 left, GuidV7 right) => left.CompareTo(right) > 0;
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
-    public static bool operator <(GuidV7 left, GuidV7 right) {
-        return left.CompareTo(right) < 0;
-    }
+    public static bool operator <(GuidV7 left, GuidV7 right) => left.CompareTo(right) < 0;
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
-    public static bool operator >=(GuidV7 left, GuidV7 right) {
-        return left.CompareTo(right) >= 0;
-    }
+    public static bool operator >=(GuidV7 left, GuidV7 right) => left.CompareTo(right) >= 0;
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
-    public static bool operator <=(GuidV7 left, GuidV7 right) {
-        return left.CompareTo(right) <= 0;
-    }
+    public static bool operator <=(GuidV7 left, GuidV7 right) => left.CompareTo(right) <= 0;
 
     /// <summary>Implicitly converts a <see cref="GuidV7"/> to <see cref="Guid"/>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Guid(GuidV7 id) {
-        return id._value;
-    }
+    public static implicit operator Guid(GuidV7 id) => id._value;
 
     /// <summary>
     /// Explicitly converts a <see cref="Guid"/> to <see cref="GuidV7"/>.
@@ -338,6 +355,40 @@ public readonly record struct GuidV7 :
         if(g.Version != 7)
             throw new InvalidCastException($"Cannot convert Guid v{g.Version} to GuidV7. Only version 7 is supported.");
         return new GuidV7(g);
+    }
+
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs equality comparisons on <see cref="GuidV7"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<GuidV7> OrdinalComparer => GuidV7OrdinalComparer.Instance;
+
+    private sealed class GuidV7OrdinalComparer : IEqualityComparer<GuidV7>, IAlternateEqualityComparer<ReadOnlySpan<char>, GuidV7> {
+        public static GuidV7OrdinalComparer Instance { get; } = new();
+
+        public bool Equals(GuidV7 x, GuidV7 y) => x.Equals(y);
+
+        public int GetHashCode(GuidV7 obj) => obj.GetHashCode();
+
+        public bool Equals(ReadOnlySpan<char> alternate, GuidV7 other) {
+            if(Guid.TryParse(alternate, out Guid g)) {
+                return g == other.Value;
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(Guid.TryParse(alternate, out Guid g)) {
+                return g.GetHashCode();
+            }
+            return 0;
+        }
+
+        public GuidV7 Create(ReadOnlySpan<char> alternate) => GuidV7.Parse(alternate);
     }
 
     #endregion
@@ -357,8 +408,24 @@ public sealed class GuidV7JsonConverter : JsonConverter<GuidV7> {
 
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, GuidV7 value, JsonSerializerOptions options) {
-        Span<char> buffer = stackalloc char[36]; // "D" format = 36 chars
+        Span<char> buffer = stackalloc char[36];
         value.TryFormat(buffer, out _, "D");
         writer.WriteStringValue(buffer);
+    }
+
+    /// <inheritdoc/>
+    public override GuidV7 ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        string? propName = reader.GetString();
+        if(propName is not null && GuidV7.TryParse(propName, out GuidV7 result)) {
+            return result;
+        }
+        throw new JsonException($"Invalid property name format for GuidV7: '{propName}'.");
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, GuidV7 value, JsonSerializerOptions options) {
+        Span<char> buffer = stackalloc char[36];
+        value.TryFormat(buffer, out _, "D");
+        writer.WritePropertyName(buffer);
     }
 }

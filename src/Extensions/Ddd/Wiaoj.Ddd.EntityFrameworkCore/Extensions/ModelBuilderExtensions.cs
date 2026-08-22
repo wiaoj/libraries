@@ -1,10 +1,15 @@
-﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Wiaoj.Ddd.ValueObjects;
 using Wiaoj.Ddd.EntityFrameworkCore.ValueConverters;
+using Wiaoj.Ddd.ValueObjects;
 
-namespace Wiaoj.Ddd.EntityFrameworkCore.Extensions;  
-public static class ModelBuilderExtensions {
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Microsoft.EntityFrameworkCore;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
+
+/// <summary>
+/// EF Core extension methods on <see cref="ModelBuilder"/> for applying DDD conventions.
+/// </summary>
+public static class DddModelBuilderExtensions {
     extension(ModelBuilder modelBuilder) {
         /// <summary>
         /// Scans all entities in the model and automatically applies ValueConverters for:

@@ -1,4 +1,4 @@
-﻿using Wiaoj.Primitives.Snowflake;
+using Wiaoj.Primitives.Snowflake;
 
 namespace Wiaoj.Primitives.Tests.Unit.UrnTests;
 public sealed class UrnTests {
@@ -28,10 +28,10 @@ public sealed class UrnTests {
 
     [Fact]
     public void TryParse_Should_Handle_Invalid_Inputs() {
-        Assert.False(Urn.TryParse("just-text", null, out _));
-        Assert.False(Urn.TryParse("urn:invalid-nid!:123", null, out _)); // Special char in NID
+        Assert.False(Urn.TryParse("just-text", out _));
+        Assert.False(Urn.TryParse("urn:invalid-nid!:123", out _)); // Special char in NID
 
-        Assert.True(Urn.TryParse("urn:isbn:978-0-123", null, out var result));
+        Assert.True(Urn.TryParse("urn:isbn:978-0-123", out var result));
         Assert.Equal("isbn", result.Namespace.ToString());
     }
 

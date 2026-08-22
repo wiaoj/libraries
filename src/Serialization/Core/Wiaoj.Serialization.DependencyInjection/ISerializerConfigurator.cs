@@ -7,19 +7,19 @@
 //    /// <summary>
 //    /// Gets the main builder to continue the registration chain.
 //    /// </summary>
-//    IWiaojSerializationBuilder Builder { get; }
+//    ISerializationBuilder Builder { get; }
 //}
 
 ///// <inheritdoc />
-//internal sealed class SerializerConfigurator<TKey>(IWiaojSerializationBuilder builder)
+//internal sealed class SerializerConfigurator<TKey>(ISerializationBuilder builder)
 //   : ISerializerConfigurator<TKey> where TKey : ISerializerKey {
 //    /// <inheritdoc />
-//    public IWiaojSerializationBuilder Builder => builder;
+//    public ISerializationBuilder Builder => builder;
 //}
 
 /// <inheritdoc />
-internal sealed class SerializerConfigurator<TKey>(IWiaojSerializationBuilder builder)
+internal sealed class SerializerConfigurator<TKey>(ISerializationBuilder builder)
    : ISerializerConfigurator<TKey> where TKey : ISerializerKey {
     /// <inheritdoc />
-    public IWiaojSerializationBuilder Builder => builder;
+    public ISerializationBuilder Builder => builder;
 }

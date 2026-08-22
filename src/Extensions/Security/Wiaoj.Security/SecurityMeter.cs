@@ -23,6 +23,11 @@ public static class SecurityMeter {
     /// </code>
     /// </summary>
     public const string Name = "Wiaoj.Security";
+
+    /// <summary>
+    /// Gets the informational version of the executing assembly, or a fallback default (<c>"1.0.0"</c>) 
+    /// if the version attribute is not present. Used to tag the metrics meter.
+    /// </summary>
     public static readonly string Version = Assembly.GetExecutingAssembly()
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
         .InformationalVersion ?? "1.0.0";

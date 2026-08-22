@@ -1,23 +1,72 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
-using System.Text;
+﻿using System.Text;
+using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.BloomFilter.Internal;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter.Tests.Unit;
 
+[Trait("Category", "Unit")]
+[Trait("Component", "InMemoryBloomFilter")]
 public sealed class InMemoryBloomFilterTests {
     private readonly BloomFilterOptions _options = new();
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 1. BASIC CONFORMANCE & REGRESSION TESTS
+    // ────────────────────────────────────────────────────────────────────────
 
     [Fact]
     public void Add_Item_Should_Always_Be_Contained() {
         BloomFilterConfiguration config = new("test", 1000, Percentage.FromDouble(0.01));
         InMemoryBloomFilter filter = new(config, null, NullLogger.Instance, this._options, TimeProvider.System);
-        var item = Encoding.UTF8.GetBytes("secret-key");
+        byte[] item = Encoding.UTF8.GetBytes("secret-key");
 
         filter.Add(item);
 
         Assert.True(filter.Contains(item));
         Assert.True(filter.IsDirty);
+    }
+
+    // 🌟 REGRESSION TEST: Verifies that custom/non-zero HashSeed works identically for Add and Contains
+    [Theory]
+    [InlineData(0x7769616F6A5F6266)] // Default factory seed
+    [InlineData(0xDEADBEEFCAFE)]     // Custom large seed
+    [InlineData(123456789)]          // Arbitrary positive seed
+    [InlineData(-987654321)]         // Negative seed
+    public void Add_WithCustomHashSeed_ShouldBeContained_ForBothByteAndCharSpans(long customSeed) {
+        // Arrange: Custom non-zero seed ile config oluşturuyoruz
+        BloomFilterConfiguration config = new BloomFilterConfiguration("seed-test", 1000, Percentage.FromDouble(0.01))
+            .WithHashSeed(customSeed);
+
+        InMemoryBloomFilter filter = new(config, null, NullLogger.Instance, this._options, TimeProvider.System);
+
+        const string testKey = "webhook:order:ORD-9999";
+        byte[] testKeyBytes = Encoding.UTF8.GetBytes(testKey);
+
+        // Act 1: Add via byte span -> must be found via byte and char spans
+        filter.Add(testKeyBytes);
+        Assert.True(filter.Contains(testKeyBytes), $"Contains(byte[]) failed for HashSeed: {customSeed:X}");
+        Assert.True(filter.Contains(testKey.AsSpan()), $"Contains(char[]) failed for HashSeed: {customSeed:X}");
+
+        // Act 2: Add via char span -> must be found via byte and char spans
+        const string secondKey = "webhook:order:ORD-8888";
+        filter.Add(secondKey.AsSpan());
+        Assert.True(filter.Contains(secondKey.AsSpan()), $"Contains(char[]) failed after char Add for HashSeed: {customSeed:X}");
+        Assert.True(filter.Contains(Encoding.UTF8.GetBytes(secondKey)), $"Contains(byte[]) failed after char Add for HashSeed: {customSeed:X}");
+    }
+
+    // 🌟 FACTORY INTEGRATION TEST: ConfigurationFactory'den çıkan üretim config'i ile doğrulama
+    [Fact]
+    public void Add_And_Contains_UsingConfigurationFactory_ShouldBeConsistent() {
+        BloomFilterConfigurationFactory factory = new();
+        BloomFilterConfiguration config = factory.Create("factory-test", 10_000, 0.01);
+
+        InMemoryBloomFilter filter = new(config, null, NullLogger.Instance, this._options, TimeProvider.System);
+
+        for(int i = 0; i < 100; i++) {
+            string item = $"item-{i}";
+            filter.Add(item.AsSpan());
+            Assert.True(filter.Contains(item.AsSpan()), $"Item '{item}' was not found with factory seed {config.HashSeed:X}");
+        }
     }
 
     [Fact]

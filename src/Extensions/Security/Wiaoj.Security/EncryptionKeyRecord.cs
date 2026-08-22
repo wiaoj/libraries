@@ -1,3 +1,5 @@
+using Wiaoj.Primitives;
+
 namespace Wiaoj.Security;
 
 /// <summary>
@@ -7,7 +9,11 @@ namespace Wiaoj.Security;
 /// Never stores plaintext key material.
 /// </summary>
 public sealed class EncryptionKeyRecord {
-    public Guid Id { get; set; } = Guid.CreateVersion7(); 
+    /// <summary>
+    /// Gets or sets the unique identifier for this encryption key record.
+    /// Defaults to a time-ordered UUIDv7 to ensure sequential database indexing.
+    /// </summary>
+    public Guid Id { get; set; } = Guid.CreateVersion7();
 
     /// <summary>
     /// The name of the <see cref="ISecretContext"/> type this key belongs to.
@@ -30,11 +36,19 @@ public sealed class EncryptionKeyRecord {
     /// <summary>UTC timestamp when this key was retired. Null = still active.</summary>
     public DateTimeOffset? RetiredAt { get; set; }
 
-    public bool IsRetired => RetiredAt.HasValue;
+    /// <summary>
+    /// Gets a value indicating whether this key has been retired.
+    /// Retired keys can still decrypt historical data but are never used for new encryptions.
+    /// </summary>
+    public bool IsRetired => this.RetiredAt.HasValue;
 
     /// <summary>
-    /// Returns true if this key has been active longer than <paramref name="rotationInterval"/>.
+    /// Determines whether this key has exceeded its active lifespan based on the specified rotation interval.
     /// </summary>
-    public bool IsExpired(TimeSpan rotationInterval, TimeProvider timeProvider)
-        => !IsRetired && (timeProvider.GetUtcNow() - CreatedAt) > rotationInterval;
+    /// <param name="rotationInterval">The maximum duration a key remains active before rotation is required.</param>
+    /// <param name="timeProvider">The time provider used to evaluate the current UTC time.</param>
+    /// <returns><see langword="true"/> if the key is active and its age exceeds <paramref name="rotationInterval"/>; otherwise, <see langword="false"/>.</returns>
+    public bool IsExpired(TimeSpan rotationInterval, TimeProvider timeProvider) {
+        return !this.IsRetired && (timeProvider.GetUtcNow() - this.CreatedAt) > rotationInterval;
+    }
 }

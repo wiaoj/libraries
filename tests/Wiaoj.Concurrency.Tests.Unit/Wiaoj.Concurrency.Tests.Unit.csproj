@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Extensions\Wiaoj.Threading\Wiaoj.Concurrency.csproj" />
+    <ProjectReference Include="..\..\src\Extensions\Concurrency\Wiaoj.Concurrency\Wiaoj.Concurrency.csproj" />
   </ItemGroup>
 
   <ItemGroup>

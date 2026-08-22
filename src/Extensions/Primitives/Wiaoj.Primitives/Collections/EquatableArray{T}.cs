@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
@@ -9,7 +10,8 @@ namespace Wiaoj.Primitives.Collections;
 /// <summary>
 /// Represents an immutable array structure focused on zero-allocation and content-based value equality.
 /// </summary>
-/// <typeparam name="T">The type of elements in the array.</typeparam>[JsonConverter(typeof(EquatableArrayJsonConverterFactory))] 
+/// <typeparam name="T">The type of elements in the array.</typeparam>
+[DebuggerDisplay("Count = {Count}")]
 [CollectionBuilder(typeof(EquatableArray), nameof(EquatableArray.Create))]
 [JsonConverter(typeof(EquatableArrayJsonConverterFactory))]
 public readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IReadOnlyList<T> {

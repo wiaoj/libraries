@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -23,11 +24,14 @@ namespace Wiaoj.Primitives;
 [JsonConverter(typeof(Base64UrlStringJsonConverter))]
 public readonly record struct Base64UrlString :
     IEquatable<Base64UrlString>,
+    IComparable<Base64UrlString>,
+    IComparable,
     ISpanParsable<Base64UrlString>,
     IUtf8SpanParsable<Base64UrlString>,
     ISpanFormattable,
     IUtf8SpanFormattable,
-    IFormattable {
+    IFormattable,
+    IComparisonOperators<Base64UrlString, Base64UrlString, bool> {
 
     // Ultra-fast validation tables using SIMD (Vectorized operations)
     private static readonly SearchValues<char> ValidBase64UrlChars =
@@ -37,6 +41,16 @@ public readonly record struct Base64UrlString :
         SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"u8);
 
     private readonly string _encodedValue;
+
+    /// <summary>
+    /// Gets a value indicating whether this Base64Url string is empty or uninitialized (default).
+    /// </summary>
+    public bool IsEmpty => string.IsNullOrEmpty(this._encodedValue);
+
+    /// <summary>
+    /// Gets the number of characters in this Base64Url string.
+    /// </summary>
+    public int Length => this._encodedValue?.Length ?? 0;
 
     /// <summary>
     /// Gets the underlying Base64Url-encoded string value.
@@ -68,7 +82,7 @@ public readonly record struct Base64UrlString :
         }
 
         int requiredLength = Base64Url.GetEncodedLength(bytes.Length);
-         
+
         using ValueBuffer<byte> utf8Buffer = ValueBuffer.Create(requiredLength, stackalloc byte[1024]);
 
         if(Base64Url.EncodeToUtf8(bytes, utf8Buffer, out _, out int bytesWritten) == OperationStatus.Done) {
@@ -102,10 +116,12 @@ public readonly record struct Base64UrlString :
     /// Encodes a string using the specified encoding into a <see cref="Base64UrlString"/>.
     /// </summary>
     /// <param name="text">The text to encode.</param>
-    /// <param name="encoding">The encoding to apply to the text before Base64Url conversion.</param>
-    /// <returns>A new <see cref="Base64UrlString"/> representing the encoded text.</returns>
+    /// <param name="encoding">The encoding to use.</param>
+    /// <returns>A new <see cref="Base64UrlString"/> containing the encoded text.</returns>
     public static Base64UrlString From(string text, Encoding encoding) {
-        if(string.IsNullOrEmpty(text)) return Empty;
+        if(string.IsNullOrEmpty(text)) {
+            return Empty;
+        }
         Preca.ThrowIfNull(encoding);
         return FromBytes(encoding.GetBytes(text));
     }
@@ -120,13 +136,7 @@ public readonly record struct Base64UrlString :
     /// <returns>A new byte array containing the decoded binary data.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[] ToBytes() {
-        if(string.IsNullOrEmpty(this.Value)) {
-            return [];
-        }
-
-        byte[] bytes = new byte[GetDecodedLength()];
-        TryDecode(bytes, out _);
-        return bytes;
+        return Decode(this.Value.AsSpan());
     }
 
     /// <summary>
@@ -137,20 +147,7 @@ public readonly record struct Base64UrlString :
     /// <returns><see langword="true"/> if decoding was successful; otherwise, <see langword="false"/>.</returns>
     [SkipLocalsInit]
     public bool TryDecode(Span<byte> destination, out int bytesWritten) {
-        if(string.IsNullOrEmpty(this.Value)) {
-            bytesWritten = 0;
-            return true;
-        }
-
-        int charLen = this.Value.Length;
-
-        using ValueBuffer<byte> utf8Buffer = ValueBuffer.Create(charLen, stackalloc byte[1024]);
-
-        // Highly optimized narrowing: Valid Base64Url is strictly ASCII.
-        Ascii.FromUtf16(this.Value.AsSpan(), utf8Buffer, out _);
-
-        return Base64Url.DecodeFromUtf8(utf8Buffer[..charLen], destination, out _, out bytesWritten) == OperationStatus.Done;
-
+        return TryDecode(this.Value.AsSpan(), destination, out bytesWritten);
     }
 
     /// <summary>
@@ -159,13 +156,64 @@ public readonly record struct Base64UrlString :
     /// <returns>The exact length of the decoded data in bytes.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetDecodedLength() {
-        if(string.IsNullOrEmpty(this._encodedValue)) {
+        return GetDecodedLength(this.Length);
+    }
+
+    // ── Static, Span-Based (no Base64UrlString instance required) ─────────────
+
+    /// <summary>
+    /// Decodes a Base64Url-encoded character span directly into a newly allocated byte array,
+    /// without constructing an intermediate <see cref="Base64UrlString"/> instance — avoids the
+    /// extra string copy and validation pass that <see cref="Parse(ReadOnlySpan{char})"/> would
+    /// otherwise perform.
+    /// </summary>
+    /// <param name="encoded">The Base64Url-encoded character span to decode.</param>
+    /// <returns>A new byte array containing the decoded data.</returns>
+    /// <exception cref="FormatException">Thrown when <paramref name="encoded"/> is not valid Base64Url.</exception>
+    public static byte[] Decode(ReadOnlySpan<char> encoded) {
+        if(encoded.IsEmpty) {
+            return [];
+        }
+
+        byte[] result = new byte[GetDecodedLength(encoded.Length)];
+        if(!TryDecode(encoded, result, out _)) {
+            throw new FormatException("The input is not a valid Base64Url string.");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Attempts to decode a Base64Url-encoded character span directly into a destination byte span,
+    /// without constructing an intermediate <see cref="Base64UrlString"/> instance.
+    /// </summary>
+    /// <param name="encoded">The Base64Url-encoded character span to decode.</param>
+    /// <param name="destination">The destination span to write decoded bytes into.</param>
+    /// <param name="bytesWritten">The number of bytes written to <paramref name="destination"/>.</param>
+    /// <returns><see langword="true"/> if decoding succeeded; otherwise, <see langword="false"/>.</returns>
+    [SkipLocalsInit]
+    public static bool TryDecode(ReadOnlySpan<char> encoded, Span<byte> destination, out int bytesWritten) {
+        if(encoded.IsEmpty) {
+            bytesWritten = 0;
+            return true;
+        }
+
+        int charLen = encoded.Length;
+
+        using ValueBuffer<byte> utf8Buffer = ValueBuffer.Create(charLen, stackalloc byte[1024]);
+
+        // Highly optimized narrowing: Valid Base64Url is strictly ASCII.
+        Ascii.FromUtf16(encoded, utf8Buffer, out _);
+
+        return Base64Url.DecodeFromUtf8(utf8Buffer[..charLen], destination, out _, out bytesWritten) == OperationStatus.Done;
+    }
+
+    private static int GetDecodedLength(int encodedLength) {
+        if(encodedLength == 0) {
             return 0;
         }
 
-        // Each Base64Url character encodes exactly 6 bits. 
-        // We can cleanly derive the unpadded byte count mathematically.
-        return (this._encodedValue.Length * 3) / 4;
+        return (encodedLength * 3) / 4;
     }
 
     #endregion
@@ -176,10 +224,11 @@ public readonly record struct Base64UrlString :
     /// Parses a string into a <see cref="Base64UrlString"/>.
     /// </summary>
     /// <param name="s">The string to parse.</param>
+    /// <returns>A new <see cref="Base64UrlString"/> instance.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="s"/> is null.</exception>
     /// <exception cref="FormatException">Thrown if the input is not a valid Base64Url format.</exception>
     public static Base64UrlString Parse(string s) {
-        ArgumentNullException.ThrowIfNull(s);
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 
@@ -212,6 +261,9 @@ public readonly record struct Base64UrlString :
     /// <summary>
     /// Tries to parse a string into a <see cref="Base64UrlString"/>.
     /// </summary>
+    /// <param name="s">The string to parse.</param>
+    /// <param name="result">When this method returns, contains the parsed result.</param>
+    /// <returns><see langword="true"/> if parsing was successful; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse([NotNullWhen(true)] string? s, out Base64UrlString result) {
         if(s is null) {
             result = default;
@@ -223,6 +275,9 @@ public readonly record struct Base64UrlString :
     /// <summary>
     /// Tries to parse a character span into a <see cref="Base64UrlString"/>.
     /// </summary>
+    /// <param name="s">The character span to parse.</param>
+    /// <param name="result">When this method returns, contains the parsed result.</param>
+    /// <returns><see langword="true"/> if parsing was successful; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, out Base64UrlString result) {
         return TryParseInternal(s, out result);
     }
@@ -230,9 +285,23 @@ public readonly record struct Base64UrlString :
     /// <summary>
     /// Tries to parse a UTF-8 byte span into a <see cref="Base64UrlString"/>.
     /// </summary>
+    /// <param name="utf8Text">The UTF-8 encoded byte span to parse.</param>
+    /// <param name="result">When this method returns, contains the parsed result.</param>
+    /// <returns><see langword="true"/> if parsing was successful; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, out Base64UrlString result) {
         return TryParseInternal(utf8Text, out result);
     }
+
+    #endregion
+
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static Base64UrlString IParsable<Base64UrlString>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<Base64UrlString>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Base64UrlString result) => TryParse(s, out result);
+    static Base64UrlString ISpanParsable<Base64UrlString>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<Base64UrlString>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Base64UrlString result) => TryParse(s, out result);
+    static Base64UrlString IUtf8SpanParsable<Base64UrlString>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<Base64UrlString>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Base64UrlString result) => TryParse(utf8Text, out result);
 
     #endregion
 
@@ -281,7 +350,7 @@ public readonly record struct Base64UrlString :
         }
 
         int maxDecodedLength = Base64Url.GetMaxDecodedLength(utf8Text.Length);
-         
+
         using ValueBuffer<byte> decodeBuffer = ValueBuffer.Create(maxDecodedLength, stackalloc byte[1024]);
 
         if(Base64Url.DecodeFromUtf8(utf8Text, decodeBuffer, out _, out _) == OperationStatus.Done) {
@@ -296,6 +365,21 @@ public readonly record struct Base64UrlString :
     #endregion
 
     #region Formatting (ISpanFormattable, IUtf8SpanFormattable, IFormattable)
+
+    /// <summary>
+    /// Formats the Base64Url string.
+    /// </summary>
+    /// <param name="format">The format string (ignored).</param>
+    /// <returns>The underlying Base64Url string value.</returns>
+    public string ToString(string? format) => ToString(format, null);
+
+    /// <summary>
+    /// Formats the Base64Url string using the specified format provider.
+    /// </summary>
+    /// <param name="format">The format string (ignored).</param>
+    /// <param name="formatProvider">The format provider (ignored).</param>
+    /// <returns>The underlying Base64Url string value.</returns>
+    public string ToString(string? format, IFormatProvider? formatProvider) => this.Value;
 
     /// <summary>
     /// Writes the strictly ASCII representation of the Base64Url string to the provided buffer writer.
@@ -316,13 +400,32 @@ public readonly record struct Base64UrlString :
         writer.Advance(byteCount);
     }
 
-    // IFormattable
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
-        return this.Value;
-    }
+    /// <summary>
+    /// Tries to format the Base64Url string into the destination character span.
+    /// </summary>
+    /// <param name="destination">The destination character span.</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
 
-    // ISpanFormattable
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Tries to format the Base64Url string into the destination character span using the specified format.
+    /// </summary>
+    /// <param name="destination">The destination character span.</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
+    /// <param name="format">The format span (ignored).</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the Base64Url string into the destination character span using the specified format and provider.
+    /// </summary>
+    /// <param name="destination">The destination character span.</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
+    /// <param name="format">The format span (ignored).</param>
+    /// <param name="provider">The format provider (ignored).</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         ReadOnlySpan<char> src = this.Value.AsSpan();
         if(destination.Length < src.Length) { charsWritten = 0; return false; }
         src.CopyTo(destination);
@@ -330,8 +433,32 @@ public readonly record struct Base64UrlString :
         return true;
     }
 
-    // IUtf8SpanFormattable
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Tries to format the Base64Url string into the destination UTF-8 byte span.
+    /// </summary>
+    /// <param name="utf8Destination">The destination byte span.</param>
+    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the Base64Url string into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    /// <param name="utf8Destination">The destination byte span.</param>
+    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
+    /// <param name="format">The format span (ignored).</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the Base64Url string into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    /// <param name="utf8Destination">The destination byte span.</param>
+    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
+    /// <param name="format">The format span (ignored).</param>
+    /// <param name="provider">The format provider (ignored).</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         if(string.IsNullOrEmpty(this._encodedValue)) { bytesWritten = 0; return true; }
         if(utf8Destination.Length < this._encodedValue.Length) { bytesWritten = 0; return false; }
 
@@ -341,35 +468,86 @@ public readonly record struct Base64UrlString :
 
     #endregion
 
-    #region Explicit Interface Implementations (Hidden API)
+    #region Comparison & Ordering
 
-    static Base64UrlString IParsable<Base64UrlString>.Parse(string s, IFormatProvider? provider) {
-        ArgumentNullException.ThrowIfNull(s);
-        return Parse(s.AsSpan());
+    /// <summary>
+    /// Compares the current instance with another <see cref="Base64UrlString"/> using ordinal comparison.
+    /// </summary>
+    /// <param name="other">The other <see cref="Base64UrlString"/> to compare.</param>
+    /// <returns>A value that indicates the relative order of the objects being compared.</returns>
+    public int CompareTo(Base64UrlString other) => string.Compare(this.Value, other.Value, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Compares the current instance with another object.
+    /// </summary>
+    /// <param name="obj">The object to compare.</param>
+    /// <returns>A value that indicates the relative order of the objects being compared.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="obj"/> is not a <see cref="Base64UrlString"/>.</exception>
+    public int CompareTo(object? obj) {
+        if(obj is null) return 1;
+        if(obj is Base64UrlString other) return CompareTo(other);
+        throw new ArgumentException($"Object must be of type {nameof(Base64UrlString)}", nameof(obj));
     }
 
-    static bool IParsable<Base64UrlString>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Base64UrlString result) {
-        if(s is null) { result = default; return false; }
-        return TryParseInternal(s.AsSpan(), out result);
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
+    public static bool operator <(Base64UrlString left, Base64UrlString right) => left.CompareTo(right) < 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
+    public static bool operator <=(Base64UrlString left, Base64UrlString right) => left.CompareTo(right) <= 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
+    public static bool operator >(Base64UrlString left, Base64UrlString right) => left.CompareTo(right) > 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
+    public static bool operator >=(Base64UrlString left, Base64UrlString right) => left.CompareTo(right) >= 0;
+
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs ordinal comparisons on <see cref="Base64UrlString"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Base64UrlString> OrdinalComparer => Base64UrlStringOrdinalComparer.Instance;
+
+    /// <summary>
+    /// Gets an equality comparer that performs case-insensitive ordinal comparisons on <see cref="Base64UrlString"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Base64UrlString> OrdinalIgnoreCaseComparer => Base64UrlStringOrdinalIgnoreCaseComparer.Instance;
+
+    private sealed class Base64UrlStringOrdinalComparer : IEqualityComparer<Base64UrlString>, IAlternateEqualityComparer<ReadOnlySpan<char>, Base64UrlString> {
+        public static Base64UrlStringOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(Base64UrlString x, Base64UrlString y) => x.Equals(y);
+
+        public int GetHashCode(Base64UrlString obj) => obj.GetHashCode();
+
+        public bool Equals(ReadOnlySpan<char> alternate, Base64UrlString other) => alternate.SequenceEqual(other.Value.AsSpan());
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.Ordinal);
+
+        public Base64UrlString Create(ReadOnlySpan<char> alternate) => Base64UrlString.Parse(alternate);
     }
 
-    static Base64UrlString ISpanParsable<Base64UrlString>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        return Parse(s);
-    }
+    private sealed class Base64UrlStringOrdinalIgnoreCaseComparer : IEqualityComparer<Base64UrlString>, IAlternateEqualityComparer<ReadOnlySpan<char>, Base64UrlString> {
+        public static Base64UrlStringOrdinalIgnoreCaseComparer Instance { get; } = new();
 
-    static bool ISpanParsable<Base64UrlString>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Base64UrlString result) {
-        return TryParse(s, out result);
-    }
+        public bool Equals(Base64UrlString x, Base64UrlString y) => string.Equals(x.Value, y.Value, StringComparison.OrdinalIgnoreCase);
 
-    static Base64UrlString IUtf8SpanParsable<Base64UrlString>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
-        return Parse(utf8Text);
-    }
+        public int GetHashCode(Base64UrlString obj) => string.GetHashCode(obj.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
 
-    static bool IUtf8SpanParsable<Base64UrlString>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Base64UrlString result) {
-        return TryParseInternal(utf8Text, out result);
+        public bool Equals(ReadOnlySpan<char> alternate, Base64UrlString other) => MemoryExtensions.Equals(alternate, other.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.OrdinalIgnoreCase);
+
+        public Base64UrlString Create(ReadOnlySpan<char> alternate) => Base64UrlString.Parse(alternate);
     }
 
     #endregion
+
+
 
     #region Equality and Operators
 
@@ -378,14 +556,18 @@ public readonly record struct Base64UrlString :
         return this.Value;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether two <see cref="Base64UrlString"/> instances are equal.
+    /// Treats <see langword="default"/> and <see cref="Empty"/> as equal.
+    /// </summary>
     public bool Equals(Base64UrlString other) {
+        if(this.IsEmpty && other.IsEmpty) return true;
         return string.Equals(this.Value, other.Value, StringComparison.Ordinal);
     }
 
     /// <inheritdoc/>
     public override int GetHashCode() {
-        return this.Value.GetHashCode();
+        return this.IsEmpty ? 0 : string.GetHashCode(this.Value.AsSpan(), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -410,7 +592,7 @@ public readonly record struct Base64UrlString :
     /// <exception cref="FormatException">Thrown if the provided string is not valid Base64Url.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator Base64UrlString(string s) {
-        ArgumentNullException.ThrowIfNull(s);
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 

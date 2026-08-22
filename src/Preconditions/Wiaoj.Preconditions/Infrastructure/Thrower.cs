@@ -100,6 +100,16 @@ internal static class Thrower {
         throw new PrecaArgumentException($"The value '{value}' cannot contain the separator character '{invalidChar}'.", paramName);
     }
 
+    /// <summary>
+    /// Throws a <see cref="PrecaArgumentException"/> indicating that the string argument does not equal the expected value.
+    /// </summary>
+    [DebuggerHidden, StackTraceHidden, DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    internal static void ThrowNotEqual(string? actual, string expected, string? paramName) {
+        throw new PrecaArgumentException(PrecaMessages.Text.GetNotEqualMessage(actual, expected), paramName);
+    }
+
     [DebuggerHidden, StackTraceHidden, DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
     [EditorBrowsable(EditorBrowsableState.Never)]

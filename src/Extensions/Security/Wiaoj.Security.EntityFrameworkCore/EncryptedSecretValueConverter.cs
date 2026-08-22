@@ -1,58 +1,46 @@
-﻿using System.Linq.Expressions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
+﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
 
 namespace Wiaoj.Security.EntityFrameworkCore;
 
 /// <summary>
-/// Maps the <see cref="EncryptedSecret{TContext}"/> object to a single string column 
-/// in the database using the "Version:Base64Blob" format.
+/// Maps the <see cref="EncryptedSecret{TContext}"/> value object to a single compact string column 
+/// in the database using the URL-safe <c>"v{version}.{blob}"</c> token format.
 /// </summary>
-public sealed class EncryptedSecretValueConverter<TContext> : ValueConverter<EncryptedSecret<TContext>, string>
-    where TContext : ISecretContext {
-    private const char StorageSeparator = ':';
-
-    public EncryptedSecretValueConverter()
-        : base(
-            secret => $"{secret.KeyVersion.Value}{StorageSeparator}{secret.Blob.ToStorageString()}",
-            dbValue => Parse(dbValue)) {
-    }
-
-    private static EncryptedSecret<TContext> Parse(string dbValue) {
-        if(string.IsNullOrWhiteSpace(dbValue))
-            throw new InvalidOperationException(
-                $"The database value for EncryptedSecret<{typeof(TContext).Name}> is empty or whitespace.");
-
-        ReadOnlySpan<char> span = dbValue.AsSpan();
-        int colonIndex = span.IndexOf(StorageSeparator);
-
-        if(colonIndex == -1)
-            throw new InvalidOperationException(
-                $"Invalid EncryptedSecret format for context {typeof(TContext).Name}. Expected 'version:base64'.");
-
-        int version = int.Parse(span[..colonIndex]);
-        string base64 = span[(colonIndex + 1)..].ToString();
-        return EncryptedSecret<TContext>.FromPersisted(base64, version);
-    }
-}
+/// <typeparam name="TContext">The secret domain context.</typeparam>
+public sealed class EncryptedSecretValueConverter<TContext>() : ValueConverter<EncryptedSecret<TContext>, string>(
+    static secret => secret.ToCompactString(),
+    static dbValue => EncryptedSecret<TContext>.Parse(dbValue))
+    where TContext : ISecretContext;
 
 /// <summary>
-/// Defines EF Core change tracking behavior for <see cref="EncryptedSecret{TContext}"/>.
+/// Defines EF Core change tracking and snapshotting behavior for <see cref="EncryptedSecret{TContext}"/>.
 /// </summary>
-public sealed class EncryptedSecretValueComparer<TContext> : ValueComparer<EncryptedSecret<TContext>>
-    where TContext : ISecretContext {
-    public EncryptedSecretValueComparer() : base(
-        (left, right) => left.Equals(right),
-        secret => secret.GetHashCode(),
-        secret => secret) {
-    }
-}
+/// <typeparam name="TContext">The secret domain context.</typeparam>
+public sealed class EncryptedSecretValueComparer<TContext>() : ValueComparer<EncryptedSecret<TContext>>(
+    static (left, right) => left.Equals(right),
+    static secret => secret.GetHashCode(),
+    static secret => secret)
+    where TContext : ISecretContext;
 
+/// <summary>
+/// Provides fluent extension methods for configuring <see cref="EncryptedSecret{TContext}"/> mappings in EF Core.
+/// </summary>
 public static class EncryptedSecretMappingExtensions {
 
-    // ─── PropertyBuilder (Entity Properties) ────────────────────────────────
+    private const DynamicallyAccessedMemberTypes EntityMemberTypes =
+        DynamicallyAccessedMemberTypes.PublicConstructors |
+        DynamicallyAccessedMemberTypes.NonPublicConstructors |
+        DynamicallyAccessedMemberTypes.PublicFields |
+        DynamicallyAccessedMemberTypes.NonPublicFields |
+        DynamicallyAccessedMemberTypes.PublicProperties |
+        DynamicallyAccessedMemberTypes.NonPublicProperties |
+        DynamicallyAccessedMemberTypes.Interfaces;
+
+    // ─── PropertyBuilder (Standard Entity Properties) ─────────────────────────
 
     /// <summary>
     /// Configures a required <see cref="EncryptedSecret{TContext}"/> entity property.
@@ -67,7 +55,7 @@ public static class EncryptedSecretMappingExtensions {
     }
 
     /// <summary>
-    /// Configures an optional <see cref="EncryptedSecret{TContext}"/> entity property.
+    /// Configures an optional (nullable) <see cref="EncryptedSecret{TContext}"/> entity property.
     /// </summary>
     public static PropertyBuilder<EncryptedSecret<TContext>?> HasEncryptedSecretConversion<TContext>(
         this PropertyBuilder<EncryptedSecret<TContext>?> propertyBuilder)
@@ -77,18 +65,10 @@ public static class EncryptedSecretMappingExtensions {
             new EncryptedSecretValueComparer<TContext>());
     }
 
-    // ─── ComplexTypePropertyBuilder (EF Core 8+ Complex Types) ──────────────
+    // ─── ComplexTypePropertyBuilder (EF Core 8+ Complex Types) ────────────────
 
     /// <summary>
-    /// Configures a required <see cref="EncryptedSecret{TContext}"/> property
-    /// inside an EF Core 8+ complex type.
-    /// <example>
-    /// <code>
-    /// builder.ComplexProperty(x => x.SigningConfig, cp => {
-    ///     cp.Property(x => x.Secret).HasEncryptedSecretConversion();
-    /// });
-    /// </code>
-    /// </example>
+    /// Configures a required <see cref="EncryptedSecret{TContext}"/> property inside an EF Core 8+ complex type.
     /// </summary>
     public static ComplexTypePropertyBuilder<EncryptedSecret<TContext>> HasEncryptedSecretConversion<TContext>(
         this ComplexTypePropertyBuilder<EncryptedSecret<TContext>> propertyBuilder)
@@ -100,8 +80,7 @@ public static class EncryptedSecretMappingExtensions {
     }
 
     /// <summary>
-    /// Configures an optional <see cref="EncryptedSecret{TContext}"/> property
-    /// inside an EF Core 8+ complex type.
+    /// Configures an optional <see cref="EncryptedSecret{TContext}"/> property inside an EF Core 8+ complex type.
     /// </summary>
     public static ComplexTypePropertyBuilder<EncryptedSecret<TContext>?> HasEncryptedSecretConversion<TContext>(
         this ComplexTypePropertyBuilder<EncryptedSecret<TContext>?> propertyBuilder)
@@ -111,21 +90,15 @@ public static class EncryptedSecretMappingExtensions {
             new EncryptedSecretValueComparer<TContext>());
     }
 
-    // ─── OwnedNavigationBuilder (Owned Entities) ────────────────────────────
+    // ─── OwnedNavigationBuilder (Owned Entities) ──────────────────────────────
 
     /// <summary>
-    /// Configures a required <see cref="EncryptedSecret{TContext}"/> property
-    /// inside an owned entity navigation.
-    /// <example>
-    /// <code>
-    /// builder.OwnsOne(x => x.SigningConfig, owned => {
-    ///     owned.HasEncryptedSecret(x => x.Secret);
-    ///     owned.HasEncryptedSecret(x => x.PreviousSecret);
-    /// });
-    /// </code>
-    /// </example>
+    /// Configures a required <see cref="EncryptedSecret{TContext}"/> property inside an owned entity navigation.
     /// </summary>
-    public static OwnedNavigationBuilder<TOwner, TDependant> HasEncryptedSecret<TOwner, TDependant, TContext>(
+    public static OwnedNavigationBuilder<TOwner, TDependant> HasEncryptedSecret<
+        [DynamicallyAccessedMembers(EntityMemberTypes)] TOwner,
+        [DynamicallyAccessedMembers(EntityMemberTypes)] TDependant,
+        TContext>(
         this OwnedNavigationBuilder<TOwner, TDependant> builder,
         Expression<Func<TDependant, EncryptedSecret<TContext>>> propertyExpression)
         where TOwner : class
@@ -136,10 +109,12 @@ public static class EncryptedSecretMappingExtensions {
     }
 
     /// <summary>
-    /// Configures an optional <see cref="EncryptedSecret{TContext}"/> property
-    /// inside an owned entity navigation.
+    /// Configures an optional <see cref="EncryptedSecret{TContext}"/> property inside an owned entity navigation.
     /// </summary>
-    public static OwnedNavigationBuilder<TOwner, TDependant> HasEncryptedSecret<TOwner, TDependant, TContext>(
+    public static OwnedNavigationBuilder<TOwner, TDependant> HasEncryptedSecret<
+        [DynamicallyAccessedMembers(EntityMemberTypes)] TOwner,
+        [DynamicallyAccessedMembers(EntityMemberTypes)] TDependant,
+        TContext>(
         this OwnedNavigationBuilder<TOwner, TDependant> builder,
         Expression<Func<TDependant, EncryptedSecret<TContext>?>> propertyExpression)
         where TOwner : class
@@ -149,19 +124,14 @@ public static class EncryptedSecretMappingExtensions {
         return builder;
     }
 
-    // ─── EntityTypeBuilder Shorthands ───────────────────────────────────────
+    // ─── EntityTypeBuilder Shorthands ─────────────────────────────────────────
 
     /// <summary>
-    /// Shorthand to configure a required <see cref="EncryptedSecret{TContext}"/> 
-    /// directly on an entity type builder without nesting into Property().
-    /// <example>
-    /// <code>
-    /// builder.HasEncryptedSecret(x => x.SigningSecret);
-    /// builder.HasEncryptedSecret(x => x.PreviousSigningSecret); // optional
-    /// </code>
-    /// </example>
+    /// Shorthand to configure a required <see cref="EncryptedSecret{TContext}"/> directly on an entity type builder.
     /// </summary>
-    public static EntityTypeBuilder<TEntity> HasEncryptedSecret<TEntity, TContext>(
+    public static EntityTypeBuilder<TEntity> HasEncryptedSecret<
+        [DynamicallyAccessedMembers(EntityMemberTypes)] TEntity,
+        TContext>(
         this EntityTypeBuilder<TEntity> builder,
         Expression<Func<TEntity, EncryptedSecret<TContext>>> propertyExpression)
         where TEntity : class
@@ -171,10 +141,11 @@ public static class EncryptedSecretMappingExtensions {
     }
 
     /// <summary>
-    /// Shorthand to configure an optional <see cref="EncryptedSecret{TContext}"/>
-    /// directly on an entity type builder.
+    /// Shorthand to configure an optional <see cref="EncryptedSecret{TContext}"/> directly on an entity type builder.
     /// </summary>
-    public static EntityTypeBuilder<TEntity> HasEncryptedSecret<TEntity, TContext>(
+    public static EntityTypeBuilder<TEntity> HasEncryptedSecret<
+        [DynamicallyAccessedMembers(EntityMemberTypes)] TEntity,
+        TContext>(
         this EntityTypeBuilder<TEntity> builder,
         Expression<Func<TEntity, EncryptedSecret<TContext>?>> propertyExpression)
         where TEntity : class
@@ -183,12 +154,11 @@ public static class EncryptedSecretMappingExtensions {
         return builder;
     }
 
-    // ─── ModelBuilder Conventions (Global) ──────────────────────────────────
+    // ─── ModelBuilder Conventions (Global / Bulk Configuration) ───────────────
 
     /// <summary>
-    /// Globally applies <see cref="EncryptedSecretValueConverter{TContext}"/> to all
-    /// required properties of type <see cref="EncryptedSecret{TContext}"/> in the model.
-    /// Call inside <c>ConfigureConventions</c>.
+    /// Globally applies <see cref="EncryptedSecretValueConverter{TContext}"/> to all required properties 
+    /// of type <see cref="EncryptedSecret{TContext}"/> across the entire model. Call inside <c>ConfigureConventions</c>.
     /// </summary>
     public static PropertiesConfigurationBuilder<EncryptedSecret<TContext>> HaveEncryptedSecretConversion<TContext>(
         this PropertiesConfigurationBuilder<EncryptedSecret<TContext>> builder)
@@ -197,9 +167,8 @@ public static class EncryptedSecretMappingExtensions {
     }
 
     /// <summary>
-    /// Globally applies <see cref="EncryptedSecretValueConverter{TContext}"/> to all
-    /// optional properties of type <see cref="EncryptedSecret{TContext}"/> in the model.
-    /// Call inside <c>ConfigureConventions</c>.
+    /// Globally applies <see cref="EncryptedSecretValueConverter{TContext}"/> to all optional properties 
+    /// of type <see cref="EncryptedSecret{TContext}"/> across the entire model. Call inside <c>ConfigureConventions</c>.
     /// </summary>
     public static PropertiesConfigurationBuilder<EncryptedSecret<TContext>?> HaveEncryptedSecretConversion<TContext>(
         this PropertiesConfigurationBuilder<EncryptedSecret<TContext>?> builder)

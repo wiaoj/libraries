@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -22,13 +23,25 @@ namespace Wiaoj.Primitives.Cryptography.Hashing;
 [StructLayout(LayoutKind.Sequential)]
 [JsonConverter(typeof(HmacSha256HashJsonConverter))]
 public unsafe struct HmacSha256Hash
-    : IEquatable<HmacSha256Hash>,
+    : IFixedBinaryValue<HmacSha256Hash>,
+    IEquatable<HmacSha256Hash>,
+    IComparable<HmacSha256Hash>,
+    IComparable,
+    IParsable<HmacSha256Hash>,
+    ISpanParsable<HmacSha256Hash>,
+    IUtf8SpanParsable<HmacSha256Hash>,
     ISpanFormattable,
     IUtf8SpanFormattable,
-    IEqualityOperators<HmacSha256Hash, HmacSha256Hash, bool> {
+    IFormattable,
+    IEqualityOperators<HmacSha256Hash, HmacSha256Hash, bool>,
+    IComparisonOperators<HmacSha256Hash, HmacSha256Hash, bool> {
 
     /// <summary>The size of the HMAC-SHA256 hash in bytes (32 bytes).</summary>
     internal const int HashSizeInBytes = 32;
+
+    /// <inheritdoc/>
+    public static int SizeInBytes => HashSizeInBytes;
+
 
     private fixed byte _bytes[HashSizeInBytes];
 
@@ -203,26 +216,69 @@ public unsafe struct HmacSha256Hash
         return Convert.ToHexString(AsSpan());
     }
 
-    // IFormattable — "x" = lowercase hex, default = uppercase
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+    /// <summary>
+    /// Returns the string representation of the hash using the specified format.
+    /// </summary>
+    public string ToString(string? format) {
+        return ToString(format, null);
+    }
+
+    /// <summary>
+    /// Returns the string representation of the hash using the specified format and provider.
+    /// </summary>
+    public string ToString(string? format, IFormatProvider? formatProvider) {
         return format is "x" ? Convert.ToHexStringLower(AsSpan()) : Convert.ToHexString(AsSpan());
     }
 
-    // ISpanFormattable
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Attempts to format the hash as an uppercase hexadecimal string into the destination character span.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) {
+        return TryFormat(destination, out charsWritten, default, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination character span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
+        return TryFormat(destination, out charsWritten, format, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination character span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         int required = HashSizeInBytes * 2;
         if(destination.Length < required) { charsWritten = 0; return false; }
-        return format.Equals("x", StringComparison.Ordinal)
+        bool lower = format.Equals("x", StringComparison.Ordinal);
+        return lower
             ? Convert.TryToHexStringLower(AsSpan(), destination, out charsWritten)
             : Convert.TryToHexString(AsSpan(), destination, out charsWritten);
     }
 
-    // IUtf8SpanFormattable
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Attempts to format the hash as an uppercase UTF-8 hexadecimal byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
+        return TryFormat(utf8Destination, out bytesWritten, default, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) {
+        return TryFormat(utf8Destination, out bytesWritten, format, null);
+    }
+
+    /// <summary>
+    /// Attempts to format the hash into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         int required = HashSizeInBytes * 2;
         if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
         Span<char> charBuf = stackalloc char[required];
-        bool ok = format.Equals("x", StringComparison.Ordinal)
+        bool lower = format.Equals("x", StringComparison.Ordinal);
+        bool ok = lower
             ? Convert.TryToHexStringLower(AsSpan(), charBuf, out _)
             : Convert.TryToHexString(AsSpan(), charBuf, out _);
         if(!ok) { bytesWritten = 0; return false; }
@@ -296,8 +352,8 @@ public unsafe struct HmacSha256Hash
     /// Parses a hexadecimal string into a HmacSha256Hash.
     /// </summary>
     public static HmacSha256Hash Parse(string s) {
-        Preca.ThrowIfNull(s);
-        if(!TryParse(s, out HmacSha256Hash result)) {
+        ArgumentNullException.ThrowIfNull(s);
+        if(!TryParse(s.AsSpan(), out HmacSha256Hash result)) {
             throw new FormatException($"Input string must represent exactly {HashSizeInBytes} bytes (64 hex characters).");
         }
         return result;
@@ -314,14 +370,21 @@ public unsafe struct HmacSha256Hash
     }
 
     /// <summary>
+    /// Parses a UTF-8 encoded hexadecimal byte span into a <see cref="HmacSha256Hash"/>.
+    /// </summary>
+    public static HmacSha256Hash Parse(ReadOnlySpan<byte> utf8Text) {
+        if(!TryParse(utf8Text, out HmacSha256Hash result)) {
+            throw new FormatException("Invalid UTF-8 hexadecimal sequence for HmacSha256Hash.");
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Tries to parse a hexadecimal string into a HmacSha256Hash.
     /// </summary>
-    public static bool TryParse(string? s, out HmacSha256Hash result) {
-        if(HexString.TryParse(s, out HexString hex)) {
-            return TryParse(hex, out result);
-        }
-        result = default;
-        return false;
+    public static bool TryParse([NotNullWhen(true)] string? s, out HmacSha256Hash result) {
+        if(s is null) { result = default; return false; }
+        return TryParse(s.AsSpan(), out result);
     }
 
     /// <summary>
@@ -330,6 +393,20 @@ public unsafe struct HmacSha256Hash
     public static bool TryParse(ReadOnlySpan<char> s, out HmacSha256Hash result) {
         if(HexString.TryParse(s, out HexString hex)) {
             return TryParse(hex, out result);
+        }
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to parse a UTF-8 encoded byte span into a <see cref="HmacSha256Hash"/>.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out HmacSha256Hash result) {
+        if(utf8Text.Length == HashSizeInBytes * 2) {
+            Span<char> chars = stackalloc char[HashSizeInBytes * 2];
+            if(Encoding.UTF8.GetChars(utf8Text, chars) == HashSizeInBytes * 2) {
+                return TryParse(chars, out result);
+            }
         }
         result = default;
         return false;
@@ -357,6 +434,36 @@ public unsafe struct HmacSha256Hash
         result = new HmacSha256Hash(buffer);
         return true;
     }
+
+    #endregion
+
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static HmacSha256Hash IParsable<HmacSha256Hash>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<HmacSha256Hash>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out HmacSha256Hash result) {
+        return TryParse(s, out result);
+    }
+
+    static HmacSha256Hash ISpanParsable<HmacSha256Hash>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<HmacSha256Hash>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out HmacSha256Hash result) {
+        return TryParse(s, out result);
+    }
+
+    static HmacSha256Hash IUtf8SpanParsable<HmacSha256Hash>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<HmacSha256Hash>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out HmacSha256Hash result) {
+        return TryParse(utf8Text, out result);
+    }
+
+    #endregion
 
     /// <summary>
     /// Creates a <see cref="HmacSha256Hash"/> from a raw byte array.
@@ -436,15 +543,13 @@ public unsafe struct HmacSha256Hash
         return hash.AsSpan();
     }
 
-    #endregion
-
-    #region Equality
+    #region Equality & Comparison
 
     /// <summary>
     /// Determines whether two <see cref="HmacSha256Hash"/> instances are equal using a constant-time algorithm.
     /// </summary>
     public bool Equals(HmacSha256Hash other) {
-        return CryptographicOperations.FixedTimeEquals(AsSpan(), other.AsSpan());
+        return FixedBinaryValueOps.Equals(this, other);
     }
 
     /// <inheritdoc/>
@@ -454,11 +559,37 @@ public unsafe struct HmacSha256Hash
 
     /// <inheritdoc/>
     public override int GetHashCode() {
-        fixed(byte* p = this._bytes) {
-            HashCode hash = new();
-            hash.AddBytes(new ReadOnlySpan<byte>(p, HashSizeInBytes));
-            return hash.ToHashCode();
-        }
+        return FixedBinaryValueOps.GetHashCode(this);
+    }
+
+    /// <inheritdoc/>
+    public int CompareTo(HmacSha256Hash other) {
+        return FixedBinaryValueOps.CompareTo(this, other);
+    }
+
+    /// <inheritdoc/>
+    public int CompareTo(object? obj) {
+        return FixedBinaryValueOps.CompareToObject(this, obj);
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
+    public static bool operator >(HmacSha256Hash left, HmacSha256Hash right) {
+        return left.CompareTo(right) > 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
+    public static bool operator <(HmacSha256Hash left, HmacSha256Hash right) {
+        return left.CompareTo(right) < 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
+    public static bool operator >=(HmacSha256Hash left, HmacSha256Hash right) {
+        return left.CompareTo(right) >= 0;
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
+    public static bool operator <=(HmacSha256Hash left, HmacSha256Hash right) {
+        return left.CompareTo(right) <= 0;
     }
 
     /// <inheritdoc cref="IEqualityOperators{TSelf, TOther, TResult}.op_Equality(TSelf, TOther)" />
@@ -470,6 +601,83 @@ public unsafe struct HmacSha256Hash
     public static bool operator !=(HmacSha256Hash left, HmacSha256Hash right) {
         return !left.Equals(right);
     }
+
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs ordinal comparisons on <see cref="HmacSha256Hash"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<HmacSha256Hash> OrdinalComparer => HmacSha256HashOrdinalComparer.Instance;
+
+    /// <summary>
+    /// Gets an equality comparer that performs case-insensitive ordinal comparisons on <see cref="HmacSha256Hash"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<HmacSha256Hash> OrdinalIgnoreCaseComparer => HmacSha256HashOrdinalIgnoreCaseComparer.Instance;
+
+    private sealed class HmacSha256HashOrdinalComparer : IEqualityComparer<HmacSha256Hash>, IAlternateEqualityComparer<ReadOnlySpan<char>, HmacSha256Hash> {
+        public static HmacSha256HashOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(HmacSha256Hash x, HmacSha256Hash y) {
+            return x.Equals(y);
+        }
+
+        public int GetHashCode(HmacSha256Hash obj) {
+            return obj.GetHashCode();
+        }
+
+        public bool Equals(ReadOnlySpan<char> alternate, HmacSha256Hash other) {
+            if(HmacSha256Hash.TryParse(alternate, out HmacSha256Hash parsed)) {
+                return parsed.Equals(other);
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(HmacSha256Hash.TryParse(alternate, out HmacSha256Hash parsed)) {
+                return parsed.GetHashCode();
+            }
+            return 0;
+        }
+
+        public HmacSha256Hash Create(ReadOnlySpan<char> alternate) {
+            return HmacSha256Hash.Parse(alternate);
+        }
+    }
+
+    private sealed class HmacSha256HashOrdinalIgnoreCaseComparer : IEqualityComparer<HmacSha256Hash>, IAlternateEqualityComparer<ReadOnlySpan<char>, HmacSha256Hash> {
+        public static HmacSha256HashOrdinalIgnoreCaseComparer Instance { get; } = new();
+
+        public bool Equals(HmacSha256Hash x, HmacSha256Hash y) {
+            return x.Equals(y);
+        }
+
+        public int GetHashCode(HmacSha256Hash obj) {
+            return obj.GetHashCode();
+        }
+
+        public bool Equals(ReadOnlySpan<char> alternate, HmacSha256Hash other) {
+            if(HmacSha256Hash.TryParse(alternate, out HmacSha256Hash parsed)) {
+                return parsed.Equals(other);
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(HmacSha256Hash.TryParse(alternate, out HmacSha256Hash parsed)) {
+                return parsed.GetHashCode();
+            }
+            return 0;
+        }
+
+        public HmacSha256Hash Create(ReadOnlySpan<char> alternate) {
+            return HmacSha256Hash.Parse(alternate);
+        }
+    }
+
     #endregion
 }
 
@@ -482,10 +690,18 @@ public static partial class HmacSha256HashExtensions {
         /// Asynchronously computes the HMAC-SHA256 hash of a stream.
         /// Ensures the stream is reset before and after computation, and manages memory securely.
         /// </summary>
+        public static ValueTask<HmacSha256Hash> ComputeAsync(Stream stream, Secret<byte> key) {
+            return ComputeAsync(stream, key, CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Asynchronously computes the HMAC-SHA256 hash of a stream.
+        /// Ensures the stream is reset before and after computation, and manages memory securely.
+        /// </summary>
         public static async ValueTask<HmacSha256Hash> ComputeAsync(
             Stream stream,
             Secret<byte> key,
-            CancellationToken cancellationToken = default) {
+            CancellationToken cancellationToken) {
             Preca.ThrowIfNull(stream);
             Preca.ThrowIfNull(key);
 
@@ -512,7 +728,7 @@ public static partial class HmacSha256HashExtensions {
                 ArrayPool<byte>.Shared.Return(keyBuffer);
                 ArrayPool<byte>.Shared.Return(hashBuffer);
 
-                if(stream.CanSeek) 
+                if(stream.CanSeek)
                     stream.Position = 0;
             }
         }

@@ -53,9 +53,5 @@ public static partial class TimeSpanExtensions {
             }
             return max;
         }
-    }
-
-    extension([NotNullWhen(false)] TimeSpan? timeSpan) {
-        public bool IsNullOrLessThanOrEqualToZero() => timeSpan is null || timeSpan.Value <= TimeSpan.Zero;
-    }
+    } 
 }

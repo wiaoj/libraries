@@ -1,4 +1,4 @@
-﻿using System.Buffers.Text;
+using System.Buffers.Text;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -31,6 +31,7 @@ public readonly record struct Percentage :
     IComparable<Percentage>,
     IFormattable,
     IParsable<Percentage>,
+    ISpanParsable<Percentage>,
     ISpanFormattable,
     IUtf8SpanFormattable,
     IUtf8SpanParsable<Percentage>,
@@ -273,28 +274,121 @@ public readonly record struct Percentage :
 
     #endregion
 
-    #region Formatting
+    #region Formatting (ISpanFormattable, IUtf8SpanFormattable, IFormattable)
 
     /// <summary>
     /// Returns a string representation of the percentage using the "P0" format (e.g., "50%").
-    /// Uses the current culture.
     /// </summary>
     public override string ToString() => this.Value.ToString("P0", CultureInfo.CurrentCulture);
 
-    /// <inheritdoc/>
-    public string ToString(string? format, IFormatProvider? formatProvider) => this.Value.ToString(format, formatProvider); 
+    /// <summary>
+    /// Formats the percentage using the specified format.
+    /// </summary>
+    public string ToString(string? format) => ToString(format, null);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Formats the percentage using the specified format and format provider.
+    /// </summary>
+    public string ToString(string? format, IFormatProvider? formatProvider) => this.Value.ToString(format ?? "P0", formatProvider ?? CultureInfo.CurrentCulture); 
+
+    /// <summary>
+    /// Tries to format the percentage into the destination character span.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the percentage into the destination character span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the percentage into the destination character span using the specified format and provider.
+    /// </summary>
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
-        => this.Value.TryFormat(destination, out charsWritten, format, provider);
+        => this.Value.TryFormat(destination, out charsWritten, format.IsEmpty ? "P0" : format, provider ?? CultureInfo.CurrentCulture);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Tries to format the percentage into the destination UTF-8 byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the percentage into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the percentage into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
     public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
-        => this.Value.TryFormat(utf8Destination, out bytesWritten, format, provider);
+        => this.Value.TryFormat(utf8Destination, out bytesWritten, format.IsEmpty ? "P0" : format, provider ?? CultureInfo.CurrentCulture);
 
     #endregion
 
-    #region Parsing (Simplified: No % Support)
+    #region Parsing
+
+    /// <summary>
+    /// Parses a string into a <see cref="Percentage"/>.
+    /// </summary>
+    /// <param name="s">The string to parse.</param>
+    /// <returns>The parsed <see cref="Percentage"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="s"/> is null.</exception>
+    /// <exception cref="FormatException">Thrown if the input is not a valid number between 0.0 and 1.0.</exception>
+    public static Percentage Parse(string s) {
+        Preca.ThrowIfNull(s);
+        return Parse(s.AsSpan());
+    }
+
+    /// <summary>
+    /// Parses a character span into a <see cref="Percentage"/>.
+    /// </summary>
+    /// <param name="s">The span to parse.</param>
+    /// <returns>The parsed <see cref="Percentage"/>.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not a valid number between 0.0 and 1.0.</exception>
+    public static Percentage Parse(ReadOnlySpan<char> s) {
+        if(TryParse(s, out Percentage result)) {
+            return result;
+        }
+        throw new FormatException($"Span '{s}' was not valid for Percentage. Value must be a raw number between 0.0 and 1.0.");
+    }
+
+    /// <summary>
+    /// Parses a UTF-8 byte span into a <see cref="Percentage"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 byte span to parse.</param>
+    /// <returns>The parsed <see cref="Percentage"/>.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not a valid UTF-8 number between 0.0 and 1.0.</exception>
+    public static Percentage Parse(ReadOnlySpan<byte> utf8Text) {
+        if(TryParse(utf8Text, out Percentage result)) {
+            return result;
+        }
+        throw new FormatException("Invalid UTF-8 data for Percentage. Expected raw number bytes between 0.0 and 1.0.");
+    }
+
+    /// <summary>
+    /// Tries to parse a string into a <see cref="Percentage"/>.
+    /// </summary>
+    public static bool TryParse([NotNullWhen(true)] string? s, out Percentage result) {
+        if(s is null) {
+            result = default;
+            return false;
+        }
+        return TryParse(s.AsSpan(), out result);
+    }
+
+    /// <summary>
+    /// Tries to parse a character span into a <see cref="Percentage"/>.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<char> s, out Percentage result) {
+        return TryParseInternal(s, CultureInfo.InvariantCulture, out result);
+    }
+
+    /// <summary>
+    /// Tries to parse a UTF-8 byte span into a <see cref="Percentage"/>.
+    /// </summary>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out Percentage result) {
+        return TryParseUtf8Internal(utf8Text, out result);
+    }
 
     /// <summary>
     /// Internal parsing logic. Expects a raw number string (e.g. "0.5").
@@ -302,9 +396,7 @@ public readonly record struct Percentage :
     /// </summary>
     internal static bool TryParseInternal(ReadOnlySpan<char> s, IFormatProvider? provider, out Percentage result) {
         result = default;
-        // Standard double parsing. Supports culture-specific decimal separators (comma/dot).
-        if(double.TryParse(s, NumberStyles.Float, provider ?? CultureInfo.CurrentCulture, out double value)) {
-            // Range check
+        if(double.TryParse(s, NumberStyles.Float, provider ?? CultureInfo.InvariantCulture, out double value)) {
             if(value >= 0.0 && value <= 1.0) {
                 result = new Percentage(value);
                 return true;
@@ -315,11 +407,9 @@ public readonly record struct Percentage :
 
     /// <summary>
     /// Internal UTF-8 parsing logic. Expects raw ASCII/UTF-8 number bytes (e.g. "0.5").
-    /// Uses <see cref="Utf8Parser"/> which strictly requires '.' as the decimal separator.
     /// </summary>
-    private static bool TryParseUtf8Internal(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Percentage result) {
+    private static bool TryParseUtf8Internal(ReadOnlySpan<byte> utf8Text, out Percentage result) {
         result = default;
-        // Standard UTF-8 parsing. Fast and allocation-free.
         if(Utf8Parser.TryParse(utf8Text, out double value, out _) && value >= 0.0 && value <= 1.0) {
             result = new Percentage(value);
             return true;
@@ -327,30 +417,55 @@ public readonly record struct Percentage :
         return false;
     }
 
-    // --- Explicit Interface Implementations ---
+    #endregion
 
-    /// <inheritdoc/>
-    static Percentage IParsable<Percentage>.Parse(string s, IFormatProvider? provider) {
-        if(s is null) throw new ArgumentNullException(nameof(s));
-        if(TryParseInternal(s.AsSpan(), provider, out Percentage result)) return result;
-        throw new FormatException($"String '{s}' was not valid for Percentage. Value must be a raw number between 0.0 and 1.0.");
-    }
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
 
-    /// <inheritdoc/>
+    static Percentage IParsable<Percentage>.Parse(string s, IFormatProvider? provider) => Parse(s);
     static bool IParsable<Percentage>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out Percentage result) {
         if(s is null) { result = default; return false; }
         return TryParseInternal(s.AsSpan(), provider, out result);
     }
-
-    /// <inheritdoc/>
-    static Percentage IUtf8SpanParsable<Percentage>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
-        if(TryParseUtf8Internal(utf8Text, provider, out Percentage result)) return result;
-        throw new FormatException("Invalid UTF-8 data for Percentage. Expected raw number bytes.");
+    static Percentage ISpanParsable<Percentage>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        if(TryParseInternal(s, provider, out Percentage result)) return result;
+        throw new FormatException($"Span '{s}' was not valid for Percentage.");
     }
+    static bool ISpanParsable<Percentage>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out Percentage result) => TryParseInternal(s, provider, out result);
+    static Percentage IUtf8SpanParsable<Percentage>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<Percentage>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Percentage result) => TryParseUtf8Internal(utf8Text, out result);
 
-    /// <inheritdoc/>
-    static bool IUtf8SpanParsable<Percentage>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out Percentage result) {
-        return TryParseUtf8Internal(utf8Text, provider, out result);
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs equality comparisons on <see cref="Percentage"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<Percentage> OrdinalComparer => PercentageOrdinalComparer.Instance;
+
+    private sealed class PercentageOrdinalComparer : IEqualityComparer<Percentage>, IAlternateEqualityComparer<ReadOnlySpan<char>, Percentage> {
+        public static PercentageOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(Percentage x, Percentage y) => x.Value.Equals(y.Value);
+
+        public int GetHashCode(Percentage obj) => obj.Value.GetHashCode();
+
+        public bool Equals(ReadOnlySpan<char> alternate, Percentage other) {
+            if(Percentage.TryParse(alternate, out Percentage p)) {
+                return p.Value.Equals(other.Value);
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(Percentage.TryParse(alternate, out Percentage p)) {
+                return p.Value.GetHashCode();
+            }
+            return 0;
+        }
+
+        public Percentage Create(ReadOnlySpan<char> alternate) => Percentage.Parse(alternate);
     }
 
     #endregion

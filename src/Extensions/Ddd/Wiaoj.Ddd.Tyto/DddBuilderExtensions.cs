@@ -1,13 +1,13 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Reflection;
 using Tyto;
 using Wiaoj.Ddd;
 using Wiaoj.Ddd.Tyto;
 using Wiaoj.Preconditions;
 
-#pragma warning disable IDE0130
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Ddd;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Extension methods for configuring Tyto integration within the DDD architecture.
 /// </summary>

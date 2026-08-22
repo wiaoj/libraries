@@ -32,4 +32,15 @@ public sealed class Base64UrlStringJsonConverter : JsonConverter<Base64UrlString
     public override void Write(Utf8JsonWriter writer, Base64UrlString value, JsonSerializerOptions options) {
         writer.WriteStringValue(value.Value);
     }
+
+    /// <inheritdoc/>
+    public override Base64UrlString ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        string? propName = reader.GetString();
+        return propName is null ? Base64UrlString.Empty : Base64UrlString.Parse(propName);
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, Base64UrlString value, JsonSerializerOptions options) {
+        writer.WritePropertyName(value.Value);
+    }
 }

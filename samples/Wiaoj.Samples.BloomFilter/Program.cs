@@ -1,4 +1,4 @@
-using Wiaoj.BloomFilter;
+using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.Samples.BloomFilter;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;

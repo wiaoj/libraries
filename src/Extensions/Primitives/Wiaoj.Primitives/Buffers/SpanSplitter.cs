@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
@@ -6,7 +6,7 @@ namespace Wiaoj.Primitives.Buffers;
 
 
 /// <summary>
-/// A high-performance, zero-allocation splitter for <see cref="ReadOnlySpan{char}"/>.
+/// A high-performance, zero-allocation splitter for <see cref="ReadOnlySpan{Char}"/>.
 /// It uses the enumerator pattern to allow usage in <c>foreach</c> loops without any heap allocations.
 /// </summary>
 [Experimental("WIAOJ_SPNSPLTTR")]
@@ -26,7 +26,14 @@ public ref struct SpanSplitter {
     /// Initializes a splitter for a single character separator.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SpanSplitter(ReadOnlySpan<char> span, char separator, bool removeEmptyEntries = false) {
+    public SpanSplitter(ReadOnlySpan<char> span, char separator)
+        : this(span, separator, false) { }
+
+    /// <summary>
+    /// Initializes a splitter for a single character separator with optional empty entry removal.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SpanSplitter(ReadOnlySpan<char> span, char separator, bool removeEmptyEntries) {
         this._original = span;
         this._remaining = span;
         this._separator = separator;
@@ -37,10 +44,17 @@ public ref struct SpanSplitter {
     }
 
     /// <summary>
-    /// Initializes a splitter for multiple character separators using optimized <see cref="SearchValues{char}"/>.
+    /// Initializes a splitter for multiple character separators using optimized <see cref="SearchValues{Char}"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SpanSplitter(ReadOnlySpan<char> span, SearchValues<char> searchValues, bool removeEmptyEntries = false) {
+    public SpanSplitter(ReadOnlySpan<char> span, SearchValues<char> searchValues)
+        : this(span, searchValues, false) { }
+
+    /// <summary>
+    /// Initializes a splitter for multiple character separators with optional empty entry removal.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SpanSplitter(ReadOnlySpan<char> span, SearchValues<char> searchValues, bool removeEmptyEntries) {
         this._original = span;
         this._remaining = span;
         this._searchValues = searchValues;

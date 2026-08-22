@@ -42,4 +42,24 @@ public sealed class Crc32HashJsonConverter : JsonConverter<Crc32Hash> {
             writer.WriteStringValue(value.ToString());
         }
     }
+
+    /// <inheritdoc/>
+    public override Crc32Hash ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        string? value = reader.GetString();
+        if(value is not null && Crc32Hash.TryParse(value, out Crc32Hash result)) {
+            return result;
+        }
+        throw new JsonException($"Invalid property name format for Crc32Hash: '{value}'.");
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, Crc32Hash value, JsonSerializerOptions options) {
+        Span<char> buffer = stackalloc char[Crc32Hash.HashSizeInBytes * 2];
+        if(value.TryFormat(buffer, out int charsWritten, lowerCase: false)) {
+            writer.WritePropertyName(buffer[..charsWritten]);
+        }
+        else {
+            writer.WritePropertyName(value.ToString());
+        }
+    }
 }

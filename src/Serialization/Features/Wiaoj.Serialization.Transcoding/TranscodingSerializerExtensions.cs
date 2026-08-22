@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Serialization.Transcoding;
 using Wiaoj.Serialization.Transcoding.Abstractions;
 
@@ -10,7 +10,7 @@ public static class TranscodingSerializerExtensions {
     /// Adds the ITranscoder service to the service collection, enabling fluent transcoding between formats.
     /// This should be called after AddWiaojSerializer.
     /// </summary>
-    public static IWiaojSerializationBuilder AddTranscoding(this IWiaojSerializationBuilder builder) {
+    public static ISerializationBuilder AddTranscoding(this ISerializationBuilder builder) {
         return builder.ConfigureServices(services => services.TryAddSingleton<ITranscoder, Transcoder>());
     }
 }

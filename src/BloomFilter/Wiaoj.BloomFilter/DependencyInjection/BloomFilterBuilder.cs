@@ -1,9 +1,7 @@
-using Wiaoj.BloomFilter;
+using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.BloomFilter.Hosting;
 
-#pragma warning disable IDE0130
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130
+namespace Wiaoj.BloomFilter.DependencyInjection;
 
 /// <summary>
 /// A builder class used to configure Bloom Filter services via extension methods.
@@ -13,8 +11,8 @@ internal sealed class BloomFilterBuilder(IServiceCollection services) : IBloomFi
     public IServiceCollection Services { get; } = services;
 
     /// <inheritdoc/>
-    public BloomFilterOptions Options { get; } = new(); 
-    
+    public BloomFilterOptions Options { get; } = new();
+
     /// <inheritdoc/>
     public IBloomFilterBuilder AddAutoSave() {
         this.Services.AddHostedService<BloomFilterAutoSaveService>();

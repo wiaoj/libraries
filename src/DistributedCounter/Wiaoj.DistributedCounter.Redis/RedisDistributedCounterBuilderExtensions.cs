@@ -1,13 +1,13 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using StackExchange.Redis;
 using Wiaoj.DistributedCounter;
 using Wiaoj.DistributedCounter.DependencyInjection;
 using Wiaoj.DistributedCounter.Redis;
 using Wiaoj.Preconditions;
 
-#pragma warning disable IDE0130 
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.DistributedCounter;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 public static class RedisDistributedCounterBuilderExtensions {
     /// <summary>
     /// Configures the distributed counter to use Redis as the storage provider.

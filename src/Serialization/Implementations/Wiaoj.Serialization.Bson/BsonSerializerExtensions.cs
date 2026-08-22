@@ -10,7 +10,7 @@ using Wiaoj.Serialization.Bson;
 namespace Wiaoj.Serialization.DependencyInjection;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
-/// Extension methods to register BSON serializers in IWiaojSerializationBuilder.
+/// Extension methods to register BSON serializers in ISerializationBuilder.
 /// </summary>
 public static class BsonSerializerExtensions {
     static BsonSerializerExtensions() {
@@ -25,7 +25,7 @@ public static class BsonSerializerExtensions {
     /// <summary>
     /// Registers BSON as the default (keyless) serializer with default settings.
     /// </summary>
-    public static ISerializerConfigurator<KeylessRegistration> UseBson(this IWiaojSerializationBuilder builder) {
+    public static ISerializerConfigurator<KeylessRegistration> UseBson(this ISerializationBuilder builder) {
         Preca.ThrowIfNull(builder);
         return builder.UseBson<KeylessRegistration>(_ => { }, _ => { });
     }
@@ -34,7 +34,7 @@ public static class BsonSerializerExtensions {
     /// Registers BSON as the default (keyless) serializer with custom context configuration.
     /// </summary>
     public static ISerializerConfigurator<KeylessRegistration> UseBson(
-         this IWiaojSerializationBuilder builder,
+         this ISerializationBuilder builder,
          Action<BsonSerializationContext.Builder>? serializationConfigurator = null,
          Action<BsonDeserializationContext.Builder>? deserializationConfigurator = null,
          BsonSerializationArgs serializationArgs = default) {
@@ -44,7 +44,7 @@ public static class BsonSerializerExtensions {
     /// <summary>
     /// Registers BSON as a named serializer for the given key type with default settings.
     /// </summary>
-    public static ISerializerConfigurator<TKey> UseBson<TKey>(this IWiaojSerializationBuilder builder)
+    public static ISerializerConfigurator<TKey> UseBson<TKey>(this ISerializationBuilder builder)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
         return builder.UseBson<TKey>(_ => { }, _ => { });
@@ -54,7 +54,7 @@ public static class BsonSerializerExtensions {
     /// Registers BSON as a named serializer for the given key type with custom context configuration. 
     /// </summary>
     public static ISerializerConfigurator<TKey> UseBson<TKey>(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<BsonSerializationContext.Builder>? serializationConfigurator = null,
         Action<BsonDeserializationContext.Builder>? deserializationConfigurator = null,
         BsonSerializationArgs serializationArgs = default)
@@ -74,14 +74,14 @@ public static class BsonSerializerExtensions {
     }
 
     public static ISerializerConfigurator<TKey> UseBson<TKey>(
-       this IWiaojSerializationBuilder builder,
+       this ISerializationBuilder builder,
        BsonSerializationArgs serializationArgs)
        where TKey : ISerializerKey {
         return builder.UseBson<TKey>(null, null, serializationArgs);
     }
 
     public static ISerializerConfigurator<KeylessRegistration> UseBson(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         BsonSerializationArgs serializationArgs) {
         return builder.UseBson<KeylessRegistration>(null, null, serializationArgs);
     }
@@ -89,7 +89,7 @@ public static class BsonSerializerExtensions {
     /// <summary>
     /// Tries to register BSON as the default (keyless) serializer.
     /// </summary>
-    public static ISerializerConfigurator<KeylessRegistration> TryUseBson(this IWiaojSerializationBuilder builder) {
+    public static ISerializerConfigurator<KeylessRegistration> TryUseBson(this ISerializationBuilder builder) {
         Preca.ThrowIfNull(builder);
         return builder.TryUseBson<KeylessRegistration>(_ => { }, _ => { });
     }
@@ -98,7 +98,7 @@ public static class BsonSerializerExtensions {
     /// Tries to register BSON as the default (keyless) serializer with custom configuration.
     /// </summary>
     public static ISerializerConfigurator<KeylessRegistration> TryUseBson(
-         this IWiaojSerializationBuilder builder,
+         this ISerializationBuilder builder,
          Action<BsonSerializationContext.Builder>? serializationConfigurator = null,
          Action<BsonDeserializationContext.Builder>? deserializationConfigurator = null,
          BsonSerializationArgs serializationArgs = default) {
@@ -108,7 +108,7 @@ public static class BsonSerializerExtensions {
     /// <summary>
     /// Tries to register BSON as a named serializer.
     /// </summary>
-    public static ISerializerConfigurator<TKey> TryUseBson<TKey>(this IWiaojSerializationBuilder builder)
+    public static ISerializerConfigurator<TKey> TryUseBson<TKey>(this ISerializationBuilder builder)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
         return builder.TryUseBson<TKey>(_ => { }, _ => { });
@@ -118,7 +118,7 @@ public static class BsonSerializerExtensions {
     /// Tries to register BSON as a named serializer with custom configuration.
     /// </summary>
     public static ISerializerConfigurator<TKey> TryUseBson<TKey>(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<BsonSerializationContext.Builder>? serializationConfigurator = null,
         Action<BsonDeserializationContext.Builder>? deserializationConfigurator = null,
         BsonSerializationArgs serializationArgs = default)
@@ -140,14 +140,14 @@ public static class BsonSerializerExtensions {
     }
 
     public static ISerializerConfigurator<TKey> TryUseBson<TKey>(
-       this IWiaojSerializationBuilder builder,
+       this ISerializationBuilder builder,
        BsonSerializationArgs serializationArgs)
        where TKey : ISerializerKey {
         return builder.TryUseBson<TKey>(null, null, serializationArgs);
     }
 
     public static ISerializerConfigurator<KeylessRegistration> TryUseBson(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         BsonSerializationArgs serializationArgs) {
         return builder.TryUseBson<KeylessRegistration>(null, null, serializationArgs);
     }

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 
 namespace Wiaoj.Primitives.Tests.Unit;
@@ -190,7 +190,7 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void Parse_NullString_ThrowsArgumentNullException() {
-        Assert.Throws<ArgumentNullException>(() => GuidV7.Parse(null!));
+        Assert.ThrowsAny<ArgumentNullException>(() => GuidV7.Parse((string)null!));
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public sealed class GuidV7Tests {
 
     [Fact]
     public void TryParse_NullString_ReturnsFalse() {
-        bool ok = GuidV7.TryParse(null, out GuidV7 result);
+        bool ok = GuidV7.TryParse((string?)null, out GuidV7 result);
         Assert.False(ok);
         Assert.Equal(GuidV7.Empty, result);
     }

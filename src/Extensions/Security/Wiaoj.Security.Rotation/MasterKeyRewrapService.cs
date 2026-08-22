@@ -32,9 +32,11 @@ namespace Wiaoj.Security;
 /// running it twice is safe — the second run will find every record already current.
 /// </para>
 /// </remarks>
-public sealed class MasterKeyRewrapService<TContext>
-    where TContext : ISecretContext {
-
+public sealed class MasterKeyRewrapService<TContext> where TContext : ISecretContext {
+    /// <summary>
+    /// Minimum Base64Url character length for an AES-GCM wrapped key packet (12-byte Nonce + 16-byte Tag = 28 bytes -> 38 Base64Url chars).
+    /// </summary>
+    private const int MinWrappedKeyLength = 38;
     private readonly IEncryptionKeyStore _store;
     private readonly IMasterKeyProvider _currentMaster;
     private readonly IPreviousMasterKeyProvider? _previousMaster;
@@ -44,6 +46,14 @@ public sealed class MasterKeyRewrapService<TContext>
 
     private static readonly KeyValuePair<string, object?> _ctxTag = SecurityMeter.ContextTag<TContext>();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MasterKeyRewrapService{TContext}"/> class.
+    /// </summary>
+    /// <param name="store">The key storage repository used to load and update encrypted key records.</param>
+    /// <param name="currentMaster">The provider supplying the current active master key for re-wrapping.</param>
+    /// <param name="protector">The managed secret protector whose in-memory key ring will be reloaded after re-wrapping completes.</param>
+    /// <param name="logger">The logger instance used for operational and diagnostic telemetry.</param>
+    /// <param name="previousMaster">The provider supplying the previous master key used to unwrap legacy keys, or <see langword="null"/> if not configured.</param>
     public MasterKeyRewrapService(
         IEncryptionKeyStore store,
         IMasterKeyProvider currentMaster,
@@ -64,11 +74,12 @@ public sealed class MasterKeyRewrapService<TContext>
     public async Task<MasterKeyRewrapResult> RewrapAllAsync(CancellationToken cancellationToken = default) {
         long start = Stopwatch.GetTimestamp();
 
-        if(this._previousMaster is null)
+        if(this._previousMaster is null) {
             throw new InvalidOperationException(
                 "Master-key rewrap requires an IPreviousMasterKeyProvider to be registered. " +
                 "Register it via .AddEnvironmentPreviousMasterKey() (or a custom provider) " +
                 "before invoking RewrapAllAsync.");
+        }
 
         IReadOnlyList<EncryptionKeyRecord> records = await this._store.LoadKeysAsync(this._ctx, cancellationToken);
         if(records.Count == 0) {
@@ -90,15 +101,16 @@ public sealed class MasterKeyRewrapService<TContext>
             foreach(EncryptionKeyRecord record in records) {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if(TryUnwrap(current, record.WrappedKeyMaterial, out Secret<byte>? probe)) {
-                    probe!.Value.Dispose();
+                // 1. Zaten yeni master key ile sarılmış mı kontrol et
+                if(TryUnwrap(current, record.WrappedKeyMaterial, out Secret<byte> probe)) {
+                    probe.Dispose();
                     alreadyCurrent++;
-                    this._logger.LogDebug(
-                        "[{Ctx}] v{V} already wrapped with current master — skipping.", this._ctx, record.Version);
+                    this._logger.LogDebug("[{Ctx}] v{V} already wrapped with current master — skipping.", this._ctx, record.Version);
                     continue;
                 }
 
-                if(!TryUnwrap(previous!.Value, record.WrappedKeyMaterial, out Secret<byte>? unwrapped)) {
+                // 2. Eski master key ile açmayı dene
+                if(!TryUnwrap(previous.Value, record.WrappedKeyMaterial, out Secret<byte> unwrapped)) {
                     failed++;
                     this._logger.LogError(
                         "[{Ctx}] v{V} could not be unwrapped with either current or previous master key — manual recovery required.",
@@ -106,9 +118,10 @@ public sealed class MasterKeyRewrapService<TContext>
                     continue;
                 }
 
+                // 3. Yeni master key ile tekrar sar ve DB'ye yaz
                 string newWrapped;
-                using(Secret<byte> dek = unwrapped!.Value) {
-                    newWrapped = dek.Expose(current, static (master, span) => master.Wrap(span));
+                using(unwrapped) {
+                    newWrapped = unwrapped.Expose(current, static (master, span) => master.Wrap(span));
                 }
 
                 await this._store.UpdateWrappedKeyAsync(this._ctx, record.Version, newWrapped, cancellationToken);
@@ -117,8 +130,15 @@ public sealed class MasterKeyRewrapService<TContext>
                 this._logger.LogInformation("[{Ctx}] v{V} re-wrapped with new master.", this._ctx, record.Version);
             }
 
-            // Force the in-memory ring to be re-read from store + re-unwrapped with the current master.
-            await this._protector.ReloadAsync(cancellationToken);
+            if(failed == 0) {
+                await this._protector.ReloadAsync(cancellationToken);
+                this._logger.LogInformation("[{Ctx}] Protector reloaded with new master key.", this._ctx);
+            }
+            else {
+                this._logger.LogWarning(
+                    "[{Ctx}] Master rewrap completed with {Failed} failed record(s). In-memory protector was NOT reloaded. Manual recovery required.",
+                    this._ctx, failed);
+            }
 
             TimeSpan duration = Stopwatch.GetElapsedTime(start);
             SecurityMeter.RewrapCount.Add(1, _ctxTag);
@@ -138,13 +158,27 @@ public sealed class MasterKeyRewrapService<TContext>
         }
     }
 
-    private static bool TryUnwrap(MasterKey master, string wrapped, out Secret<byte>? result) {
+    private static bool TryUnwrap(MasterKey master, string wrapped, out Secret<byte> result) {
+        result = default;
+
+        if(string.IsNullOrWhiteSpace(wrapped)) {
+            return false;
+        }
+
+        if(!Base64UrlString.TryParse(wrapped, out Base64UrlString parsed)) {
+            return false;
+        }
+
+        if(parsed.Value.Length < MinWrappedKeyLength) {
+            return false;
+        }
+
         try {
-            result = master.Unwrap(wrapped);
+            result = master.Unwrap(parsed.Value);
             return true;
         }
         catch(CryptographicException) {
-            result = null;
+            result = default;
             return false;
         }
     }

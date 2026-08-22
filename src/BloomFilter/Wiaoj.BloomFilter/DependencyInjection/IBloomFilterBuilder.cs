@@ -1,8 +1,8 @@
-using Wiaoj.BloomFilter;
+using Microsoft.Extensions.DependencyInjection;
 
-#pragma warning disable IDE0130
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.BloomFilter;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// A builder for configuring Wiaoj Bloom Filter services, options, and filter registrations.
 /// </summary>

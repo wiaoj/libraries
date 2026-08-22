@@ -48,4 +48,15 @@ public sealed class HexStringJsonConverter : JsonConverter<HexString> {
     public override void Write(Utf8JsonWriter writer, HexString value, JsonSerializerOptions options) {
         writer.WriteStringValue(value.Value);
     }
+
+    /// <inheritdoc/>
+    public override HexString ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        string? propName = reader.GetString();
+        return propName is null ? HexString.Empty : HexString.Parse(propName);
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, HexString value, JsonSerializerOptions options) {
+        writer.WritePropertyName(value.Value);
+    }
 }

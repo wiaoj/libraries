@@ -49,7 +49,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Wiaoj.Threading\Wiaoj.Concurrency.csproj" />
+    <ProjectReference Include="..\..\Concurrency\Wiaoj.Concurrency\Wiaoj.Concurrency.csproj" />
     <ProjectReference Include="..\Wiaoj.Security.DependencyInjection\Wiaoj.Security.DependencyInjection.csproj" />
     <ProjectReference Include="..\Wiaoj.Security\Wiaoj.Security.csproj" />
   </ItemGroup>

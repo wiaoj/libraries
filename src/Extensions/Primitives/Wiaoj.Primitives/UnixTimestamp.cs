@@ -430,9 +430,7 @@ public readonly record struct UnixTimestamp :
         return From(dto);
     }
 
-    // -------------------------------------------------------------------------
-    // FORMATTING (Public Convenience & Explicit Interfaces)
-    // -------------------------------------------------------------------------
+    #region Formatting (ISpanFormattable, IUtf8SpanFormattable, IFormattable)
 
     /// <summary>
     /// Returns a string representation of the timestamp in ISO 8601 UTC format.
@@ -454,18 +452,18 @@ public readonly record struct UnixTimestamp :
     /// </list>
     /// </param>
     /// <returns>A formatted string representation of the timestamp.</returns>
-    public string ToString(string? format) {
-        return ToStringInternal(format, CultureInfo.InvariantCulture);
-    }
-
-    /// <inheritdoc cref="ToString(string?)"/>
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
-        return ToStringInternal(format, formatProvider);
-    }
+    public string ToString(string? format) => ToString(format, null);
 
     /// <summary>
-    /// Core formatting logic shared by all ToString overloads.
+    /// Formats the value of the current instance using the specified format and format provider.
     /// </summary>
+    /// <param name="format">The format string.</param>
+    /// <param name="formatProvider">The format provider.</param>
+    /// <returns>A formatted string representation of the timestamp.</returns>
+    public string ToString(string? format, IFormatProvider? formatProvider) {
+        return ToStringInternal(format, formatProvider ?? CultureInfo.InvariantCulture);
+    }
+
     private string ToStringInternal(string? format, IFormatProvider? formatProvider) {
         bool isRawRequest = format is "R" or "r" or "N" or "n";
         bool isOutOfRange = this._milliseconds is < MinUnixMillis or > MaxUnixMillis;
@@ -481,8 +479,32 @@ public readonly record struct UnixTimestamp :
         return ToDateTimeOffset().ToString(format, formatProvider);
     }
 
-    /// <inheritdoc cref="ToString(string?)"/>
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Tries to format the timestamp into the destination character span.
+    /// </summary>
+    /// <param name="destination">The destination character span.</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the timestamp into the destination character span using the specified format.
+    /// </summary>
+    /// <param name="destination">The destination character span.</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
+    /// <param name="format">The format span.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the timestamp into the destination character span using the specified format and provider.
+    /// </summary>
+    /// <param name="destination">The destination character span.</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
+    /// <param name="format">The format span.</param>
+    /// <param name="provider">The format provider.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         bool isRawRequest = format.Equals("R", StringComparison.OrdinalIgnoreCase) || format.Equals("N", StringComparison.OrdinalIgnoreCase);
         bool isOutOfRange = this._milliseconds is < MinUnixMillis or > MaxUnixMillis;
 
@@ -497,8 +519,32 @@ public readonly record struct UnixTimestamp :
         return ToDateTimeOffset().TryFormat(destination, out charsWritten, format, provider);
     }
 
-    /// <inheritdoc cref="ToString(string?)"/>
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Tries to format the timestamp into the destination UTF-8 byte span.
+    /// </summary>
+    /// <param name="utf8Destination">The destination byte span.</param>
+    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the timestamp into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    /// <param name="utf8Destination">The destination byte span.</param>
+    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
+    /// <param name="format">The format span.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the timestamp into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    /// <param name="utf8Destination">The destination byte span.</param>
+    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
+    /// <param name="format">The format span.</param>
+    /// <param name="provider">The format provider.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         bool isRawRequest = format.Equals("R", StringComparison.OrdinalIgnoreCase) || format.Equals("N", StringComparison.OrdinalIgnoreCase);
         bool isOutOfRange = this._milliseconds is < MinUnixMillis or > MaxUnixMillis;
 
@@ -506,7 +552,6 @@ public readonly record struct UnixTimestamp :
             return this._milliseconds.TryFormat(utf8Destination, out bytesWritten, format, provider);
         }
 
-        // DateTimeOffset UTF8 desteği sürüme göre değişebilir, ToDateTimeUtc() garantidir.
         if(format.IsEmpty) {
             return ToDateTimeUtc().TryFormat(utf8Destination, out bytesWritten, "yyyy-MM-ddTHH:mm:ss.fffZ", provider);
         }
@@ -514,9 +559,9 @@ public readonly record struct UnixTimestamp :
         return ToDateTimeUtc().TryFormat(utf8Destination, out bytesWritten, format, provider);
     }
 
-    // -------------------------------------------------------------------------
-    // PARSING (Public Convenience & Explicit Interfaces)
-    // -------------------------------------------------------------------------
+    #endregion
+
+    #region Parsing
 
     /// <summary>
     /// Parses a string containing raw milliseconds into a <see cref="UnixTimestamp"/>.
@@ -527,7 +572,7 @@ public readonly record struct UnixTimestamp :
     /// <exception cref="FormatException">Thrown if the string is not a valid integer.</exception>
     public static UnixTimestamp Parse(string s) {
         Preca.ThrowIfNull(s);
-        return ParseInternal(s.AsSpan(), CultureInfo.InvariantCulture);
+        return Parse(s.AsSpan());
     }
 
     /// <summary>
@@ -537,8 +582,23 @@ public readonly record struct UnixTimestamp :
     /// <returns>The parsed timestamp.</returns>
     /// <exception cref="FormatException">Thrown if the span is not a valid integer.</exception>
     public static UnixTimestamp Parse(ReadOnlySpan<char> s) {
-        // Convenience method always uses InvariantCulture
-        return ParseInternal(s, CultureInfo.InvariantCulture);
+        if(long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out long result)) {
+            return new UnixTimestamp(result);
+        }
+        throw new FormatException($"Invalid Unix Timestamp format: '{s}'");
+    }
+
+    /// <summary>
+    /// Parses a UTF-8 byte span containing raw milliseconds into a <see cref="UnixTimestamp"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 byte span to parse.</param>
+    /// <returns>The parsed timestamp.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not a valid UTF-8 integer sequence.</exception>
+    public static UnixTimestamp Parse(ReadOnlySpan<byte> utf8Text) {
+        if(Utf8Parser.TryParse(utf8Text, out long result, out int bytesConsumed) && bytesConsumed == utf8Text.Length) {
+            return new UnixTimestamp(result);
+        }
+        throw new FormatException("Invalid UTF-8 sequence for Unix Timestamp.");
     }
 
     /// <summary>
@@ -552,7 +612,7 @@ public readonly record struct UnixTimestamp :
             result = default;
             return false;
         }
-        return TryParseInternal(s.AsSpan(), CultureInfo.InvariantCulture, out result);
+        return TryParse(s.AsSpan(), out result);
     }
 
     /// <summary>
@@ -562,22 +622,7 @@ public readonly record struct UnixTimestamp :
     /// <param name="result">When this method returns, contains the parsed timestamp if successful.</param>
     /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, out UnixTimestamp result) {
-        return TryParseInternal(s, CultureInfo.InvariantCulture, out result);
-    }
-
-    // --- Internal Logic Reuse ---
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static UnixTimestamp ParseInternal(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        if(long.TryParse(s, NumberStyles.Integer, provider, out long result)) {
-            return new UnixTimestamp(result);
-        }
-        throw new FormatException($"Invalid Unix Timestamp format: '{s}'");
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool TryParseInternal(ReadOnlySpan<char> s, IFormatProvider? provider, out UnixTimestamp result) {
-        if(long.TryParse(s, NumberStyles.Integer, provider, out long milliseconds)) {
+        if(long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out long milliseconds)) {
             result = new UnixTimestamp(milliseconds);
             return true;
         }
@@ -585,50 +630,65 @@ public readonly record struct UnixTimestamp :
         return false;
     }
 
-    // --- Explicit Interface Implementations (IParsable, ISpanParsable) ---
-
-    /// <inheritdoc/>
-    static UnixTimestamp IParsable<UnixTimestamp>.Parse(string s, IFormatProvider? provider) {
-        Preca.ThrowIfNull(s);
-        return ParseInternal(s.AsSpan(), provider);
+    /// <summary>
+    /// Tries to parse a UTF-8 byte span into a <see cref="UnixTimestamp"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 byte span to parse.</param>
+    /// <param name="result">When this method returns, contains the parsed timestamp if successful.</param>
+    /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
+    public static bool TryParse(ReadOnlySpan<byte> utf8Text, out UnixTimestamp result) {
+        if(Utf8Parser.TryParse(utf8Text, out long milliseconds, out int bytesConsumed) && bytesConsumed == utf8Text.Length) {
+            result = new UnixTimestamp(milliseconds);
+            return true;
+        }
+        result = default;
+        return false;
     }
 
-    /// <inheritdoc/>
-    static bool IParsable<UnixTimestamp>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out UnixTimestamp result) {
-        if(s is null) {
-            result = default;
+    #endregion
+
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static UnixTimestamp IParsable<UnixTimestamp>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<UnixTimestamp>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out UnixTimestamp result) => TryParse(s, out result);
+    static UnixTimestamp ISpanParsable<UnixTimestamp>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<UnixTimestamp>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UnixTimestamp result) => TryParse(s, out result);
+    static UnixTimestamp IUtf8SpanParsable<UnixTimestamp>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<UnixTimestamp>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out UnixTimestamp result) => TryParse(utf8Text, out result);
+
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs equality comparisons on <see cref="UnixTimestamp"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<UnixTimestamp> OrdinalComparer => UnixTimestampOrdinalComparer.Instance;
+
+    private sealed class UnixTimestampOrdinalComparer : IEqualityComparer<UnixTimestamp>, IAlternateEqualityComparer<ReadOnlySpan<char>, UnixTimestamp> {
+        public static UnixTimestampOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(UnixTimestamp x, UnixTimestamp y) => x._milliseconds == y._milliseconds;
+
+        public int GetHashCode(UnixTimestamp obj) => obj._milliseconds.GetHashCode();
+
+        public bool Equals(ReadOnlySpan<char> alternate, UnixTimestamp other) {
+            if(long.TryParse(alternate, NumberStyles.Integer, CultureInfo.InvariantCulture, out long ms)) {
+                return ms == other._milliseconds;
+            }
             return false;
         }
-        return TryParseInternal(s.AsSpan(), provider, out result);
-    }
 
-    /// <inheritdoc/>
-    static UnixTimestamp ISpanParsable<UnixTimestamp>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        return ParseInternal(s, provider);
-    }
-
-    /// <inheritdoc/>
-    static bool ISpanParsable<UnixTimestamp>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UnixTimestamp result) {
-        return TryParseInternal(s, provider, out result);
-    }
-
-    // --- Explicit Interface Implementations (UTF-8) ---
-
-    /// <inheritdoc/>
-    static UnixTimestamp IUtf8SpanParsable<UnixTimestamp>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
-        if(Utf8Parser.TryParse(utf8Text, out long result, out _)) {
-            return new UnixTimestamp(result);
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(long.TryParse(alternate, NumberStyles.Integer, CultureInfo.InvariantCulture, out long ms)) {
+                return ms.GetHashCode();
+            }
+            return 0;
         }
-        throw new FormatException("Invalid UTF-8 sequence for Unix Timestamp.");
+
+        public UnixTimestamp Create(ReadOnlySpan<char> alternate) => UnixTimestamp.Parse(alternate);
     }
 
-    /// <inheritdoc/>
-    static bool IUtf8SpanParsable<UnixTimestamp>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out UnixTimestamp result) {
-        if(Utf8Parser.TryParse(utf8Text, out long milliseconds, out _)) {
-            result = new UnixTimestamp(milliseconds);
-            return true;
-        }
-        result = default;
-        return false;
-    }
+    #endregion
 }

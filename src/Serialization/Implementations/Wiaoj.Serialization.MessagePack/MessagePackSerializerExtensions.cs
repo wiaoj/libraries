@@ -6,7 +6,7 @@ using Wiaoj.Serialization.MessagePack;
 namespace Wiaoj.Serialization.DependencyInjection;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
-/// Extension methods to register MessagePack serializers in IWiaojSerializationBuilder.
+/// Extension methods to register MessagePack serializers in ISerializationBuilder.
 /// </summary>
 public static class MessagePackSerializerExtensions {
     private static MessagePackSerializerOptions DefaultOptions => MessagePackSerializerOptions.Standard
@@ -23,7 +23,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Registers MessagePack as the default (keyless) serializer with default options.
     /// </summary>
-    public static ISerializerConfigurator<KeylessRegistration> UseMessagePack(this IWiaojSerializationBuilder builder) {
+    public static ISerializerConfigurator<KeylessRegistration> UseMessagePack(this ISerializationBuilder builder) {
         Preca.ThrowIfNull(builder);
         return builder.UseMessagePack(_ => { });
     }
@@ -31,7 +31,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Registers MessagePack as the default (keyless) serializer with a provided options instance.
     /// </summary>
-    public static ISerializerConfigurator<KeylessRegistration> UseMessagePack(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<KeylessRegistration> UseMessagePack(this ISerializationBuilder builder,
                                                            MessagePackSerializerOptions options) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(options);
@@ -41,7 +41,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Registers MessagePack as the default (keyless) serializer with custom configuration.
     /// </summary>
-    public static ISerializerConfigurator<KeylessRegistration> UseMessagePack(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<KeylessRegistration> UseMessagePack(this ISerializationBuilder builder,
                                                            Action<MessagePackSerializerOptions> configure) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(configure);
@@ -53,7 +53,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Registers MessagePack as a named serializer for the given key type with default options.
     /// </summary>
-    public static ISerializerConfigurator<TKey> UseMessagePack<TKey>(this IWiaojSerializationBuilder builder)
+    public static ISerializerConfigurator<TKey> UseMessagePack<TKey>(this ISerializationBuilder builder)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
         return builder.UseMessagePack<TKey>(_ => { });
@@ -62,7 +62,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Registers MessagePack as a named serializer for the given key type with a provided options instance.
     /// </summary>
-    public static ISerializerConfigurator<TKey> UseMessagePack<TKey>(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<TKey> UseMessagePack<TKey>(this ISerializationBuilder builder,
                                                                  MessagePackSerializerOptions options)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
@@ -73,7 +73,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Registers MessagePack as a named serializer for the given key type with custom configuration.
     /// </summary>
-    public static ISerializerConfigurator<TKey> UseMessagePack<TKey>(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<TKey> UseMessagePack<TKey>(this ISerializationBuilder builder,
                                                                  Action<MessagePackSerializerOptions> configure)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
@@ -86,7 +86,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Tries to register MessagePack as the default (keyless) serializer.
     /// </summary>
-    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this IWiaojSerializationBuilder builder) {
+    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this ISerializationBuilder builder) {
         Preca.ThrowIfNull(builder);
         return builder.TryUseMessagePack(_ => { });
     }
@@ -94,7 +94,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Tries to register MessagePack as the default (keyless) serializer with options.
     /// </summary>
-    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this ISerializationBuilder builder,
                                                            MessagePackSerializerOptions options) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(options);
@@ -104,7 +104,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Tries to register MessagePack as the default (keyless) serializer with configuration.
     /// </summary>
-    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<KeylessRegistration> TryUseMessagePack(this ISerializationBuilder builder,
                                                            Action<MessagePackSerializerOptions> configure) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(configure);
@@ -116,7 +116,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Tries to register MessagePack as a named serializer.
     /// </summary>
-    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this IWiaojSerializationBuilder builder)
+    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this ISerializationBuilder builder)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
         return builder.TryUseMessagePack<TKey>(_ => { });
@@ -125,7 +125,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Tries to register MessagePack as a named serializer with options.
     /// </summary>
-    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this ISerializationBuilder builder,
                                                                  MessagePackSerializerOptions options)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
@@ -136,7 +136,7 @@ public static class MessagePackSerializerExtensions {
     /// <summary>
     /// Tries to register MessagePack as a named serializer with configuration.
     /// </summary>
-    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this IWiaojSerializationBuilder builder,
+    public static ISerializerConfigurator<TKey> TryUseMessagePack<TKey>(this ISerializationBuilder builder,
                                                                  Action<MessagePackSerializerOptions> configure)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);

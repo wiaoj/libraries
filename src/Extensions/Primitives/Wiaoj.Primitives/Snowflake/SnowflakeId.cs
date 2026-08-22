@@ -65,10 +65,25 @@ public readonly struct SnowflakeId :
         Configure(new SnowflakeOptions { NodeId = nodeId, Epoch = epoch });
     }
 
-    public static void ConfigureStriped(SnowflakeOptions options, int stripeCount = 16) {
+    /// <summary>
+    /// Configures the global shared generator as a striped generator using the default stripe count (16).
+    /// </summary>
+    /// <param name="options">The configuration options.</param>
+    public static void ConfigureStriped(SnowflakeOptions options) => ConfigureStriped(options, 16);
+
+    /// <summary>
+    /// Configures the global shared generator as a striped generator with a specified stripe count.
+    /// </summary>
+    /// <param name="options">The configuration options.</param>
+    /// <param name="stripeCount">The number of concurrent stripes to allocate.</param>
+    public static void ConfigureStriped(SnowflakeOptions options, int stripeCount) {
         ConfigureInternal(new StripedSnowflakeGenerator(options, stripeCount));
     }
 
+    /// <summary>
+    /// Configures the global shared generator with a custom <see cref="ISnowflakeGenerator"/> implementation.
+    /// </summary>
+    /// <param name="customGenerator">The custom generator.</param>
     public static void Configure(ISnowflakeGenerator customGenerator) {
         ConfigureInternal(customGenerator);
     }
@@ -117,16 +132,45 @@ public readonly struct SnowflakeId :
     // --- Public API ---
 
     /// <summary>
+    /// Parses a string into a <see cref="SnowflakeId"/>.
+    /// </summary>
+    public static SnowflakeId Parse(string s) {
+        Preca.ThrowIfNull(s);
+        return Parse(s.AsSpan());
+    }
+
+    /// <summary>
     /// Parses a span of characters into a <see cref="SnowflakeId"/>.
     /// </summary>
     /// <param name="s">The span of characters to parse.</param>
     /// <returns>The parsed SnowflakeId.</returns>
     /// <exception cref="FormatException">Thrown if the input is not in a valid format.</exception>
     public static SnowflakeId Parse(ReadOnlySpan<char> s) {
-        if (TryParseInternal(s, out SnowflakeId result)) {
+        if (TryParse(s, out SnowflakeId result)) {
             return result;
         }
         throw new FormatException($"'{s}' is not a valid SnowflakeId.");
+    }
+
+    /// <summary>
+    /// Parses a UTF-8 byte span into a <see cref="SnowflakeId"/>.
+    /// </summary>
+    /// <param name="utf8Text">The UTF-8 encoded text to parse.</param>
+    /// <returns>The parsed SnowflakeId.</returns>
+    /// <exception cref="FormatException">Thrown if the input is not in a valid format.</exception>
+    public static SnowflakeId Parse(ReadOnlySpan<byte> utf8Text) {
+        if (TryParse(utf8Text, out SnowflakeId result)) {
+            return result;
+        }
+        throw new FormatException("The input is not a valid UTF-8 encoded SnowflakeId.");
+    }
+
+    /// <summary>
+    /// Tries to parse a string into a <see cref="SnowflakeId"/>.
+    /// </summary>
+    public static bool TryParse([NotNullWhen(true)] string? s, out SnowflakeId result) {
+        if (s is null) { result = default; return false; }
+        return TryParse(s.AsSpan(), out result);
     }
 
     /// <summary>
@@ -137,24 +181,24 @@ public readonly struct SnowflakeId :
     }
 
     /// <summary>
-    /// Parses a UTF-8 byte span into a <see cref="SnowflakeId"/>.
-    /// </summary>
-    /// <param name="utf8Text">The UTF-8 encoded text to parse.</param>
-    /// <returns>The parsed SnowflakeId.</returns>
-    /// <exception cref="FormatException">Thrown if the input is not in a valid format.</exception>
-    public static SnowflakeId Parse(ReadOnlySpan<byte> utf8Text) {
-        if (TryParseInternal(utf8Text, out SnowflakeId result)) {
-            return result;
-        }
-        throw new FormatException("The input is not a valid UTF-8 encoded SnowflakeId.");
-    }
-
-    /// <summary>
     /// Tries to parse a UTF-8 byte span into a <see cref="SnowflakeId"/>.
     /// </summary>
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, out SnowflakeId result) {
         return TryParseInternal(utf8Text, out result);
     }
+
+    #endregion
+
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static SnowflakeId IParsable<SnowflakeId>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<SnowflakeId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SnowflakeId result) => TryParse(s, out result);
+    static SnowflakeId ISpanParsable<SnowflakeId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<SnowflakeId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SnowflakeId result) => TryParse(s, out result);
+    static SnowflakeId IUtf8SpanParsable<SnowflakeId>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<SnowflakeId>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out SnowflakeId result) => TryParse(utf8Text, out result);
+
+    #endregion
      
     // --- Internal Logic ---
 
@@ -184,63 +228,57 @@ public readonly struct SnowflakeId :
             return true;
         }
 
-        // UTF-8 parsing only supports the raw long (decimal) format.
-        // Guid-format strings (e.g. "550e8400-e29b-41d4-a716-446655440000") are NOT supported here
-        // because they require string allocation. Use Parse(string) / TryParse(string, out) instead
-        // when the input is a Guid-encoded SnowflakeId.
         result = Empty;
         return false;
     }
 
-    // --- Explicit Interface Implementations ---
-
-    static SnowflakeId IParsable<SnowflakeId>.Parse(string s, IFormatProvider? provider) {
-        return Parse(s.AsSpan());
-    }
-
-    static bool IParsable<SnowflakeId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SnowflakeId result) {
-        if (s is null) { result = default; return false; }
-        return TryParseInternal(s.AsSpan(), out result);
-    }
-
-    static SnowflakeId ISpanParsable<SnowflakeId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        return Parse(s);
-    }
-
-    static bool ISpanParsable<SnowflakeId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SnowflakeId result) {
-        return TryParse(s, out result);
-    }
-
-    static SnowflakeId IUtf8SpanParsable<SnowflakeId>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
-        return Parse(utf8Text);
-    }
-
-    static bool IUtf8SpanParsable<SnowflakeId>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out SnowflakeId result) {
-        return TryParse(utf8Text, out result);
-    }
-
-    #endregion
-
     #region Formatting 
 
     /// <inheritdoc/>
-    public override string ToString() {
-        return this._value.ToString(CultureInfo.InvariantCulture);
+    public override string ToString() => this._value.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Formats the current instance using the specified format.
+    /// </summary>
+    public string ToString(string? format) => ToString(format, CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Formats the current instance using the specified format and format provider.
+    /// </summary>
+    public string ToString(string? format, IFormatProvider? formatProvider) => this._value.ToString(format, formatProvider ?? CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Tries to format the current instance into the destination character span.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+
+    /// <summary>
+    /// Tries to format the current instance into the destination character span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+
+    /// <summary>
+    /// Tries to format the current instance into the destination character span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return this._value.TryFormat(destination, out charsWritten, format, provider ?? CultureInfo.InvariantCulture);
     }
 
-    /// <inheritdoc/>
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
-        return this._value.ToString(format, formatProvider);
-    }
+    /// <summary>
+    /// Tries to format the current instance into the destination UTF-8 byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
 
-    /// <inheritdoc/>
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        return this._value.TryFormat(destination, out charsWritten, format, provider);
-    }
+    /// <summary>
+    /// Tries to format the current instance into the destination UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
 
-    /// <inheritdoc/>
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        return this._value.TryFormat(utf8Destination, out bytesWritten, format, provider);
+    /// <summary>
+    /// Tries to format the current instance into the destination UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return this._value.TryFormat(utf8Destination, out bytesWritten, format, provider ?? CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -597,6 +635,45 @@ public readonly struct SnowflakeId :
         return left._value >= right._value;
     }
 
+    /// <summary>
+    /// Explicitly converts a <see cref="SnowflakeId"/> to a <see cref="UnixTimestamp"/>.
+    /// </summary>
+    /// <param name="id">The Snowflake ID to convert.</param>
     public static explicit operator UnixTimestamp(SnowflakeId id) => id.ToUnixTimestamp(); 
+
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs equality comparisons on <see cref="SnowflakeId"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<SnowflakeId> OrdinalComparer => SnowflakeIdOrdinalComparer.Instance;
+
+    private sealed class SnowflakeIdOrdinalComparer : IEqualityComparer<SnowflakeId>, IAlternateEqualityComparer<ReadOnlySpan<char>, SnowflakeId> {
+        public static SnowflakeIdOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(SnowflakeId x, SnowflakeId y) => x._value == y._value;
+
+        public int GetHashCode(SnowflakeId obj) => obj._value.GetHashCode();
+
+        public bool Equals(ReadOnlySpan<char> alternate, SnowflakeId other) {
+            if(SnowflakeId.TryParse(alternate, out SnowflakeId parsed)) {
+                return parsed._value == other._value;
+            }
+            return false;
+        }
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            if(SnowflakeId.TryParse(alternate, out SnowflakeId parsed)) {
+                return parsed._value.GetHashCode();
+            }
+            return 0;
+        }
+
+        public SnowflakeId Create(ReadOnlySpan<char> alternate) => SnowflakeId.Parse(alternate);
+    }
+
     #endregion
 }

@@ -5,9 +5,9 @@ using Wiaoj.Security;
 using Wiaoj.Security.DependencyInjection;
 using Wiaoj.Security.EntityFrameworkCore;
 
-#pragma warning disable IDE0130
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Security;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 
 public static class SecurityBuilderEfCoreExtensions { 
     /// <summary>

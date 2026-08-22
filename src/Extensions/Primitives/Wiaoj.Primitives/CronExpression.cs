@@ -1,7 +1,9 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -20,11 +22,15 @@ namespace Wiaoj.Primitives;
 [TypeConverter(typeof(CronExpressionTypeConverter))]
 public readonly record struct CronExpression :
     IEquatable<CronExpression>,
+    IComparable<CronExpression>,
+    IComparable,
+    IParsable<CronExpression>,
     ISpanParsable<CronExpression>,
     IUtf8SpanParsable<CronExpression>,
     ISpanFormattable,
     IUtf8SpanFormattable,
-    IFormattable {
+    IFormattable,
+    IComparisonOperators<CronExpression, CronExpression, bool> {
     // Allowed characters in a valid Cron expression (Digits, letters for months/days, and symbols * ? / , - L W #)
     private static readonly SearchValues<char> ValidCronChars = SearchValues.Create("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz *?/,-#LWC");
     private static readonly SearchValues<byte> ValidCronBytes = SearchValues.Create("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz *?/,-#LWC"u8);
@@ -74,8 +80,7 @@ public readonly record struct CronExpression :
     /// </summary>
     public static CronExpression Parse(string s) {
         Preca.ThrowIfNull(s);
-        if(TryParseInternal(s.AsSpan(), out CronExpression result)) return result;
-        throw new FormatException($"Invalid Cron expression format: '{s}'");
+        return Parse(s.AsSpan());
     }
 
     /// <summary>
@@ -115,6 +120,17 @@ public readonly record struct CronExpression :
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, out CronExpression result) {
         return TryParseInternal(utf8Text, out result);
     }
+
+    #endregion
+
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+
+    static CronExpression IParsable<CronExpression>.Parse(string s, IFormatProvider? provider) => Parse(s);
+    static bool IParsable<CronExpression>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out CronExpression result) => TryParse(s, out result);
+    static CronExpression ISpanParsable<CronExpression>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
+    static bool ISpanParsable<CronExpression>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out CronExpression result) => TryParse(s, out result);
+    static CronExpression IUtf8SpanParsable<CronExpression>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
+    static bool IUtf8SpanParsable<CronExpression>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out CronExpression result) => TryParse(utf8Text, out result);
 
     #endregion
 
@@ -304,17 +320,32 @@ public readonly record struct CronExpression :
     #region Formatting & Operators
 
     /// <inheritdoc/>
-    public override string ToString() {
-        return this.Value;
-    }
+    public override string ToString() => this.Value;
+
+    /// <summary>
+    /// Returns the string representation of the Cron expression.
+    /// </summary>
+    public string ToString(string? format) => this.Value;
+
+    /// <summary>
+    /// Returns the string representation of the Cron expression with the specified format provider.
+    /// </summary>
+    public string ToString(string? format, IFormatProvider? formatProvider) => this.Value;
 
     /// <summary>
     /// Attempts to format the value of the current instance into the provided span of characters.
     /// </summary>
-    /// <param name="destination">The span in which to write this instance's value formatted as a span of characters.</param>
-    /// <param name="charsWritten">When this method returns, contains the number of characters that were written in <paramref name="destination"/>.</param>
-    /// <returns><see langword="true"/> if the formatting was successful; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten) {
+    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+
+    /// <summary>
+    /// Attempts to format the value of the current instance into the provided span of characters using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+
+    /// <summary>
+    /// Attempts to format the value of the current instance into the provided span of characters using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         if(this.Value.AsSpan().TryCopyTo(destination)) {
             charsWritten = this.Value.Length;
             return true;
@@ -323,69 +354,104 @@ public readonly record struct CronExpression :
         return false;
     }
 
-    /// <summary>Implicit conversion to string.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator string(CronExpression cron) {
-        return cron.Value;
-    }
+    /// <summary>
+    /// Attempts to format the value of the current instance into the provided UTF-8 byte span.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
 
-    /// <summary>Explicit conversion from string.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static explicit operator CronExpression(string s) {
-        return Parse(s);
-    }
+    /// <summary>
+    /// Attempts to format the value of the current instance into the provided UTF-8 byte span using the specified format.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
 
-    /// <inheritdoc/>
-    public bool Equals(CronExpression other) {
-        return string.Equals(this.Value, other.Value, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <inheritdoc/>
-    public override int GetHashCode() {
-        return StringComparer.OrdinalIgnoreCase.GetHashCode(this.Value);
-    }
-
-    #endregion
-
-    #region Explicit Interface Implementations (Hidden API)
-
-    static CronExpression IParsable<CronExpression>.Parse(string s, IFormatProvider? provider) {
-        return Parse(s);
-    }
-
-    static bool IParsable<CronExpression>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out CronExpression result) {
-        return TryParse(s, out result);
-    }
-
-    static CronExpression ISpanParsable<CronExpression>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        return Parse(s);
-    }
-
-    static bool ISpanParsable<CronExpression>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out CronExpression result) {
-        return TryParse(s, out result);
-    }
-
-    static CronExpression IUtf8SpanParsable<CronExpression>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
-        return Parse(utf8Text);
-    }
-
-    static bool IUtf8SpanParsable<CronExpression>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out CronExpression result) {
-        return TryParse(utf8Text, out result);
-    }
-
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
-        return ToString();
-    }
-
-    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        return TryFormat(destination, out charsWritten);
-    }
-
-    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    /// <summary>
+    /// Attempts to format the value of the current instance into the provided UTF-8 byte span using the specified format and provider.
+    /// </summary>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         if(string.IsNullOrEmpty(this._value)) { bytesWritten = 0; return true; }
         if(utf8Destination.Length < this._value.Length) { bytesWritten = 0; return false; }
         bytesWritten = Encoding.UTF8.GetBytes(this._value.AsSpan(), utf8Destination);
         return true;
+    }
+
+    /// <summary>Implicit conversion to string.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator string(CronExpression cron) => cron.Value;
+
+    /// <summary>Explicit conversion from string.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator CronExpression(string s) => Parse(s);
+
+    /// <inheritdoc/>
+    public bool Equals(CronExpression other) => string.Equals(this.Value, other.Value, StringComparison.OrdinalIgnoreCase);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => StringComparer.OrdinalIgnoreCase.GetHashCode(this.Value);
+
+    /// <inheritdoc/>
+    public int CompareTo(CronExpression other) => string.Compare(this.Value, other.Value, StringComparison.OrdinalIgnoreCase);
+
+    /// <inheritdoc/>
+    public int CompareTo(object? obj) {
+        if(obj is null) return 1;
+        if(obj is CronExpression other) return CompareTo(other);
+        throw new ArgumentException($"Object must be of type {nameof(CronExpression)}.", nameof(obj));
+    }
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
+    public static bool operator >(CronExpression left, CronExpression right) => left.CompareTo(right) > 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
+    public static bool operator <(CronExpression left, CronExpression right) => left.CompareTo(right) < 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
+    public static bool operator >=(CronExpression left, CronExpression right) => left.CompareTo(right) >= 0;
+
+    /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
+    public static bool operator <=(CronExpression left, CronExpression right) => left.CompareTo(right) <= 0;
+
+    #endregion
+
+    #region Alternate Comparers (.NET 10 Alternate Lookup)
+
+    /// <summary>
+    /// Gets an equality comparer that performs case-insensitive ordinal comparisons on <see cref="CronExpression"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<CronExpression> OrdinalIgnoreCaseComparer => CronExpressionOrdinalIgnoreCaseComparer.Instance;
+
+    /// <summary>
+    /// Gets an equality comparer that performs ordinal comparisons on <see cref="CronExpression"/>
+    /// and supports zero-allocation alternate lookups using <see cref="ReadOnlySpan{Char}"/>.
+    /// </summary>
+    public static IEqualityComparer<CronExpression> OrdinalComparer => CronExpressionOrdinalComparer.Instance;
+
+    private sealed class CronExpressionOrdinalIgnoreCaseComparer : IEqualityComparer<CronExpression>, IAlternateEqualityComparer<ReadOnlySpan<char>, CronExpression> {
+        public static CronExpressionOrdinalIgnoreCaseComparer Instance { get; } = new();
+
+        public bool Equals(CronExpression x, CronExpression y) => string.Equals(x.Value, y.Value, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode(CronExpression obj) => StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Value);
+
+        public bool Equals(ReadOnlySpan<char> alternate, CronExpression other) => alternate.Equals(other.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.OrdinalIgnoreCase);
+
+        public CronExpression Create(ReadOnlySpan<char> alternate) => CronExpression.Parse(alternate);
+    }
+
+    private sealed class CronExpressionOrdinalComparer : IEqualityComparer<CronExpression>, IAlternateEqualityComparer<ReadOnlySpan<char>, CronExpression> {
+        public static CronExpressionOrdinalComparer Instance { get; } = new();
+
+        public bool Equals(CronExpression x, CronExpression y) => string.Equals(x.Value, y.Value, StringComparison.Ordinal);
+
+        public int GetHashCode(CronExpression obj) => obj.Value.GetHashCode(StringComparison.Ordinal);
+
+        public bool Equals(ReadOnlySpan<char> alternate, CronExpression other) => alternate.SequenceEqual(other.Value.AsSpan());
+
+        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.Ordinal);
+
+        public CronExpression Create(ReadOnlySpan<char> alternate) => CronExpression.Parse(alternate);
     }
 
     #endregion

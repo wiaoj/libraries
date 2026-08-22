@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -18,7 +18,7 @@
 	<ItemGroup>
     <ProjectReference Include="..\..\Results\Wiaoj.Results\Wiaoj.Results.csproj" />
     <ProjectReference Include="..\..\Wiaoj.Extensions\Wiaoj.Extensions.csproj" />
-    <ProjectReference Include="..\..\Wiaoj.Threading\Wiaoj.Concurrency.csproj" />
+    <ProjectReference Include="..\..\Concurrency\Wiaoj.Concurrency\Wiaoj.Concurrency.csproj" />
     <ProjectReference Include="..\Wiaoj.Consensus.Raft.Abstractions\Wiaoj.Consensus.Raft.Abstractions.csproj" />
   </ItemGroup>
 

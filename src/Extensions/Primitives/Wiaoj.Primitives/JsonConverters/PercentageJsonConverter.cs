@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -38,14 +38,22 @@ public sealed class PercentageJsonConverter : JsonConverter<Percentage> {
         throw new JsonException($"Unexpected token type {reader.TokenType} for Percentage.");
     }
 
-    /// <summary>
-    /// Writes a specified value as JSON.
-    /// </summary>
-    /// <param name="writer">The writer to write to.</param>
-    /// <param name="value">The value to convert to JSON.</param>
-    /// <param name="options">An object that specifies serialization options to use.</param>
+    /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Percentage value, JsonSerializerOptions options) {
-        // Serialize as a raw number (e.g., 0.5) to maintain precision and standard format.
         writer.WriteNumberValue(value.Value);
+    }
+
+    /// <inheritdoc/>
+    public override Percentage ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        string? propName = reader.GetString();
+        if(propName is not null && Percentage.TryParseInternal(propName.AsSpan(), CultureInfo.InvariantCulture, out Percentage result)) {
+            return result;
+        }
+        throw new JsonException($"Invalid property name format for Percentage: '{propName}'.");
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, Percentage value, JsonSerializerOptions options) {
+        writer.WritePropertyName(value.Value.ToString("G", CultureInfo.InvariantCulture));
     }
 }

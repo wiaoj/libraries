@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Security.Cryptography;
+using Wiaoj.Security.DependencyInjection;
 
 namespace Wiaoj.Security;
 /// <summary>

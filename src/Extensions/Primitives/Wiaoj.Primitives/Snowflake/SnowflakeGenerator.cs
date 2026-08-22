@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Wiaoj.Concurrency;
@@ -75,8 +75,15 @@ public class SnowflakeGenerator : ISnowflakeGenerator {
     /// </summary>
     public static readonly SnowflakeGenerator Default = new(new SnowflakeOptions { NodeId = 0 });
 
-    public long NodeId => _nodeId;
-    public int SequenceBits => _sequenceBits;
+    /// <summary>
+    /// Gets the Node ID assigned to this generator.
+    /// </summary>
+    public long NodeId => this._nodeId;
+
+    /// <summary>
+    /// Gets the number of sequence bits used by this generator.
+    /// </summary>
+    public int SequenceBits => this._sequenceBits;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SnowflakeGenerator"/> class with the specified options.
@@ -233,6 +240,11 @@ public class SnowflakeGenerator : ISnowflakeGenerator {
         return this._timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
     }
 
+    /// <summary>
+    /// Decodes the metadata embedded in the given <see cref="SnowflakeId"/>.
+    /// </summary>
+    /// <param name="id">The Snowflake ID to decode.</param>
+    /// <returns>A <see cref="SnowflakeMetadata"/> instance containing the extracted timestamp, node ID, and sequence.</returns>
     public SnowflakeMetadata Decode(SnowflakeId id) {
         long val = (long)id;
 
@@ -246,4 +258,11 @@ public class SnowflakeGenerator : ISnowflakeGenerator {
         return new SnowflakeMetadata(dt, nodeId, sequence);
     }
 }
+
+/// <summary>
+/// Represents the extracted components from a decoded <see cref="SnowflakeId"/>.
+/// </summary>
+/// <param name="Timestamp">The timestamp at which the ID was generated.</param>
+/// <param name="NodeId">The node/machine ID embedded in the identifier.</param>
+/// <param name="Sequence">The sequence counter value within the millisecond.</param>
 public record struct SnowflakeMetadata(DateTimeOffset Timestamp, long NodeId, long Sequence);

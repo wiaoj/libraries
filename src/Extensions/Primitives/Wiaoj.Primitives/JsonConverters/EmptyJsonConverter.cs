@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Wiaoj.Primitives.JsonConverters;
@@ -18,5 +18,15 @@ public sealed class EmptyJsonConverter : JsonConverter<Empty> {
         // "{}"
         writer.WriteStartObject();
         writer.WriteEndObject();
+    }
+
+    /// <inheritdoc/>
+    public override Empty ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return Empty.Default;
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, Empty value, JsonSerializerOptions options) {
+        writer.WritePropertyName(nameof(Empty));
     }
 }

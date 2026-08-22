@@ -3,6 +3,7 @@ using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Primitives.Tests.Unit.Hashing;
+
 public sealed class Sha512HashTests {
     private static byte[] GetRandomBytes(int length = 64) {
         byte[] buffer = new byte[length];
@@ -46,7 +47,7 @@ public sealed class Sha512HashTests {
 
         // Assert
         Assert.Equal(64, bytes.Length);
-        foreach(var b in bytes) {
+        foreach(byte b in bytes) {
             Assert.Equal(0, b);
         }
     }
@@ -85,6 +86,61 @@ public sealed class Sha512HashTests {
         Assert.False(hash1 == hash2);
         Assert.True(hash1 != hash2);
         Assert.NotEqual(hash1.GetHashCode(), hash2.GetHashCode());
+    }
+
+    #endregion
+
+    #region Sıralama (Comparison) Testleri
+
+    [Fact]
+    public void CompareTo_SmallerFirstByteDiffers_ShouldReturnNegative() {
+        // Arrange
+        byte[] smaller = new byte[64]; smaller[0] = 0x01;
+        byte[] larger = new byte[64]; larger[0] = 0x02;
+        Sha512Hash a = new(smaller);
+        Sha512Hash b = new(larger);
+
+        // Assert
+        Assert.True(a.CompareTo(b) < 0);
+        Assert.True(b.CompareTo(a) > 0);
+        Assert.Equal(0, a.CompareTo(a));
+    }
+
+    [Fact]
+    public void ComparisonOperators_ShouldReflectByteOrdering() {
+        // Arrange
+        byte[] smaller = new byte[64]; smaller[0] = 0x01;
+        byte[] larger = new byte[64]; larger[0] = 0x02;
+        Sha512Hash a = new(smaller);
+        Sha512Hash b = new(larger);
+
+        // Assert
+        Assert.True(a < b);
+        Assert.True(b > a);
+        Assert.True(a <= b);
+        Assert.True(a <= a);
+        Assert.True(b >= a);
+        Assert.True(a >= a);
+        Assert.False(a > b);
+        Assert.False(b < a);
+    }
+
+    [Fact]
+    public void CompareTo_Object_NullShouldReturnPositive() {
+        // Arrange
+        Sha512Hash a = Sha512Hash.Compute("x");
+
+        // Act & Assert
+        Assert.True(((IComparable)a).CompareTo(null) > 0);
+    }
+
+    [Fact]
+    public void CompareTo_Object_WrongTypeShouldThrow() {
+        // Arrange
+        Sha512Hash a = Sha512Hash.Compute("x");
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => ((IComparable)a).CompareTo("not-a-hash"));
     }
 
     #endregion

@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Primitives.Tests.Unit.UrnTests; 
+namespace Wiaoj.Primitives.Tests.Unit.UrnTests; 
 public sealed class UrnParsingTests {
     [Theory]
     [InlineData("urn:user:123")]
@@ -19,7 +19,7 @@ public sealed class UrnParsingTests {
     [InlineData("noturn:nid:nss")] // Yanlış prefix
     [InlineData("urn:nid_bad:nss")] // NID içinde geçersiz karakter
     public void TryParse_InvalidInputs_ShouldReturnFalse(string? input) {
-        bool success = Urn.TryParse(input, null, out var result);
+        bool success = Urn.TryParse(input, out var result);
         Assert.False(success);
         Assert.Equal(Urn.Empty, result);
     }

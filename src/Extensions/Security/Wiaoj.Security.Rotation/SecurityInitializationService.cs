@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Wiaoj.Security.DependencyInjection;
 
 namespace Wiaoj.Security;
 

@@ -90,7 +90,7 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
         try {
             EncryptionKey key = this._keyRing.GetKey(encrypted.KeyVersion);
 
-            byte[] combined = Base64UrlString.Parse(encrypted.Blob.RawBase64).ToBytes();
+            byte[] combined = Base64UrlString.Parse(encrypted.Blob.RawBase64Url).ToBytes();
             try {
                 // Strictly decrypt with Context-specific AAD
                 Secret<byte> result = key.Decrypt(combined, _contextAad);

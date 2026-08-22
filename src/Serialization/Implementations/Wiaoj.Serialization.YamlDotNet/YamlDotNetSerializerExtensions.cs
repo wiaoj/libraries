@@ -14,9 +14,9 @@ public static class YamlDotNetSerializerExtensions {
     /// <param name="builder">The serialization builder.</param>
     /// <param name="configureSerializer">An action to configure the <see cref="SerializerBuilder"/>.</param>
     /// <param name="configureDeserializer">An action to configure the <see cref="DeserializerBuilder"/>.</param>
-    /// <returns>The <see cref="IWiaojSerializationBuilder"/> for chaining.</returns>
+    /// <returns>The <see cref="ISerializationBuilder"/> for chaining.</returns>
     public static ISerializerConfigurator<TKey> UseYamlDotNet<TKey>(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<SerializerBuilder>? configureSerializer = null,
         Action<DeserializerBuilder>? configureDeserializer = null) where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
@@ -42,7 +42,7 @@ public static class YamlDotNetSerializerExtensions {
     /// Registers YamlDotNet as the default (keyless) serializer.
     /// </summary>
     public static ISerializerConfigurator<KeylessRegistration> UseYamlDotNet(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<SerializerBuilder>? configureSerializer = null,
         Action<DeserializerBuilder>? configureDeserializer = null) {
         return builder.UseYamlDotNet<KeylessRegistration>(configureSerializer, configureDeserializer);
@@ -52,7 +52,7 @@ public static class YamlDotNetSerializerExtensions {
     /// Tries to register YamlDotNet as a serializer for the given key type.
     /// </summary>
     public static ISerializerConfigurator<TKey> TryUseYamlDotNet<TKey>(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<SerializerBuilder>? configureSerializer = null,
         Action<DeserializerBuilder>? configureDeserializer = null) where TKey : ISerializerKey {
         Preca.ThrowIfNull(builder);
@@ -78,7 +78,7 @@ public static class YamlDotNetSerializerExtensions {
     /// Tries to register YamlDotNet as the default (keyless) serializer.
     /// </summary>
     public static ISerializerConfigurator<KeylessRegistration> TryUseYamlDotNet(
-        this IWiaojSerializationBuilder builder,
+        this ISerializationBuilder builder,
         Action<SerializerBuilder>? configureSerializer = null,
         Action<DeserializerBuilder>? configureDeserializer = null) {
         return builder.TryUseYamlDotNet<KeylessRegistration>(configureSerializer, configureDeserializer);

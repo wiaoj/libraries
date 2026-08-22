@@ -33,4 +33,15 @@ public sealed class Base62StringJsonConverter : JsonConverter<Base62String> {
     public override void Write(Utf8JsonWriter writer, Base62String value, JsonSerializerOptions options) {
         writer.WriteStringValue(value.Value);
     }
+
+    /// <inheritdoc/>
+    public override Base62String ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        string? propName = reader.GetString();
+        return propName is null ? Base62String.Empty : Base62String.Parse(propName);
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, Base62String value, JsonSerializerOptions options) {
+        writer.WritePropertyName(value.Value);
+    }
 }

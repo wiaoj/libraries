@@ -1,11 +1,15 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
+﻿using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.ObjectPool;
 using System.Diagnostics.CodeAnalysis;
 using Wiaoj.Abstractions;
+using Wiaoj.ObjectPool;
 using Wiaoj.ObjectPool.Policies;
+using IResettable = Wiaoj.ObjectPool.IResettable;
 
-namespace Wiaoj.ObjectPool.Extensions;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Microsoft.Extensions.DependencyInjection;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
+
 /// <summary>
 /// Provides streamlined extension methods for registering Object Pools in DI.
 /// </summary>
@@ -81,7 +85,7 @@ public static class PoolingServiceCollectionExtensions {
     public static IServiceCollection AddAsyncResettablePool<T>(this IServiceCollection services, Action<ObjectPoolOptions>? configure = null)
         where T : class, IAsyncResettable, new() {
         // Factory null geçiliyor, policy içinde T new() ile oluşturulacak.
-        var policy = new AsyncResettableObjectPolicy<T>(factory: null);
+        AsyncResettableObjectPolicy<T> policy = new(factory: null);
         return services.RegisterAsyncPool(policy, configure);
     }
 
@@ -160,7 +164,7 @@ public static class PoolingServiceCollectionExtensions {
             // parametreleri DI container'dan otomatik çeker.
             var policy = ActivatorUtilities.CreateInstance<TPolicy>(sp);
 
-            var options = new ObjectPoolOptions();
+            ObjectPoolOptions options = new();
             configure?.Invoke(options);
 
             return ObjectPoolFactory.Create(policy, options);
@@ -185,7 +189,7 @@ public static class PoolingServiceCollectionExtensions {
             // Policy oluşturulurken DI servisleri enjekte edilir.
             var policy = ActivatorUtilities.CreateInstance<TPolicy>(sp);
 
-            var options = new ObjectPoolOptions();
+            ObjectPoolOptions options = new();
             configure?.Invoke(options);
 
             return ObjectPoolFactory.CreateAsync(policy, options);
@@ -202,7 +206,7 @@ public static class PoolingServiceCollectionExtensions {
         where T : class {
         services.TryAddObjectPoolProvider();
         services.TryAddSingleton<IObjectPool<T>>(sp => {
-            var options = new ObjectPoolOptions();
+            ObjectPoolOptions options = new();
             configure?.Invoke(options);
             return ObjectPoolFactory.Create(policy, options);
         });
@@ -213,7 +217,7 @@ public static class PoolingServiceCollectionExtensions {
         where T : class {
         services.TryAddObjectPoolProvider();
         services.TryAddSingleton<IAsyncObjectPool<T>>(sp => {
-            var options = new ObjectPoolOptions();
+            ObjectPoolOptions options = new();
             configure?.Invoke(options);
             return ObjectPoolFactory.CreateAsync(policy, options);
         });
@@ -227,9 +231,9 @@ public static class PoolingServiceCollectionExtensions {
             var factory = sp.GetService<IAsyncFactory<T>>()
                           ?? throw new InvalidOperationException($"No 'IAsyncFactory<{typeof(T).Name}>' found in DI.");
 
-            var policy = new AsyncFactoryPooledObjectPolicy<T>(factory, resetter);
+            AsyncFactoryPooledObjectPolicy<T> policy = new(factory, resetter);
 
-            var options = new ObjectPoolOptions();
+            ObjectPoolOptions options = new();
             configure?.Invoke(options);
 
             return ObjectPoolFactory.CreateAsync(policy, options);

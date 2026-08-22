@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.BloomFilter;
+using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.BloomFilter.Internal;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
-using Wiaoj.ObjectPool.Extensions;
 
 #pragma warning disable IDE0130
 namespace Microsoft.Extensions.DependencyInjection;

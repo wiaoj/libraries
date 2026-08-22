@@ -208,4 +208,4 @@ public static partial class BloomFilterLoggerExtensions {
     [LoggerMessage(EventId = 5001, Level = LogLevel.Error,
         Message = "Critical failure in BloomFilter '{FilterName}' during '{Operation}': {ErrorMessage}")]
     public static partial void LogCriticalOperationError(this ILogger logger, Exception ex, FilterName filterName, string operation, string errorMessage);
-}
+}
