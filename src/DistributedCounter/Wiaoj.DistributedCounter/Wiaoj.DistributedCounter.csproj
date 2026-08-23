@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -7,6 +7,8 @@
 	  <RootNamespace>Wiaoj.DistributedCounter</RootNamespace>
 	  <AssemblyName>Wiaoj.DistributedCounter</AssemblyName>
 	  <PackageId>Wiaoj.DistributedCounter</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
 	<ItemGroup>
@@ -14,6 +16,7 @@
 		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.2" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
 		<PackageReference Include="Microsoft.Extensions.Options" Version="10.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.2" />
 	</ItemGroup>
 	
   <ItemGroup>

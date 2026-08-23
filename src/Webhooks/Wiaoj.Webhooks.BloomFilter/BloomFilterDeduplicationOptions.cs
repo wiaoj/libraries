@@ -1,4 +1,5 @@
 using Wiaoj.Preconditions;
+using Wiaoj.Primitives.Hashing;
 
 namespace Wiaoj.Webhooks.BloomFilter;
 
@@ -32,11 +33,12 @@ public sealed class BloomFilterDeduplicationOptions {
     public Func<WebhookDeliveryContext, string> KeySelector { get; set; } = DefaultKeySelector;
 
     /// <summary>
-    /// Default key extraction logic combining EndpointId and Event type name + hash code.
+    /// Default key extraction logic combining EndpointId, Event type name, and 128-bit payload digest.
     /// </summary>
     public static string DefaultKeySelector(WebhookDeliveryContext context) {
         Preca.ThrowIfNull(context);
-        return $"{context.Endpoint.Id.Value}:{context.Event.GetType().Name}:{context.Event.GetHashCode()}";
+        XxHash128 hash = XxHash128.Compute(context.SerializedPayload);
+        return $"{context.Endpoint.Id.Value}:{context.Event.GetType().Name}:{hash}";
     }
 
     /// <summary>
@@ -44,7 +46,7 @@ public sealed class BloomFilterDeduplicationOptions {
     /// </summary>
     public void Validate() {
         Preca.ThrowIfLessThan(this.Capacity, 1);
-        if(this.ErrorRate <= 0.0 || this.ErrorRate >= 1.0) {
+        if(this.ErrorRate is <= 0.0 or >= 1.0) {
             throw new ArgumentOutOfRangeException(nameof(this.ErrorRate), "Error rate must be between 0.0 and 1.0.");
         }
         Preca.ThrowIfNull(this.KeySelector);

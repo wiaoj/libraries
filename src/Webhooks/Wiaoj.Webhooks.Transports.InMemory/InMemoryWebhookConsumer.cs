@@ -1,31 +1,31 @@
-using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Wiaoj.Webhooks.Transports.InMemory.Diagnostics;
+using System.Threading.Channels;
 
 namespace Wiaoj.Webhooks.Transports.InMemory;
 
 /// <summary>
-/// Background service that runs a multi-worker concurrent consumer pool to continuously dequeue jobs from an
-/// <see cref="InMemoryWebhookTransport"/> and process them with <see cref="IWebhookJobHandler"/>.
+/// Background service that runs a concurrent consumer worker pool to continuously dequeue and process jobs from
+/// <see cref="InMemoryWebhookTransport"/> or <see cref="ShardedWebhookTransport"/>.
 /// </summary>
 public sealed class InMemoryWebhookConsumer : BackgroundService {
-    private readonly InMemoryWebhookTransport _transport;
+    private readonly IWebhookTransport _transport;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly InMemoryWebhookTransportOptions _options;
     private readonly ILogger<InMemoryWebhookConsumer> _logger;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="InMemoryWebhookConsumer"/> class with options.
+    /// Initializes a new instance of the <see cref="InMemoryWebhookConsumer"/> class with all required dependencies.
     /// </summary>
-    /// <param name="transport">The in-memory transport to read jobs from.</param>
+    /// <param name="transport">The transport instance to read jobs from.</param>
     /// <param name="scopeFactory">The factory used to create per-job DI scopes.</param>
     /// <param name="options">The transport configuration options.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>
     public InMemoryWebhookConsumer(
-        InMemoryWebhookTransport transport,
+        IWebhookTransport transport,
         IServiceScopeFactory scopeFactory,
         IOptions<InMemoryWebhookTransportOptions> options,
         ILogger<InMemoryWebhookConsumer> logger) {
@@ -40,21 +40,41 @@ public sealed class InMemoryWebhookConsumer : BackgroundService {
         this._logger = logger;
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="InMemoryWebhookConsumer"/> class with default options.
-    /// </summary>
-    /// <param name="transport">The in-memory transport to read jobs from.</param>
-    /// <param name="scopeFactory">The factory used to create per-job DI scopes.</param>
-    /// <param name="logger">The logger instance.</param>
-    public InMemoryWebhookConsumer(
-        InMemoryWebhookTransport transport,
-        IServiceScopeFactory scopeFactory,
-        ILogger<InMemoryWebhookConsumer> logger)
-        : this(transport, scopeFactory, Microsoft.Extensions.Options.Options.Create(new InMemoryWebhookTransportOptions()), logger) {
-    }
-
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        if(this._transport is ShardedWebhookTransport sharded) {
+            await ExecuteShardedAsync(sharded, stoppingToken).ConfigureAwait(false);
+        }
+        else if(this._transport is InMemoryWebhookTransport single) {
+            await ExecuteSingleAsync(single, stoppingToken).ConfigureAwait(false);
+        }
+        else {
+            throw new InvalidOperationException($"Unsupported transport type '{this._transport.GetType().FullName}' for InMemoryWebhookConsumer.");
+        }
+    }
+
+    private async Task ExecuteShardedAsync(ShardedWebhookTransport sharded, CancellationToken stoppingToken) {
+        int shardCount = sharded.ShardCount;
+        this._logger.LogConsumerStarted(shardCount);
+
+        Task[] workerTasks = new Task[shardCount];
+
+        for(int i = 0; i < shardCount; i++) {
+            int workerId = i + 1;
+            if(sharded.GetShard(i) is InMemoryWebhookTransport shardTransport) {
+                workerTasks[i] = Task.Run(() => WorkerLoopAsync(workerId, shardTransport.Reader, stoppingToken), CancellationToken.None);
+            }
+        }
+
+        try {
+            await Task.WhenAll(workerTasks).ConfigureAwait(false);
+        }
+        finally {
+            this._logger.LogConsumerStopping();
+        }
+    }
+
+    private async Task ExecuteSingleAsync(InMemoryWebhookTransport single, CancellationToken stoppingToken) {
         int workerCount = this._options.Concurrency;
         this._logger.LogConsumerStarted(workerCount);
 
@@ -62,22 +82,22 @@ public sealed class InMemoryWebhookConsumer : BackgroundService {
 
         for(int i = 0; i < workerCount; i++) {
             int workerId = i + 1;
-            workerTasks[i] = Task.Run(() => WorkerLoopAsync(workerId, stoppingToken), CancellationToken.None);
+            workerTasks[i] = Task.Run(() => WorkerLoopAsync(workerId, single.Reader, stoppingToken), CancellationToken.None);
         }
 
         try {
-            await Task.WhenAll(workerTasks);
+            await Task.WhenAll(workerTasks).ConfigureAwait(false);
         }
         finally {
             this._logger.LogConsumerStopping();
         }
     }
 
-    private async Task WorkerLoopAsync(int workerId, CancellationToken stoppingToken) {
+    private async Task WorkerLoopAsync(int workerId, ChannelReader<WebhookDeliveryJob> reader, CancellationToken stoppingToken) {
         while(!stoppingToken.IsCancellationRequested) {
             WebhookDeliveryJob job;
             try {
-                job = await this._transport.Reader.ReadAsync(stoppingToken);
+                job = await reader.ReadAsync(stoppingToken).ConfigureAwait(false);
             }
             catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
                 break;
@@ -91,13 +111,12 @@ public sealed class InMemoryWebhookConsumer : BackgroundService {
             try {
                 await using AsyncServiceScope scope = this._scopeFactory.CreateAsyncScope();
                 IWebhookJobHandler handler = scope.ServiceProvider.GetRequiredService<IWebhookJobHandler>();
-                await handler.HandleAsync(job, stoppingToken);
+                await handler.HandleAsync(job, stoppingToken).ConfigureAwait(false);
             }
             catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
                 break;
             }
             catch(Exception ex) {
-                // A job-level failure should never take the worker loop down.
                 this._logger.LogConsumerJobError(ex, workerId, job.Id.Value, job.EndpointId.Value);
             }
         }

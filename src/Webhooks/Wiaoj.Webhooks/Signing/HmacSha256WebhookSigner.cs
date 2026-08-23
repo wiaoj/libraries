@@ -1,5 +1,3 @@
-using Wiaoj.Primitives.Cryptography.Hashing;
-
 namespace Wiaoj.Webhooks.Signing;
 
 /// <summary>

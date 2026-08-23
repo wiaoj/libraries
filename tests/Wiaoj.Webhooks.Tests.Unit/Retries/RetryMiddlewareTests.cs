@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Retries;
 using Wiaoj.Webhooks.Tests.Unit.Fakes;
 using Wiaoj.Webhooks.Tests.Unit.TestData;

@@ -3,6 +3,7 @@
     "Wiaoj.Samples.Webhooks": {
       "commandName": "Project",
       "launchBrowser": true,
+      "dotnetRunMessages": false,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },

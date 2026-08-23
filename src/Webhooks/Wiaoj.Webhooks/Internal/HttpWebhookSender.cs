@@ -1,8 +1,9 @@
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Net;
 using System.Net.Mime;
 using System.Text;
-using Microsoft.Extensions.Logging;
 using Wiaoj.Webhooks.Diagnostics;
 
 namespace Wiaoj.Webhooks.Internal;
@@ -53,6 +54,8 @@ internal sealed class HttpWebhookSender {
         using Activity? activity = WebhookActivitySource.StartHttpActivity(targetUrl);
 
         HttpRequestMessage request = new(HttpMethod.Post, targetUrl) {
+            Version = HttpVersion.Version20,
+            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
             Content = new StringContent(payload, Encoding.UTF8, MediaTypeNames.Application.Json)
         };
 

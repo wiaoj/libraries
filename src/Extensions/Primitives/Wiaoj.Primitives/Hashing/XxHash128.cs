@@ -46,7 +46,7 @@ public readonly struct XxHash128
       IComparisonOperators<XxHash128, XxHash128, bool> {
 
     /// <summary>The size of the XXHash3-128 hash in bytes (16 bytes / 128 bits).</summary>
-    internal const int HashSizeInBytes = 16;
+    public const int HashSizeInBytes = 16;
 
     private readonly UInt128 _value;
 
@@ -262,6 +262,32 @@ public readonly struct XxHash128
     [SkipLocalsInit]
     public static XxHash128 Compute(ReadOnlySpan<byte> data) {
         return new(XxHash128Core.HashToUInt128(data));
+    }
+
+    /// <summary>
+    /// Computes the XXHash3-128 hash of a character span using UTF-8 encoding.
+    /// </summary>
+    /// <param name="chars">The character span to hash.</param>
+    /// <returns>A new <see cref="XxHash128"/> instance containing the 128-bit digest.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash128 Compute(ReadOnlySpan<char> chars) {
+        return Compute(chars, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the XXHash3-128 hash of a character span using the specified encoding.
+    /// </summary>
+    /// <param name="chars">The character span to hash.</param>
+    /// <param name="encoding">The encoding used to convert the characters to bytes before hashing.</param>
+    /// <returns>A new <see cref="XxHash128"/> instance containing the 128-bit digest.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [SkipLocalsInit]
+    public static XxHash128 Compute(ReadOnlySpan<char> chars, Encoding encoding) {
+        Preca.ThrowIfNull(encoding);
+        int maxByteCount = encoding.GetMaxByteCount(chars.Length);
+        using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+        int bytesWritten = encoding.GetBytes(chars, buffer.Span);
+        return Compute(buffer.Span[..bytesWritten]);
     }
 
     /// <summary>

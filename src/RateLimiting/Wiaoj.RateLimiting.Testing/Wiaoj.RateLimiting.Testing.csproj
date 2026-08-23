@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.RateLimiting.Testing</RootNamespace>
+	  <AssemblyName>Wiaoj.RateLimiting.Testing</AssemblyName>
+	  <PackageId>Wiaoj.RateLimiting.Testing</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Wiaoj.RateLimiting.Abstractions\Wiaoj.RateLimiting.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

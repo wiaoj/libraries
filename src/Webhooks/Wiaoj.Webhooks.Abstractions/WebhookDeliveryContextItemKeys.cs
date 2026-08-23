@@ -27,4 +27,9 @@ public static class WebhookDeliveryContextItemKeys {
     /// and persistent store that the job lifecycle status must transition to <see cref="WebhookJobStatus.DeadLettered"/>.
     /// </summary>
     public const string IsDeadLettered = "__wiaoj.webhooks.is_dead_lettered";
+
+    /// <summary>
+    /// Key under which the computed <see cref="IdempotencyKey"/> is stored in <see cref="WebhookDeliveryContext.Items"/>.
+    /// </summary>
+    public const string IdempotencyKey = "__wiaoj.webhooks.idempotency_key";
 }

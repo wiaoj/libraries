@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using Wiaoj.Serialization.SystemTextJson;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Retries;
 using Wiaoj.Webhooks.Tests.Unit.Fakes;
@@ -21,10 +20,11 @@ public sealed class DeadLetteringAndReplayLifecycleTests {
         FakeWebhookSerializer serializer = new();
         FakeTimeProvider timeProvider = new();
         FakeWebhookEndpointResolver resolver = new();
+        WebhookEventRegistry eventRegistry = new(new WebhookEventRegistryOptions());
         WebhookEndpoint endpoint = WebhookTestFactory.CreateEndpoint();
         resolver.Register(endpoint);
 
-        // 1. Exponential Backoff with MaxAttempts = 2 (1 initial attempt + 1 retry attempt)
+        // 1. Exponential Backoff with MaxAttempts = 2
         ExponentialBackoffOptions retryOptions = new() {
             MaxAttempts = 2,
             InitialDelay = TimeSpan.FromSeconds(1),
@@ -32,16 +32,16 @@ public sealed class DeadLetteringAndReplayLifecycleTests {
         };
         ExponentialBackoffPolicy retryPolicy = new(retryOptions);
 
-        // 2. Deliverer Mock: Returns 503 for first 2 attempts, then 200 OK when replayed
+        // 2. Deliverer Mock
         Queue<WebhookDeliveryResult> deliverySequence = new([
-            WebhookDeliveryResult.Transient("503 Server Error", 503), // Attempt #1 -> Retry scheduled
-            WebhookDeliveryResult.Transient("503 Server Error", 503), // Attempt #2 -> Retries exhausted -> DeadLetter
-            WebhookDeliveryResult.Success(200, "OK")                  // Replay attempt -> Success!
+            WebhookDeliveryResult.Transient("503 Server Error", 503),
+            WebhookDeliveryResult.Transient("503 Server Error", 503),
+            WebhookDeliveryResult.Success(200, "OK")
         ]);
 
         FakeWebhookDeliverer deliverer = new(deliverySequence.ToArray());
 
-        // 3. Pipeline: Configured with RetryMiddleware
+        // 3. Pipeline
         RetryMiddleware retryMiddleware = new(retryPolicy, transport, NullLogger<RetryMiddleware>.Instance);
         WebhookPipelineRunner runner = new(
             [retryMiddleware],
@@ -50,17 +50,18 @@ public sealed class DeadLetteringAndReplayLifecycleTests {
             NullLogger<WebhookPipelineRunner>.Instance);
 
         WebhookJobHandler jobHandler = new(store, resolver, serializer, runner, NullLogger<WebhookJobHandler>.Instance);
-        WebhookDispatcher dispatcher = new(store, transport, serializer, timeProvider, NullLogger<WebhookDispatcher>.Instance);
 
-        // ── STEP 1: DISPATCH EVENT ───────────────────────────────────────────
+        // 🌟 Düzeltilen Satır: eventRegistry parametresi eklendi
+        WebhookDispatcher dispatcher = new(store, transport, serializer, eventRegistry, timeProvider, NullLogger<WebhookDispatcher>.Instance);
+
+        // ── STEP 1: DISPATCH EVENT ──
         OrderCreatedWebhookEvent @event = WebhookTestFactory.CreateEvent();
         WebhookDeliveryHandle handle = await dispatcher.DispatchAsync(endpoint.Id, @event);
         WebhookJobId jobId = handle.JobId;
 
-        // Transport should have accepted the initial delivery job
         Assert.Single(transport.EnqueuedJobs);
 
-        // ── STEP 2: WORKER PROCESSES ATTEMPT #1 (503 Error -> Schedules Retry)
+        // ── STEP 2: WORKER PROCESSES ATTEMPT #1 (503 Error -> Schedules Retry) ──
         WebhookDeliveryJob jobAttempt1 = transport.EnqueuedJobs[0].Job;
         await jobHandler.HandleAsync(jobAttempt1);
 
@@ -69,34 +70,31 @@ public sealed class DeadLetteringAndReplayLifecycleTests {
         Assert.Equal(WebhookJobStatus.Retrying, recordAfterAttempt1.Status);
         Assert.Single(recordAfterAttempt1.Attempts);
 
-        // ── STEP 3: WORKER PROCESSES ATTEMPT #2 (Max Attempts Reached -> DeadLetter)
-        Assert.Equal(2, transport.EnqueuedJobs.Count); // Retry middleware re-enqueued the job with original JobId
+        // ── STEP 3: WORKER PROCESSES ATTEMPT #2 (Max Attempts Reached -> DeadLetter) ──
+        Assert.Equal(2, transport.EnqueuedJobs.Count);
         WebhookDeliveryJob jobAttempt2 = transport.EnqueuedJobs[1].Job;
         await jobHandler.HandleAsync(jobAttempt2);
 
-        // Assert: Job status must transition to DeadLettered
         WebhookJobRecord? recordDeadLettered = await store.GetJobAsync(jobId);
         Assert.NotNull(recordDeadLettered);
         Assert.Equal(WebhookJobStatus.DeadLettered, recordDeadLettered.Status);
         Assert.Equal(2, recordDeadLettered.Attempts.Count);
 
-        // Assert: Dead-letter query returns the failed job
         IReadOnlyList<WebhookJobRecord> deadLetterList = await store.GetDeadLetteredJobsAsync(10);
         Assert.Single(deadLetterList);
         Assert.Equal(jobId, deadLetterList[0].Id);
 
-        // ── STEP 4: OPERATOR / ADMIN TRIGGERS MANUAL REPLAY ──────────────────
+        // ── STEP 4: OPERATOR TRIGGERS MANUAL REPLAY ──
         await dispatcher.ReplayAsync(jobId);
 
         WebhookJobRecord? recordReplayed = await store.GetJobAsync(jobId);
         Assert.NotNull(recordReplayed);
         Assert.Equal(WebhookJobStatus.Queued, recordReplayed.Status);
 
-        // ── STEP 5: WORKER PROCESSES REPLAYED JOB (Success 200 OK) ────────────
+        // ── STEP 5: WORKER PROCESSES REPLAYED JOB (Success 200 OK) ──
         WebhookDeliveryJob jobReplay = transport.EnqueuedJobs[^1].Job;
         await jobHandler.HandleAsync(jobReplay);
 
-        // Assert: Final state is Delivered with all 3 attempts preserved in audit history
         WebhookJobRecord? finalRecord = await store.GetJobAsync(jobId);
         Assert.NotNull(finalRecord);
         Assert.Equal(WebhookJobStatus.Delivered, finalRecord.Status);

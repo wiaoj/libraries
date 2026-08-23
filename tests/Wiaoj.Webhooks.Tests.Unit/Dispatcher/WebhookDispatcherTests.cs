@@ -14,15 +14,18 @@ public sealed class WebhookDispatcherTests {
     private readonly SystemTextJsonSerializer<WebhookSerializerKey> _serializer = new();
     private readonly FakeTimeProvider _timeProvider = new();
     private readonly InMemoryWebhookStore _store = new();
+    private readonly WebhookEventRegistry _eventRegistry = new(new WebhookEventRegistryOptions());
 
     private WebhookDispatcher CreateDispatcher(
         IWebhookStore? store = null,
         IWebhookTransport? transport = null,
+        IWebhookEventRegistry? eventRegistry = null,
         TimeProvider? timeProvider = null) {
         return new(
             store ?? this._store,
             transport ?? new InMemoryWebhookTransport(),
             this._serializer,
+            eventRegistry ?? this._eventRegistry,
             timeProvider ?? this._timeProvider,
             NullLogger<WebhookDispatcher>.Instance);
     }
@@ -37,15 +40,17 @@ public sealed class WebhookDispatcherTests {
             InMemoryWebhookStore store = new();
             InMemoryWebhookTransport transport = new();
             SystemTextJsonSerializer<WebhookSerializerKey> serializer = new();
+            WebhookEventRegistry eventRegistry = new(new WebhookEventRegistryOptions());
             FakeTimeProvider timeProvider = new();
             NullLogger<WebhookDispatcher> logger = NullLogger<WebhookDispatcher>.Instance;
 
-            // 5 parametrenin tamamının guard kontrolü:
-            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(null!, transport, serializer, timeProvider, logger));
-            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, null!, serializer, timeProvider, logger));
-            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, transport, null!, timeProvider, logger));
-            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, transport, serializer, null!, logger));
-            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, transport, serializer, timeProvider, null!));
+            // 6 parametrenin tamamının guard kontrolü:
+            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(null!, transport, serializer, eventRegistry, timeProvider, logger));
+            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, null!, serializer, eventRegistry, timeProvider, logger));
+            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, transport, null!, eventRegistry, timeProvider, logger));
+            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, transport, serializer, null!, timeProvider, logger));
+            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, transport, serializer, eventRegistry, null!, logger));
+            Assert.ThrowsAny<ArgumentException>(() => new WebhookDispatcher(store, transport, serializer, eventRegistry, timeProvider, null!));
         }
     }
 
@@ -60,10 +65,17 @@ public sealed class WebhookDispatcherTests {
             InMemoryWebhookStore store = new();
             InMemoryWebhookTransport transport = new();
             FakeTimeProvider timeProvider = new();
+            WebhookEventRegistry eventRegistry = new(new WebhookEventRegistryOptions());
             DateTimeOffset fixedNow = new(2026, 8, 22, 12, 0, 0, TimeSpan.Zero);
             timeProvider.SetUtcNow(fixedNow);
 
-            WebhookDispatcher dispatcher = new(store, transport, new SystemTextJsonSerializer<WebhookSerializerKey>(), timeProvider, NullLogger<WebhookDispatcher>.Instance);
+            WebhookDispatcher dispatcher = new(
+                store,
+                transport,
+                new SystemTextJsonSerializer<WebhookSerializerKey>(),
+                eventRegistry,
+                timeProvider,
+                NullLogger<WebhookDispatcher>.Instance);
 
             WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-123");
             OrderCreatedWebhookEvent @event = WebhookTestFactory.CreateEvent();
@@ -79,7 +91,7 @@ public sealed class WebhookDispatcherTests {
             Assert.NotNull(storedJob);
             Assert.Equal(endpointId, storedJob.EndpointId);
             Assert.Equal(WebhookJobStatus.Queued, storedJob.Status);
-            Assert.Equal(OrderCreatedWebhookEvent.EventName, storedJob.EventType);
+            Assert.Equal("order.created", storedJob.EventType);
             Assert.Equal(fixedNow, storedJob.CreatedAt);
             Assert.NotEmpty(storedJob.SerializedPayload);
 
@@ -89,6 +101,7 @@ public sealed class WebhookDispatcherTests {
             Assert.NotNull(job);
             Assert.Equal(handle.JobId, job.Id);
             Assert.Equal(endpointId, job.EndpointId);
+            Assert.Equal("order.created", job.EventType);
             Assert.Same(@event, job.Payload);
         }
 
@@ -98,6 +111,7 @@ public sealed class WebhookDispatcherTests {
                 new InMemoryWebhookStore(),
                 new InMemoryWebhookTransport(),
                 new SystemTextJsonSerializer<WebhookSerializerKey>(),
+                new WebhookEventRegistry(new WebhookEventRegistryOptions()),
                 new FakeTimeProvider(),
                 NullLogger<WebhookDispatcher>.Instance);
 
@@ -122,6 +136,7 @@ public sealed class WebhookDispatcherTests {
                 store,
                 transport,
                 new SystemTextJsonSerializer<WebhookSerializerKey>(),
+                new WebhookEventRegistry(new WebhookEventRegistryOptions()),
                 new FakeTimeProvider(),
                 NullLogger<WebhookDispatcher>.Instance);
 
@@ -152,6 +167,7 @@ public sealed class WebhookDispatcherTests {
             Assert.NotNull(enqueuedJob);
             Assert.Equal(jobId, enqueuedJob.Id);
             Assert.Equal(endpointId, enqueuedJob.EndpointId);
+            Assert.Equal("order.created", enqueuedJob.EventType);
             Assert.Equal(originalJson, enqueuedJob.Payload.ToString());
         }
 
@@ -161,6 +177,7 @@ public sealed class WebhookDispatcherTests {
                 new InMemoryWebhookStore(),
                 new InMemoryWebhookTransport(),
                 new SystemTextJsonSerializer<WebhookSerializerKey>(),
+                new WebhookEventRegistry(new WebhookEventRegistryOptions()),
                 new FakeTimeProvider(),
                 NullLogger<WebhookDispatcher>.Instance);
 

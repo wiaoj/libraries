@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <TargetFramework>net10.0</TargetFramework>
+	  <ImplicitUsings>enable</ImplicitUsings>
+	  <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.RateLimiting</RootNamespace>
+	  <AssemblyName>Wiaoj.RateLimiting.Abstractions</AssemblyName>
+	  <PackageId>Wiaoj.RateLimiting.Abstractions</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+  </ItemGroup> 
+
+</Project>

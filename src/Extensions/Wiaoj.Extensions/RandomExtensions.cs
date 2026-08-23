@@ -58,7 +58,7 @@ public static class RandomExtensions {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double Next(Range<double> range) {
-            return random.NextDouble(range.Min, range.Max + 1);
+            return random.NextDouble(range.Min, range.Max);
         }
     }
 }

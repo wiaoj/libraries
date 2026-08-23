@@ -9,6 +9,7 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
     private readonly IWebhookStore _store;
     private readonly IWebhookTransport _transport;
     private readonly ISerializer<WebhookSerializerKey> _serializer;
+    private readonly IWebhookEventRegistry _eventRegistry;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<WebhookDispatcher> _logger;
 
@@ -16,17 +17,20 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
         IWebhookStore store,
         IWebhookTransport transport,
         ISerializer<WebhookSerializerKey> serializer,
+        IWebhookEventRegistry eventRegistry,
         TimeProvider timeProvider,
         ILogger<WebhookDispatcher> logger) {
         Preca.ThrowIfNull(store);
         Preca.ThrowIfNull(transport);
         Preca.ThrowIfNull(serializer);
+        Preca.ThrowIfNull(eventRegistry);
         Preca.ThrowIfNull(timeProvider);
         Preca.ThrowIfNull(logger);
 
         this._store = store;
         this._transport = transport;
         this._serializer = serializer;
+        this._eventRegistry = eventRegistry;
         this._timeProvider = timeProvider;
         this._logger = logger;
     }
@@ -35,14 +39,13 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
     public async Task<WebhookDeliveryHandle> DispatchAsync<TEvent>(
         WebhookEndpointId endpointId,
         TEvent payload,
+        WebhookPartitionKey partitionKey,
         CancellationToken cancellationToken = default)
         where TEvent : IWebhookEvent {
         Preca.ThrowIfNull(payload);
+        Preca.ThrowIfNullOrWhiteSpace(partitionKey.Value);
 
-        string eventName = !string.IsNullOrWhiteSpace(TEvent.EventName)
-            ? TEvent.EventName
-            : typeof(TEvent).Name;
-
+        string eventName = this._eventRegistry.GetEventName<TEvent>();
         this._logger.LogDispatchStarting(eventName, endpointId);
 
         using Activity? activity = WebhookActivitySource.StartDispatchActivity(endpointId, eventName);
@@ -51,23 +54,25 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
             WebhookJobId jobId = WebhookJobId.NewJobId();
             string serializedPayload = this._serializer.SerializeToString(payload, payload.GetType());
 
-            // 1. Store-First Persistence with deterministic TimeProvider (Zero loss guarantee)
+            // 1. Store Persistence with PartitionKey
             this._logger.LogStoreSavingJob(jobId, endpointId, eventName);
             WebhookJobRecord jobRecord = new(
                 jobId,
                 endpointId,
+                partitionKey.Value,
                 eventName,
                 serializedPayload,
                 this._timeProvider.GetUtcNow());
 
             await this._store.SaveAsync(jobRecord, cancellationToken).ConfigureAwait(false);
 
-            // 2. Zero-Latency Execution Channel Push (Fast-Path)
-            WebhookDeliveryJob job = new(jobId, endpointId, payload);
+            // 2. Transport Queue Push with PartitionKey
+            WebhookDeliveryJob job = new(jobId, endpointId, partitionKey, eventName, payload);
             await this._transport.EnqueueAsync(job, cancellationToken).ConfigureAwait(false);
 
             WebhookMeter.DispatchedEventsCount.Add(1, new TagList {
                 { "webhook.endpoint_id", endpointId.Value },
+                { "webhook.partition_key", partitionKey.Value },
                 { "webhook.event_name", eventName }
             });
 
@@ -79,6 +84,7 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
         catch(Exception ex) {
             WebhookMeter.DispatchErrorCount.Add(1, new TagList {
                 { "webhook.endpoint_id", endpointId.Value },
+                { "webhook.partition_key", partitionKey.Value },
                 { "webhook.event_name", eventName }
             });
 
@@ -96,19 +102,12 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
 
         jobRecord.Status = WebhookJobStatus.Queued;
         await this._store.UpdateStatusAsync(jobId, WebhookJobStatus.Queued, cancellationToken).ConfigureAwait(false);
-         
+
         IWebhookEvent payload = new RawJsonWebhookEvent(jobRecord.EventType, jobRecord.SerializedPayload);
 
-        WebhookDeliveryJob job = new(jobId, jobRecord.EndpointId, payload);
+        WebhookDeliveryJob job = new(jobId, jobRecord.EndpointId, WebhookPartitionKey.Parse(jobRecord.PartitionKey), jobRecord.EventType, payload);
         await this._transport.EnqueueAsync(job, cancellationToken).ConfigureAwait(false);
 
         return new WebhookDeliveryHandle(jobId);
-    }
-
-    private sealed record RawJsonWebhookEvent(string EventType, string SerializedJson) : IWebhookEvent {
-        public static string EventName => "raw.json";
-        public override string ToString() {
-            return this.SerializedJson;
-        }
     }
 }

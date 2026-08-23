@@ -1,11 +1,25 @@
-﻿namespace Wiaoj.Abstractions;    
+﻿namespace Wiaoj.Abstractions;
+
 /// <summary>
 /// Defines a standardized, asynchronous factory for creating instances of a type T.
 /// </summary>
 /// <remarks>
+/// <para>
 /// This interface is essential for scenarios where the initialization of an object
 /// involves asynchronous operations. It promotes loose coupling and is a key component
 /// for Dependency Injection scenarios involving async-initialized objects.
+/// </para>
+/// <para>
+/// Choose this over <see cref="IAsyncBuilder{T}"/> when creation genuinely depends on
+/// external arguments supplied at call time (see the <c>T1</c>/<c>T2</c>/<c>T3</c> overloads below).
+/// Choose <see cref="IAsyncBuilder{T}"/> instead when state is accumulated via fluent configuration
+/// before a parameterless materialization step.
+/// </para>
+/// <para>
+/// Also consumed directly by <see cref="AsyncLazy{T}"/>'s
+/// <c>AsyncLazy(IAsyncFactory&lt;T&gt;)</c> constructor, which wraps <see cref="CreateAsync"/>
+/// to provide thread-safe, run-once lazy initialization.
+/// </para>
 /// </remarks>
 /// <typeparam name="T">The type of object to create.</typeparam>
 public interface IAsyncFactory<T> {

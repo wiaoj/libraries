@@ -27,29 +27,8 @@ public static class TaskDelayExtensions {
     /// </code>
     /// </example>
     /// </remarks>
-    public static Task DelayAsync(this OperationTimeout timeout) {
-        // 1. OperationTimeout politikasından tek bir CancellationTokenSource oluştur.
-        //    Bu CTS, hem süre dolduğunda hem de içindeki token iptal olduğunda iptal olur.
+    public static async Task DelayAsync(this OperationTimeout timeout) {
         CancellationTokenSource cts = timeout.CreateCancellationTokenSource();
-
-        // 2. Task.Delay'e sonsuz bir süre ver, çünkü iptal mantığını tamamen
-        //    oluşturduğumuz CTS yönetecek.
-        //    cts.Token.WaitHandle.WaitOne(0) kontrolü, eğer token zaten iptal edilmişse
-        //    gereksiz bir Task oluşturmayı engeller ve anında iptal edilmiş bir Task döndürür.
-        if (cts.IsCancellationRequested) {
-            cts.Dispose();
-            return Task.FromCanceled(cts.Token);
-        }
-
-        // 3. Task.Delay'i oluştur ve tamamlandığında (ya da hata verdiğinde) CTS'i dispose et.
-        return Task.Delay(Timeout.InfiniteTimeSpan, cts.Token)
-            .ContinueWith(t => {
-                cts.Dispose();
-                // Orijinal iptal nedenini korumak için, yeni bir Canceled task oluşturmak yerine
-                // tamamlanmış task'in kendisini (veya exception'ını) yay.
-                // Not: Task.Delay başarılı bir şekilde tamamlanmaz, sadece iptal olur.
-                // Bu yüzden burada sadece hata durumunu ele alıyoruz.
-                t.GetAwaiter().GetResult();
-            }, TaskContinuationOptions.ExecuteSynchronously);
+        await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token).ConfigureAwait(false);
     }
 }

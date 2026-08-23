@@ -28,12 +28,11 @@ public sealed class InMemoryTransportConcurrencyTests {
         Task consumerTask = consumer.StartAsync(cts.Token);
 
         const int jobCount = 100;
-        for(int i = 0; i < jobCount; i++) {
-            WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId($"client-{i}"), WebhookTestFactory.CreateEvent());
+        for(int i = 0; i < jobCount; i++) { 
+            WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId($"client-{i}"), "order.created", WebhookTestFactory.CreateEvent());
             await transport.EnqueueAsync(job);
         }
 
-        // Wait until all 100 jobs are handled by the 8 concurrent workers
         while(handler.HandledJobs.Count < jobCount) {
             await Task.Delay(10);
         }

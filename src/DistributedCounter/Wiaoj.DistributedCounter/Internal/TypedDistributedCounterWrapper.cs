@@ -16,7 +16,7 @@ internal class TypedDistributedCounterWrapper<TTag>(IDistributedCounterFactory f
         return ForKey(key).IncrementAsync(amount, expiry, cancellationToken);
     }
 
-    public ValueTask<CounterLimitResult> TryIncrementAsync<TKey>(TKey key, long limit, long amount, CounterExpiry expiry , CancellationToken cancellationToken) where TKey : notnull {
+    public ValueTask<CounterLimitResult> TryIncrementAsync<TKey>(TKey key, long limit, long amount, CounterExpiry expiry, CancellationToken cancellationToken) where TKey : notnull {
         return ForKey(key).TryIncrementAsync(amount, limit, expiry, cancellationToken);
     }
 
@@ -24,7 +24,7 @@ internal class TypedDistributedCounterWrapper<TTag>(IDistributedCounterFactory f
         return ForKey(key).DecrementAsync(amount, expiry, cancellationToken);
     }
 
-    public ValueTask<CounterLimitResult> TryDecrementAsync<TKey>(TKey key, long minLimit, long amount,  CounterExpiry expiry, CancellationToken cancellationToken = default) where TKey : notnull {
+    public ValueTask<CounterLimitResult> TryDecrementAsync<TKey>(TKey key, long minLimit, long amount, CounterExpiry expiry, CancellationToken cancellationToken = default) where TKey : notnull {
         return ForKey(key).TryDecrementAsync(amount, minLimit, expiry, cancellationToken);
     }
 

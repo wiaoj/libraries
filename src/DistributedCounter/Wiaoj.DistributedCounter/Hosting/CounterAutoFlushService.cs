@@ -9,19 +9,28 @@ using Wiaoj.DistributedCounter.Internal.Logging;
 
 namespace Wiaoj.DistributedCounter.Hosting;
 
-public class CounterAutoFlushService : BackgroundService {
+/// <summary>
+/// Background service responsible for periodic batch flushing of buffered distributed counters.
+/// </summary>
+public sealed class CounterAutoFlushService : BackgroundService {
     private readonly IBufferedCounterSource _source;
     private readonly ICounterStorage _storage;
     private readonly DistributedCounterOptions _options;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<CounterAutoFlushService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CounterAutoFlushService"/> class.
+    /// </summary>
     public CounterAutoFlushService(
         IDistributedCounterFactory factory,
         ICounterStorage storage,
         IOptions<DistributedCounterOptions> options,
+        TimeProvider timeProvider,
         ILogger<CounterAutoFlushService> logger) {
 
         this._options = options.Value;
+        this._timeProvider = timeProvider;
         this._logger = logger;
         this._storage = storage;
 
@@ -29,64 +38,70 @@ public class CounterAutoFlushService : BackgroundService {
             this._source = source;
         }
         else {
-            throw new InvalidOperationException("Factory IBufferedCounterSource implemente etmiyor. Auto-flush çalışamaz.");
+            throw new InvalidOperationException("The configured IDistributedCounterFactory does not implement IBufferedCounterSource. Auto-flush cannot operate.");
         }
     }
 
+    /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         if(this._options.AutoFlushInterval <= TimeSpan.Zero) {
-            this._logger.LogWarning("AutoFlushInterval 0 veya negatif. Servis devre dışı.");
+            this._logger.LogWarning("AutoFlushInterval is zero or negative. Background flush service is disabled.");
             return;
         }
 
-        using PeriodicTimer timer = new(this._options.AutoFlushInterval);
+        using PeriodicTimer timer = new(this._options.AutoFlushInterval, this._timeProvider);
 
-        while(await timer.WaitForNextTickAsync(stoppingToken)) {
-            try {
-                await FlushBatchAsync(stoppingToken);
+        try {
+            while(await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false)) {
+                try {
+                    await FlushBatchAsync(stoppingToken).ConfigureAwait(false);
+                }
+                catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
+                    break;
+                }
+                catch(Exception ex) {
+                    this._logger.LogError(ex, "Critical failure occurred during distributed counter auto-flush loop.");
+                }
             }
-            catch(Exception ex) {
-                // LogExtensions kullanmıyoruz çünkü generic exception logu standarda uymayabilir, 
-                // ama istersen oraya da taşıyabilirsin.
-                this._logger.LogError(ex, "Distributed counter Auto-Flush döngüsünde kritik hata.");
-            }
+        }
+        catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
+            // Graceful shutdown on host cancellation
         }
     }
 
+    /// <inheritdoc/>
     public override async Task StopAsync(CancellationToken cancellationToken) {
-        this._logger.LogInformation("Uygulama kapanıyor. Son kez flush yapılıyor...");
-        await FlushBatchAsync(cancellationToken);
-        await base.StopAsync(cancellationToken);
+        this._logger.LogInformation("Application is stopping. Performing final distributed counter flush...");
+        try {
+            await FlushBatchAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception ex) {
+            this._logger.LogError(ex, "Final batch flush failed during shutdown.");
+        }
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task FlushBatchAsync(CancellationToken cancellationToken) {
-        // 1. TRACING BAŞLAT (OpenTelemetry)
         using Activity? activity = DistributedCounterTracing.Source.StartActivity("FlushBatch");
 
         IEnumerable<BufferedDistributedCounter> counters = this._source.GetBufferedCounters();
 
-        int countEstimate = 0;
-        if(counters is ICollection<BufferedDistributedCounter> c) countEstimate = c.Count;
-        else countEstimate = 128;
-
+        int countEstimate = counters is ICollection<BufferedDistributedCounter> c ? c.Count : 128;
         if(countEstimate == 0) return;
 
-        // Tracing Tagleri
         activity?.SetTag("batch.estimate_count", countEstimate);
 
-        // 2. Buffer Kiralama (Zero-Allocation)
         ArrayPool<CounterUpdate> updatesPool = ArrayPool<CounterUpdate>.Shared;
         ArrayPool<(BufferedDistributedCounter Counter, long Delta)> contextPool = ArrayPool<(BufferedDistributedCounter Counter, long Delta)>.Shared;
         ArrayPool<long> resultsPool = ArrayPool<long>.Shared;
 
         CounterUpdate[] updatesBuffer = updatesPool.Rent(countEstimate);
-        (BufferedDistributedCounter, long)[] contextBuffer = contextPool.Rent(countEstimate);
+        (BufferedDistributedCounter Counter, long Delta)[] contextBuffer = contextPool.Rent(countEstimate);
         long[] resultsBuffer = resultsPool.Rent(countEstimate);
 
         int actualCount = 0;
 
         try {
-            // 3. Veri Toplama
             foreach(BufferedDistributedCounter counter in counters) {
                 if(counter.TryCaptureDelta(out long delta, out CounterExpiry expiry)) {
                     if(actualCount >= updatesBuffer.Length) {
@@ -105,34 +120,24 @@ public class CounterAutoFlushService : BackgroundService {
 
             activity?.SetTag("batch.actual_count", actualCount);
 
-            // 4. Redis İşlemi
             long startTimestamp = Stopwatch.GetTimestamp();
 
             try {
-                // Storage'a git
                 await this._storage.BatchIncrementAsync(
                     updatesBuffer.AsMemory(0, actualCount),
                     resultsBuffer.AsMemory(0, actualCount),
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
-                // 5. Commit & Self-Healing & Logging
                 for(int i = 0; i < actualCount; i++) {
                     (BufferedDistributedCounter counter, long delta) = contextBuffer[i];
-                    long redisVal = resultsBuffer[i]; // Redis'ten gelen yeni değer
+                    long redisVal = resultsBuffer[i];
 
-                    // a) Local Commit (Eski mantık, base'i artırır)
-                    // cancellationTokenx.counter.CommitDelta(ctx.delta); -> ARTIK GEREK YOK çünkü Sync yapacağız.
-
-                    // b) Self-Healing Sync (Drift hesapla ve eşitle)
-                    // Not: SyncWithStorage içinde baseValue = redisVal yapılıyor.
                     long drift = counter.SyncWithStorage(redisVal, delta);
 
                     if(drift != 0) {
-                        // Drift varsa logla (Self-Healing Log)
-                        long expected = redisVal - drift; // (OldBase + delta)
+                        long expected = redisVal - drift;
                         this._logger.LogSelfHealing(counter.Key.Value, expected, redisVal, drift);
 
-                        // Tracing'e event ekle (Hata analizi için)
                         activity?.AddEvent(new ActivityEvent("SelfHealingDrift", tags: new ActivityTagsCollection {
                             { "key", counter.Key.Value },
                             { "drift", drift }
@@ -140,7 +145,6 @@ public class CounterAutoFlushService : BackgroundService {
                     }
                 }
 
-                // Metrics & High-Performance Logging
                 DistributedCounterMetrics.RecordFlush();
                 TimeSpan elapsed = Stopwatch.GetElapsedTime(startTimestamp);
                 DistributedCounterMetrics.RecordFlushDuration(elapsed.TotalMilliseconds);
@@ -148,7 +152,6 @@ public class CounterAutoFlushService : BackgroundService {
                 this._logger.LogBatchFlushCompleted(actualCount, elapsed.TotalMilliseconds);
             }
             catch(Exception ex) {
-                // 6. Rollback
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 this._logger.LogFlushFailed(actualCount, ex);
 

@@ -1,7 +1,6 @@
-using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Wiaoj.Webhooks.Transports.InMemory.Diagnostics;
+using System.Threading.Channels;
 using Wiaoj.Webhooks.Transports.InMemory.Internal;
 
 namespace Wiaoj.Webhooks.Transports.InMemory;
@@ -73,16 +72,19 @@ public sealed class InMemoryWebhookTransport : IWebhookTransport, IDisposable {
     internal ChannelWriter<WebhookDeliveryJob> Writer => this._channel.Writer;
 
     /// <inheritdoc/>
-    public Task EnqueueAsync(WebhookDeliveryJob job, CancellationToken cancellationToken) =>
-        EnqueueAsync(job, null, cancellationToken);
+    public Task EnqueueAsync(WebhookDeliveryJob job, CancellationToken cancellationToken) {
+        return EnqueueAsync(job, null, cancellationToken);
+    }
 
     /// <inheritdoc/>
-    public Task EnqueueAsync(WebhookDeliveryJob job) =>
-        EnqueueAsync(job, null, CancellationToken.None);
+    public Task EnqueueAsync(WebhookDeliveryJob job) {
+        return EnqueueAsync(job, null, CancellationToken.None);
+    }
 
     /// <inheritdoc/>
-    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) =>
-        EnqueueAsync(job, delay, CancellationToken.None);
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) {
+        return EnqueueAsync(job, delay, CancellationToken.None);
+    }
 
     /// <inheritdoc/>
     public async Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {

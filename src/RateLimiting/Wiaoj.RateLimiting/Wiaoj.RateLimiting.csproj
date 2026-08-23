@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.RateLimiting</RootNamespace>
+	  <AssemblyName>Wiaoj.RateLimiting</AssemblyName>
+	  <PackageId>Wiaoj.RateLimiting</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\DistributedCounter\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
+    <ProjectReference Include="..\..\Extensions\Wiaoj.Extensions\Wiaoj.Extensions.csproj" />
+    <ProjectReference Include="..\Wiaoj.RateLimiting.Abstractions\Wiaoj.RateLimiting.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

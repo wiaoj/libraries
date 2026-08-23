@@ -27,18 +27,25 @@ public static class WebhookServiceCollectionExtensions {
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
 
         services.AddHttpClient<HttpWebhookSender>((sp, client) => {
-            var options = sp.GetRequiredService<IOptions<WebhookSecurityOptions>>().Value;
+            WebhookSecurityOptions options = sp.GetRequiredService<IOptions<WebhookSecurityOptions>>().Value;
             client.Timeout = options.RequestTimeout;
         })
+         .RemoveAllLoggers()
          .ConfigurePrimaryHttpMessageHandler(sp => {
-             var options = sp.GetRequiredService<IOptions<WebhookSecurityOptions>>().Value;
-
-             return new SocketsHttpHandler {
+             WebhookSecurityOptions options = sp.GetRequiredService<IOptions<WebhookSecurityOptions>>().Value;
+             SocketsHttpHandler handler = new() {
                  PooledConnectionLifetime = TimeSpan.FromMinutes(15),
                  ConnectTimeout = options.ConnectTimeout,
-                 AllowAutoRedirect = false,
+                 AllowAutoRedirect = false
+             };
 
-                 ConnectCallback = async (context, cancellationToken) => {
+             if(options.Proxy is not null) {
+                 handler.Proxy = options.Proxy;
+                 handler.UseProxy = true;
+             }
+             else {
+                 // Direct socket connection with SSRF filtering
+                 handler.ConnectCallback = async (context, cancellationToken) => {
                      IPAddress[] addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken).ConfigureAwait(false);
 
                      IPAddress targetIp = addresses.FirstOrDefault(ip => WebhookIpFilter.IsAllowed(ip, options.AllowPrivateNetworks))
@@ -48,18 +55,32 @@ public static class WebhookServiceCollectionExtensions {
                          NoDelay = true
                      };
 
-                     await socket.ConnectAsync(new IPEndPoint(targetIp, context.DnsEndPoint.Port), cancellationToken).ConfigureAwait(false);
-                     return new NetworkStream(socket, ownsSocket: true);
-                 }
-             };
-         }); ;
+                     try {
+                         await socket.ConnectAsync(new IPEndPoint(targetIp, context.DnsEndPoint.Port), cancellationToken).ConfigureAwait(false);
+                         return new NetworkStream(socket, ownsSocket: true);
+                     }
+                     catch {
+                         socket.Dispose();
+                         throw;
+                     }
+                 };
+             }
+
+             return handler;
+         });
 
         services.AddWiaojSerializer(serialization => {
             serialization.TryUseSystemTextJson<WebhookSerializerKey>();
         });
 
+        services.AddOptions<WebhookEventRegistryOptions>();
+        services.TryAddSingleton<IWebhookEventRegistry>(static sp => {
+            IOptions<WebhookEventRegistryOptions> options = sp.GetRequiredService<IOptions<WebhookEventRegistryOptions>>();
+            return new WebhookEventRegistry(options.Value);
+        });
+
         services.TryAddSingleton<IWebhookStore, InMemoryWebhookStore>();
- 
+
         services.TryAddTransient<IWebhookDeliverer, HttpWebhookDeliverer>();
 
         services.TryAddTransient<WebhookPipelineRunner>(static sp => {

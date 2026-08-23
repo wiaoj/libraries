@@ -11,7 +11,10 @@
     <ProjectReference Include="..\..\src\BloomFilter\Wiaoj.BloomFilter\Wiaoj.BloomFilter.csproj" />
     <ProjectReference Include="..\..\src\DistributedCounter\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
     <ProjectReference Include="..\..\src\Extensions\Security\Wiaoj.Security.Testing\Wiaoj.Security.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Serialization\Features\Wiaoj.Serialization.Security\Wiaoj.Serialization.Security.csproj" />
+    <ProjectReference Include="..\..\src\Serialization\Implementations\Wiaoj.Serialization.YamlDotNet\Wiaoj.Serialization.YamlDotNet.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.AspNetCore\Wiaoj.Webhooks.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.BloomFilter\Wiaoj.Webhooks.BloomFilter.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.DistributedCounter\Wiaoj.Webhooks.DistributedCounter.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Transports.InMemory\Wiaoj.Webhooks.Transports.InMemory.csproj" />

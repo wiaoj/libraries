@@ -26,7 +26,6 @@ public interface ICounterStorage {
     /// <summary>
     /// Attempts to decrement a counter only if the resulting value does not fall below a minimum limit.
     /// </summary>
-    // DEĞİŞİKLİK: (minLimit, amount) -> (amount, minLimit) sıralaması yapıldı.
     ValueTask<CounterLimitResult> TryDecrementAsync(
         CounterKey key,
         long amount,
@@ -38,6 +37,17 @@ public interface ICounterStorage {
     /// Retrieves the current value of a counter from storage.
     /// </summary>
     ValueTask<CounterValue> GetAsync(CounterKey key, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Retrieves the remaining time-to-live for a counter key.
+    /// </summary>
+    /// <param name="key">The counter key to inspect.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>
+    /// The remaining TTL, or <see langword="null"/> when the key does not exist, has already
+    /// expired, or was stored with <see cref="CounterExpiry.Infinite"/>.
+    /// </returns>
+    ValueTask<TimeSpan?> GetTtlAsync(CounterKey key, CancellationToken cancellationToken);
 
     /// <summary>
     /// Retrieves multiple counter values in a single batch request.

@@ -30,24 +30,26 @@ public class AsyncAutoResetEvent {
     /// <returns>A task that completes when the event is set.</returns>
     public Task WaitAsync(CancellationToken cancellationToken = default) {
         // The lock protects the _waiters queue and the _isSet flag.
-        lock (this._waiters) {
+        lock(this._waiters) {
             // If the event is already set, we can complete immediately.
-            if (this._isSet) {
+            if(this._isSet) {
                 // Consume the signal and return a completed task.
                 this._isSet = false;
                 return Task.CompletedTask;
             }
 
-            // If the event is not set, create a new waiter and add it to the queue.
             TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            CancellationTokenRegistration registration = default;
 
-            // If cancellation is requested before we even wait, complete the task as cancelled.
-            if (cancellationToken.IsCancellationRequested) {
+            if(cancellationToken.IsCancellationRequested) {
                 tcs.SetCanceled(cancellationToken);
             }
             else {
-                // Register a callback to cancel the TCS if the token is triggered.
-                cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
+                registration = cancellationToken.Register(static state => {
+                    ((TaskCompletionSource<bool>)state!).TrySetCanceled();
+                }, tcs);
+                tcs.Task.ContinueWith(static (_, state) => ((CancellationTokenRegistration)state!).Dispose(),
+                    registration, TaskContinuationOptions.ExecuteSynchronously);
             }
 
             this._waiters.Enqueue(tcs);
@@ -65,13 +67,13 @@ public class AsyncAutoResetEvent {
     public void Set() {
         TaskCompletionSource<bool>? toRelease = null;
 
-        lock (this._waiters) {
+        lock(this._waiters) {
             // If there are tasks waiting in the queue, dequeue the next one to release it.
-            if (this._waiters.Count > 0) {
+            if(this._waiters.Count > 0) {
                 toRelease = this._waiters.Dequeue();
             }
             // If no tasks are waiting, set the flag so the next waiter completes immediately.
-            else if (!this._isSet) {
+            else if(!this._isSet) {
                 this._isSet = true;
             }
         }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.DistributedCounter.DependencyInjection;
 using Wiaoj.DistributedCounter.Internal.Memory;
 using Wiaoj.Preconditions;
@@ -6,29 +7,21 @@ using Wiaoj.Preconditions;
 namespace Wiaoj.DistributedCounter;
 
 /// <summary>
-/// Provides extension methods for configuring distributed counter storage on <see cref="IDistributedCounterBuilder"/>.
+/// Extension methods for configuring in-memory storage on <see cref="IDistributedCounterBuilder"/>.
 /// </summary>
-public static class InMemoryDistributedCounterBuilderExtensions { 
+public static class InMemoryDistributedCounterBuilderExtensions {
     /// <summary>
-    /// Configures the distributed counter to use In-Memory storage.
-    /// Best for testing, development, or single-instance applications.
-    /// NOT suitable for distributed environments (like Kubernetes with multiple replicas).
+    /// Configures the distributed counter to use high-performance in-memory CAS storage.
+    /// Ideal for local development, integration tests, and single-instance applications.
     /// </summary>
-    public static IDistributedCounterBuilder UseInMemory(this IDistributedCounterBuilder builder) { 
+    /// <param name="builder">The distributed counter builder.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IDistributedCounterBuilder UseInMemory(this IDistributedCounterBuilder builder) {
         Preca.ThrowIfNull(builder);
-        builder.Services.AddSingleton<ICounterStorage, InMemoryCounterStorage>();
-        return builder;
-    }
 
-    /// <summary>
-    /// Configures global <see cref="DistributedCounterOptions"/> for the builder.
-    /// </summary>
-    public static IDistributedCounterBuilder Configure(
-        this IDistributedCounterBuilder builder,
-        Action<DistributedCounterOptions> configure) {
-        Preca.ThrowIfNull(builder);
-        Preca.ThrowIfNull(configure);
-        configure(builder.Options);
+        builder.Services.RemoveAll<ICounterStorage>();
+        builder.Services.AddSingleton<ICounterStorage, InMemoryCounterStorage>();
+
         return builder;
     }
 }

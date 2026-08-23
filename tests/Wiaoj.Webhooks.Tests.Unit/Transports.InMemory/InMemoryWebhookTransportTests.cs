@@ -7,7 +7,7 @@ public sealed class InMemoryWebhookTransportTests {
     [Fact]
     public async Task EnqueueAsync_MakesJobAvailable_ToReader() {
         InMemoryWebhookTransport transport = new();
-        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = WebhookTestFactory.CreateJob();
 
         await transport.EnqueueAsync(job);
 
@@ -19,8 +19,8 @@ public sealed class InMemoryWebhookTransportTests {
     [Fact]
     public async Task EnqueueAsync_PreservesFifoOrder() {
         InMemoryWebhookTransport transport = new();
-        WebhookDeliveryJob first = new(WebhookTestFactory.CreateEndpointId("a"), WebhookTestFactory.CreateEvent());
-        WebhookDeliveryJob second = new(WebhookTestFactory.CreateEndpointId("b"), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob first = WebhookTestFactory.CreateJob(WebhookTestFactory.CreateEndpointId("a"));
+        WebhookDeliveryJob second = WebhookTestFactory.CreateJob(WebhookTestFactory.CreateEndpointId("b"));
 
         await transport.EnqueueAsync(first);
         await transport.EnqueueAsync(second);
@@ -42,13 +42,13 @@ public sealed class InMemoryWebhookTransportTests {
     [Fact]
     public async Task EnqueueAsync_ThrowsOperationCanceledException_WhenCancelledBeforeWrite() {
         InMemoryWebhookTransport transport = new(capacity: 1);
-        WebhookDeliveryJob fillerJob = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob fillerJob = WebhookTestFactory.CreateJob();
         await transport.EnqueueAsync(fillerJob); // fill the bounded channel
 
         using CancellationTokenSource cts = new();
         cts.Cancel();
 
-        WebhookDeliveryJob blockedJob = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob blockedJob = WebhookTestFactory.CreateJob();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => transport.EnqueueAsync(blockedJob, null, cts.Token));
@@ -57,7 +57,7 @@ public sealed class InMemoryWebhookTransportTests {
     [Fact]
     public async Task EnqueueAsync_DelaysEnqueue_NonBlocking_AndFlushesWhenTimerExpires() {
         InMemoryWebhookTransport transport = new();
-        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = WebhookTestFactory.CreateJob();
 
         Task enqueueTask = transport.EnqueueAsync(job, TimeSpan.FromMilliseconds(50));
 
@@ -78,7 +78,7 @@ public sealed class InMemoryWebhookTransportTests {
     [Fact]
     public async Task EnqueueAsync_CancelsScheduledJob_WhenTokenIsCancelled() {
         InMemoryWebhookTransport transport = new();
-        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = WebhookTestFactory.CreateJob();
         using CancellationTokenSource cts = new();
 
         await transport.EnqueueAsync(job, TimeSpan.FromMilliseconds(50), cts.Token);
@@ -93,7 +93,7 @@ public sealed class InMemoryWebhookTransportTests {
     [Fact]
     public async Task EnqueueAsync_ThroughInterface_CallsUnderlyingTransport() {
         IWebhookTransport transport = new InMemoryWebhookTransport();
-        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = WebhookTestFactory.CreateJob();
 
         await transport.EnqueueAsync(job);
 

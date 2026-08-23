@@ -89,6 +89,13 @@ public static partial class WebhookLoggerExtensions {
         Message = "Instance '{InstanceId}' claimed lease lock for job '{JobId}' for {LeaseDurationMs}ms.")]
     public static partial void LogStoreLeaseClaimed(this ILogger logger, string instanceId, WebhookJobId jobId, double leaseDurationMs);
 
+    /// <summary>Logs that a background stale job recovery sweep is starting.</summary>
+    [LoggerMessage(
+        EventId = 2008,
+        Level = LogLevel.Debug,
+        Message = "Starting stale in-flight job recovery sweep with threshold '{Threshold}'.")]
+    public static partial void LogRecoverySweepStarting(this ILogger logger, DateTimeOffset threshold);
+
     // ── Information (3000 - 3999) ─────────────────────────────────────────────
 
     /// <summary>Logs that a webhook event has been dispatched.</summary>
@@ -111,6 +118,13 @@ public static partial class WebhookLoggerExtensions {
         Level = LogLevel.Information,
         Message = "Webhook delivery attempt #{AttemptNumber} to endpoint '{EndpointId}' succeeded with HTTP {StatusCode} in {DurationMs:F2}ms.")]
     public static partial void LogDeliverySuccess(this ILogger logger, int attemptNumber, WebhookEndpointId endpointId, int? statusCode, double durationMs);
+
+    /// <summary>Logs that stale jobs were successfully recovered and re-enqueued.</summary>
+    [LoggerMessage(
+        EventId = 3004,
+        Level = LogLevel.Information,
+        Message = "Successfully recovered {RecoveredCount} stale in-flight webhook jobs and re-enqueued them for delivery.")]
+    public static partial void LogRecoverySweepCompleted(this ILogger logger, int recoveredCount);
 
     // ── Warning (4000 - 4999) ─────────────────────────────────────────────────
 
@@ -156,6 +170,13 @@ public static partial class WebhookLoggerExtensions {
         Message = "Instance '{InstanceId}' failed to claim lease for job '{JobId}'. Active lease held by '{LockedBy}' until {LockExpiresAt}.")]
     public static partial void LogStoreLeaseContention(this ILogger logger, string instanceId, WebhookJobId jobId, string? lockedBy, DateTimeOffset? lockExpiresAt);
 
+    /// <summary>Logs high lock contention when waiting to acquire endpoint delivery lock.</summary>
+    [LoggerMessage(
+        EventId = 4007,
+        Level = LogLevel.Warning,
+        Message = "High lock contention detected for endpoint '{EndpointId}'. Waited {LockWaitDurationMs:F2}ms to acquire delivery lock.")]
+    public static partial void LogLockContention(this ILogger logger, WebhookEndpointId endpointId, double lockWaitDurationMs);
+
     // ── Error (5000 - 5999) ───────────────────────────────────────────────────
 
     /// <summary>Logs that an unexpected error occurred during webhook job handling.</summary>
@@ -192,6 +213,13 @@ public static partial class WebhookLoggerExtensions {
         Level = LogLevel.Error,
         Message = "Failed to dispatch webhook event '{EventName}' to endpoint '{EndpointId}'.")]
     public static partial void LogDispatchFailed(this ILogger logger, Exception exception, string eventName, WebhookEndpointId endpointId);
+
+    /// <summary>Logs that an error occurred during the background recovery sweep.</summary>
+    [LoggerMessage(
+        EventId = 5006,
+        Level = LogLevel.Error,
+        Message = "Unexpected error occurred during background stale job recovery sweep.")]
+    public static partial void LogRecoverySweepFailed(this ILogger logger, Exception exception);
 
     // ── Critical (6000 - 6999) ────────────────────────────────────────────────
 

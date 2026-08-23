@@ -1,4 +1,5 @@
-using Wiaoj.Webhooks.Internal;
+using Microsoft.Extensions.Logging.Abstractions;
+using Wiaoj.Webhooks.Concurrency;
 using Wiaoj.Webhooks.Tests.Unit.TestData;
 
 namespace Wiaoj.Webhooks.Tests.Unit.Concurrency;
@@ -8,103 +9,117 @@ namespace Wiaoj.Webhooks.Tests.Unit.Concurrency;
 [Trait("Component", "PartitionedDelivery")]
 public sealed class PartitionedDeliveryMiddlewareTests {
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 1. CONSTRUCTOR GUARD
-    // ────────────────────────────────────────────────────────────────────────
-
     public sealed class TheConstructor {
         [Fact]
-        public void Constructor_Throws_WhenDeliveryLockIsNull() {
+        public void Constructor_Throws_WhenDependenciesAreNull() {
+            StripedWebhookDeliveryLock deliveryLock = new(64);
+            PartitionedDeliveryOptions options = new();
+
             Assert.ThrowsAny<ArgumentException>(() =>
-                new PartitionedDeliveryMiddleware(null!));
+                new PartitionedDeliveryMiddleware(null!, options, NullLogger<PartitionedDeliveryMiddleware>.Instance));
+
+            Assert.ThrowsAny<ArgumentException>(() =>
+                new PartitionedDeliveryMiddleware(deliveryLock, null!, NullLogger<PartitionedDeliveryMiddleware>.Instance));
+
+            Assert.ThrowsAny<ArgumentException>(() =>
+                new PartitionedDeliveryMiddleware(deliveryLock, options, null!));
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 2. CONCURRENCY & SERIALIZATION BEHAVIOR
-    // ────────────────────────────────────────────────────────────────────────
-
-    public sealed class WhenDeliveringConcurrently {
+    public sealed class TheInvokeAsyncMethod {
         [Fact]
-        public async Task InvokeAsync_SerializesDeliveries_ForSameEndpoint() {
-            // Arrange: In-memory lock with 4096 stripes
-            StripedWebhookDeliveryLock deliveryLock = new(4096);
-            PartitionedDeliveryMiddleware middleware = new(deliveryLock);
+        public async Task InvokeAsync_SerializesDeliveries_SharingSamePartitionKey() {
+            EndpointMailboxDeliveryLock deliveryLock = new();
+            PartitionedDeliveryOptions options = new();
+            PartitionedDeliveryMiddleware middleware = new(deliveryLock, options, NullLogger<PartitionedDeliveryMiddleware>.Instance);
 
-            WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("same-endpoint");
-            WebhookEndpoint endpoint = WebhookTestFactory.CreateEndpoint(endpointId);
-
-            int concurrentExecutionCount = 0;
+            const string sharedPartitionKey = "order-group-99";
+            int concurrentExecutions = 0;
             int maxObservedConcurrency = 0;
-            Lock syncLock = new();
+            Lock gate = new();
 
-            WebhookDelegate next = async (ctx, ct) => {
-                lock(syncLock) {
-                    concurrentExecutionCount++;
-                    if(concurrentExecutionCount > maxObservedConcurrency) {
-                        maxObservedConcurrency = concurrentExecutionCount;
+            WebhookDelegate downstream = async (ctx, ct) => {
+                lock(gate) {
+                    concurrentExecutions++;
+                    if(concurrentExecutions > maxObservedConcurrency) {
+                        maxObservedConcurrency = concurrentExecutions;
                     }
                 }
 
-                // Simulate processing latency to test concurrency
-                await Task.Delay(20, ct);
+                await Task.Delay(25, ct);
 
-                lock(syncLock) {
-                    concurrentExecutionCount--;
+                lock(gate) {
+                    concurrentExecutions--;
                 }
             };
 
-            // Act: Dispatch 10 concurrent requests to the SAME endpoint
-            Task[] tasks = Enumerable.Range(0, 10).Select(_ => {
-                WebhookDeliveryContext context = WebhookTestFactory.CreateContext(endpoint);
-                return middleware.InvokeAsync(context, next, CancellationToken.None);
+            // Act: 8 contexts having the exact same PartitionKey
+            Task[] tasks = Enumerable.Range(0, 8).Select(_ => {
+                WebhookDeliveryContext context = WebhookTestFactory.CreateContext(partitionKey: sharedPartitionKey);
+                return middleware.InvokeAsync(context, downstream, CancellationToken.None);
             }).ToArray();
 
             await Task.WhenAll(tasks);
 
-            // Assert: Execution count at any given moment must NEVER exceed 1 (strictly sequential)
+            // Assert: Must be strictly serialized (FIFO)
             Assert.Equal(1, maxObservedConcurrency);
         }
 
         [Fact]
-        public async Task InvokeAsync_AllowsParallelExecution_ForDifferentEndpoints() {
-            // Arrange: In-memory lock with 4096 stripes
-            StripedWebhookDeliveryLock deliveryLock = new(4096);
-            PartitionedDeliveryMiddleware middleware = new(deliveryLock);
+        public async Task InvokeAsync_RespectsCustomDomainPartitionKeySelector() {
+            EndpointMailboxDeliveryLock deliveryLock = new();
+            PartitionedDeliveryOptions options = new() {
+                PartitionKeySelector = ctx => ctx.Items.TryGetValue("domain_key", out object? key) && key is string str
+                    ? str
+                    : ctx.PartitionKey.Value
+            };
 
-            int concurrentExecutionCount = 0;
+            PartitionedDeliveryMiddleware middleware = new(deliveryLock, options, NullLogger<PartitionedDeliveryMiddleware>.Instance);
+
+            int concurrentExecutions = 0;
             int maxObservedConcurrency = 0;
-            Lock syncLock = new();
+            Lock gate = new();
 
-            WebhookDelegate next = async (ctx, ct) => {
-                lock(syncLock) {
-                    concurrentExecutionCount++;
-                    if(concurrentExecutionCount > maxObservedConcurrency) {
-                        maxObservedConcurrency = concurrentExecutionCount;
+            WebhookDelegate downstream = async (ctx, ct) => {
+                lock(gate) {
+                    concurrentExecutions++;
+                    if(concurrentExecutions > maxObservedConcurrency) {
+                        maxObservedConcurrency = concurrentExecutions;
                     }
                 }
 
-                // Simulate processing latency to observe parallel execution
-                await Task.Delay(50, ct);
+                await Task.Delay(25, ct);
 
-                lock(syncLock) {
-                    concurrentExecutionCount--;
+                lock(gate) {
+                    concurrentExecutions--;
                 }
             };
 
-            // Act: Dispatch concurrent requests across 5 DIFFERENT endpoints
-            Task[] tasks = Enumerable.Range(0, 5).Select(i => {
-                WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId($"endpoint-{i}");
-                WebhookEndpoint endpoint = WebhookTestFactory.CreateEndpoint(endpointId);
-                WebhookDeliveryContext context = WebhookTestFactory.CreateContext(endpoint);
+            WebhookDeliveryContext ctx1 = WebhookTestFactory.CreateContext(WebhookTestFactory.CreateEndpoint(WebhookTestFactory.CreateEndpointId("ep-1")));
+            ctx1.Items["domain_key"] = "customer-aggregate-A";
 
-                return middleware.InvokeAsync(context, next, CancellationToken.None);
-            }).ToArray();
+            WebhookDeliveryContext ctx2 = WebhookTestFactory.CreateContext(WebhookTestFactory.CreateEndpoint(WebhookTestFactory.CreateEndpointId("ep-2")));
+            ctx2.Items["domain_key"] = "customer-aggregate-A";
 
-            await Task.WhenAll(tasks);
+            Task task1 = middleware.InvokeAsync(ctx1, downstream, CancellationToken.None);
+            Task task2 = middleware.InvokeAsync(ctx2, downstream, CancellationToken.None);
 
-            // Assert: Different endpoints must not block each other; concurrency should be greater than 1
-            Assert.True(maxObservedConcurrency > 1, $"Expected parallel execution (>1), but observed max concurrency was {maxObservedConcurrency}");
+            await Task.WhenAll(task1, task2);
+
+            Assert.Equal(1, maxObservedConcurrency);
+        }
+
+        [Fact]
+        public async Task InvokeAsync_Throws_WhenContextOrNextIsNull() {
+            EndpointMailboxDeliveryLock deliveryLock = new();
+            PartitionedDeliveryMiddleware middleware = new(deliveryLock, new PartitionedDeliveryOptions(), NullLogger<PartitionedDeliveryMiddleware>.Instance);
+
+            await Assert.ThrowsAnyAsync<ArgumentException>(() =>
+                middleware.InvokeAsync(null!, (ctx, ct) => Task.CompletedTask, CancellationToken.None));
+
+            WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
+            await Assert.ThrowsAnyAsync<ArgumentException>(() =>
+                middleware.InvokeAsync(context, null!, CancellationToken.None));
         }
     }
 }

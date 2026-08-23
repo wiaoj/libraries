@@ -14,7 +14,7 @@ public static partial class Preca {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNegative(TimeSpan argument,
                                        [CallerArgumentExpression(nameof(argument))] string? paramName = null) {
-        if (argument < TimeSpan.Zero) {
+        if(argument < TimeSpan.Zero) {
             Thrower.ThrowPrecaArgumentOutOfRangeException(paramName, PrecaMessages.Value.TimeSpanCannotBeNegative);
         }
     }
@@ -28,7 +28,7 @@ public static partial class Preca {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNegative<TException>(TimeSpan argument)
         where TException : Exception, new() {
-        if (argument < TimeSpan.Zero) {
+        if(argument < TimeSpan.Zero) {
             Thrower.ThrowException<TException>();
         }
     }
@@ -44,8 +44,26 @@ public static partial class Preca {
     public static void ThrowIfNegative<TException>(TimeSpan argument, [NotNull] Func<TException> exceptionFactory)
         where TException : notnull, Exception {
         Preca.ThrowIfNull(exceptionFactory);
-        if (argument < TimeSpan.Zero) {
+        if(argument < TimeSpan.Zero) {
             Thrower.ThrowFromFactory(exceptionFactory);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the specified TimeSpan value is not negative, using a custom exception factory if the validation fails.
+    /// </summary>
+    /// <typeparam name="TException">The type of the exception to throw.</typeparam>
+    /// <typeparam name="TState">The type of the state object passed to <paramref name="exceptionFactory"/>.</typeparam>
+    /// <param name="argument">The TimeSpan value to validate.</param>
+    /// <param name="exceptionFactory">The factory function that creates the exception to throw if the validation fails, given <paramref name="state"/>.</param>
+    /// <param name="state">The state object passed to <paramref name="exceptionFactory"/>, avoiding a closure allocation for the common case where the exception message needs contextual data.</param>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfNegative<TException, TState>(TimeSpan argument, [NotNull] Func<TState, TException> exceptionFactory, TState state)
+        where TException : notnull, Exception {
+        Preca.ThrowIfNull(exceptionFactory);
+        if(argument < TimeSpan.Zero) {
+            Thrower.ThrowFromFactory(exceptionFactory, state);
         }
     }
 
@@ -62,7 +80,7 @@ public static partial class Preca {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNegativeOrZero(TimeSpan argument,
                                              [CallerArgumentExpression(nameof(argument))] string? paramName = null) {
-        if (argument <= TimeSpan.Zero) {
+        if(argument <= TimeSpan.Zero) {
             Thrower.ThrowPrecaArgumentOutOfRangeException(paramName, PrecaMessages.Value.TimeSpanCannotBeNegativeOrZero);
         }
     }
@@ -76,7 +94,7 @@ public static partial class Preca {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNegativeOrZero<TException>(TimeSpan argument)
         where TException : Exception, new() {
-        if (argument <= TimeSpan.Zero) {
+        if(argument <= TimeSpan.Zero) {
             Thrower.ThrowException<TException>();
         }
     }
@@ -92,8 +110,26 @@ public static partial class Preca {
     public static void ThrowIfNegativeOrZero<TException>(TimeSpan argument, [NotNull] Func<TException> exceptionFactory)
         where TException : notnull, Exception {
         Preca.ThrowIfNull(exceptionFactory);
-        if (argument <= TimeSpan.Zero) {
+        if(argument <= TimeSpan.Zero) {
             Thrower.ThrowFromFactory(exceptionFactory);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the specified TimeSpan value is strictly positive, using a custom exception factory if the validation fails.
+    /// </summary>
+    /// <typeparam name="TException">The type of the exception to throw.</typeparam>
+    /// <typeparam name="TState">The type of the state object passed to <paramref name="exceptionFactory"/>.</typeparam>
+    /// <param name="argument">The TimeSpan value to validate.</param>
+    /// <param name="exceptionFactory">The factory function that creates the exception to throw if the validation fails, given <paramref name="state"/>.</param>
+    /// <param name="state">The state object passed to <paramref name="exceptionFactory"/>, avoiding a closure allocation for the common case where the exception message needs contextual data.</param>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfNegativeOrZero<TException, TState>(TimeSpan argument, [NotNull] Func<TState, TException> exceptionFactory, TState state)
+        where TException : notnull, Exception {
+        Preca.ThrowIfNull(exceptionFactory);
+        if(argument <= TimeSpan.Zero) {
+            Thrower.ThrowFromFactory(exceptionFactory, state);
         }
     }
 }

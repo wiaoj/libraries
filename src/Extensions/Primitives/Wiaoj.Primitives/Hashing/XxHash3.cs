@@ -1,8 +1,6 @@
 using System.Buffers;
-using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -249,12 +247,29 @@ public readonly struct XxHash3
 
     #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
 
-    static XxHash3 IParsable<XxHash3>.Parse(string s, IFormatProvider? provider) => Parse(s);
-    static bool IParsable<XxHash3>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out XxHash3 result) => TryParse(s, out result);
-    static XxHash3 ISpanParsable<XxHash3>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
-    static bool ISpanParsable<XxHash3>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out XxHash3 result) => TryParse(s, out result);
-    static XxHash3 IUtf8SpanParsable<XxHash3>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
-    static bool IUtf8SpanParsable<XxHash3>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out XxHash3 result) => TryParse(utf8Text, out result);
+    static XxHash3 IParsable<XxHash3>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<XxHash3>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out XxHash3 result) {
+        return TryParse(s, out result);
+    }
+
+    static XxHash3 ISpanParsable<XxHash3>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<XxHash3>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out XxHash3 result) {
+        return TryParse(s, out result);
+    }
+
+    static XxHash3 IUtf8SpanParsable<XxHash3>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<XxHash3>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out XxHash3 result) {
+        return TryParse(utf8Text, out result);
+    }
 
     #endregion
 
@@ -276,6 +291,32 @@ public readonly struct XxHash3
     [SkipLocalsInit]
     public static XxHash3 Compute(ReadOnlySpan<byte> data) {
         return new(XxHash3Core.HashToUInt64(data));
+    }
+
+    /// <summary>
+    /// Computes the XXHash3-64 hash of a character span using UTF-8 encoding.
+    /// </summary>
+    /// <param name="chars">The character span to hash.</param>
+    /// <returns>A new <see cref="XxHash3"/> instance containing the 64-bit digest.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash3 Compute(ReadOnlySpan<char> chars) {
+        return Compute(chars, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the XXHash3-64 hash of a character span using the specified encoding.
+    /// </summary>
+    /// <param name="chars">The character span to hash.</param>
+    /// <param name="encoding">The encoding used to convert the characters to bytes before hashing.</param>
+    /// <returns>A new <see cref="XxHash3"/> instance containing the 64-bit digest.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [SkipLocalsInit]
+    public static XxHash3 Compute(ReadOnlySpan<char> chars, Encoding encoding) {
+        Preca.ThrowIfNull(encoding);
+        int maxByteCount = encoding.GetMaxByteCount(chars.Length);
+        using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+        int bytesWritten = encoding.GetBytes(chars, buffer.Span);
+        return Compute(buffer.Span[..bytesWritten]);
     }
 
     /// <summary>
@@ -424,13 +465,17 @@ public readonly struct XxHash3
     /// Returns the uppercase hexadecimal string representation of the hash.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override string ToString() => Convert.ToHexString(AsSpan());
+    public override string ToString() {
+        return Convert.ToHexString(AsSpan());
+    }
 
     /// <summary>
     /// Returns the string representation of the hash using the specified format.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public string ToString(string? format) => ToString(format, null);
+    public string ToString(string? format) {
+        return ToString(format, null);
+    }
 
     /// <summary>
     /// Returns the string representation of the hash using the specified format and provider.
@@ -444,13 +489,17 @@ public readonly struct XxHash3
     /// Attempts to format the hash as an uppercase hexadecimal string into the destination character span.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+    public bool TryFormat(Span<char> destination, out int charsWritten) {
+        return TryFormat(destination, out charsWritten, default, null);
+    }
 
     /// <summary>
     /// Attempts to format the hash into the destination character span using the specified format.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
+        return TryFormat(destination, out charsWritten, format, null);
+    }
 
     /// <summary>
     /// Attempts to format the hash into the destination character span using the specified format and provider.
@@ -468,13 +517,17 @@ public readonly struct XxHash3
     /// Attempts to format the hash as an uppercase UTF-8 hexadecimal byte span.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
+        return TryFormat(utf8Destination, out bytesWritten, default, null);
+    }
 
     /// <summary>
     /// Attempts to format the hash into the destination UTF-8 byte span using the specified format.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) {
+        return TryFormat(utf8Destination, out bytesWritten, format, null);
+    }
 
     /// <summary>
     /// Attempts to format the hash into the destination UTF-8 byte span using the specified format and provider.
@@ -518,7 +571,9 @@ public readonly struct XxHash3
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int CompareTo(XxHash3 other) => this._value.CompareTo(other._value);
+    public int CompareTo(XxHash3 other) {
+        return this._value.CompareTo(other._value);
+    }
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -530,19 +585,27 @@ public readonly struct XxHash3
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >(XxHash3 left, XxHash3 right) => left.CompareTo(right) > 0;
+    public static bool operator >(XxHash3 left, XxHash3 right) {
+        return left.CompareTo(right) > 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <(XxHash3 left, XxHash3 right) => left.CompareTo(right) < 0;
+    public static bool operator <(XxHash3 left, XxHash3 right) {
+        return left.CompareTo(right) < 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator >=(XxHash3 left, XxHash3 right) => left.CompareTo(right) >= 0;
+    public static bool operator >=(XxHash3 left, XxHash3 right) {
+        return left.CompareTo(right) >= 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator <=(XxHash3 left, XxHash3 right) => left.CompareTo(right) <= 0;
+    public static bool operator <=(XxHash3 left, XxHash3 right) {
+        return left.CompareTo(right) <= 0;
+    }
 
     /// <inheritdoc cref="IEqualityOperators{TSelf,TOther,TResult}.op_Equality"/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -576,10 +639,14 @@ public readonly struct XxHash3
         public static XxHash3OrdinalComparer Instance { get; } = new();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Equals(XxHash3 x, XxHash3 y) => x.Equals(y);
+        public bool Equals(XxHash3 x, XxHash3 y) {
+            return x.Equals(y);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetHashCode(XxHash3 obj) => obj.GetHashCode();
+        public int GetHashCode(XxHash3 obj) {
+            return obj.GetHashCode();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(ReadOnlySpan<char> alternate, XxHash3 other) {
@@ -598,17 +665,23 @@ public readonly struct XxHash3
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public XxHash3 Create(ReadOnlySpan<char> alternate) => XxHash3.Parse(alternate);
+        public XxHash3 Create(ReadOnlySpan<char> alternate) {
+            return XxHash3.Parse(alternate);
+        }
     }
 
     private sealed class XxHash3OrdinalIgnoreCaseComparer : IEqualityComparer<XxHash3>, IAlternateEqualityComparer<ReadOnlySpan<char>, XxHash3> {
         public static XxHash3OrdinalIgnoreCaseComparer Instance { get; } = new();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Equals(XxHash3 x, XxHash3 y) => x.Equals(y);
+        public bool Equals(XxHash3 x, XxHash3 y) {
+            return x.Equals(y);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetHashCode(XxHash3 obj) => obj.GetHashCode();
+        public int GetHashCode(XxHash3 obj) {
+            return obj.GetHashCode();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(ReadOnlySpan<char> alternate, XxHash3 other) {
@@ -627,7 +700,9 @@ public readonly struct XxHash3
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public XxHash3 Create(ReadOnlySpan<char> alternate) => XxHash3.Parse(alternate);
+        public XxHash3 Create(ReadOnlySpan<char> alternate) {
+            return XxHash3.Parse(alternate);
+        }
     }
 
     #endregion
@@ -642,7 +717,9 @@ public static partial class XxHash3Extensions {
         /// Asynchronously computes the <see cref="XxHash3"/> hash of a stream using SIMD hardware streaming.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ValueTask<XxHash3> ComputeAsync(Stream stream) => ComputeAsync(stream, CancellationToken.None);
+        public static ValueTask<XxHash3> ComputeAsync(Stream stream) {
+            return ComputeAsync(stream, CancellationToken.None);
+        }
 
         /// <summary>
         /// Asynchronously computes the <see cref="XxHash3"/> hash of a stream using SIMD hardware streaming.

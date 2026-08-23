@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Internal;
 

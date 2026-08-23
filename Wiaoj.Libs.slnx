@@ -89,6 +89,12 @@
     <File Path="src/Preconditions/README.md" />
     <Project Path="src/Preconditions/Wiaoj.Preconditions/Wiaoj.Preconditions.csproj" />
   </Folder>
+  <Folder Name="/src/RateLimiting/">
+    <File Path="src/RateLimiting/_build.md" />
+    <Project Path="src/RateLimiting/Wiaoj.RateLimiting.Abstractions/Wiaoj.RateLimiting.Abstractions.csproj" Id="ce9067d2-256a-43c5-ac1c-f4375053ec75" />
+    <Project Path="src/RateLimiting/Wiaoj.RateLimiting.Testing/Wiaoj.RateLimiting.Testing.csproj" Id="fdd5f4cc-8356-4161-b605-6bc9331778a9" />
+    <Project Path="src/RateLimiting/Wiaoj.RateLimiting/Wiaoj.RateLimiting.csproj" Id="3350a94a-e110-4126-99c7-88f98a7b8e98" />
+  </Folder>
   <Folder Name="/src/Serialization/">
     <File Path="src/Serialization/README.md" />
   </Folder>
@@ -114,6 +120,7 @@
     <File Path="src/Webhooks/_build.md" />
     <File Path="src/Webhooks/docs/ARCHITECTURE.md" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.Abstractions/Wiaoj.Webhooks.Abstractions.csproj" Id="73037a10-7883-4f3c-880a-4ed6910ecf33" />
+    <Project Path="src/Webhooks/Wiaoj.Webhooks.AspNetCore/Wiaoj.Webhooks.AspNetCore.csproj" Id="c889539a-5240-4346-be30-ad1c106a7d19" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.BloomFilter/Wiaoj.Webhooks.BloomFilter.csproj" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.DistributedCounter/Wiaoj.Webhooks.DistributedCounter.csproj" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.Transports.InMemory/Wiaoj.Webhooks.Transports.InMemory.csproj" Id="c5f5ba7b-56ee-472b-8ea9-fdd151a4a93a" />
@@ -126,8 +133,10 @@
     <Project Path="tests/Wiaoj.Extensions.DependencyInjection.Tests.Unit/Wiaoj.Extensions.DependencyInjection.Tests.Unit.csproj" Id="dba407f5-a6c7-4f26-8bf6-f330e9e0a649" />
     <Project Path="tests/Wiaoj.Modulith.Tests.Unit/Wiaoj.Modulith.Tests.Unit.csproj" Id="9f4c2996-1708-4765-950a-b19ff6a0f078" />
     <Project Path="tests/Wiaoj.Primitives.Tests.Unit/Wiaoj.Primitives.Tests.Unit.csproj" Id="cef5fdb1-e581-46b4-964c-d5f75f7db1ff" />
+    <Project Path="tests/Wiaoj.RateLimiting.Tests.Unit/Wiaoj.RateLimiting.Tests.Unit.csproj" Id="a0e5a3bd-5e5a-4a9d-91bb-313fbd1af895" />
     <Project Path="tests/Wiaoj.Results.Tests.Unit/Wiaoj.Results.Tests.Unit.csproj" Id="57cc275f-70ef-4c5e-a3bc-d4c305628b04" />
     <Project Path="tests/Wiaoj.Security.Tests.Unit/Wiaoj.Security.Tests.Unit.csproj" Id="9514b855-ab9c-4310-9c23-6438d123b24d" />
+    <Project Path="tests/Wiaoj.Webhooks.Tests.Integration/Wiaoj.Webhooks.Tests.Integration.csproj" />
     <Project Path="tests/Wiaoj.Webhooks.Tests.Unit/Wiaoj.Webhooks.Tests.Unit.csproj" Id="a6438743-c2c9-4bf6-aa66-6b4229ed80c3" />
   </Folder>
   <Folder Name="/tests/Ddd/">

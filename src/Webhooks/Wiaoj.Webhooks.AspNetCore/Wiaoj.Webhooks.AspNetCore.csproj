@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.Webhooks.AspNetCore</RootNamespace>
+	  <AssemblyName>Wiaoj.Webhooks.AspNetCore</AssemblyName>
+	  <PackageId>Wiaoj.Webhooks.AspNetCore</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup> 
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
+  </ItemGroup>
+
+</Project>

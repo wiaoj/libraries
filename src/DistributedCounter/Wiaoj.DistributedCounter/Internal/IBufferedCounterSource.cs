@@ -1,6 +1,5 @@
-﻿using System.Diagnostics.Metrics;
+﻿namespace Wiaoj.DistributedCounter.Internal;
 
-namespace Wiaoj.DistributedCounter.Internal;
 internal interface IBufferedCounterSource {
     IEnumerable<BufferedDistributedCounter> GetBufferedCounters();
 

@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Webhooks.Security;
+﻿using System.Net;
+
+namespace Wiaoj.Webhooks.Security;
 
 /// <summary>
 /// Security and outbound hardening options for the webhook HTTP transport.
@@ -24,6 +26,11 @@ public sealed class WebhookSecurityOptions {
     /// Default is <see langword="false"/> (strict SSRF protection enabled).
     /// </summary>
     public bool AllowPrivateNetworks { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets an optional outbound egress forward proxy (e.g. Squid, Envoy, DMZ proxy).
+    /// </summary>
+    public IWebProxy? Proxy { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum number of response body bytes to read for audit history and delivery results.

@@ -1,47 +1,66 @@
 ﻿using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
+using Wiaoj.Preconditions;
 
-namespace Wiaoj.DistributedCounter.Internal; 
-public sealed class DistributedCounterFactory : IDistributedCounterFactory, IBufferedCounterSource {
+namespace Wiaoj.DistributedCounter.Internal;
+
+/// <summary>
+/// Default factory implementation for creating, resolving, and tracking <see cref="IDistributedCounter"/> instances.
+/// </summary>
+internal sealed class DistributedCounterFactory : IDistributedCounterFactory, IBufferedCounterSource {
     private readonly ICounterStorage _storage;
     private readonly ICounterKeyBuilder _keyBuilder;
     private readonly DistributedCounterOptions _options;
 
-    // Oluşturulan Buffered sayaçları burada tutuyoruz (Flush için)
     private readonly ConcurrentBag<BufferedDistributedCounter> _bufferedCounters = [];
+    private readonly ConcurrentDictionary<string, IDistributedCounter> _counters = new(StringComparer.Ordinal);
 
-    // Cache created instances to avoid allocations (Singleton behavior per key)
-    private readonly ConcurrentDictionary<string, IDistributedCounter> _counters = new();
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DistributedCounterFactory"/> class.
+    /// </summary>
+    /// <param name="storage">The underlying storage provider.</param>
+    /// <param name="keyBuilder">The counter key builder.</param>
+    /// <param name="options">The distributed counter configuration options.</param>
     public DistributedCounterFactory(
-        ICounterStorage storage, // Redis veya Memory buradan gelir
+        ICounterStorage storage,
         ICounterKeyBuilder keyBuilder,
         IOptions<DistributedCounterOptions> options) {
+        Preca.ThrowIfNull(storage);
+        Preca.ThrowIfNull(keyBuilder);
+        Preca.ThrowIfNull(options);
+
         this._storage = storage;
         this._keyBuilder = keyBuilder;
         this._options = options.Value;
     }
 
+    /// <inheritdoc/>
     public IDistributedCounter Create<TTag>() where TTag : notnull {
-        string name = typeof(TTag).Name; // Basit isim
-        // KeyBuilder generic methodunu kullanarak Typed Key oluşturur
+        string name = typeof(TTag).Name;
         CounterKey key = this._keyBuilder.Build<TTag>(name, this._options);
         return GetOrCreate(name, key);
     }
 
+    /// <inheritdoc/>
     public IDistributedCounter Create(string name) {
+        Preca.ThrowIfNullOrWhiteSpace(name);
         CounterKey key = this._keyBuilder.Build(name, this._options);
         return GetOrCreate(name, key);
     }
 
+    /// <inheritdoc/>
     public IDistributedCounter Create<TKey>(string name, TKey key) where TKey : notnull {
-        CounterKey counterKey = _keyBuilder.Build(name, key, _options);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNull(key);
+        CounterKey counterKey = this._keyBuilder.Build(name, key, this._options);
         return GetOrCreate(name, counterKey);
     }
 
+    /// <inheritdoc/>
     public IDistributedCounter Create<TTag, TKey>(TKey key) where TTag : notnull where TKey : notnull {
+        Preca.ThrowIfNull(key);
         string name = typeof(TTag).Name;
-        CounterKey counterKey = _keyBuilder.Build<TTag, TKey>(key, _options);
+        CounterKey counterKey = this._keyBuilder.Build<TTag, TKey>(key, this._options);
         return GetOrCreate(name, counterKey);
     }
 
@@ -49,16 +68,17 @@ public sealed class DistributedCounterFactory : IDistributedCounterFactory, IBuf
         return this._bufferedCounters;
     }
 
-    IEnumerable<IDistributedCounter> IBufferedCounterSource.GetAllTrackedCounters() => _counters.Values;
+    IEnumerable<IDistributedCounter> IBufferedCounterSource.GetAllTrackedCounters() {
+        return this._counters.Values;
+    }
 
     void IBufferedCounterSource.ClearCache() {
-        _counters.Clear();
-        while(_bufferedCounters.TryTake(out _)) { }
+        this._counters.Clear();
+        while(this._bufferedCounters.TryTake(out _)) { }
     }
 
     private IDistributedCounter GetOrCreate(string name, CounterKey key) {
         return this._counters.GetOrAdd(key.Value, _ => {
-            // 1. Bu sayaç için özel bir strateji var mı? Yoksa varsayılanı al.
             CounterStrategy strategy = this._options.Registrations.TryGetValue(name, out CounterConfiguration? config)
                 ? config.Strategy
                 : this._options.DefaultStrategy;
@@ -66,11 +86,10 @@ public sealed class DistributedCounterFactory : IDistributedCounterFactory, IBuf
             if(strategy == CounterStrategy.Immediate) {
                 return new ImmediateDistributedCounter(key, this._storage);
             }
-            else {
-                var buffered = new BufferedDistributedCounter(key, this._storage);
-                this._bufferedCounters.Add(buffered); // Background service için kaydet
-                return buffered;
-            }
+
+            BufferedDistributedCounter buffered = new(key, this._storage);
+            this._bufferedCounters.Add(buffered);
+            return buffered;
         });
     }
 }

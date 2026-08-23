@@ -1,74 +1,47 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Runtime.CompilerServices;
+using Wiaoj.ObjectPool.Internal;
 
 namespace Wiaoj.ObjectPool;
 
 /// <summary>
-/// A zero-allocation, disposable struct that wraps a leased object from an object pool.
-/// ensuring it is returned to the pool when disposed.
+/// A zero-allocation disposable struct managing a leased object from an object pool.
 /// </summary>
-/// <remarks>
-/// IMPORTANT: This is a value type (struct). Do NOT copy this object or pass it by value.
-/// It is designed to be used strictly within a 'using' or 'await using' statement.
-/// </remarks>
-public struct PooledObject<T> : IDisposable, IAsyncDisposable where T : class {
-    private T? _item;
-     
-    private readonly IObjectPool<T>? _syncPool;
-    private readonly IAsyncObjectPool<T>? _asyncPool;
+public readonly struct PooledObject<T> : IDisposable, IAsyncDisposable where T : class {
+    private readonly Lease<T>? _lease;
 
-    // Senkron havuzlar için internal constructor
+    // Senkron havuzlar için constructor
     internal PooledObject(T item, IObjectPool<T> pool) {
-        _item = item;
-        _syncPool = pool;
-        _asyncPool = null;
+        this._lease = new Lease<T>(item, pool);
     }
 
-    // Asenkron havuzlar için internal constructor
-    internal PooledObject(T item, IAsyncObjectPool<T> pool) {
-        _item = item;
-        _syncPool = null;
-        _asyncPool = pool;
+    // Asenkron havuzlar (FifoAsyncObjectPool / BoundedAsyncObjectPool) için constructor
+    internal PooledObject(T item, IAsyncObjectPool<T> asyncPool) {
+        this._lease = new Lease<T>(item, asyncPool);
     }
 
     /// <summary>
     /// Gets the underlying pooled object instance.
     /// </summary>
-    public readonly T Item =>
-        _item ?? throw new ObjectDisposedException(nameof(PooledObject<>), "This object has already been returned to the pool.");
+    public T Item => this._lease is not null
+        ? this._lease.Item
+        : throw new ObjectDisposedException(nameof(PooledObject<T>), "Object has already been returned to pool.");
 
     /// <summary>
-    /// Returns the wrapped object to its pool.
+    /// Returns the object to the pool safely and idempotently.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose() {
-        // Interlocked.Exchange, _item'ı null yapar ve eski değerini döndürür.
-        // Bu sayede aynı değişken üzerinde iki kere Dispose() çağrılırsa çökme veya çift iade engellenir.
-        T? item = Interlocked.Exchange(ref _item, null);
-
-        if(item is not null) {
-            if(_syncPool is not null) {
-                _syncPool.Return(item);
-            }
-            else {
-                _asyncPool?.Return(item);
-            }
-        }
+        this._lease?.ReturnToPool();
     }
 
-    /// <summary>
-    /// Returns the object to the pool asynchronously.
-    /// Allows using the 'await using' syntax.
-    /// </summary>
+    /// <inheritdoc/>
     public ValueTask DisposeAsync() {
-        this.Dispose();
+        Dispose();
         return ValueTask.CompletedTask;
     }
 
     /// <summary>
-    /// Allows for implicit conversion from a <see cref="PooledObject{T}"/> to the wrapped object of type <typeparamref name="T"/>.
+    /// Implicitly converts a <see cref="PooledObject{T}"/> to the wrapped instance.
     /// </summary>
-    public static implicit operator T(PooledObject<T> pooledObject) {
-        return pooledObject.Item;
-    }
+    public static implicit operator T(PooledObject<T> pooledObject) => pooledObject.Item;
 }

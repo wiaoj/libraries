@@ -63,6 +63,8 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
         WebhookDeliveryContext context = new() {
             JobId = job.Id,
             Endpoint = endpoint,
+            PartitionKey = job.PartitionKey,
+            EventType = job.EventType,
             Event = job.Payload,
             SerializedPayload = serializedPayload,
             AttemptHistory = priorAttempts
@@ -72,16 +74,15 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
 
         await this._store.RecordAttemptAsync(job.Id, attempt, cancellationToken);
         this._logger.LogStoreAttemptRecorded(job.Id, attempt.AttemptNumber, attempt.IsSuccess, attempt.Duration.TotalMilliseconds);
-
-        // DeadLettering & Status Yönetimi
-        bool isDeadLettered = context.Items.TryGetValue(WebhookDeliveryContextItemKeys.IsDeadLettered, out object? dl) && dl is true;
+         
+        bool isDeadLettered = context.IsDeadLettered();
 
         WebhookJobStatus newStatus = attempt.Result switch {
             WebhookDeliveryResult.Delivered or WebhookDeliveryResult.Deduplicated => WebhookJobStatus.Delivered,
             WebhookDeliveryResult.TransientFailure when !isDeadLettered => WebhookJobStatus.Retrying,
             _ => WebhookJobStatus.DeadLettered
         };
-
+         
         await this._store.UpdateStatusAsync(job.Id, newStatus, cancellationToken);
         this._logger.LogStoreStatusUpdated(job.Id, newStatus);
 

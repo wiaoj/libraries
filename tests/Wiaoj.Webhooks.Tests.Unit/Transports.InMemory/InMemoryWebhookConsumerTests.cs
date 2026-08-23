@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Wiaoj.Webhooks.Transports.InMemory;
 using Wiaoj.Webhooks.Tests.Unit.Fakes;
 using Wiaoj.Webhooks.Tests.Unit.TestData;
+using Wiaoj.Webhooks.Transports.InMemory;
 
 namespace Wiaoj.Webhooks.Tests.Unit.Transports.InMemory;
 
@@ -20,7 +20,7 @@ public sealed class InMemoryWebhookConsumerTests {
         InMemoryWebhookConsumer consumer = new(
             transport,
             provider.GetRequiredService<IServiceScopeFactory>(),
-            Microsoft.Extensions.Options.Options.Create(options),
+            Options.Create(options),
             NullLogger<InMemoryWebhookConsumer>.Instance);
         return (consumer, transport, handler);
     }
@@ -28,7 +28,7 @@ public sealed class InMemoryWebhookConsumerTests {
     [Fact]
     public async Task ExecuteAsync_InvokesHandler_ForEachEnqueuedJob() {
         (InMemoryWebhookConsumer consumer, InMemoryWebhookTransport transport, FakeWebhookJobHandler handler) = CreateSut();
-        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), "order.created", WebhookTestFactory.CreateEvent());
 
         using CancellationTokenSource cts = new();
         Task run = consumer.StartAsync(cts.Token);
@@ -47,8 +47,8 @@ public sealed class InMemoryWebhookConsumerTests {
         (InMemoryWebhookConsumer consumer, InMemoryWebhookTransport transport, FakeWebhookJobHandler handler) = CreateSut();
         handler.ThrowOnNextHandle = true;
 
-        WebhookDeliveryJob failingJob = new(WebhookTestFactory.CreateEndpointId("fails"), WebhookTestFactory.CreateEvent());
-        WebhookDeliveryJob followingJob = new(WebhookTestFactory.CreateEndpointId("ok"), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob failingJob = new(WebhookTestFactory.CreateEndpointId("fails"), "order.created", WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob followingJob = new(WebhookTestFactory.CreateEndpointId("ok"), "order.created", WebhookTestFactory.CreateEvent());
 
         using CancellationTokenSource cts = new();
         await consumer.StartAsync(cts.Token);
@@ -70,26 +70,22 @@ public sealed class InMemoryWebhookConsumerTests {
         ServiceProvider provider = services.BuildServiceProvider();
         IServiceScopeFactory scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
         InMemoryWebhookTransport transport = new();
-        IOptions<InMemoryWebhookTransportOptions> options = Microsoft.Extensions.Options.Options.Create(new InMemoryWebhookTransportOptions());
+        IOptions<InMemoryWebhookTransportOptions> options = Options.Create(new InMemoryWebhookTransportOptions());
+        NullLogger<InMemoryWebhookConsumer> logger = NullLogger<InMemoryWebhookConsumer>.Instance;
 
+        // 1. transport null 
         Assert.ThrowsAny<ArgumentNullException>(() =>
-            new InMemoryWebhookConsumer(null!, scopeFactory, NullLogger<InMemoryWebhookConsumer>.Instance));
+            new InMemoryWebhookConsumer(null!, scopeFactory, options, logger));
 
+        // 2. scopeFactory null 
         Assert.ThrowsAny<ArgumentNullException>(() =>
-            new InMemoryWebhookConsumer(transport, null!, NullLogger<InMemoryWebhookConsumer>.Instance));
+            new InMemoryWebhookConsumer(transport, null!, options, logger));
 
+        // 3. options null 
         Assert.ThrowsAny<ArgumentNullException>(() =>
-            new InMemoryWebhookConsumer(transport, scopeFactory, null!));
+            new InMemoryWebhookConsumer(transport, scopeFactory, null!, logger));
 
-        Assert.ThrowsAny<ArgumentNullException>(() =>
-            new InMemoryWebhookConsumer(null!, scopeFactory, options, NullLogger<InMemoryWebhookConsumer>.Instance));
-
-        Assert.ThrowsAny<ArgumentNullException>(() =>
-            new InMemoryWebhookConsumer(transport, null!, options, NullLogger<InMemoryWebhookConsumer>.Instance));
-
-        Assert.ThrowsAny<ArgumentNullException>(() =>
-            new InMemoryWebhookConsumer(transport, scopeFactory, null!, NullLogger<InMemoryWebhookConsumer>.Instance));
-
+        // 4. logger null 
         Assert.ThrowsAny<ArgumentNullException>(() =>
             new InMemoryWebhookConsumer(transport, scopeFactory, options, null!));
     }

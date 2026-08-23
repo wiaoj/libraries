@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using System.Net;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Security;
@@ -17,7 +18,8 @@ public sealed class HttpWebhookDelivererTests {
         HttpWebhookSender sender = new(new HttpClient(handler), NullLogger<HttpWebhookSender>.Instance);
         return new HttpWebhookDeliverer(
             sender,
-            Microsoft.Extensions.Options.Options.Create(securityOptions ?? new WebhookSecurityOptions()),
+            Options.Create(securityOptions ?? new WebhookSecurityOptions()),
+            new FakeTimeProvider(),
             NullLogger<HttpWebhookDeliverer>.Instance);
     }
 
@@ -32,7 +34,7 @@ public sealed class HttpWebhookDelivererTests {
             NullLogger<HttpWebhookDeliverer> logger = NullLogger<HttpWebhookDeliverer>.Instance;
 
             Assert.ThrowsAny<ArgumentException>(() =>
-                new HttpWebhookDeliverer(null!, options, logger));
+                new HttpWebhookDeliverer(null!, options, TimeProvider.System, logger));
         }
 
         [Fact]
@@ -41,7 +43,17 @@ public sealed class HttpWebhookDelivererTests {
             NullLogger<HttpWebhookDeliverer> logger = NullLogger<HttpWebhookDeliverer>.Instance;
 
             Assert.ThrowsAny<ArgumentException>(() =>
-                new HttpWebhookDeliverer(sender, null!, logger));
+                new HttpWebhookDeliverer(sender, null!, TimeProvider.System, logger));
+        }
+
+        [Fact]
+        public void Constructor_Throws_WhenTimeProviderIsNull() {
+            HttpWebhookSender sender = new(new HttpClient(new FakeHttpMessageHandler(HttpStatusCode.OK)), NullLogger<HttpWebhookSender>.Instance);
+            IOptions<WebhookSecurityOptions> options = Microsoft.Extensions.Options.Options.Create(new WebhookSecurityOptions());
+            NullLogger<HttpWebhookDeliverer> logger = NullLogger<HttpWebhookDeliverer>.Instance;
+
+            Assert.ThrowsAny<ArgumentException>(() =>
+                new HttpWebhookDeliverer(sender, options, null!, logger));
         }
 
         [Fact]
@@ -50,7 +62,7 @@ public sealed class HttpWebhookDelivererTests {
             IOptions<WebhookSecurityOptions> options = Microsoft.Extensions.Options.Options.Create(new WebhookSecurityOptions());
 
             Assert.ThrowsAny<ArgumentException>(() =>
-                new HttpWebhookDeliverer(sender, options, null!));
+                new HttpWebhookDeliverer(sender, options, TimeProvider.System, null!));
         }
 
         [Fact]

@@ -9,8 +9,7 @@ using Wiaoj.Webhooks.Tests.Unit.Fakes;
 namespace Wiaoj.Webhooks.Tests.Unit.TestData;
 
 /// <summary>
-/// Central factory for building valid domain objects in tests, so individual test methods
-/// only override the field they actually care about instead of repeating boilerplate.
+/// Central factory for building valid domain objects in tests.
 /// </summary>
 internal static class WebhookTestFactory {
     private static readonly FakeSecretProtector<WebhookSigningContext> _protector =
@@ -22,6 +21,15 @@ internal static class WebhookTestFactory {
     }
 
     public static WebhookEndpointId CreateEndpointId(string value) {
+        return new(value);
+    }
+
+    // ── Partition Keys ──
+    public static WebhookPartitionKey CreatePartitionKey() {
+        return new(WebhookTestConstants.EndpointIdValue);
+    }
+
+    public static WebhookPartitionKey CreatePartitionKey(string value) {
         return new(value);
     }
 
@@ -65,20 +73,54 @@ internal static class WebhookTestFactory {
     }
 
     // ── Events ──
-    public static OrderCreatedWebhookEvent CreateEvent() {
-        return new();
+    public static OrderCreatedWebhookEvent CreateEvent(string orderId = "ORD-1", decimal amount = 42.50m) {
+        return new(orderId, amount);
+    }
+
+    // ── Jobs ──
+    public static WebhookDeliveryJob CreateJob() {
+        return new(WebhookJobId.NewJobId(), CreateEndpointId(), CreatePartitionKey(), WebhookTestConstants.EventTypeValue, CreateEvent());
+    }
+
+    public static WebhookDeliveryJob CreateJob(WebhookEndpointId endpointId) {
+        return new(WebhookJobId.NewJobId(), endpointId, WebhookPartitionKey.From(endpointId), WebhookTestConstants.EventTypeValue, CreateEvent());
+    }
+
+    public static WebhookDeliveryJob CreateJob(WebhookEndpointId endpointId, IWebhookEvent payload) {
+        return new(WebhookJobId.NewJobId(), endpointId, WebhookPartitionKey.From(endpointId), WebhookTestConstants.EventTypeValue, payload);
+    }
+
+    public static WebhookDeliveryJob CreateJob(WebhookJobId jobId, WebhookEndpointId endpointId) {
+        return new(jobId, endpointId, WebhookPartitionKey.From(endpointId), WebhookTestConstants.EventTypeValue, CreateEvent());
+    }
+
+    public static WebhookDeliveryJob CreateJob(WebhookJobId jobId, WebhookEndpointId endpointId, IWebhookEvent payload) {
+        return new(jobId, endpointId, WebhookPartitionKey.From(endpointId), WebhookTestConstants.EventTypeValue, payload);
+    }
+
+    public static WebhookDeliveryJob CreateJob(WebhookJobId jobId, WebhookEndpointId endpointId, string eventType, IWebhookEvent payload) {
+        return new(jobId, endpointId, WebhookPartitionKey.From(endpointId), eventType, payload);
+    }
+
+    public static WebhookDeliveryJob CreateJob(WebhookJobId jobId, WebhookEndpointId endpointId, WebhookPartitionKey partitionKey, string eventType, IWebhookEvent payload) {
+        return new(jobId, endpointId, partitionKey, eventType, payload);
     }
 
     // ── Delivery Contexts ──
-
-    public static WebhookDeliveryContext CreateContext(WebhookJobId? jobId = null,
-                                                       WebhookEndpoint? endpoint = null,
-                                                       IWebhookEvent? @event = null,
-                                                       string? serializedPayload = null,
-                                                       IReadOnlyList<WebhookDeliveryAttempt>? attemptHistory = null) {
+    public static WebhookDeliveryContext CreateContext(
+        WebhookJobId? jobId = null,
+        WebhookEndpoint? endpoint = null,
+        WebhookPartitionKey? partitionKey = null,
+        string? eventType = null,
+        IWebhookEvent? @event = null,
+        string? serializedPayload = null,
+        IReadOnlyList<WebhookDeliveryAttempt>? attemptHistory = null) {
+        WebhookEndpoint ep = endpoint ?? CreateEndpoint();
         return new() {
             JobId = jobId ?? WebhookJobId.NewJobId(),
-            Endpoint = endpoint ?? CreateEndpoint(),
+            Endpoint = ep,
+            PartitionKey = partitionKey ?? WebhookPartitionKey.From(ep.Id),
+            EventType = eventType ?? "order.created",
             Event = @event ?? CreateEvent(),
             SerializedPayload = serializedPayload ?? WebhookTestConstants.PayloadJson,
             AttemptHistory = attemptHistory ?? []
@@ -86,52 +128,34 @@ internal static class WebhookTestFactory {
     }
 
     public static WebhookDeliveryContext CreateContext() {
-        return new() {
-            JobId = WebhookJobId.NewJobId(),
-            Endpoint = CreateEndpoint(),
-            Event = CreateEvent(),
-            SerializedPayload = WebhookTestConstants.PayloadJson,
-            AttemptHistory = []
-        };
+        return CreateContext(null, null, null, null, null, null, null);
     }
 
     public static WebhookDeliveryContext CreateContext(WebhookEndpoint endpoint) {
-        return new() {
-            JobId = WebhookJobId.NewJobId(),
-            Endpoint = endpoint,
-            Event = CreateEvent(),
-            SerializedPayload = WebhookTestConstants.PayloadJson,
-            AttemptHistory = []
-        };
+        return CreateContext(null, endpoint, null, null, null, null, null);
     }
 
     public static WebhookDeliveryContext CreateContext(IReadOnlyList<WebhookDeliveryAttempt> attemptHistory) {
-        return new() {
-            JobId = WebhookJobId.NewJobId(),
-            Endpoint = CreateEndpoint(),
-            Event = CreateEvent(),
-            SerializedPayload = WebhookTestConstants.PayloadJson,
-            AttemptHistory = attemptHistory
-        };
+        return CreateContext(null, null, null, null, null, null, attemptHistory);
     }
 
     // ── Deliverers ──
-
     public static HttpWebhookDeliverer CreateDeliverer(
         HttpMessageHandler? handler = null,
         WebhookSecurityOptions? securityOptions = null,
+        TimeProvider? timeProvider = null,
         ILogger<HttpWebhookDeliverer>? logger = null) {
-
         handler ??= new FakeHttpMessageHandler(System.Net.HttpStatusCode.OK);
         HttpWebhookSender sender = new(new HttpClient(handler), NullLogger<HttpWebhookSender>.Instance);
 
         return new HttpWebhookDeliverer(
             sender,
             Microsoft.Extensions.Options.Options.Create(securityOptions ?? new WebhookSecurityOptions()),
+            timeProvider ?? TimeProvider.System,
             logger ?? NullLogger<HttpWebhookDeliverer>.Instance);
     }
 
-    // ── Delivery Results (Discriminated Union) ──
+    // ── Delivery Results ──
     public static WebhookDeliveryResult CreateSuccessResult() {
         return WebhookDeliveryResult.Success(200, "{}");
     }
@@ -148,7 +172,6 @@ internal static class WebhookTestFactory {
         return WebhookDeliveryResult.Duplicate(key);
     }
 
-    // Backward-compatible generic failure (maps to Transient)
     public static WebhookDeliveryResult CreateFailureResult() {
         return WebhookDeliveryResult.Transient("boom");
     }
@@ -165,20 +188,8 @@ internal static class WebhookTestFactory {
         return WebhookDeliveryResult.Transient(errorMessage, statusCode);
     }
 
-    public static WebhookDeliveryResult CreateTransientFailureResult(string errorMessage, int statusCode, TimeSpan retryAfter) {
-        return WebhookDeliveryResult.Transient(errorMessage, statusCode, retryAfter);
-    }
-
     public static WebhookDeliveryResult CreatePermanentFailureResult(string errorMessage = "Permanent error", int statusCode = 400) {
         return WebhookDeliveryResult.Permanent(errorMessage, statusCode, PermanentFailureReason.General);
-    }
-
-    public static WebhookDeliveryResult CreatePermanentFailureResult(string errorMessage, PermanentFailureReason reason) {
-        return WebhookDeliveryResult.Permanent(errorMessage, reason);
-    }
-
-    public static WebhookDeliveryResult CreatePermanentFailureResult(string errorMessage, int statusCode, PermanentFailureReason reason) {
-        return WebhookDeliveryResult.Permanent(errorMessage, statusCode, reason);
     }
 
     // ── Delivery Attempts ──
@@ -208,9 +219,5 @@ internal static class WebhookTestFactory {
 
     public static WebhookDeliveryAttempt CreateAttempt(int attemptNumber, WebhookDeliveryResult result) {
         return new(CreateEndpointId(), attemptNumber, UnixTimestamp.Now, TimeSpan.FromMilliseconds(120), result);
-    }
-
-    public static WebhookDeliveryAttempt CreateAttempt(int attemptNumber, UnixTimestamp attemptedAt, WebhookDeliveryResult result) {
-        return new(CreateEndpointId(), attemptNumber, attemptedAt, TimeSpan.FromMilliseconds(120), result);
     }
 }

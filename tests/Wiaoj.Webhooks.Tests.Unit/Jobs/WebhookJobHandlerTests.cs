@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using Wiaoj.Preconditions.Exceptions;
 using Wiaoj.Serialization;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Tests.Unit.Fakes;
@@ -10,7 +9,7 @@ namespace Wiaoj.Webhooks.Tests.Unit.Jobs;
 
 [Trait("Category", "Unit")]
 [Trait("Component", "JobHandler")]
-public sealed class WebhookJobHandlerTests { 
+public sealed class WebhookJobHandlerTests {
     private static WebhookJobHandler CreateHandler(
         IWebhookStore? store = null,
         IWebhookEndpointResolver? resolver = null,
@@ -43,7 +42,7 @@ public sealed class WebhookJobHandlerTests {
         WebhookEndpoint endpoint = WebhookTestFactory.CreateEndpoint(endpointId);
         FakeWebhookEndpointResolver resolver = new FakeWebhookEndpointResolver().Register(endpoint);
         FakeWebhookDeliverer deliverer = new();
-        WebhookDeliveryJob job = new(endpointId, WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = new(endpointId, "order.created", WebhookTestFactory.CreateEvent());
 
         WebhookJobHandler handler = CreateHandler(resolver: resolver, deliverer: deliverer);
 
@@ -55,8 +54,8 @@ public sealed class WebhookJobHandlerTests {
 
     [Fact]
     public async Task HandleAsync_ThrowsWebhookEndpointNotFoundException_WhenEndpointDoesNotResolve() {
-        FakeWebhookEndpointResolver resolver = new(); // Kayıtlı endpoint yok
-        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        FakeWebhookEndpointResolver resolver = new();
+        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), "order.created", WebhookTestFactory.CreateEvent());
 
         WebhookJobHandler handler = CreateHandler(resolver: resolver);
 
@@ -73,7 +72,7 @@ public sealed class WebhookJobHandlerTests {
     [Fact]
     public async Task HandleAsync_SerializesPayload_UsingConcreteRuntimeType() {
         OrderCreatedWebhookEvent @event = WebhookTestFactory.CreateEvent();
-        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), @event);
+        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), "order.created", @event);
         FakeWebhookSerializer serializer = new();
 
         WebhookJobHandler handler = CreateHandler(serializer: serializer);
@@ -87,7 +86,7 @@ public sealed class WebhookJobHandlerTests {
     [Fact]
     public async Task HandleAsync_PassesSerializedPayload_IntoDeliveryContext() {
         const string serialized = """{"custom":true}""";
-        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = new(WebhookTestFactory.CreateEndpointId(), "order.created", WebhookTestFactory.CreateEvent());
         FakeWebhookDeliverer deliverer = new();
         FakeWebhookSerializer serializer = new(serialized);
 
@@ -110,16 +109,16 @@ public sealed class WebhookJobHandlerTests {
 
         WebhookJobId jobId = WebhookJobId.NewJobId();
         WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId();
-        WebhookJobRecord record = new(jobId, endpointId, "OrderCreated", "{}", DateTimeOffset.UtcNow);
+        WebhookJobRecord record = new(jobId, endpointId, "order.created", "{}", DateTimeOffset.UtcNow);
         await store.SaveAsync(record);
 
-        WebhookDeliveryJob job = new(jobId, endpointId, WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = new(jobId, endpointId, "order.created", WebhookTestFactory.CreateEvent());
         WebhookJobHandler handler = CreateHandler(store: store, deliverer: deliverer);
 
         // Act
         WebhookDeliveryAttempt attempt = await handler.HandleAsync(job);
 
-        // Assert: Attempt dönmeli, store güncellenmeli ve Delivered olmalı
+        // Assert
         Assert.True(attempt.IsSuccess);
         WebhookJobRecord? updated = await store.GetJobAsync(jobId);
         Assert.NotNull(updated);
@@ -136,16 +135,16 @@ public sealed class WebhookJobHandlerTests {
 
         WebhookJobId jobId = WebhookJobId.NewJobId();
         WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId();
-        WebhookJobRecord record = new(jobId, endpointId, "OrderCreated", "{}", DateTimeOffset.UtcNow);
+        WebhookJobRecord record = new(jobId, endpointId, "order.created", "{}", DateTimeOffset.UtcNow);
         await store.SaveAsync(record);
 
-        WebhookDeliveryJob job = new(jobId, endpointId, WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = new(jobId, endpointId, "order.created", WebhookTestFactory.CreateEvent());
         WebhookJobHandler handler = CreateHandler(store: store, deliverer: deliverer);
 
         // Act
         WebhookDeliveryAttempt attempt = await handler.HandleAsync(job);
 
-        // Assert: Retrying olmalı
+        // Assert
         Assert.False(attempt.IsSuccess);
         WebhookJobRecord? updated = await store.GetJobAsync(jobId);
         Assert.NotNull(updated);
@@ -156,22 +155,21 @@ public sealed class WebhookJobHandlerTests {
     [Fact]
     public async Task HandleAsync_WhenPermanentFailureOrDeadLettered_UpdatesJobStatusToDeadLettered() {
         InMemoryWebhookStore store = new();
-        // Permanent failure doğrudan dead letter tetikler
         WebhookDeliveryResult permanentFailure = WebhookTestFactory.CreatePermanentFailureResult("404 Not Found", 404);
         FakeWebhookDeliverer deliverer = new(permanentFailure);
 
         WebhookJobId jobId = WebhookJobId.NewJobId();
         WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId();
-        WebhookJobRecord record = new(jobId, endpointId, "OrderCreated", "{}", DateTimeOffset.UtcNow);
+        WebhookJobRecord record = new(jobId, endpointId, "order.created", "{}", DateTimeOffset.UtcNow);
         await store.SaveAsync(record);
 
-        WebhookDeliveryJob job = new(jobId, endpointId, WebhookTestFactory.CreateEvent());
+        WebhookDeliveryJob job = new(jobId, endpointId, "order.created", WebhookTestFactory.CreateEvent());
         WebhookJobHandler handler = CreateHandler(store: store, deliverer: deliverer);
 
         // Act
         WebhookDeliveryAttempt attempt = await handler.HandleAsync(job);
 
-        // Assert: DeadLettered olarak işaretlenmeli!
+        // Assert
         Assert.False(attempt.IsSuccess);
         WebhookJobRecord? updated = await store.GetJobAsync(jobId);
         Assert.NotNull(updated);
@@ -189,7 +187,7 @@ public sealed class WebhookJobHandlerTests {
         FakeWebhookEndpointResolver resolver = new();
         FakeWebhookSerializer serializer = new();
         WebhookPipelineRunner runner = new([], new FakeWebhookDeliverer(), new FakeTimeProvider(), NullLogger<WebhookPipelineRunner>.Instance);
-        var logger = NullLogger<WebhookJobHandler>.Instance;
+        NullLogger<WebhookJobHandler> logger = NullLogger<WebhookJobHandler>.Instance;
 
         Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(null!, resolver, serializer, runner, logger));
         Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, null!, serializer, runner, logger));

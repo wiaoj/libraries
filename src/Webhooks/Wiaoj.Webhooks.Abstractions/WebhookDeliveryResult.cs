@@ -141,7 +141,7 @@ public abstract record WebhookDeliveryResult {
         /// <param name="errorMessage">The error message.</param>
         /// <param name="statusCode">The transport status code.</param>
         /// <param name="retryAfter">The suggested delay before the next retry.</param>
-        public TransientFailure(string errorMessage, int statusCode, TimeSpan retryAfter)
+        public TransientFailure(string errorMessage, int statusCode, TimeSpan? retryAfter)
             : this(errorMessage, statusCode, retryAfter, null) {
         }
 
@@ -150,7 +150,7 @@ public abstract record WebhookDeliveryResult {
         /// </summary>
         /// <param name="errorMessage">The error message.</param>
         /// <param name="retryAfter">The suggested delay before the next retry.</param>
-        public TransientFailure(string errorMessage, TimeSpan retryAfter)
+        public TransientFailure(string errorMessage, TimeSpan? retryAfter)
             : this(errorMessage, null, retryAfter, null) {
         }
 
@@ -301,9 +301,9 @@ public abstract record WebhookDeliveryResult {
     /// </summary>
     /// <param name="errorMessage">The error message.</param>
     /// <param name="statusCode">The transport status code.</param>
-    /// <param name="retryAfter">The delay before the next retry.</param>
+    /// <param name="retryAfter">The optional delay before the next retry attempt.</param>
     /// <returns>A new <see cref="TransientFailure"/> result instance.</returns>
-    public static WebhookDeliveryResult Transient(string errorMessage, int statusCode, TimeSpan retryAfter) {
+    public static WebhookDeliveryResult Transient(string errorMessage, int statusCode, TimeSpan? retryAfter) {
         return new TransientFailure(errorMessage, statusCode, retryAfter);
     }
 
@@ -311,9 +311,9 @@ public abstract record WebhookDeliveryResult {
     /// Creates a new <see cref="TransientFailure"/> result with a retry delay.
     /// </summary>
     /// <param name="errorMessage">The error message.</param>
-    /// <param name="retryAfter">The delay before the next retry.</param>
+    /// <param name="retryAfter">The optional delay before the next retry attempt.</param>
     /// <returns>A new <see cref="TransientFailure"/> result instance.</returns>
-    public static WebhookDeliveryResult Transient(string errorMessage, TimeSpan retryAfter) {
+    public static WebhookDeliveryResult Transient(string errorMessage, TimeSpan? retryAfter) {
         return new TransientFailure(errorMessage, retryAfter);
     }
 

@@ -1,3 +1,4 @@
+using FsCheck;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics;
@@ -21,6 +22,7 @@ public sealed class WebhookDiagnosticsTests {
         return new HttpWebhookDeliverer(
             sender,
             Microsoft.Extensions.Options.Options.Create(securityOptions ?? new WebhookSecurityOptions()),
+            new FakeTimeProvider(),
             NullLogger<HttpWebhookDeliverer>.Instance);
     }
 
@@ -92,7 +94,8 @@ public sealed class WebhookDiagnosticsTests {
         InMemoryWebhookStore store = new();
         SystemTextJsonSerializer<WebhookSerializerKey> serializer = new();
         FakeTimeProvider timeProvider = new();
-        WebhookDispatcher dispatcher = new(store, transport, serializer, timeProvider, NullLogger<WebhookDispatcher>.Instance);
+        WebhookEventRegistry eventRegistry = new(new WebhookEventRegistryOptions());
+        WebhookDispatcher dispatcher = new(store, transport, serializer, eventRegistry, timeProvider, NullLogger<WebhookDispatcher>.Instance);
         OrderCreatedWebhookEvent @event = WebhookTestFactory.CreateEvent();
 
         await dispatcher.DispatchAsync(endpointId, @event);
@@ -101,7 +104,7 @@ public sealed class WebhookDiagnosticsTests {
 
         Assert.NotNull(capturedActivity);
         Assert.Equal(endpointId.Value, capturedActivity.GetTagItem("webhook.endpoint_id"));
-        Assert.Equal(OrderCreatedWebhookEvent.EventName, capturedActivity.GetTagItem("webhook.event_name")); ;
+        Assert.Equal(WebhookTestConstants.EventTypeValue, capturedActivity.GetTagItem("webhook.event_name")); ;
         Assert.Equal(1, measurementValue);
     }
 

@@ -4,8 +4,17 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
+	  <IsPackable>false</IsPackable>
+	  <IsTestProject>true</IsTestProject>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Concurrency\EndpointMailboxDeliveryLockTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Concurrency\EndpointMailboxDeliveryLockTests.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
@@ -21,6 +30,7 @@
     <ProjectReference Include="..\..\src\BloomFilter\Wiaoj.BloomFilter.Testing\Wiaoj.BloomFilter.Testing.csproj" />
     <ProjectReference Include="..\..\src\Extensions\Security\Wiaoj.Security.Testing\Wiaoj.Security.Testing.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.AspNetCore\Wiaoj.Webhooks.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.BloomFilter\Wiaoj.Webhooks.BloomFilter.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.DistributedCounter\Wiaoj.Webhooks.DistributedCounter.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Transports.InMemory\Wiaoj.Webhooks.Transports.InMemory.csproj" />

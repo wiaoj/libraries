@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Wiaoj.Webhooks;
 
@@ -218,8 +219,126 @@ public static class WebhookDeliveryContextExtensions {
         headers[name] = value;
     }
 
+    /// <summary>
+    /// Checks whether an outbound HTTP header is present in the context.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name to check.</param>
+    /// <returns><see langword="true"/> if the header exists; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool HasHeader(this WebhookDeliveryContext context, string name) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+
+        return context.GetHeaders().ContainsKey(name);
+    }
+
+    /// <summary>
+    /// Retrieves the value of a specific outbound HTTP header, or <see langword="null"/> if not present.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name.</param>
+    /// <returns>The header value if found; otherwise, <see langword="null"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string? GetHeader(this WebhookDeliveryContext context, string name) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+
+        return context.GetHeaders().TryGetValue(name, out string? value) ? value : null;
+    }
+
+    /// <summary>
+    /// Tries to retrieve the value of a specific outbound HTTP header.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name.</param>
+    /// <param name="value">When this method returns, contains the header value if found.</param>
+    /// <returns><see langword="true"/> if the header was found; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryGetHeader(
+        this WebhookDeliveryContext context,
+        string name,
+        [NotNullWhen(true)] out string? value) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+
+        return context.GetHeaders().TryGetValue(name, out value);
+    }
+
+    /// <summary>
+    /// Removes an outbound HTTP header from the delivery context if present.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name to remove.</param>
+    /// <returns><see langword="true"/> if the header was found and removed; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool RemoveHeader(this WebhookDeliveryContext context, string name) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+
+        if(context.Items.TryGetValue(WebhookDeliveryContextItemKeys.Headers, out object? raw) && raw is IDictionary<string, string> headers) {
+            return headers.Remove(name);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Adds or updates multiple outbound HTTP headers simultaneously.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="headers">The collection of headers to add.</param>
+    public static void SetHeaders(this WebhookDeliveryContext context, IEnumerable<KeyValuePair<string, string>> headers) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNull(headers);
+
+        IDictionary<string, string> target = context.GetOrCreateHeaders();
+        foreach(KeyValuePair<string, string> kvp in headers) {
+            target[kvp.Key] = kvp.Value;
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────────
-    // 5. SIGNATURE ACCESSORS
+    // 5. ZERO-ALLOCATION PAYLOAD ACCESSORS
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns a direct, zero-allocation <see cref="ReadOnlySpan{Char}"/> view over the pre-serialized payload.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <returns>A character span of the serialized payload.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ReadOnlySpan<char> GetPayloadSpan(this WebhookDeliveryContext context) {
+        Preca.ThrowIfNull(context);
+        return context.SerializedPayload.AsSpan();
+    }
+
+    /// <summary>
+    /// Gets the exact UTF-8 byte count of the serialized payload without allocating a byte array.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <returns>The number of UTF-8 encoded bytes.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int GetPayloadByteCount(this WebhookDeliveryContext context) {
+        Preca.ThrowIfNull(context);
+        return Encoding.UTF8.GetByteCount(context.SerializedPayload);
+    }
+
+    /// <summary>
+    /// Writes the serialized payload as UTF-8 bytes directly into the destination span without heap allocations.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="destination">The destination byte buffer.</param>
+    /// <param name="bytesWritten">The number of bytes written to <paramref name="destination"/>.</param>
+    /// <returns><see langword="true"/> if the destination was large enough; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryWritePayloadBytes(this WebhookDeliveryContext context, Span<byte> destination, out int bytesWritten) {
+        Preca.ThrowIfNull(context);
+        return Encoding.UTF8.TryGetBytes(context.SerializedPayload.AsSpan(), destination, out bytesWritten);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 6. SIGNATURE ACCESSORS
     // ────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -247,8 +366,179 @@ public static class WebhookDeliveryContextExtensions {
                 : null;
     }
 
+    /// <summary>
+    /// Tries to retrieve the computed cryptographic signature from the context.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="signature">When this method returns, contains the signature if computed.</param>
+    /// <returns><see langword="true"/> if a signature is present; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryGetSignature(
+        this WebhookDeliveryContext context,
+        [NotNullWhen(true)] out WebhookSignature? signature) {
+        signature = context.GetSignature();
+        return signature is not null;
+    }
+
     // ────────────────────────────────────────────────────────────────────────
-    // 6. GENERIC SAFE ITEMS ACCESSORS
+    // 7. EVENT ACCESSORS & TYPE GUARDS
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Gets the canonical wire-format event name (e.g., <c>"order.created"</c>).
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <returns>The wire-format event name associated with this delivery attempt.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string GetEventName(this WebhookDeliveryContext context) {
+        Preca.ThrowIfNull(context);
+        return context.EventType;
+    }
+
+    /// <summary>
+    /// Determines whether the event being delivered matches the specified canonical wire-format name.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="eventName">The expected wire-format event name to compare against.</param>
+    /// <returns><see langword="true"/> if the event name matches; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsEvent(this WebhookDeliveryContext context, string eventName) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(eventName);
+
+        return string.Equals(context.EventType, eventName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Determines whether the domain payload is of the specified strongly-typed event type.
+    /// </summary>
+    /// <typeparam name="TEvent">The expected event type.</typeparam>
+    /// <param name="context">The delivery context.</param>
+    /// <returns><see langword="true"/> if the underlying payload is an instance of <typeparamref name="TEvent"/>; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsEvent<TEvent>(this WebhookDeliveryContext context) where TEvent : class, IWebhookEvent {
+        Preca.ThrowIfNull(context);
+        return context.Event is TEvent;
+    }
+
+    /// <summary>
+    /// Attempts to safely cast the domain payload to the specified strongly-typed event type.
+    /// </summary>
+    /// <typeparam name="TEvent">The expected event type.</typeparam>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="event">When this method returns, contains the typed event instance if compatible; otherwise, <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if the payload was successfully cast to <typeparamref name="TEvent"/>; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryGetEvent<TEvent>(
+        this WebhookDeliveryContext context,
+        [NotNullWhen(true)] out TEvent? @event)
+        where TEvent : class, IWebhookEvent {
+        Preca.ThrowIfNull(context);
+
+        if(context.Event is TEvent typedEvent) {
+            @event = typedEvent;
+            return true;
+        }
+
+        @event = null;
+        return false;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 8. IDEMPOTENCY KEY ACCESSORS
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Stores the generated idempotency key in the delivery context.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="key">The generated idempotency key.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void SetIdempotencyKey(this WebhookDeliveryContext context, IdempotencyKey key) {
+        Preca.ThrowIfNull(context);
+        context.Items[WebhookDeliveryContextItemKeys.IdempotencyKey] = key;
+    }
+
+    /// <summary>
+    /// Retrieves the generated idempotency key from the context, or <see langword="null"/> if not yet generated.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <returns>The <see cref="IdempotencyKey"/> if present; otherwise, <see langword="null"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static IdempotencyKey? GetIdempotencyKey(this WebhookDeliveryContext context) {
+        Preca.ThrowIfNull(context);
+        return context.Items.TryGetValue(WebhookDeliveryContextItemKeys.IdempotencyKey, out object? raw)
+            && raw is IdempotencyKey key
+                ? key
+                : null;
+    }
+
+    /// <summary>
+    /// Tries to retrieve the generated idempotency key from the context.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="key">When this method returns, contains the key if found.</param>
+    /// <returns><see langword="true"/> if the key was found; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryGetIdempotencyKey(this WebhookDeliveryContext context, out IdempotencyKey key) {
+        Preca.ThrowIfNull(context);
+        if(context.Items.TryGetValue(WebhookDeliveryContextItemKeys.IdempotencyKey, out object? raw) && raw is IdempotencyKey typedKey) {
+            key = typedKey;
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 9. ATTEMPT HISTORY & STATUS CODE ANALYTICS
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Determines whether any prior delivery attempt for this job encountered the specified HTTP status code.
+    /// Useful for retry policies checking if an endpoint previously returned <c>429 Too Many Requests</c>.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="statusCode">The HTTP status code to search for (e.g. 429, 503).</param>
+    /// <returns><see langword="true"/> if the status code was observed in attempt history; otherwise, <see langword="false"/>.</returns>
+    public static bool HasEncounteredStatusCode(this WebhookDeliveryContext context, int statusCode) {
+        Preca.ThrowIfNull(context);
+
+        for(int i = 0; i < context.AttemptHistory.Count; i++) {
+            WebhookDeliveryAttempt attempt = context.AttemptHistory[i];
+            if(attempt.Result is WebhookDeliveryResult.TransientFailure tf && tf.StatusCode == statusCode) {
+                return true;
+            }
+            if(attempt.Result is WebhookDeliveryResult.PermanentFailure pf && pf.StatusCode == statusCode) {
+                return true;
+            }
+            if(attempt.Result is WebhookDeliveryResult.Delivered d && d.StatusCode == statusCode) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Calculates the cumulative execution duration spent across all prior delivery attempts.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <returns>The total wall-clock duration of all prior attempts.</returns>
+    public static TimeSpan GetTotalPriorAttemptsDuration(this WebhookDeliveryContext context) {
+        Preca.ThrowIfNull(context);
+
+        TimeSpan total = TimeSpan.Zero;
+        for(int i = 0; i < context.AttemptHistory.Count; i++) {
+            total += context.AttemptHistory[i].Duration;
+        }
+
+        return total;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 10. GENERIC SAFE ITEMS ACCESSORS & FACTORY
     // ────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -299,6 +589,28 @@ public static class WebhookDeliveryContextExtensions {
         }
         value = default;
         return false;
+    }
+
+    /// <summary>
+    /// Retrieves an item from <see cref="WebhookDeliveryContext.Items"/>, or computes and stores it using a factory function if missing.
+    /// </summary>
+    /// <typeparam name="T">The type of the item.</typeparam>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="key">The dictionary key.</param>
+    /// <param name="factory">The factory delegate used to produce the item value when missing.</param>
+    /// <returns>The existing or newly generated item instance.</returns>
+    public static T GetOrSetItem<T>(this WebhookDeliveryContext context, string key, Func<T> factory) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(key);
+        Preca.ThrowIfNull(factory);
+
+        if(context.Items.TryGetValue(key, out object? raw) && raw is T existing) {
+            return existing;
+        }
+
+        T created = factory();
+        context.Items[key] = created;
+        return created;
     }
 
     private static class EmptyHeadersDictionary {
