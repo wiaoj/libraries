@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<ServerGarbageCollection>true</ServerGarbageCollection>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+		<PackageReference Include="MassTransit" Version="8.5.10" />
+		<PackageReference Include="Tyto.Transports.InMemory" Version="0.0.1-alpha.99" />
+		<PackageReference Include="Wiaoj.Serialization.Abstractions" Version="0.0.1-alpha.83" />
+		<PackageReference Include="Wiaoj.Serialization.DependencyInjection" Version="0.0.1-alpha.83" />
+		<PackageReference Include="Wiaoj.Serialization.SystemTextJson" Version="0.0.1-alpha.83" /> 
+		<PackageReference Include="WolverineFx" Version="6.29.2" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+		<PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.29.2" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Extensions\Security\Wiaoj.Security.Testing\Wiaoj.Security.Testing.csproj" />
+		<ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
+		<ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Transports.InMemory\Wiaoj.Webhooks.Transports.InMemory.csproj" />
+	</ItemGroup>
+
+</Project>

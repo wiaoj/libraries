@@ -4,6 +4,7 @@
     <Project Path="benchmarks/Wiaoj.Benchmarks.DistributedCounter/Wiaoj.Benchmarks.DistributedCounter.csproj" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.Mediator/Wiaoj.Benchmarks.Mediator.csproj" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.Primitives/Wiaoj.Benchmarks.Primitives.csproj" Id="47a9018c-29c4-4747-8ef4-ffc2eacdaca2" />
+    <Project Path="benchmarks/Wiaoj.Benchmarks.Webhooks/Wiaoj.Benchmarks.Webhooks.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Wiaoj.Samples.BloomFilter/Wiaoj.Samples.BloomFilter.csproj" Id="69d8af16-0970-4213-a1c2-ecea075b0b68" />
