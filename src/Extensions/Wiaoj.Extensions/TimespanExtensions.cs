@@ -10,7 +10,9 @@ public static partial class TimeSpanExtensions {
         /// <param name="first">The first TimeSpan to compare.</param>
         /// <param name="second">The second TimeSpan to compare.</param>
         /// <returns>The smaller of the two TimeSpan values.</returns>
-        public static TimeSpan Min(TimeSpan first, TimeSpan second) => first < second ? first : second;
+        public static TimeSpan Min(TimeSpan first, TimeSpan second) {
+            return first < second ? first : second;
+        }
 
         /// <summary>
         /// Returns the larger of two TimeSpan values.
@@ -18,7 +20,9 @@ public static partial class TimeSpanExtensions {
         /// <param name="first">The first TimeSpan to compare.</param>
         /// <param name="second">The second TimeSpan to compare.</param>
         /// <returns>The larger of the two TimeSpan values.</returns>
-        public static TimeSpan Max(TimeSpan first, TimeSpan second) => first > second ? first : second;
+        public static TimeSpan Max(TimeSpan first, TimeSpan second) {
+            return first > second ? first : second;
+        }
 
         /// <summary>
         /// Returns the smallest <see cref="TimeSpan"/> from a set of values.
@@ -53,5 +57,17 @@ public static partial class TimeSpanExtensions {
             }
             return max;
         }
-    } 
+    }
+
+    extension([NotNullWhen(false)] TimeSpan? timeSpan) {
+        /// <summary>
+        /// Determines whether the nullable <see cref="TimeSpan"/> is null, or if its value is less than or equal to <see cref="TimeSpan.Zero"/>.
+        /// </summary>
+        /// <returns>
+        /// <see langword="true"/> if the value is null or less than or equal to zero; otherwise, <see langword="false"/>.
+        /// </returns>
+        public bool IsNullOrLessThanOrEqualToZero() {
+            return timeSpan is null || timeSpan.Value <= TimeSpan.Zero;
+        }
+    }
 }
