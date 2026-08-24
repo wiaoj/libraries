@@ -1,17 +1,29 @@
 ﻿namespace Wiaoj.Preconditions.Exceptions;
+
 /// <summary>
-/// Represents a base class for exceptions thrown by Wiaoj.Preca guard clauses related to arguments.
-/// Inherits from ArgumentException to ensure compatibility with standard error handling patterns.
+/// Exception thrown when an argument does not meet the required precondition.
 /// </summary>
 public class PrecaArgumentException : ArgumentException {
-    public PrecaArgumentException() { }
+    /// <summary>Initializes a new instance of the <see cref="PrecaArgumentException"/> class.</summary>
+    public PrecaArgumentException() : base() { }
 
+    /// <summary>Initializes a new instance of the <see cref="PrecaArgumentException"/> class with a message.</summary>
+    /// <param name="message">The error message.</param>
     public PrecaArgumentException(string? message) : base(message) { }
 
+    /// <summary>Initializes a new instance of the <see cref="PrecaArgumentException"/> class with a message and inner exception.</summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="innerException">The inner exception.</param>
     public PrecaArgumentException(string? message, Exception? innerException) : base(message, innerException) { }
 
+    /// <summary>Initializes a new instance of the <see cref="PrecaArgumentException"/> class with a message and parameter name.</summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="paramName">The invalid parameter name.</param>
     public PrecaArgumentException(string? message, string? paramName) : base(message, paramName) { }
 
-    public PrecaArgumentException(string? message, string? paramName, Exception? innerException)
-        : base(message, paramName, innerException) { }
+    /// <summary>Initializes a new instance of the <see cref="PrecaArgumentException"/> class with all details.</summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="paramName">The invalid parameter name.</param>
+    /// <param name="innerException">The inner exception.</param>
+    public PrecaArgumentException(string? message, string? paramName, Exception? innerException) : base(message, paramName, innerException) { }
 }

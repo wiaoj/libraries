@@ -1,4 +1,5 @@
 ﻿namespace Wiaoj.Preconditions.Exceptions;
+
 /// <summary>
 /// Thrown when an operation is invalid for the current state of an object.
 /// This is Preca's equivalent to <see cref="InvalidOperationException"/> with enhanced debugging information.
