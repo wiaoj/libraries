@@ -32,4 +32,12 @@ public interface IIdempotencyStore {
     /// <see langword="false"/> if the key already exists and has not yet expired (duplicate detected).
     /// </returns>
     ValueTask<bool> TryMarkProcessedAsync(IdempotencyKey key, TimeSpan window, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes an idempotency key from the store, rolling back an active reservation or clearing recorded state.
+    /// </summary>
+    /// <param name="key">The idempotency key to remove.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous remove operation.</returns>
+    ValueTask RemoveAsync(IdempotencyKey key, CancellationToken cancellationToken = default);
 }

@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.RateLimiting.AspNetCore</RootNamespace>
+	  <AssemblyName>Wiaoj.RateLimiting.AspNetCore</AssemblyName>
+	  <PackageId>Wiaoj.RateLimiting.AspNetCore</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup> 
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Wiaoj.RateLimiting\Wiaoj.RateLimiting.csproj" />
+  </ItemGroup>
+
+</Project>

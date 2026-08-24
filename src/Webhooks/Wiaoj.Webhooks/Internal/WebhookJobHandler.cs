@@ -53,9 +53,7 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
 
         this._logger.LogEndpointResolved(job.EndpointId, endpoint.TargetUrl);
 
-        string serializedPayload = job.Payload is RawJsonWebhookEvent raw 
-            ? raw.RawJson
-            : this._serializer.SerializeToString(job.Payload, job.Payload.GetType());
+        string serializedPayload = this._serializer.SerializeToString(job.Payload, job.Payload.GetType());
 
         WebhookJobRecord? existingJob = await this._store.GetJobAsync(job.Id, cancellationToken);
         List<WebhookDeliveryAttempt> priorAttempts = existingJob is not null ? [.. existingJob.Attempts] : [];
@@ -69,6 +67,10 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
             SerializedPayload = serializedPayload,
             AttemptHistory = priorAttempts
         };
+
+        if(job.IsReplay) {
+            context.MarkReplay(true);
+        }
 
         WebhookDeliveryAttempt attempt = await this._pipelineRunner.RunAsync(context, cancellationToken);
 

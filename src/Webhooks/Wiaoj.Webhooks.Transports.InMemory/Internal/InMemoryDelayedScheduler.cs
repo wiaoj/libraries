@@ -1,40 +1,44 @@
-using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Wiaoj.Webhooks.Transports.InMemory.Diagnostics;
+using System.Threading.Channels;
 
 namespace Wiaoj.Webhooks.Transports.InMemory.Internal;
 
+file readonly record struct ScheduledJobItem(WebhookDeliveryJob Job, CancellationToken CancellationToken);
+
 /// <summary>
-/// Non-blocking, in-memory delayed execution scheduler that buffers delayed jobs using <see cref="TimeProvider"/> timers
-/// and flushes them into the target channel writer when their delay expires.
+/// High-throughput, asynchronous delayed job scheduler backed by a single priority queue and background worker loop.
 /// </summary>
-internal sealed class InMemoryDelayedScheduler : IDisposable {
+internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
     private readonly ChannelWriter<WebhookDeliveryJob> _writer;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger _logger;
+    private readonly PriorityQueue<ScheduledJobItem, DateTimeOffset> _queue = new();
+    private readonly SemaphoreSlim _signal = new(0);
     private readonly Lock _lock = new();
-    private readonly List<ITimer> _activeTimers = [];
+    private readonly CancellationTokenSource _cts = new();
+    private readonly Task _processingTask;
     private bool _isDisposed;
 
-    public InMemoryDelayedScheduler(
-        ChannelWriter<WebhookDeliveryJob> writer,
-        TimeProvider? timeProvider = null,
-        ILogger? logger = null) {
+    public InMemoryDelayedScheduler(ChannelWriter<WebhookDeliveryJob> writer,
+                                    TimeProvider timeProvider,
+                                    ILogger logger) {
         Preca.ThrowIfNull(writer);
+        Preca.ThrowIfNull(timeProvider);
+        Preca.ThrowIfNull(logger);
+
         this._writer = writer;
-        this._timeProvider = timeProvider ?? TimeProvider.System;
-        this._logger = logger ?? NullLogger.Instance;
+        this._timeProvider = timeProvider;
+        this._logger = logger;
+        this._processingTask = Task.Run(ProcessQueueAsync);
     }
 
     /// <summary>
-    /// Schedules a job to be written to the channel writer after the specified delay without blocking the caller.
+    /// Schedules a delivery job to be enqueued when its delay window expires, observing the cancellation token.
     /// </summary>
-    /// <param name="job">The job to enqueue.</param>
-    /// <param name="delay">The delay duration.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
     public void Schedule(WebhookDeliveryJob job, TimeSpan delay, CancellationToken cancellationToken) {
         Preca.ThrowIfNull(job);
+
+        DateTimeOffset dueTime = this._timeProvider.GetUtcNow().Add(delay);
 
         lock(this._lock) {
             if(this._isDisposed) {
@@ -42,38 +46,68 @@ internal sealed class InMemoryDelayedScheduler : IDisposable {
             }
 
             this._logger.LogJobScheduledDelayed(job.Id.Value, job.EndpointId.Value, delay.TotalMilliseconds);
+            this._queue.Enqueue(new ScheduledJobItem(job, cancellationToken), dueTime);
+        }
 
-            ITimer? timer = null;
-            timer = this._timeProvider.CreateTimer(
-                callback: _ => {
-                    // Remove timer from tracking list
-                    lock(this._lock) {
-                        if(timer is not null) {
-                            this._activeTimers.Remove(timer);
-                            timer.Dispose();
-                        }
+        this._signal.Release();
+    }
+
+    private async Task ProcessQueueAsync() {
+        CancellationToken ct = this._cts.Token;
+
+        while(!ct.IsCancellationRequested) {
+            ScheduledJobItem nextItem = default;
+            bool hasJob = false;
+            TimeSpan waitDuration = Timeout.InfiniteTimeSpan;
+
+            lock(this._lock) {
+                if(this._queue.TryPeek(out ScheduledJobItem candidate, out DateTimeOffset dueTime)) {
+                    DateTimeOffset now = this._timeProvider.GetUtcNow();
+                    if(dueTime <= now) {
+                        nextItem = this._queue.Dequeue();
+                        hasJob = true;
                     }
-
-                    if(!cancellationToken.IsCancellationRequested) {
-                        this._logger.LogDelayedJobFlushed(job.Id.Value, job.EndpointId.Value);
-                        this._writer.TryWrite(job);
+                    else {
+                        waitDuration = dueTime - now;
                     }
-                },
-                state: null,
-                dueTime: delay,
-                period: Timeout.InfiniteTimeSpan
-            );
+                }
+            }
 
-            this._activeTimers.Add(timer);
+            if(hasJob) {
+                if(nextItem.CancellationToken.IsCancellationRequested) {
+                    this._logger.LogDelayedJobCancelled(nextItem.Job.Id.Value, nextItem.Job.EndpointId.Value);
+                    continue;
+                }
 
-            if(cancellationToken.CanBeCanceled) {
-                cancellationToken.Register(() => {
-                    lock(this._lock) {
-                        this._activeTimers.Remove(timer);
-                        timer.Dispose();
-                    }
-                    this._logger.LogDelayedJobCancelled(job.Id.Value, job.EndpointId.Value);
-                });
+                try {
+                    await this._writer.WriteAsync(nextItem.Job, ct).ConfigureAwait(false);
+                    this._logger.LogDelayedJobFlushed(nextItem.Job.Id.Value, nextItem.Job.EndpointId.Value);
+                }
+                catch(ChannelClosedException) {
+                    break;
+                }
+                catch(OperationCanceledException) {
+                    break;
+                }
+
+                continue;
+            }
+
+            if(waitDuration == Timeout.InfiniteTimeSpan) {
+                try {
+                    await this._signal.WaitAsync(ct).ConfigureAwait(false);
+                }
+                catch(OperationCanceledException) {
+                    break;
+                }
+            }
+            else {
+                using CancellationTokenSource delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                Task signalTask = this._signal.WaitAsync(delayCts.Token);
+                Task delayTask = Task.Delay(waitDuration, this._timeProvider, delayCts.Token);
+
+                await Task.WhenAny(signalTask, delayTask).ConfigureAwait(false);
+                await delayCts.CancelAsync();
             }
         }
     }
@@ -85,11 +119,23 @@ internal sealed class InMemoryDelayedScheduler : IDisposable {
                 return;
             }
             this._isDisposed = true;
+            this._cts.Cancel();
+        }
 
-            foreach(ITimer timer in this._activeTimers) {
-                timer.Dispose();
-            }
-            this._activeTimers.Clear();
+        this._signal.Dispose();
+        this._cts.Dispose();
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync() {
+        Dispose();
+        try {
+            await this._processingTask.ConfigureAwait(false);
+        }
+        catch(OperationCanceledException) {
+            // Task canceled gracefully during shutdown
         }
     }
+
+    private readonly record struct ScheduledJobItem(WebhookDeliveryJob Job, CancellationToken CancellationToken);
 }

@@ -1,18 +1,21 @@
-﻿#pragma warning disable IDE0130 // Namespace does not match folder structure
+﻿#pragma warning disable IDE0130
+using System.Reflection;
+
 namespace Wiaoj.Webhooks;
-#pragma warning restore IDE0130 // Namespace does not match folder structure
+#pragma warning restore IDE0130
 
 /// <summary>
 /// Pipeline middleware that injects standardized RFC and industry webhook metadata headers
-/// (<c>User-Agent</c>, <c>Webhook-Id</c>, <c>Webhook-Event</c>, <c>Webhook-Attempt</c>) into the outbound delivery context.
+/// (<c>User-Agent</c>, <c>Webhook-Id</c>, <c>Webhook-Event</c>, <c>Webhook-Attempt</c>)
+/// and endpoint-specific custom static headers into the outbound delivery context.
 /// </summary>
-/// <remarks>
-/// Ensures destination endpoints receive structured metadata to perform idempotency checks,
-/// event routing, and retry diagnostics without parsing the JSON payload body.
-/// </remarks>
 public sealed class StandardHeadersMiddleware : IWebhookMiddleware {
     private static readonly string DefaultUserAgent =
-        $"Wiaoj-Webhooks/{typeof(StandardHeadersMiddleware).Assembly.GetName().Version?.ToString(3) ?? "1.0.0"}";
+        $"Wiaoj-Webhooks/{typeof(StandardHeadersMiddleware).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion?.Split('+')[0]
+                ?? typeof(StandardHeadersMiddleware).Assembly.GetName().Version?.ToString(3)
+                ?? "1.0.0"}";
 
     private readonly StandardHeadersOptions _options;
 
@@ -35,7 +38,13 @@ public sealed class StandardHeadersMiddleware : IWebhookMiddleware {
     /// <inheritdoc />
     public async Task InvokeAsync(WebhookDeliveryContext context, WebhookDelegate next, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(context);
-        Preca.ThrowIfNull(next);
+        Preca.ThrowIfNull(next); 
+
+        if(context.Endpoint.CustomHeaders is not null) {
+            foreach(KeyValuePair<string, string> kvp in context.Endpoint.CustomHeaders) {
+                context.SetHeader(kvp.Key, kvp.Value);
+            }
+        }
 
         if(this._options.IncludeWebhookId) {
             context.SetHeader(this._options.WebhookIdHeaderName, context.JobId.Value);

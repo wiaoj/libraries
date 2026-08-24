@@ -8,7 +8,7 @@ namespace Wiaoj.Serialization.DependencyInjection;
 #pragma warning restore IDE0130
 
 /// <summary>
-/// Extension methods to register System.Text.Json serializers in ISerializationBuilder.
+/// Extension methods for registering and replacing System.Text.Json serializers on <see cref="ISerializationBuilder"/>.
 /// </summary>
 public static class SystemTextJsonSerializerExtensions {
     /// <summary>
@@ -239,13 +239,73 @@ public static class SystemTextJsonSerializerExtensions {
     }
 
     public static ISerializerConfigurator<TKey> UseSystemTextJson<TKey>(this ISerializerConfigurator<TKey> configurator,
-                                                                        Action<JsonSerializerOptions> configure) 
+                                                                        Action<JsonSerializerOptions> configure)
         where TKey : ISerializerKey {
         Preca.ThrowIfNull(configurator);
         Preca.ThrowIfNull(configure);
         JsonSerializerOptions options = new();
         configure(options);
-         
+
         return configurator.Builder.ReplaceSerializer<TKey>(sp => new SystemTextJsonSerializer<TKey>(options));
+    }
+
+    /// <summary>
+    /// Replaces any existing serializer for <typeparamref name="TKey"/> with a configured <see cref="SystemTextJsonSerializer{TKey}"/>.
+    /// </summary>
+    /// <typeparam name="TKey">The serializer key type.</typeparam>
+    /// <param name="builder">The serialization builder.</param>
+    /// <param name="configure">The configuration delegate for <see cref="JsonSerializerOptions"/>.</param>
+    /// <returns>The serializer configurator instance.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
+    public static ISerializerConfigurator<TKey> ReplaceSystemTextJson<TKey>(
+        this ISerializationBuilder builder,
+        Action<JsonSerializerOptions> configure)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+
+        JsonSerializerOptions options = new();
+        configure(options);
+
+        return builder.ReplaceSerializer<TKey>(sp => new SystemTextJsonSerializer<TKey>(options));
+    }
+
+    /// <summary>
+    /// Replaces any existing serializer for <typeparamref name="TKey"/> with a configured <see cref="SystemTextJsonSerializer{TKey}"/>.
+    /// </summary>
+    /// <typeparam name="TKey">The serializer key type.</typeparam>
+    /// <param name="builder">The serialization builder.</param>
+    /// <param name="configure">The configuration delegate for <see cref="JsonSerializerOptions"/>.</param>
+    /// <returns>The serializer configurator instance.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
+    public static ISerializerConfigurator<TKey> ReplaceSystemTextJson<TKey>(
+        this ISerializerConfigurator<TKey> builder,
+        Action<JsonSerializerOptions> configure)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+
+        JsonSerializerOptions options = new();
+        configure(options);
+
+        return builder.Builder.ReplaceSerializer<TKey>(sp => new SystemTextJsonSerializer<TKey>(options));
+    }
+
+    /// <summary>
+    /// Replaces any existing serializer for <typeparamref name="TKey"/> with the specified <see cref="JsonSerializerOptions"/> instance.
+    /// </summary>
+    /// <typeparam name="TKey">The serializer key type.</typeparam>
+    /// <param name="builder">The serialization builder.</param>
+    /// <param name="jsonSerializerOptions">The <see cref="JsonSerializerOptions"/> to use.</param>
+    /// <returns>The serializer configurator instance.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="jsonSerializerOptions"/> is <see langword="null"/>.</exception>
+    public static ISerializerConfigurator<TKey> ReplaceSystemTextJson<TKey>(
+        this ISerializerConfigurator<TKey> builder,
+        JsonSerializerOptions jsonSerializerOptions)
+        where TKey : ISerializerKey {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(jsonSerializerOptions);
+
+        return builder.Builder.ReplaceSerializer<TKey>(sp => new SystemTextJsonSerializer<TKey>(jsonSerializerOptions));
     }
 }

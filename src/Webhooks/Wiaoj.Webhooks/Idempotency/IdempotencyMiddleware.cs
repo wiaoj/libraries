@@ -47,8 +47,10 @@ public sealed class IdempotencyMiddleware : IWebhookMiddleware {
 
         context.SetIdempotencyKey(key);
 
+        bool shouldCheckDeduplication = !(this._options.BypassOnReplay && context.IsReplay());
+
         // 1. Check if the event was already successfully processed within the active window
-        if(await this._store.ContainsAsync(key, cancellationToken).ConfigureAwait(false)) {
+        if(shouldCheckDeduplication && await this._store.ContainsAsync(key, cancellationToken).ConfigureAwait(false)) {
             this._logger.LogPipelineShortCircuited(context.Endpoint.Id, $"Duplicate event intercepted by IdempotencyStore with key '{key.Value}'.");
             context.SetResult(WebhookDeliveryResult.Duplicate(key.Value));
             return;

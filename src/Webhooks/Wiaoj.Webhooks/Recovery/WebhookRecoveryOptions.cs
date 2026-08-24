@@ -21,6 +21,9 @@ public sealed class WebhookRecoveryOptions {
     /// </summary>
     public static readonly TimeSpan DefaultRecoveryLeaseDuration = TimeSpan.FromMinutes(2);
 
+    /// <summary>The default threshold after which an unprocessed queued job is considered a stranded zombie (2 minutes).</summary>
+    public static readonly TimeSpan DefaultQueuedJobStaleThreshold = TimeSpan.FromMinutes(2);
+  
     /// <summary>
     /// Gets or sets the interval between periodic recovery sweeps. Default is 30 seconds.
     /// </summary>
@@ -37,6 +40,12 @@ public sealed class WebhookRecoveryOptions {
     public TimeSpan RecoveryLeaseDuration { get; set; } = DefaultRecoveryLeaseDuration;
 
     /// <summary>
+    /// Gets or sets the duration an unprocessed job may remain in <see cref="WebhookJobStatus.Queued"/> state
+    /// before being classified as a stranded zombie job eligible for recovery. Default is 2 minutes.
+    /// </summary>
+    public TimeSpan QueuedJobStaleThreshold { get; set; } = DefaultQueuedJobStaleThreshold;
+
+    /// <summary>
     /// Validates the configuration values.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any configuration value is negative or out of bounds.</exception>
@@ -46,6 +55,9 @@ public sealed class WebhookRecoveryOptions {
         }
         if(this.RecoveryLeaseDuration <= TimeSpan.Zero) {
             throw new ArgumentOutOfRangeException(nameof(this.RecoveryLeaseDuration), "Recovery lease duration must be a positive non-zero duration.");
+        }
+        if(this.QueuedJobStaleThreshold <= TimeSpan.Zero) {
+            throw new ArgumentOutOfRangeException(nameof(this.QueuedJobStaleThreshold), "Queued job stale threshold must be a positive non-zero duration.");
         }
         Preca.ThrowIfLessThan(this.BatchSize, 1);
     }

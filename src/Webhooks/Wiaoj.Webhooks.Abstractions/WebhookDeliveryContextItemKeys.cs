@@ -32,4 +32,10 @@ public static class WebhookDeliveryContextItemKeys {
     /// Key under which the computed <see cref="IdempotencyKey"/> is stored in <see cref="WebhookDeliveryContext.Items"/>.
     /// </summary>
     public const string IdempotencyKey = "__wiaoj.webhooks.idempotency_key";
+
+    /// <summary>
+    /// Key under which a boolean flag (<see cref="bool"/>) is stored in <see cref="WebhookDeliveryContext.Items"/> indicating
+    /// that the active delivery execution was initiated as a manual replay request.
+    /// </summary>
+    public const string IsReplay = "__wiaoj.webhooks.is_replay";
 }

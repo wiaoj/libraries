@@ -8,6 +8,7 @@
 	  <AssemblyName>Wiaoj.RateLimiting.Testing</AssemblyName>
 	  <PackageId>Wiaoj.RateLimiting.Testing</PackageId>
 	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

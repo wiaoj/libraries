@@ -54,7 +54,7 @@ internal sealed class WebhookPipelineRunner {
     /// </returns>
     public async Task<WebhookDeliveryAttempt> RunAsync(WebhookDeliveryContext context, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(context);
-        int attemptNumber = context.AttemptHistory.Count + 1; 
+        int attemptNumber = context.AttemptHistory.Count + 1;
 
         this._logger.LogDeliveryAttemptStarting(attemptNumber, context.Endpoint.Id, context.TargetUrl);
 
@@ -69,7 +69,7 @@ internal sealed class WebhookPipelineRunner {
             && stored is WebhookDeliveryResult capturedResult
                 ? capturedResult
                 : WebhookDeliveryResult.Permanent("Pipeline short-circuited before reaching a deliverer.", PermanentFailureReason.General);
-         
+
         int? statusCode = result switch {
             WebhookDeliveryResult.Delivered d => d.StatusCode,
             WebhookDeliveryResult.TransientFailure tf => tf.StatusCode,
@@ -86,7 +86,8 @@ internal sealed class WebhookPipelineRunner {
         TagList tags = new() {
             { "webhook.endpoint_id", context.Endpoint.Id.Value },
             { "webhook.success", result.IsSuccess },
-            { "webhook.attempt_number", attemptNumber }
+            { "webhook.attempt_number", attemptNumber },
+            { "webhook.is_replay", context.IsReplay() }
         };
         if(statusCode.HasValue) {
             tags.Add("webhook.status_code", statusCode.Value);
@@ -108,7 +109,17 @@ internal sealed class WebhookPipelineRunner {
         activity?.SetTag("webhook.status_code", statusCode);
         activity?.SetTag("webhook.duration_ms", durationMs);
 
-        return new WebhookDeliveryAttempt(context.Endpoint.Id, attemptNumber, _timeProvider.GetUnixTimestamp(), duration, result);
+        // Tracing: Yalnızca replay olduğunda span etiketine basarak gürültüyü önle
+        if(context.IsReplay()) {
+            activity?.SetTag("webhook.is_replay", true);
+        }
+
+        return new WebhookDeliveryAttempt(context.Endpoint.Id,
+                                          attemptNumber,
+                                          this._timeProvider.GetUnixTimestamp(),
+                                          duration,
+                                          result,
+                                          context.IsReplay());
     }
 
     private static WebhookDelegate BuildPipeline(IReadOnlyList<IWebhookMiddleware> middleware, IWebhookDeliverer deliverer) {

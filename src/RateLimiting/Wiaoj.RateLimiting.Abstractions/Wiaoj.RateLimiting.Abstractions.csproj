@@ -8,6 +8,7 @@
 	  <AssemblyName>Wiaoj.RateLimiting.Abstractions</AssemblyName>
 	  <PackageId>Wiaoj.RateLimiting.Abstractions</PackageId>
 	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

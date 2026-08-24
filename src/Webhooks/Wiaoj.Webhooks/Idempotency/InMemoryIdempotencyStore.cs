@@ -91,4 +91,12 @@ public sealed class InMemoryIdempotencyStore : IIdempotencyStore {
 
         return removedCount;
     }
+
+
+    /// <inheritdoc/>
+    public ValueTask RemoveAsync(IdempotencyKey key, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNullOrWhiteSpace(key.Value);
+        this._entries.TryRemove(key, out _);
+        return ValueTask.CompletedTask;
+    }
 }

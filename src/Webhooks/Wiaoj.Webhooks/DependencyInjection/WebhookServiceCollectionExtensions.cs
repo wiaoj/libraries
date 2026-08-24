@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Sockets;
 using Wiaoj.Serialization.DependencyInjection;
 using Wiaoj.Webhooks;
-using Wiaoj.Webhooks.Exceptions;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Security;
 
@@ -26,15 +25,20 @@ public static class WebhookServiceCollectionExtensions {
         Preca.ThrowIfNull(services);
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
 
+        services.AddSingleton<IValidateOptions<WebhookSecurityOptions>, WebhookSecurityOptionsValidator>();
+        services.AddOptions<WebhookSecurityOptions>().ValidateOnStart();
+        services.AddOptions<WebhookOptions>().ValidateOnStart();
+
         services.AddHttpClient<HttpWebhookSender>((sp, client) => {
             WebhookSecurityOptions options = sp.GetRequiredService<IOptions<WebhookSecurityOptions>>().Value;
             client.Timeout = options.RequestTimeout;
         })
-         .RemoveAllLoggers()
+         //.RemoveAllLoggers()
          .ConfigurePrimaryHttpMessageHandler(sp => {
              WebhookSecurityOptions options = sp.GetRequiredService<IOptions<WebhookSecurityOptions>>().Value;
+             options.Validate();
              SocketsHttpHandler handler = new() {
-                 PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+                 PooledConnectionLifetime = options.PooledConnectionLifetime,
                  ConnectTimeout = options.ConnectTimeout,
                  AllowAutoRedirect = false
              };
@@ -84,7 +88,7 @@ public static class WebhookServiceCollectionExtensions {
         services.TryAddTransient<IWebhookDeliverer, HttpWebhookDeliverer>();
 
         services.TryAddTransient<WebhookPipelineRunner>(static sp => {
-            IWebhookMiddleware[] middleware = sp.GetServices<IWebhookMiddleware>().ToArray();
+            IWebhookMiddleware[] middleware = [.. sp.GetServices<IWebhookMiddleware>()];
             IWebhookDeliverer deliverer = sp.GetRequiredService<IWebhookDeliverer>();
             TimeProvider timeProvider = sp.GetRequiredService<TimeProvider>();
             ILogger<WebhookPipelineRunner> logger = sp.GetRequiredService<ILogger<WebhookPipelineRunner>>();

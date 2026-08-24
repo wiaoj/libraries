@@ -1,4 +1,6 @@
 ﻿#pragma warning disable IDE0130
+using Wiaoj.Webhooks.AspNetCore.Context;
+
 namespace Wiaoj.Webhooks.AspNetCore;
 #pragma warning restore IDE0130
 
@@ -6,7 +8,7 @@ namespace Wiaoj.Webhooks.AspNetCore;
 /// Defines a class-based handler for executing application business logic upon receiving a verified webhook event.
 /// </summary>
 /// <typeparam name="TEvent">The type of event handled.</typeparam>
-public interface IWebhookReceiverHandler<TEvent> where TEvent : IWebhookEvent {
+public interface IWebhookReceiverHandler<TEvent> where TEvent : class {
     /// <summary>
     /// Executes the business logic for the verified incoming webhook.
     /// </summary>

@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+		<RootNamespace>Wiaoj.Webhooks.Tests.Integration</RootNamespace>
+		<AssemblyName>Wiaoj.Webhooks.Tests.Integration</AssemblyName>
+	</PropertyGroup>
+	
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+
+	<ItemGroup>
+		<PackageReference Include="Bogus" Version="35.6.5" />
+		<PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+		<PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+		<PackageReference Include="xunit.v3" Version="4.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\src\DistributedCounter\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
+		<ProjectReference Include="..\..\..\src\Extensions\Security\Wiaoj.Security.Testing\Wiaoj.Security.Testing.csproj" />
+		<ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks.AspNetCore\Wiaoj.Webhooks.AspNetCore.csproj" />
+		<ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks.RateLimiting\Wiaoj.Webhooks.RateLimiting.csproj" />
+		<ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
+		<ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
+		<ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks.BloomFilter\Wiaoj.Webhooks.BloomFilter.csproj" />
+		<ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks.Transports.InMemory\Wiaoj.Webhooks.Transports.InMemory.csproj" />
+	</ItemGroup>
+
+</Project>

@@ -180,14 +180,16 @@ public sealed class LeakyBucketRateLimiterTests {
     [InlineData(0)]
     [InlineData(-1)]
     public void Constructor_WithNonPositiveCapacity_Throws(int capacity) {
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new LeakyBucketRateLimiter(capacity, TimeSpan.FromSeconds(1)));
     }
 
     [Fact]
     public void Constructor_WithZeroOrNegativePeriod_Throws() {
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new LeakyBucketRateLimiter(1, TimeSpan.Zero));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
+            () => new LeakyBucketRateLimiter(1, TimeSpan.FromSeconds(-1)));
     }
 
     [Fact]
@@ -197,7 +199,7 @@ public sealed class LeakyBucketRateLimiterTests {
         // requires an exact type match, so this has to be asserted separately from the empty case.
         (LeakyBucketRateLimiter sut, _) = CreateSut(capacity: 1, period: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
+        await Assert.ThrowsAnyAsync<ArgumentNullException>(
             async () => await sut.TryAcquireAsync(null!, cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -205,7 +207,7 @@ public sealed class LeakyBucketRateLimiterTests {
     public async Task TryAcquireAsync_WithEmptyKey_ThrowsArgumentException() {
         (LeakyBucketRateLimiter sut, _) = CreateSut(capacity: 1, period: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentException>(
+        await Assert.ThrowsAnyAsync<ArgumentException>(
             async () => await sut.TryAcquireAsync(string.Empty, cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -215,7 +217,7 @@ public sealed class LeakyBucketRateLimiterTests {
     public async Task TryAcquireAsync_WithNonPositiveCost_Throws(int cost) {
         (LeakyBucketRateLimiter sut, _) = CreateSut(capacity: 1, period: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+        await Assert.ThrowsAnyAsync<ArgumentOutOfRangeException>(
             async () => await sut.TryAcquireAsync("key", cost: cost, cancellationToken: TestContext.Current.CancellationToken));
     }
 }

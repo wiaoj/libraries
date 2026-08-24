@@ -9,7 +9,7 @@ public sealed class InMemoryRateLimitAlgorithmTests {
     [Fact]
     public async Task TryAcquireAsync_WhenUnderLimit_IsAllowed() {
         FakeTimeProvider time = new(Epoch);
-        InMemoryRateLimitAlgorithm sut = new(limit: 3, window: TimeSpan.FromSeconds(1), time);
+        FakeRateLimitAlgorithm sut = new(limit: 3, window: TimeSpan.FromSeconds(1), time);
 
         RateLimitDecision decision = await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -21,10 +21,10 @@ public sealed class InMemoryRateLimitAlgorithmTests {
     [Fact]
     public async Task TryAcquireAsync_AtExactLimit_IsStillAllowed_NoOffByOne() {
         FakeTimeProvider time = new(Epoch);
-        InMemoryRateLimitAlgorithm sut = new(limit: 3, window: TimeSpan.FromSeconds(1), time);
+        FakeRateLimitAlgorithm sut = new(limit: 3, window: TimeSpan.FromSeconds(1), time);
 
-        await sut.TryAcquireAsync("key");
-        await sut.TryAcquireAsync("key");
+        await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
+        await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
         RateLimitDecision third = await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(third.IsAllowed);
@@ -34,11 +34,11 @@ public sealed class InMemoryRateLimitAlgorithmTests {
     [Fact]
     public async Task TryAcquireAsync_OneRequestOverLimit_IsDenied_NoOffByOne() {
         FakeTimeProvider time = new(Epoch);
-        InMemoryRateLimitAlgorithm sut = new(limit: 3, window: TimeSpan.FromSeconds(1), time);
+        FakeRateLimitAlgorithm sut = new(limit: 3, window: TimeSpan.FromSeconds(1), time);
 
-        await sut.TryAcquireAsync("key");
-        await sut.TryAcquireAsync("key");
-        await sut.TryAcquireAsync("key");
+        await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
+        await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
+        await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
         RateLimitDecision fourth = await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(fourth.IsAllowed);
@@ -51,11 +51,11 @@ public sealed class InMemoryRateLimitAlgorithmTests {
         // A denied attempt must not "use up" capacity — otherwise a burst of rejected
         // requests could itself cause legitimate, smaller requests to be denied too.
         FakeTimeProvider time = new(Epoch);
-        InMemoryRateLimitAlgorithm sut = new(limit: 1, window: TimeSpan.FromSeconds(1), time);
+        FakeRateLimitAlgorithm sut = new(limit: 1, window: TimeSpan.FromSeconds(1), time);
 
-        await sut.TryAcquireAsync("key", cost: 1);
-        RateLimitDecision denied = await sut.TryAcquireAsync("key", cost: 5);
-        RateLimitDecision stillDenied = await sut.TryAcquireAsync("key", cost: 1);
+        await sut.TryAcquireAsync("key", cost: 1, TestContext.Current.CancellationToken);
+        RateLimitDecision denied = await sut.TryAcquireAsync("key", cost: 5, TestContext.Current.CancellationToken);
+        RateLimitDecision stillDenied = await sut.TryAcquireAsync("key", cost: 1, TestContext.Current.CancellationToken);
 
         Assert.False(denied.IsAllowed);
         Assert.False(stillDenied.IsAllowed); // capacity for this window is genuinely exhausted (1 of 1 used)
@@ -64,13 +64,13 @@ public sealed class InMemoryRateLimitAlgorithmTests {
     [Fact]
     public async Task TryAcquireAsync_AfterWindowElapses_StateResets() {
         FakeTimeProvider time = new(Epoch);
-        InMemoryRateLimitAlgorithm sut = new(limit: 1, window: TimeSpan.FromSeconds(1), time);
+        FakeRateLimitAlgorithm sut = new(limit: 1, window: TimeSpan.FromSeconds(1), time);
 
-        await sut.TryAcquireAsync("key");
-        RateLimitDecision deniedWithinWindow = await sut.TryAcquireAsync("key");
+        await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
+        RateLimitDecision deniedWithinWindow = await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
 
         time.Advance(TimeSpan.FromSeconds(1));
-        RateLimitDecision allowedAfterReset = await sut.TryAcquireAsync("key");
+        RateLimitDecision allowedAfterReset = await sut.TryAcquireAsync("key", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(deniedWithinWindow.IsAllowed);
         Assert.True(allowedAfterReset.IsAllowed);
@@ -79,10 +79,10 @@ public sealed class InMemoryRateLimitAlgorithmTests {
     [Fact]
     public async Task TryAcquireAsync_DifferentKeys_DoNotAffectEachOther() {
         FakeTimeProvider time = new(Epoch);
-        InMemoryRateLimitAlgorithm sut = new(limit: 1, window: TimeSpan.FromSeconds(1), time);
+        FakeRateLimitAlgorithm sut = new(limit: 1, window: TimeSpan.FromSeconds(1), time);
 
-        RateLimitDecision keyA = await sut.TryAcquireAsync("a");
-        RateLimitDecision keyB = await sut.TryAcquireAsync("b");
+        RateLimitDecision keyA = await sut.TryAcquireAsync("a", cancellationToken: TestContext.Current.CancellationToken);
+        RateLimitDecision keyB = await sut.TryAcquireAsync("b", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(keyA.IsAllowed);
         Assert.True(keyB.IsAllowed);
@@ -91,9 +91,9 @@ public sealed class InMemoryRateLimitAlgorithmTests {
     [Fact]
     public async Task TryAcquireAsync_WithCost_ConsumesMultipleUnits() {
         FakeTimeProvider time = new(Epoch);
-        InMemoryRateLimitAlgorithm sut = new(limit: 10, window: TimeSpan.FromSeconds(1), time);
+        FakeRateLimitAlgorithm sut = new(limit: 10, window: TimeSpan.FromSeconds(1), time);
 
-        RateLimitDecision decision = await sut.TryAcquireAsync("key", cost: 4);
+        RateLimitDecision decision = await sut.TryAcquireAsync("key", cost: 4, TestContext.Current.CancellationToken);
 
         Assert.True(decision.IsAllowed);
         Assert.Equal(6, decision.Remaining);
@@ -103,13 +103,13 @@ public sealed class InMemoryRateLimitAlgorithmTests {
     [InlineData(0)]
     [InlineData(-1)]
     public void Constructor_WithNonPositiveLimit_Throws(int limit) {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new InMemoryRateLimitAlgorithm(limit, TimeSpan.FromSeconds(1)));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
+            () => new FakeRateLimitAlgorithm(limit, TimeSpan.FromSeconds(1)));
     }
 
     [Fact]
     public void Constructor_WithNonPositiveWindow_Throws() {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new InMemoryRateLimitAlgorithm(1, TimeSpan.Zero));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
+            () => new FakeRateLimitAlgorithm(1, TimeSpan.Zero));
     }
 }

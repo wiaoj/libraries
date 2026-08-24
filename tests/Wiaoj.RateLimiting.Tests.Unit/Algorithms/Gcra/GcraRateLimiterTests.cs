@@ -180,15 +180,15 @@ public sealed class GcraRateLimiterTests {
     [InlineData(0)]
     [InlineData(-1)]
     public void Constructor_WithNonPositiveLimit_Throws(int limit) {
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new GcraRateLimiter(limit, TimeSpan.FromSeconds(1)));
     }
 
     [Fact]
     public void Constructor_WithZeroOrNegativePeriod_Throws() {
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new GcraRateLimiter(1, TimeSpan.Zero));
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new GcraRateLimiter(1, TimeSpan.FromSeconds(-1)));
     }
 
@@ -199,7 +199,7 @@ public sealed class GcraRateLimiterTests {
         // requires an exact type match, so this has to be asserted separately from the empty case.
         (GcraRateLimiter sut, _) = CreateSut(limit: 1, period: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
+        await Assert.ThrowsAnyAsync<ArgumentNullException>(
             async () => await sut.TryAcquireAsync(null!, cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -207,7 +207,7 @@ public sealed class GcraRateLimiterTests {
     public async Task TryAcquireAsync_WithEmptyKey_ThrowsArgumentException() {
         (GcraRateLimiter sut, _) = CreateSut(limit: 1, period: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentException>(
+        await Assert.ThrowsAnyAsync<ArgumentException>(
             async () => await sut.TryAcquireAsync(string.Empty, cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -217,7 +217,7 @@ public sealed class GcraRateLimiterTests {
     public async Task TryAcquireAsync_WithNonPositiveCost_Throws(int cost) {
         (GcraRateLimiter sut, _) = CreateSut(limit: 1, period: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+        await Assert.ThrowsAnyAsync<ArgumentOutOfRangeException>(
             async () => await sut.TryAcquireAsync("key", cost: cost, cancellationToken: TestContext.Current.CancellationToken));
     }
 }

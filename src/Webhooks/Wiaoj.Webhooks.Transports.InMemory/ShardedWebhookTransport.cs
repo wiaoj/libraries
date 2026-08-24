@@ -63,7 +63,7 @@ public sealed class ShardedWebhookTransport : IWebhookTransport, IDisposable {
     public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {
         Preca.ThrowIfNull(job);
 
-        int shardIndex = GetShardIndex(job.PartitionKey.Value.AsSpan());
+        int shardIndex = GetShardIndex(job.PartitionKey.AsSpan());
         return this._shards[shardIndex].EnqueueAsync(job, delay, cancellationToken);
     }
 

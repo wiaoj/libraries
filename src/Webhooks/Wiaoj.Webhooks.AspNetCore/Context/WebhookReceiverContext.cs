@@ -1,14 +1,13 @@
 ﻿using Microsoft.AspNetCore.Http;
 using System.Text;
 
-namespace Wiaoj.Webhooks.AspNetCore;
+namespace Wiaoj.Webhooks.AspNetCore.Context;
 
 /// <summary>
 /// Encapsulates all contextual state, verified payload, and security metadata for an incoming webhook delivery.
 /// </summary>
 /// <typeparam name="TEvent">The strongly-typed webhook event payload type.</typeparam>
-public sealed class WebhookReceiverContext<TEvent> where TEvent : IWebhookEvent {
-    private string? _bodyText;
+public sealed class WebhookReceiverContext<TEvent> where TEvent : class {
 
     /// <summary>Gets the current ASP.NET Core HTTP context.</summary>
     public required HttpContext HttpContext { get; init; }
@@ -29,7 +28,7 @@ public sealed class WebhookReceiverContext<TEvent> where TEvent : IWebhookEvent 
     public required ReadOnlyMemory<byte> RawBody { get; init; }
 
     /// <summary>Gets the raw UTF-8 string representation of the request body, materialized lazily on demand.</summary>
-    public string BodyText => this._bodyText ??= Encoding.UTF8.GetString(this.RawBody.Span);
+    public string BodyText => field ??= Encoding.UTF8.GetString(this.RawBody.Span);
 
     /// <summary>Gets the request headers dictionary.</summary>
     public required IHeaderDictionary Headers { get; init; }

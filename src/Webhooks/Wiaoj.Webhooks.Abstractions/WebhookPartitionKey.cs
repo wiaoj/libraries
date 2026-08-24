@@ -1,6 +1,7 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -96,6 +97,13 @@ public readonly record struct WebhookPartitionKey :
     public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
         return Utf8.FromUtf16(this.Value.AsSpan(), utf8Destination, out _, out bytesWritten) == OperationStatus.Done;
     }
+
+    /// <summary>
+    /// Returns a direct, zero-allocation character span view over the underlying partition key string.
+    /// </summary>
+    /// <returns>A <see cref="ReadOnlySpan{Char}"/> representing the partition key.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<char> AsSpan() => this.Value.AsSpan();
 
     // ── Implicit Operators for Zero Friction ──────────────────────────────────
 

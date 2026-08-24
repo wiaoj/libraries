@@ -41,6 +41,10 @@ public sealed partial class RsaKeyPair {
         rsa.ImportFromPem(pem);
 
         RSAParameters publicParams = rsa.ExportParameters(false);
+
+        Preca.ThrowIfNull(publicParams.Modulus);
+        Preca.ThrowIfNull(publicParams.Exponent);
+
         Base64UrlString modulus = Base64UrlString.FromBytes(publicParams.Modulus);
         Base64UrlString exponent = Base64UrlString.FromBytes(publicParams.Exponent);
 

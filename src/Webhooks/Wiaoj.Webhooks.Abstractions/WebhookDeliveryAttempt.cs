@@ -43,6 +43,11 @@ public sealed record WebhookDeliveryAttempt {
     public WebhookDeliveryResult Result { get; }
 
     /// <summary>
+    /// Gets a value indicating whether this delivery attempt was initiated as a manual replay.
+    /// </summary>
+    public bool IsReplay { get; }
+
+    /// <summary>
     /// Gets a value indicating whether this attempt succeeded.
     /// </summary>
     /// <remarks>
@@ -55,7 +60,7 @@ public sealed record WebhookDeliveryAttempt {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebhookDeliveryAttempt"/> record.
+    /// Initializes a new instance of the <see cref="WebhookDeliveryAttempt"/> record for standard deliveries.
     /// </summary>
     /// <param name="endpointId">The identifier of the endpoint this attempt was made against.</param>
     /// <param name="attemptNumber">The one-based sequence number of this attempt.</param>
@@ -68,12 +73,35 @@ public sealed record WebhookDeliveryAttempt {
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="result"/> is <see langword="null"/>.
     /// </exception>
-    public WebhookDeliveryAttempt(
-        WebhookEndpointId endpointId,
-        int attemptNumber,
-        UnixTimestamp attemptedAt,
-        TimeSpan duration,
-        WebhookDeliveryResult result) {
+    public WebhookDeliveryAttempt(WebhookEndpointId endpointId,
+                                  int attemptNumber,
+                                  UnixTimestamp attemptedAt,
+                                  TimeSpan duration,
+                                  WebhookDeliveryResult result)
+        : this(endpointId, attemptNumber, attemptedAt, duration, result, false) {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebhookDeliveryAttempt"/> record with explicit replay flag.
+    /// </summary>
+    /// <param name="endpointId">The identifier of the endpoint this attempt was made against.</param>
+    /// <param name="attemptNumber">The one-based sequence number of this attempt.</param>
+    /// <param name="attemptedAt">The moment at which this attempt was made.</param>
+    /// <param name="duration">The wall-clock time the attempt took to complete.</param>
+    /// <param name="result">The result produced by the deliverer for this attempt.</param>
+    /// <param name="isReplay">Indicates whether the attempt was initiated as a manual replay.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="attemptNumber"/> is less than <c>1</c>, or when <paramref name="duration"/> is negative.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="result"/> is <see langword="null"/>.
+    /// </exception>
+    public WebhookDeliveryAttempt(WebhookEndpointId endpointId,
+                                  int attemptNumber,
+                                  UnixTimestamp attemptedAt,
+                                  TimeSpan duration,
+                                  WebhookDeliveryResult result,
+                                  bool isReplay) {
         Preca.ThrowIfLessThan(attemptNumber, 1);
         Preca.ThrowIfNegative(duration);
         Preca.ThrowIfNull(result);
@@ -83,5 +111,40 @@ public sealed record WebhookDeliveryAttempt {
         this.AttemptedAt = attemptedAt;
         this.Duration = duration;
         this.Result = result;
+        this.IsReplay = isReplay;
+    }
+
+    /// <summary>
+    /// Creates a new delivery attempt for a standard delivery execution.
+    /// </summary>
+    /// <param name="endpointId">The identifier of the target endpoint.</param>
+    /// <param name="attemptNumber">The one-based sequence number of this attempt.</param>
+    /// <param name="attemptedAt">The moment at which this attempt was made.</param>
+    /// <param name="duration">The wall-clock time the attempt took to complete.</param>
+    /// <param name="result">The result produced by the deliverer for this attempt.</param>
+    /// <returns>A new <see cref="WebhookDeliveryAttempt"/> instance.</returns>
+    public static WebhookDeliveryAttempt Create(WebhookEndpointId endpointId,
+                                                int attemptNumber,
+                                                UnixTimestamp attemptedAt,
+                                                TimeSpan duration,
+                                                WebhookDeliveryResult result) {
+        return new(endpointId, attemptNumber, attemptedAt, duration, result, false);
+    }
+
+    /// <summary>
+    /// Creates a new delivery attempt for a manual replay execution.
+    /// </summary>
+    /// <param name="endpointId">The identifier of the target endpoint.</param>
+    /// <param name="attemptNumber">The one-based sequence number of this attempt.</param>
+    /// <param name="attemptedAt">The moment at which this attempt was made.</param>
+    /// <param name="duration">The wall-clock time the attempt took to complete.</param>
+    /// <param name="result">The result produced by the deliverer for this attempt.</param>
+    /// <returns>A new <see cref="WebhookDeliveryAttempt"/> instance with <see cref="IsReplay"/> set to <see langword="true"/>.</returns>
+    public static WebhookDeliveryAttempt CreateReplay(WebhookEndpointId endpointId,
+                                                      int attemptNumber,
+                                                      UnixTimestamp attemptedAt,
+                                                      TimeSpan duration,
+                                                      WebhookDeliveryResult result) {
+        return new(endpointId, attemptNumber, attemptedAt, duration, result, true);
     }
 }

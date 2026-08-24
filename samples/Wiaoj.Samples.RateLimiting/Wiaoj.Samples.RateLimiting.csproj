@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-Wiaoj.Samples.RateLimiting-d4764248-454d-4907-b0e9-0c46107f538c</UserSecretsId>
+  </PropertyGroup>
+ 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DistributedCounter\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
+    <ProjectReference Include="..\..\src\RateLimiting\Wiaoj.RateLimiting.AspNetCore\Wiaoj.RateLimiting.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\RateLimiting\Wiaoj.RateLimiting\Wiaoj.RateLimiting.csproj" />
+  </ItemGroup>
+</Project>

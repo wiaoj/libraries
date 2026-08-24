@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\BloomFilter\Wiaoj.BloomFilter\Wiaoj.BloomFilter.csproj" />
     <ProjectReference Include="..\..\src\DistributedCounter\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
     <ProjectReference Include="..\..\src\Extensions\Security\Wiaoj.Security.Testing\Wiaoj.Security.Testing.csproj" />
@@ -16,7 +20,9 @@
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.AspNetCore\Wiaoj.Webhooks.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.BloomFilter\Wiaoj.Webhooks.BloomFilter.csproj" />
-    <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.DistributedCounter\Wiaoj.Webhooks.DistributedCounter.csproj" />
+    <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Publishing\Wiaoj.Webhooks.Publishing.csproj" />
+    <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.RateLimiting\Wiaoj.Webhooks.RateLimiting.csproj" />
+    <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Signing.Asymmetric\Wiaoj.Webhooks.Signing.Asymmetric.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Transports.InMemory\Wiaoj.Webhooks.Transports.InMemory.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
   </ItemGroup>

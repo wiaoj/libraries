@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using Wiaoj.Webhooks.Exceptions;
 
 namespace Wiaoj.Webhooks.Internal;
 

@@ -9,6 +9,22 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     private readonly ConcurrentDictionary<WebhookJobId, WebhookJobRecord> _jobs = new(WebhookJobId.OrdinalComparer);
     private readonly ConcurrentDictionary<WebhookEndpointId, List<WebhookJobId>> _endpointIndex = new(WebhookEndpointId.OrdinalComparer);
     private readonly Lock _lock = new();
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InMemoryWebhookStore"/> class using the system clock.
+    /// </summary>
+    public InMemoryWebhookStore() : this(TimeProvider.System) {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InMemoryWebhookStore"/> class with a custom <see cref="TimeProvider"/>.
+    /// </summary>
+    /// <param name="timeProvider">The time provider.</param>
+    public InMemoryWebhookStore(TimeProvider timeProvider) {
+        Preca.ThrowIfNull(timeProvider);
+        this._timeProvider = timeProvider;
+    }
 
     /// <inheritdoc/>
     public Task SaveAsync(WebhookJobRecord job, CancellationToken cancellationToken = default) {
@@ -64,10 +80,9 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
             return Task.FromResult(false);
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = this._timeProvider.GetUtcNow();
 
         lock(job) {
-            // Already claimed by another active instance?
             if(job.LockedBy is not null && job.LockExpiresAt.HasValue && job.LockExpiresAt.Value > now && job.LockedBy != instanceId) {
                 return Task.FromResult(false);
             }
@@ -93,12 +108,31 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     }
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<WebhookJobRecord>> GetStaleInFlightJobsAsync(DateTimeOffset threshold, int maxCount, CancellationToken cancellationToken = default) {
+    public Task<IReadOnlyList<WebhookJobRecord>> GetStaleJobsAsync(
+       DateTimeOffset? inFlightThreshold,
+       DateTimeOffset? queuedThreshold,
+       int maxCount,
+       CancellationToken cancellationToken = default) {
+        Preca.ThrowIfLessThan(maxCount, 1);
+
         List<WebhookJobRecord> stale = [];
 
         foreach(KeyValuePair<WebhookJobId, WebhookJobRecord> kvp in this._jobs) {
             WebhookJobRecord job = kvp.Value;
-            if(job.Status == WebhookJobStatus.InFlight && job.LockExpiresAt.HasValue && job.LockExpiresAt.Value < threshold) {
+
+            // 1. InFlight job with expired lease (Only checked if inFlightThreshold is provided)
+            bool isExpiredInFlight = inFlightThreshold.HasValue
+                && job.Status == WebhookJobStatus.InFlight
+                && job.LockExpiresAt.HasValue
+                && job.LockExpiresAt.Value < inFlightThreshold.Value;
+
+            // 2. Stranded Queued job (Only checked if queuedThreshold is provided)
+            bool isStrandedQueued = queuedThreshold.HasValue
+                && job.Status == WebhookJobStatus.Queued
+                && job.CreatedAt < queuedThreshold.Value
+                && (!job.LockExpiresAt.HasValue || (inFlightThreshold.HasValue && job.LockExpiresAt.Value < inFlightThreshold.Value));
+
+            if(isExpiredInFlight || isStrandedQueued) {
                 stale.Add(job);
                 if(stale.Count >= maxCount) {
                     break;

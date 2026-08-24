@@ -42,6 +42,15 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="proxyUrl"/> is <see langword="null"/>, empty, or whitespace.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
+    /// (DNS resolution + <see cref="WebhookIpFilter"/> validation against the resolved IP before opening the socket).
+    /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
+    /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
+    /// private, loopback, and cloud-metadata ranges before relying on it in production.
+    /// </para>
+    /// </remarks>
     public static IWebhookBuilder UseProxy(this IWebhookBuilder builder, string proxyUrl) {
         Preca.ThrowIfNullOrWhiteSpace(proxyUrl);
         return builder.ConfigureSecurity(options => options.Proxy = new WebProxy(proxyUrl));
@@ -55,6 +64,15 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <param name="credentials">The network credentials required by the proxy server.</param>
     /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/>, <paramref name="proxyUrl"/>, or <paramref name="credentials"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
+    /// (DNS resolution + <see cref="WebhookIpFilter"/> validation against the resolved IP before opening the socket).
+    /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
+    /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
+    /// private, loopback, and cloud-metadata ranges before relying on it in production.
+    /// </para>
+    /// </remarks>
     public static IWebhookBuilder UseProxy(this IWebhookBuilder builder, string proxyUrl, ICredentials credentials) {
         Preca.ThrowIfNullOrWhiteSpace(proxyUrl);
         Preca.ThrowIfNull(credentials);
@@ -68,6 +86,15 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <param name="proxy">The web proxy instance.</param>
     /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="proxy"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
+    /// (DNS resolution + <see cref="WebhookIpFilter"/> validation against the resolved IP before opening the socket).
+    /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
+    /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
+    /// private, loopback, and cloud-metadata ranges before relying on it in production.
+    /// </para>
+    /// </remarks>
     public static IWebhookBuilder UseProxy(this IWebhookBuilder builder, IWebProxy proxy) {
         Preca.ThrowIfNull(proxy);
         return builder.ConfigureSecurity(options => options.Proxy = proxy);

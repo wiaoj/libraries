@@ -40,7 +40,10 @@ public sealed class NullWebhookStore : IWebhookStore {
     }
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<WebhookJobRecord>> GetStaleInFlightJobsAsync(DateTimeOffset threshold, int maxCount, CancellationToken cancellationToken = default) {
+    public Task<IReadOnlyList<WebhookJobRecord>> GetStaleJobsAsync(DateTimeOffset? inFlightThreshold,
+                                                                   DateTimeOffset? queuedThreshold,
+                                                                   int maxCount,
+                                                                   CancellationToken cancellationToken = default) {
         return Task.FromResult<IReadOnlyList<WebhookJobRecord>>([]);
     }
 

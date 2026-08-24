@@ -9,7 +9,7 @@ public static partial class WebhookReceiverLoggerExtensions {
     /// <summary>Logs that an incoming webhook request was received.</summary>
     [LoggerMessage(
         EventId = 7001,
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Received inbound webhook request for event '{EventName}' on path '{Path}'.")]
     public static partial void LogInboundWebhookReceived(this ILogger logger, string eventName, string path);
 
@@ -23,14 +23,14 @@ public static partial class WebhookReceiverLoggerExtensions {
     /// <summary>Logs that an incoming webhook was detected as duplicate and safely suppressed.</summary>
     [LoggerMessage(
         EventId = 7003,
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Duplicate inbound webhook intercepted with key '{IdempotencyKey}'. Skipping execution and returning 200 OK.")]
     public static partial void LogInboundDuplicateSkipped(this ILogger logger, string idempotencyKey);
 
     /// <summary>Logs that an incoming webhook was successfully processed.</summary>
     [LoggerMessage(
         EventId = 7004,
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Inbound webhook event '{EventName}' successfully processed in {DurationMs:F2}ms.")]
     public static partial void LogInboundWebhookProcessed(this ILogger logger, string eventName, double durationMs);
 }

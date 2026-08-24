@@ -22,6 +22,11 @@ public sealed class WebhookSecurityOptions {
     public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(15);
 
     /// <summary>
+    /// The default pooled connection lifetime (15 minutes).
+    /// </summary>
+    public static readonly TimeSpan DefaultPooledConnectionLifetime = TimeSpan.FromMinutes(15);
+
+    /// <summary>
     /// Gets or sets a value indicating whether deliveries to local, private, loopback, or link-local networks are permitted.
     /// Default is <see langword="false"/> (strict SSRF protection enabled).
     /// </summary>
@@ -47,4 +52,41 @@ public sealed class WebhookSecurityOptions {
     /// Gets or sets the total outbound request timeout. Default is 15 seconds.
     /// </summary>
     public TimeSpan RequestTimeout { get; set; } = DefaultRequestTimeout;
+
+    /// <summary>
+    /// Gets or sets how long a pooled outbound connection (and the DNS resolution + SSRF check performed when it
+    /// was opened) may be reused before it is torn down and re-established on the next request. Default is 15 minutes.
+    /// </summary>
+    /// <remarks>
+    /// Lowering this value increases how often <see cref="WebhookIpFilter"/> re-validates the destination
+    /// (tighter defense against DNS rebinding, at the cost of more frequent DNS lookups and TCP handshakes).
+    /// Raising it reduces per-delivery connection overhead but widens the window during which a destination's
+    /// DNS record could change without being re-checked.
+    /// </remarks>
+    public TimeSpan PooledConnectionLifetime { get; set; } = DefaultPooledConnectionLifetime;
+
+    /// <summary>
+    /// Validates the configuration values, throwing an exception if any value is out of acceptable bounds.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a value is negative, zero where a positive
+    /// duration is required, or otherwise outside the range <see cref="SocketsHttpHandler"/> and the underlying
+    /// socket layer can safely accept.</exception>
+    public void Validate() {
+        if(this.ConnectTimeout <= TimeSpan.Zero) {
+            throw new ArgumentOutOfRangeException(nameof(this.ConnectTimeout), this.ConnectTimeout, "Connect timeout must be greater than zero.");
+        }
+        if(this.RequestTimeout <= TimeSpan.Zero) {
+            throw new ArgumentOutOfRangeException(nameof(this.RequestTimeout), this.RequestTimeout, "Request timeout must be greater than zero.");
+        }
+        if(this.RequestTimeout < this.ConnectTimeout) {
+            throw new ArgumentOutOfRangeException(nameof(this.RequestTimeout), this.RequestTimeout, "Request timeout cannot be less than the connect timeout.");
+        }
+        if(this.PooledConnectionLifetime <= TimeSpan.Zero && this.PooledConnectionLifetime != Timeout.InfiniteTimeSpan) {
+            throw new ArgumentOutOfRangeException(nameof(this.PooledConnectionLifetime), this.PooledConnectionLifetime,
+                "Pooled connection lifetime must be greater than zero, or Timeout.InfiniteTimeSpan to disable connection recycling.");
+        }
+        if(this.MaxResponseBodyBytes <= 0) {
+            throw new ArgumentOutOfRangeException(nameof(this.MaxResponseBodyBytes), this.MaxResponseBodyBytes, "Max response body bytes must be greater than zero.");
+        }
+    }
 }

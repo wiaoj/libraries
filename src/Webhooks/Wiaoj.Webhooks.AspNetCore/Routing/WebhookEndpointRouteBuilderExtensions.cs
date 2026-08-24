@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using System.Reflection;
 using Wiaoj.Webhooks;
-using Wiaoj.Webhooks.AspNetCore;
 using Wiaoj.Webhooks.AspNetCore.Filters;
 using Wiaoj.Webhooks.AspNetCore.Metadata;
 
@@ -10,44 +11,54 @@ namespace Microsoft.AspNetCore.Builder;
 #pragma warning restore IDE0130
 
 /// <summary>
-/// Extension methods for registering clean, Minimal API-compatible inbound webhook endpoints.
+/// Extension methods for registering Minimal API inbound webhook endpoints and multi-event hubs.
 /// </summary>
 public static class WebhookEndpointRouteBuilderExtensions {
     /// <summary>
-    /// Maps an inbound webhook endpoint with an inline delegate supporting full Dependency Injection parameter binding.
+    /// Maps a multi-event webhook hub endpoint on the specified path.
     /// </summary>
-    public static RouteHandlerBuilder MapWebhook<TEvent>(
+    /// <param name="endpoints">The endpoint route builder.</param>
+    /// <param name="pattern">The route URL pattern (e.g. <c>"/api/webhooks/github"</c>).</param>
+    /// <returns>A <see cref="RouteHandlerBuilder"/> for chaining event bindings and policy options.</returns>
+    public static RouteHandlerBuilder MapWebhook(
         this IEndpointRouteBuilder endpoints,
-        string pattern,
-        Delegate handler) where TEvent : class, IWebhookEvent {
+        string pattern) {
         Preca.ThrowIfNull(endpoints);
         Preca.ThrowIfNullOrWhiteSpace(pattern);
-        Preca.ThrowIfNull(handler);
 
-        WebhookReceiverEndpointMetadata metadata = new();
+        WebhookHubMetadata metadata = new();
 
         return endpoints.MapPost(pattern, static () => Results.Ok())
             .WithMetadata(metadata)
-            .AddEndpointFilter(new WebhookReceiverEndpointFilter<TEvent>(metadata, handler))
-            .WithName($"WebhookReceiver_{typeof(TEvent).Name}")
+            .AddEndpointFilter(new WebhookHubEndpointFilter(metadata))
+            .WithName($"WebhookHub_{pattern.Replace('/', '_').Trim('_')}")
             .WithTags("Webhooks");
     }
 
     /// <summary>
-    /// Maps an inbound webhook endpoint routing execution to a DI-registered <see cref="IWebhookReceiverHandler{TEvent}"/>.
+    /// Maps a dedicated 1-to-1 inbound webhook endpoint with an inline delegate.
     /// </summary>
+    /// <typeparam name="TEvent">The target payload model type.</typeparam>
+    /// <param name="endpoints">The endpoint route builder.</param>
+    /// <param name="pattern">The route URL pattern.</param>
+    /// <param name="handler">The Minimal API delegate.</param>
+    /// <returns>A <see cref="RouteHandlerBuilder"/> for chaining options.</returns>
     public static RouteHandlerBuilder MapWebhook<TEvent>(
         this IEndpointRouteBuilder endpoints,
-        string pattern) where TEvent : class, IWebhookEvent {
+        string pattern,
+        Delegate handler) where TEvent : class {
         Preca.ThrowIfNull(endpoints);
         Preca.ThrowIfNullOrWhiteSpace(pattern);
+        Preca.ThrowIfNull(handler);
 
-        WebhookReceiverEndpointMetadata metadata = new();
+        string eventName = ResolveEventName(typeof(TEvent));
 
-        return endpoints.MapPost(pattern, static () => Results.Ok())
-            .WithMetadata(metadata)
-            .AddEndpointFilter(new WebhookReceiverEndpointFilter<TEvent>(metadata, delegateHandler: null))
-            .WithName($"WebhookReceiver_{typeof(TEvent).Name}")
-            .WithTags("Webhooks");
+        return endpoints.MapWebhook(pattern)
+            .On<TEvent>(eventName, handler);
+    }
+
+    private static string ResolveEventName(Type eventType) {
+        WebhookEventAttribute? attr = eventType.GetCustomAttribute<WebhookEventAttribute>();
+        return attr?.Name ?? eventType.Name;
     }
 }

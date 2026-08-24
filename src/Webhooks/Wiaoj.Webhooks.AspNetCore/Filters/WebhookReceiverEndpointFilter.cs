@@ -4,8 +4,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Buffers;
 using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
 using Wiaoj.Primitives.Buffers;
 using Wiaoj.Serialization;
+using Wiaoj.Webhooks.AspNetCore.Context;
 using Wiaoj.Webhooks.AspNetCore.Diagnostics;
 using Wiaoj.Webhooks.AspNetCore.Metadata;
 
@@ -110,26 +113,28 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             parsedSignature = sig;
         }
 
-        // 5. Inbound Idempotency Check (Deduplication)
+        // 5. Inbound Idempotency Check (Atomic reservation to prevent TOCTOU race conditions)
         IdempotencyKey? idempotencyKey = null;
         if(policy.EnforceIdempotency && idempotencyStore is not null) {
             idempotencyKey = policy.IdempotencyKeyExtractor(httpContext, rawPayload);
             if(idempotencyKey.HasValue) {
-                bool alreadyProcessed = await idempotencyStore.ContainsAsync(idempotencyKey.Value, httpContext.RequestAborted).ConfigureAwait(false);
-                if(alreadyProcessed) {
+                bool isClaimed = await idempotencyStore.TryMarkProcessedAsync(idempotencyKey.Value, policy.IdempotencyWindow, httpContext.RequestAborted).ConfigureAwait(false);
+                if(!isClaimed) {
                     logger.LogInboundDuplicateSkipped(idempotencyKey.Value.Value);
                     return WebhookReceiverResponses.Ok;
                 }
             }
         }
 
-        // 6. Payload Deserialization directly from ReadOnlySequence
+        // 6. Payload Deserialization
         ReadOnlySequence<byte> payloadSequence = new(rawPayload);
-        TEvent? payload = serializer.Deserialize<TEvent>(payloadSequence);
-        if(payload is null) {
+        if(!serializer.TryDeserialize(in payloadSequence, out TEvent? payload) || payload is null) {
+            if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
+                await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
+            }
             return WebhookReceiverResponses.DeserializationFailed(eventName, httpContext.Request.Path);
         }
-
+         
         WebhookReceiverContext<TEvent> receiverContext = new() {
             HttpContext = httpContext,
             Payload = payload,
@@ -140,20 +145,27 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             Headers = httpContext.Request.Headers
         };
 
-        // 7. Handler Execution with full Task and ValueTask support
-        if(this._delegateHandler is not null) {
-            object? result = await InvokeDelegateHandlerAsync(this._delegateHandler, receiverContext, sp, httpContext.RequestAborted).ConfigureAwait(false);
-            if(result is IResult httpResult) {
-                return httpResult;
+        // 7. Handler Execution
+        try {
+            if(this._delegateHandler is not null) {
+                object? result = await InvokeDelegateHandlerAsync(this._delegateHandler, receiverContext, sp, httpContext.RequestAborted).ConfigureAwait(false);
+                if(result is IResult httpResult) {
+                    return httpResult;
+                }
+            }
+            else {
+                IWebhookReceiverHandler<TEvent>? handler = sp.GetService<IWebhookReceiverHandler<TEvent>>()
+                    ?? throw new InvalidOperationException(
+                        $"No handler registered for webhook event '{typeof(TEvent).FullName}'. Register '{nameof(IWebhookReceiverHandler<>)}' in DI or supply a delegate.");
+                await handler.HandleAsync(receiverContext, httpContext.RequestAborted).ConfigureAwait(false);
             }
         }
-        else {
-            IWebhookReceiverHandler<TEvent>? handler = sp.GetService<IWebhookReceiverHandler<TEvent>>();
-            if(handler is null) {
-                throw new InvalidOperationException(
-                    $"No handler registered for webhook event '{typeof(TEvent).FullName}'. Register '{nameof(IWebhookReceiverHandler<TEvent>)}' in DI or supply a delegate.");
+        catch {
+            // Rollback idempotency claim on handler failure so upstream retries can be processed
+            if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
+                await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
             }
-            await handler.HandleAsync(receiverContext, httpContext.RequestAborted).ConfigureAwait(false);
+            throw;
         }
 
         // 8. Commit Idempotency Key on Success
@@ -199,7 +211,7 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
         IServiceProvider serviceProvider,
         CancellationToken cancellationToken) {
 
-        System.Reflection.ParameterInfo[] parameters = handler.Method.GetParameters();
+        ParameterInfo[] parameters = handler.Method.GetParameters();
         object?[] arguments = new object?[parameters.Length];
 
         for(int i = 0; i < parameters.Length; i++) {
@@ -223,7 +235,14 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             }
         }
 
-        object? result = handler.DynamicInvoke(arguments);
+        object? result;
+        try {
+            result = handler.DynamicInvoke(arguments);
+        }
+        catch(TargetInvocationException ex) when(ex.InnerException is not null) {
+            ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw;
+        }
 
         switch(result) {
             case Task<IResult> taskResult:

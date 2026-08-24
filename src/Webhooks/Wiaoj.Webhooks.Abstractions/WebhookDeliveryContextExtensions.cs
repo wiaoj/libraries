@@ -538,6 +538,44 @@ public static class WebhookDeliveryContextExtensions {
     }
 
     // ────────────────────────────────────────────────────────────────────────
+    // REPLAY CONTEXT ACCESSORS
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Marks the delivery context as a manual replay attempt.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void MarkReplay(this WebhookDeliveryContext context) {
+        MarkReplay(context, true);
+    }
+
+    /// <summary>
+    /// Sets the manual replay flag on the delivery context.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="isReplay"><see langword="true"/> if the attempt is a manual replay; otherwise, <see langword="false"/>.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void MarkReplay(this WebhookDeliveryContext context, bool isReplay) {
+        Preca.ThrowIfNull(context);
+        context.Items[WebhookDeliveryContextItemKeys.IsReplay] = isReplay;
+    }
+
+    /// <summary>
+    /// Determines whether the current delivery attempt is a manual replay.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <returns><see langword="true"/> if the attempt is a manual replay; otherwise, <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsReplay(this WebhookDeliveryContext context) {
+        Preca.ThrowIfNull(context);
+        return context.GetItem<bool>(WebhookDeliveryContextItemKeys.IsReplay);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // 10. GENERIC SAFE ITEMS ACCESSORS & FACTORY
     // ────────────────────────────────────────────────────────────────────────
 

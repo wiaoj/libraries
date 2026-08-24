@@ -22,6 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\DistributedCounter\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
+    <ProjectReference Include="..\..\src\RateLimiting\Wiaoj.RateLimiting.AspNetCore\Wiaoj.RateLimiting.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\RateLimiting\Wiaoj.RateLimiting.Testing\Wiaoj.RateLimiting.Testing.csproj" />
     <ProjectReference Include="..\..\src\RateLimiting\Wiaoj.RateLimiting\Wiaoj.RateLimiting.csproj" />
   </ItemGroup>

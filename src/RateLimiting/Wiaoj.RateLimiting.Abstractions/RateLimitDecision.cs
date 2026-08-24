@@ -44,8 +44,8 @@ public readonly record struct RateLimitDecision {
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="retryAfter"/> is negative.</exception>
     public static RateLimitDecision Denied(TimeSpan retryAfter, long? remaining = null) {
         Preca.ThrowIfNegative(
-            retryAfter, 
-            static (param) => new ArgumentOutOfRangeException(nameof(retryAfter), "Retry-after duration must be non-negative."), 
+            retryAfter,
+            static (param) => new ArgumentOutOfRangeException(nameof(retryAfter), "Retry-after duration must be non-negative."),
             nameof(retryAfter));
         return new RateLimitDecision(false, retryAfter, remaining);
     }

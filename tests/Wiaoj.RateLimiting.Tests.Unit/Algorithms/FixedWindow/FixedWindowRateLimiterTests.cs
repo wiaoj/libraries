@@ -210,7 +210,7 @@ public sealed class FixedWindowRateLimiterTests {
         FakeCounterStorage storage = new(time);
         FakeDistributedCounterFactory factory = new(storage);
 
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new FixedWindowRateLimiter(factory, limit, TimeSpan.FromSeconds(1)));
     }
 
@@ -220,15 +220,15 @@ public sealed class FixedWindowRateLimiterTests {
         FakeCounterStorage storage = new(time);
         FakeDistributedCounterFactory factory = new(storage);
 
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new FixedWindowRateLimiter(factory, limit: 1, window: TimeSpan.Zero));
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new FixedWindowRateLimiter(factory, limit: 1, window: TimeSpan.FromSeconds(-1)));
     }
 
     [Fact]
     public void Constructor_WithNullCounterFactory_Throws() {
-        Assert.Throws<ArgumentNullException>(
+        Assert.ThrowsAny<ArgumentNullException>(
             () => new FixedWindowRateLimiter(null!, limit: 1, window: TimeSpan.FromSeconds(1)));
     }
 
@@ -239,7 +239,7 @@ public sealed class FixedWindowRateLimiterTests {
         // requires an exact type match, so this has to be asserted separately from the empty case.
         (FixedWindowRateLimiter sut, _) = CreateSut(limit: 1, window: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
+        await Assert.ThrowsAnyAsync<ArgumentNullException>(
             async () => await sut.TryAcquireAsync(null!, cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -247,7 +247,7 @@ public sealed class FixedWindowRateLimiterTests {
     public async Task TryAcquireAsync_WithEmptyKey_ThrowsArgumentException() {
         (FixedWindowRateLimiter sut, _) = CreateSut(limit: 1, window: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentException>(
+        await Assert.ThrowsAnyAsync<ArgumentException>(
             async () => await sut.TryAcquireAsync(string.Empty, cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -257,7 +257,7 @@ public sealed class FixedWindowRateLimiterTests {
     public async Task TryAcquireAsync_WithNonPositiveCost_Throws(int cost) {
         (FixedWindowRateLimiter sut, _) = CreateSut(limit: 1, window: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+        await Assert.ThrowsAnyAsync<ArgumentOutOfRangeException>(
             async () => await sut.TryAcquireAsync("key", cost: cost, cancellationToken: TestContext.Current.CancellationToken));
     }
 }

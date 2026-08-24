@@ -1,17 +1,20 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Wiaoj.Serialization;
 using Wiaoj.Webhooks.Diagnostics;
 
 namespace Wiaoj.Webhooks.Internal;
 
 /// <summary>
-/// Resilient background service that periodically sweeps and recovers abandoned in-flight webhook jobs
+/// Resilient background service that periodically sweeps and recovers abandoned in-flight and stranded queued webhook jobs
 /// caused by sudden process termination, OOM kills, or unhandled worker crashes.
 /// </summary>
 internal sealed class StaleJobRecoveryService : BackgroundService {
     private readonly IWebhookStore _store;
     private readonly IWebhookTransport _transport;
+    private readonly IWebhookEventRegistry _eventRegistry;
+    private readonly ISerializer<WebhookSerializerKey> _serializer;
     private readonly TimeProvider _timeProvider;
     private readonly WebhookRecoveryOptions _options;
     private readonly string _instanceId;
@@ -23,23 +26,32 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
     public StaleJobRecoveryService(
         IWebhookStore store,
         IWebhookTransport transport,
+        IWebhookEventRegistry eventRegistry,
+        ISerializer<WebhookSerializerKey> serializer,
         TimeProvider timeProvider,
-        IOptions<WebhookRecoveryOptions> options,
+        IOptions<WebhookOptions> webhookOptions,
+        IOptions<WebhookRecoveryOptions> recoveryOptions,
         ILogger<StaleJobRecoveryService> logger) {
+
         Preca.ThrowIfNull(store);
         Preca.ThrowIfNull(transport);
+        Preca.ThrowIfNull(eventRegistry);
+        Preca.ThrowIfNull(serializer);
         Preca.ThrowIfNull(timeProvider);
-        Preca.ThrowIfNull(options);
+        Preca.ThrowIfNull(webhookOptions);
+        Preca.ThrowIfNull(recoveryOptions);
         Preca.ThrowIfNull(logger);
 
-        options.Value.Validate();
+        recoveryOptions.Value.Validate();
 
         this._store = store;
         this._transport = transport;
+        this._eventRegistry = eventRegistry;
+        this._serializer = serializer;
         this._timeProvider = timeProvider;
-        this._options = options.Value;
+        this._options = recoveryOptions.Value;
+        this._instanceId = webhookOptions.Value.InstanceId;
         this._logger = logger;
-        this._instanceId = $"recovery-worker-{Guid.NewGuid():N}";
     }
 
     /// <inheritdoc/>
@@ -61,16 +73,19 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
     }
 
     /// <summary>
-    /// Executes a single recovery sweep batch.
+    /// Executes a single recovery sweep batch for both expired in-flight and stranded queued jobs.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The total number of stale jobs successfully recovered.</returns>
     public async Task<int> SweepAndRecoverAsync(CancellationToken cancellationToken = default) {
         DateTimeOffset now = this._timeProvider.GetUtcNow();
+        DateTimeOffset queuedThreshold = now.Subtract(this._options.QueuedJobStaleThreshold);
+
         this._logger.LogRecoverySweepStarting(now);
 
-        IReadOnlyList<WebhookJobRecord> staleJobs = await this._store.GetStaleInFlightJobsAsync(
+        IReadOnlyList<WebhookJobRecord> staleJobs = await this._store.GetStaleJobsAsync(
             now,
+            queuedThreshold,
             this._options.BatchSize,
             cancellationToken).ConfigureAwait(false);
 
@@ -85,7 +100,6 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
                 break;
             }
 
-            // Distributed race protection: Only the worker that successfully claims the lease recovers the job
             bool leaseClaimed = await this._store.TryClaimLeaseAsync(
                 job.Id,
                 this._instanceId,
@@ -97,18 +111,27 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
             }
 
             try {
-                // Reconstruct delivery payload from persistent raw JSON
-                IWebhookEvent payload = new RawJsonWebhookEvent(job.EventType, job.SerializedPayload);
-                WebhookDeliveryJob deliveryJob = new(job.Id,
-                                                     job.EndpointId,
-                                                     job.PartitionKey,
-                                                     job.EventType,
-                                                     payload);
+                if(!this._eventRegistry.TryGetEventType(job.EventType, out Type? eventType) || eventType is null) {
+                    this._logger.LogEndpointResolutionFailed(null, job.Id, job.EndpointId);
+                    await this._store.UpdateStatusAsync(job.Id, WebhookJobStatus.DeadLettered, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
 
-                // Transition status back to Queued
+                object? deserialized = this._serializer.DeserializeFromString(job.SerializedPayload, eventType);
+                if(deserialized is not IWebhookEvent domainEvent) {
+                    this._logger.LogEndpointResolutionFailed(null, job.Id, job.EndpointId);
+                    await this._store.UpdateStatusAsync(job.Id, WebhookJobStatus.DeadLettered, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                WebhookDeliveryJob deliveryJob = new(
+                    job.Id,
+                    job.EndpointId,
+                    WebhookPartitionKey.Parse(job.PartitionKey),
+                    job.EventType,
+                    domainEvent);
+
                 await this._store.UpdateStatusAsync(job.Id, WebhookJobStatus.Queued, cancellationToken).ConfigureAwait(false);
-
-                // Re-enqueue into the execution transport channel
                 await this._transport.EnqueueAsync(deliveryJob, cancellationToken).ConfigureAwait(false);
 
                 recoveredCount++;

@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Webhooks.Exceptions;
+﻿#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Webhooks;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
 /// Exception thrown when an outbound webhook delivery request is blocked by SSRF (Server-Side Request Forgery) protection

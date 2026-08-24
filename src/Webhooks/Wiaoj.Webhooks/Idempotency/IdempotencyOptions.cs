@@ -15,6 +15,12 @@ public sealed class IdempotencyOptions {
     public TimeSpan Window { get; set; } = DefaultWindow;
 
     /// <summary>
+    /// Gets or sets a value indicating whether manual replay deliveries bypass the idempotency store check.
+    /// Default is <see langword="true"/>.
+    /// </summary>
+    public bool BypassOnReplay { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets an optional custom key selector delegate overriding the registered <see cref="IIdempotencyKeyGenerator"/>.
     /// </summary>
     public Func<WebhookDeliveryContext, IdempotencyKey>? CustomKeySelector { get; set; }

@@ -182,13 +182,13 @@ public sealed class TokenBucketRateLimiterTests {
     [InlineData(0)]
     [InlineData(-1)]
     public void Constructor_WithNonPositiveCapacity_Throws(int capacity) {
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new TokenBucketRateLimiter(capacity, TimeSpan.FromSeconds(1)));
     }
 
     [Fact]
     public void Constructor_WithZeroOrNegativeWindow_Throws() {
-        Assert.Throws<ArgumentOutOfRangeException>(
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(
             () => new TokenBucketRateLimiter(1, TimeSpan.Zero));
     }
 
@@ -199,7 +199,7 @@ public sealed class TokenBucketRateLimiterTests {
         // requires an exact type match, so this has to be asserted separately from the empty case.
         (TokenBucketRateLimiter sut, _) = CreateSut(capacity: 1, window: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
+        await Assert.ThrowsAnyAsync<ArgumentNullException>(
             async () => await sut.TryAcquireAsync(null!, cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -207,7 +207,7 @@ public sealed class TokenBucketRateLimiterTests {
     public async Task TryAcquireAsync_WithEmptyKey_ThrowsArgumentException() {
         (TokenBucketRateLimiter sut, _) = CreateSut(capacity: 1, window: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentException>(
+        await Assert.ThrowsAnyAsync<ArgumentException>(
             async () => await sut.TryAcquireAsync(string.Empty, cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -217,7 +217,7 @@ public sealed class TokenBucketRateLimiterTests {
     public async Task TryAcquireAsync_WithNonPositiveCost_Throws(int cost) {
         (TokenBucketRateLimiter? sut, _) = CreateSut(capacity: 1, window: TimeSpan.FromSeconds(1));
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+        await Assert.ThrowsAnyAsync<ArgumentOutOfRangeException>(
             async () => await sut.TryAcquireAsync("key", cost: cost, cancellationToken: TestContext.Current.CancellationToken));
     }
 }

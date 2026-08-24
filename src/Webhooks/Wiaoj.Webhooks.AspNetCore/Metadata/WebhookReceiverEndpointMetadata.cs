@@ -36,4 +36,10 @@ public sealed class WebhookReceiverEndpointMetadata {
 
     /// <summary>Gets or sets an override for the idempotency key extraction delegate.</summary>
     public Func<HttpContext, ReadOnlyMemory<byte>, IdempotencyKey?>? IdempotencyKeyExtractor { get; set; }
+    
+    /// <summary>Gets or sets an override for the event discriminator extractor.</summary>
+    public IWebhookEventDiscriminatorExtractor? EventExtractor { get; set; }
+
+    /// <summary>Gets or sets an override indicating whether unhandled incoming events should be gracefully acknowledged with 200 OK.</summary>
+    public bool? IgnoreUnhandledEvents { get; set; }
 }
