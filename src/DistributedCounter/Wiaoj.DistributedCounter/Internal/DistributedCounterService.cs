@@ -3,86 +3,123 @@ using System.Buffers;
 using Wiaoj.ObjectPool;
 
 namespace Wiaoj.DistributedCounter.Internal;
-internal sealed class DistributedCounterService(
-    ICounterStorage storage,
-    ICounterKeyBuilder keyBuilder,
-    IDistributedCounterFactory factory,
-    IOptions<DistributedCounterOptions> options,
-    IObjectPool<Dictionary<string, CounterValue>> pool)
-    : IDistributedCounterService {
 
-    public async ValueTask<CounterValueCollection> GetValuesAsync(IEnumerable<string> counterNames, CancellationToken cancellationToken = default) {
-        // 1. Dictionary Kirala
-        PooledObject<Dictionary<string, CounterValue>> pooledDict = pool.Lease();
+internal sealed class DistributedCounterService : IDistributedCounterService {
+    private readonly ICounterStorage _defaultStorage;
+    private readonly ICounterKeyBuilder _keyBuilder;
+    private readonly IDistributedCounterFactory _factory;
+    private readonly DistributedCounterOptions _options;
+    private readonly IObjectPool<Dictionary<string, CounterValue>> _pool;
+    private readonly IServiceProvider? _serviceProvider;
+
+    public DistributedCounterService(
+        ICounterStorage defaultStorage,
+        ICounterKeyBuilder keyBuilder,
+        IDistributedCounterFactory factory,
+        IOptions<DistributedCounterOptions> options,
+        IObjectPool<Dictionary<string, CounterValue>> pool)
+        : this(defaultStorage, keyBuilder, factory, options, pool, null) {
+    }
+
+    public DistributedCounterService(
+        ICounterStorage defaultStorage,
+        ICounterKeyBuilder keyBuilder,
+        IDistributedCounterFactory factory,
+        IOptions<DistributedCounterOptions> options,
+        IObjectPool<Dictionary<string, CounterValue>> pool,
+        IServiceProvider? serviceProvider) {
+        this._defaultStorage = defaultStorage;
+        this._keyBuilder = keyBuilder;
+        this._factory = factory;
+        this._options = options.Value;
+        this._pool = pool;
+        this._serviceProvider = serviceProvider;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<CounterValueCollection> GetValuesAsync(
+        IEnumerable<string> counterNames,
+        CancellationToken cancellationToken) {
+
+        PooledObject<Dictionary<string, CounterValue>> pooledDict = this._pool.Lease();
         Dictionary<string, CounterValue> resultDict = pooledDict.Item;
 
-        int count = counterNames is ICollection<string> col ? col.Count : counterNames.Count();
-
-        // Boşsa hemen dön
-        if(count == 0) return new CounterValueCollection(resultDict, pooledDict);
-
-        // 2. ArrayPool'dan geçici dizileri kirala
-        CounterKey[] keysArray = ArrayPool<CounterKey>.Shared.Rent(count);
-        CounterValue[] valuesArray = ArrayPool<CounterValue>.Shared.Rent(count);
-        string[] namesArray = ArrayPool<string>.Shared.Rent(count);
+        int totalCount = counterNames is ICollection<string> col ? col.Count : counterNames.Count();
+        if(totalCount == 0) return new CounterValueCollection(resultDict, pooledDict);
 
         try {
-            // 3. İsimleri ve Keyleri Hazırla
-            int index = 0;
+            // Group names by their resolved storage
+            Dictionary<ICounterStorage, List<string>> storageGroups = new();
             foreach(string name in counterNames) {
-                keysArray[index] = keyBuilder.Build(name, options.Value);
-                namesArray[index] = name;
-                index++;
+                ICounterStorage storage = ResolveStorage(name);
+                if(!storageGroups.TryGetValue(storage, out List<string>? list)) {
+                    list = [];
+                    storageGroups[storage] = list;
+                }
+                list.Add(name);
             }
 
-            // 4. Memory Sarmalayıcıları (Sadece count kadarını gösterir)
-            ReadOnlyMemory<CounterKey> keysMem = new(keysArray, 0, count);
-            Memory<CounterValue> valuesMem = new(valuesArray, 0, count);
+            foreach(KeyValuePair<ICounterStorage, List<string>> group in storageGroups) {
+                ICounterStorage storage = group.Key;
+                List<string> names = group.Value;
+                int count = names.Count;
 
-            // 5. Storage'a Gönder (Doldurması için)
-            await storage.GetManyAsync(keysMem, valuesMem, cancellationToken);
+                CounterKey[] keysArray = ArrayPool<CounterKey>.Shared.Rent(count);
+                CounterValue[] valuesArray = ArrayPool<CounterValue>.Shared.Rent(count);
 
-            // 6. Sonuçları İsimlerle Eşleştir
-            Span<CounterValue> valuesSpan = valuesMem.Span; // Span ile hızlı erişim
-            for(int i = 0; i < count; i++) {
-                resultDict[namesArray[i]] = valuesSpan[i];
+                try {
+                    for(int i = 0; i < count; i++) {
+                        keysArray[i] = this._keyBuilder.Build(names[i], this._options);
+                    }
+
+                    ReadOnlyMemory<CounterKey> keysMem = new(keysArray, 0, count);
+                    Memory<CounterValue> valuesMem = new(valuesArray, 0, count);
+
+                    await storage.GetManyAsync(keysMem, valuesMem, cancellationToken).ConfigureAwait(false);
+
+                    Span<CounterValue> valuesSpan = valuesMem.Span;
+                    for(int i = 0; i < count; i++) {
+                        resultDict[names[i]] = valuesSpan[i];
+                    }
+                }
+                finally {
+                    ArrayPool<CounterKey>.Shared.Return(keysArray);
+                    ArrayPool<CounterValue>.Shared.Return(valuesArray);
+                }
             }
 
-            // 7. Paketle
             return new CounterValueCollection(resultDict, pooledDict);
         }
         catch {
-            // Hata olursa dictionary'yi havuza geri bırak (Leak olmasın)
             pooledDict.Dispose();
             throw;
         }
-        finally {
-            // 8. Kiralık dizileri iade et
-            ArrayPool<CounterKey>.Shared.Return(keysArray);
-            ArrayPool<CounterValue>.Shared.Return(valuesArray);
-            ArrayPool<string>.Shared.Return(namesArray, clearArray: true); // String referanslarını temizle!
-        }
     }
 
-    public async ValueTask FlushAllAsync(CancellationToken cancellationToken = default) {
-        // Get only buffered counters from factory
-        IEnumerable<BufferedDistributedCounter> bufferedCounters = ((IBufferedCounterSource)factory).GetBufferedCounters();
-
+    /// <inheritdoc />
+    public async ValueTask FlushAllAsync(CancellationToken cancellationToken) {
+        IEnumerable<BufferedDistributedCounter> bufferedCounters = ((IBufferedCounterSource)this._factory).GetBufferedCounters();
         IEnumerable<Task> tasks = bufferedCounters.Select(c => c.FlushAsync(cancellationToken).AsTask());
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 
-    public async ValueTask ResetAllAsync(CancellationToken cancellationToken = default) {
-        // 1. Get all instances tracked by factory
-        IBufferedCounterSource source = (IBufferedCounterSource)factory;
-
+    /// <inheritdoc />
+    public async ValueTask ResetAllAsync(CancellationToken cancellationToken) {
+        IBufferedCounterSource source = (IBufferedCounterSource)this._factory;
         IEnumerable<IDistributedCounter> allCounters = source.GetAllTrackedCounters();
 
-        // 2. Perform Reset on each (Clears local state + deletes from Storage)
         IEnumerable<Task> tasks = allCounters.Select(c => c.ResetAsync(cancellationToken).AsTask());
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(tasks).ConfigureAwait(false);
 
-        // 3. Clear factory internal cache so new instances can be created fresh
         source.ClearCache();
+    }
+
+    private ICounterStorage ResolveStorage(string name) {
+        if(this._options.Registrations.TryGetValue(name, out CounterConfiguration? config) &&
+           config?.StorageFactory is not null &&
+           this._serviceProvider is not null) {
+            return config.StorageFactory(this._serviceProvider);
+        }
+        return this._defaultStorage;
     }
 }

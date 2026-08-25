@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.Resilience;
 
@@ -23,14 +24,10 @@ public readonly record struct CircuitExecutionDecision {
     }
 
     /// <summary>Creates a decision permitting execution in closed state.</summary>
-    public static CircuitExecutionDecision Allowed() {
-        return new(true, CircuitState.Closed, null);
-    }
+    public static CircuitExecutionDecision Allowed() => new(true, CircuitState.Closed, null);
 
     /// <summary>Creates a decision permitting a trial probe execution in half-open state.</summary>
-    public static CircuitExecutionDecision HalfOpenProbe() {
-        return new(true, CircuitState.HalfOpen, null);
-    }
+    public static CircuitExecutionDecision HalfOpenProbe() => new(true, CircuitState.HalfOpen, null);
 
     /// <summary>Creates a decision rejecting execution because the circuit is open.</summary>
     /// <param name="retryAfter">The remaining duration until the break period expires.</param>

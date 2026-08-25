@@ -105,6 +105,81 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
             throw;
         }
     }
+     
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<WebhookDeliveryHandle>> DispatchBatchAsync<TEvent>(
+        WebhookEndpointId endpointId,
+        IEnumerable<TEvent> payloads,
+        Func<TEvent, WebhookPartitionKey>? partitionKeySelector,
+        CancellationToken cancellationToken = default)
+        where TEvent : IWebhookEvent {
+
+        Preca.ThrowIfNull(payloads);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        TEvent[] eventArray = payloads as TEvent[] ?? [.. payloads];
+        if(eventArray.Length == 0) {
+            return [];
+        }
+
+        string eventName = this._eventRegistry.GetEventName<TEvent>();
+        string batchId = $"batch_{Guid.CreateVersion7():N}";
+        DateTimeOffset now = this._timeProvider.GetUtcNow();
+
+        this._logger.LogBatchDispatchStarting(batchId, eventArray.Length, endpointId);
+        using Activity? activity = WebhookActivitySource.StartBatchDispatchActivity(endpointId, batchId, eventArray.Length);
+
+        WebhookJobRecord[] records = new WebhookJobRecord[eventArray.Length];
+        WebhookDeliveryJob[] deliveryJobs = new WebhookDeliveryJob[eventArray.Length];
+        WebhookDeliveryHandle[] handles = new WebhookDeliveryHandle[eventArray.Length];
+
+        try {
+            for(int i = 0; i < eventArray.Length; i++) {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                TEvent payload = eventArray[i];
+                Preca.ThrowIfNull(payload);
+
+                WebhookJobId jobId = WebhookJobId.NewJobId();
+                WebhookPartitionKey partitionKey = partitionKeySelector?.Invoke(payload) ?? WebhookPartitionKey.From(endpointId);
+                string serialized = this._serializer.SerializeToString(payload, payload.GetType());
+
+                records[i] = new WebhookJobRecord(jobId, endpointId, partitionKey.Value, eventName, serialized, now) {
+                    BatchId = batchId
+                };
+
+                deliveryJobs[i] = new WebhookDeliveryJob(jobId, endpointId, partitionKey, eventName, payload);
+                handles[i] = new WebhookDeliveryHandle(jobId);
+            }
+
+            // 1. Single batch database persistence
+            await this._store.SaveBatchAsync(records, cancellationToken).ConfigureAwait(false);
+
+            // 2. Single batch transport enqueue
+            await this._transport.EnqueueBatchAsync(deliveryJobs, cancellationToken).ConfigureAwait(false);
+
+            TagList batchTags = new() {
+                { "webhook.endpoint_id", endpointId.Value },
+                { "webhook.event_name", eventName }
+            };
+
+            WebhookMeter.DispatchedEventsCount.Add(eventArray.Length, batchTags);
+            WebhookMeter.BatchDispatchCount.Add(1, batchTags);
+            WebhookMeter.BatchSizeHistogram.Record(eventArray.Length, batchTags);
+
+            this._logger.LogBatchDispatchCompleted(batchId, eventArray.Length, endpointId);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+
+            return handles;
+        }
+        catch(Exception ex) {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.AddException(ex);
+            this._logger.LogBatchDispatchFailed(ex, batchId, eventArray.Length, endpointId);
+            throw;
+        }
+    }
 
     /// <inheritdoc/>
     public async Task<WebhookDeliveryHandle> ReplayAsync(WebhookJobId jobId, CancellationToken cancellationToken = default) {

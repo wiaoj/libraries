@@ -1,7 +1,7 @@
 ﻿namespace Wiaoj.Resilience;
 
 /// <summary>
-/// Represents the operational state of an endpoint circuit breaker.
+/// Represents the operational state of a circuit breaker.
 /// </summary>
 public enum CircuitState {
     /// <summary>The circuit is operational; execution requests proceed normally.</summary>

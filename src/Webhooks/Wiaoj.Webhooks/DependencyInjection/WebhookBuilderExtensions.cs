@@ -145,6 +145,32 @@ public static partial class WebhookBuilderCoreExtensions {
         return builder.UseEndpointResolver(new DelegateWebhookEndpointResolver(resolveDelegate));
     }
 
+    /// <summary>
+    /// Configures the default in-memory endpoint resolver.
+    /// </summary>
+    /// <param name="builder">The webhook builder.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IWebhookBuilder UseInMemoryEndpoints(this IWebhookBuilder builder) {
+        Preca.ThrowIfNull(builder);
+        builder.Services.RemoveAll<IWebhookEndpointResolver>();
+        builder.Services.AddSingleton<IWebhookEndpointResolver, InMemoryWebhookEndpointStore>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures the in-memory endpoint resolver with pre-registered endpoints.
+    /// </summary>
+    /// <param name="builder">The webhook builder.</param>
+    /// <param name="endpoints">The collection of endpoints to preload.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IWebhookBuilder UseInMemoryEndpoints(this IWebhookBuilder builder, params WebhookEndpoint[] endpoints) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(endpoints);
+        builder.Services.RemoveAll<IWebhookEndpointResolver>();
+        builder.Services.AddSingleton<IWebhookEndpointResolver>(new InMemoryWebhookEndpointStore(endpoints));
+        return builder;
+    }
+
     // ── TERMINAL DELIVERER REGISTRATIONS ─────────────────────────────────────
 
     /// <summary>

@@ -1,21 +1,28 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-	  <RootNamespace>Wiaoj.DistributedCounter.Redis</RootNamespace>
-	  <AssemblyName>Wiaoj.DistributedCounter.Redis</AssemblyName>
-	  <PackageId>Wiaoj.DistributedCounter.Redis</PackageId>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Wiaoj.DistributedCounter.Redis</RootNamespace>
+		<AssemblyName>Wiaoj.DistributedCounter.Redis</AssemblyName>
+		<PackageId>Wiaoj.DistributedCounter.Redis</PackageId>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Wiaoj.DistributedCounter.Abstractions\Wiaoj.DistributedCounter.Abstractions.csproj" />
-    <ProjectReference Include="..\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="StackExchange.Redis" Version="2.10.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Wiaoj.DistributedCounter.Abstractions\Wiaoj.DistributedCounter.Abstractions.csproj" />
+		<ProjectReference Include="..\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
+	</ItemGroup>
 
 </Project>

@@ -63,4 +63,21 @@ internal static class WebhookActivitySource {
 
         return activity;
     }
+
+    /// <summary>
+    /// Starts a new activity representing a batch event dispatch, if a listener is registered.
+    /// </summary>
+    /// <param name="endpointId">The target endpoint identifier.</param>
+    /// <param name="batchId">The unique batch identifier.</param>
+    /// <param name="batchSize">The number of events in the batch.</param>
+    /// <returns>The started <see cref="Activity"/>, or <see langword="null"/> when nobody is listening.</returns>
+    public static Activity? StartBatchDispatchActivity(WebhookEndpointId endpointId, string batchId, int batchSize) {
+        Activity? activity = Instance.StartActivity("webhook.dispatch.batch", ActivityKind.Producer);
+
+        activity?.SetTag("webhook.endpoint_id", endpointId.Value);
+        activity?.SetTag("webhook.batch_id", batchId);
+        activity?.SetTag("webhook.batch_size", batchSize);
+
+        return activity;
+    }
 }

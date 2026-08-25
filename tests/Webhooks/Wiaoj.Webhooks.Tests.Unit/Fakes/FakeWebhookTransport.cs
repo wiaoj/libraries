@@ -1,3 +1,5 @@
+using Wiaoj.Preconditions;
+
 namespace Wiaoj.Webhooks.Tests.Unit.Fakes;
 
 internal sealed class FakeWebhookTransport : IWebhookTransport {
@@ -24,6 +26,16 @@ internal sealed class FakeWebhookTransport : IWebhookTransport {
     public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {
         lock(this._gate) {
             this._enqueuedJobs.Add((job, delay));
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task EnqueueBatchAsync(IReadOnlyList<WebhookDeliveryJob> jobs, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNull(jobs);
+        lock(this._gate) {
+            for(int i = 0; i < jobs.Count; i++) {
+                this._enqueuedJobs.Add((jobs[i], null));
+            }
         }
         return Task.CompletedTask;
     }

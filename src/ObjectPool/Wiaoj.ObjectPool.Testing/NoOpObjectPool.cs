@@ -1,20 +1,31 @@
-﻿namespace Wiaoj.ObjectPool.Testing;
+﻿using Wiaoj.Preconditions;
+
+namespace Wiaoj.ObjectPool.Testing;
+
 /// <summary>
-/// A "no-operation" implementation of ObjectPool for testing purposes.
-/// Its purpose is to satisfy the PooledObject constructor, which requires a non-null pool.
+/// A lightweight no-operation implementation of <see cref="IObjectPool{T}"/> for test scenarios
+/// that simply require a valid pool reference without lifecycle tracking.
 /// </summary>
-internal sealed class NoOpObjectPool<T> : IObjectPool<T> where T : class {
-    public T Get() {
-        throw new NotSupportedException($"Get() should not be called on the {nameof(NoOpObjectPool<T>)}.");
+public sealed class NoOpObjectPool<T> : IObjectPool<T> where T : class {
+    private readonly Func<T> _factory;
+
+    public NoOpObjectPool(Func<T> factory) {
+        Preca.ThrowIfNull(factory);
+        this._factory = factory;
     }
 
+    public NoOpObjectPool() : this(() => Activator.CreateInstance<T>()) { }
+
+    /// <inheritdoc/>
     public PooledObject<T> Lease() {
-        throw new NotImplementedException();
+        return new PooledObject<T>(this._factory(), this);
     }
 
+    /// <inheritdoc/>
+    public T Get() => this._factory();
+
+    /// <inheritdoc/>
     public void Return(T obj) {
-        // This method is called when PooledObject.Dispose() is invoked.
-        // In a test environment, we don't need to return the object to a real pool,
-        // so this method is intentionally left empty.
+        // No-op by design
     }
 }

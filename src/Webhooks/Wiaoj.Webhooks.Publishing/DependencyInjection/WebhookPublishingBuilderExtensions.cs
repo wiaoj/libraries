@@ -62,7 +62,7 @@ public static class WebhookPublishingBuilderExtensions {
     public static IWebhookPublishingBuilder UseWildcardMatcher(this IWebhookPublishingBuilder builder) {
         Preca.ThrowIfNull(builder);
         builder.Services.RemoveAll<IWebhookSubscriptionMatcher>();
-        builder.Services.AddSingleton<IWebhookSubscriptionMatcher, WildcardSubscriptionMatcher>();
+        builder.Services.AddSingleton<IWebhookSubscriptionMatcher, CompositeSubscriptionMatcher>();
         return builder;
     }
 
@@ -78,6 +78,28 @@ public static class WebhookPublishingBuilderExtensions {
         Preca.ThrowIfNull(builder);
         builder.Services.RemoveAll<IWebhookSubscriptionMatcher>();
         builder.Services.AddSingleton<IWebhookSubscriptionMatcher, TMatcher>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures a custom topic pattern matcher.
+    /// </summary>
+    public static IWebhookPublishingBuilder UseTopicMatcher<TMatcher>(this IWebhookPublishingBuilder builder)
+        where TMatcher : class, IWebhookTopicMatcher {
+        Preca.ThrowIfNull(builder);
+        builder.Services.RemoveAll<IWebhookTopicMatcher>();
+        builder.Services.AddSingleton<IWebhookTopicMatcher, TMatcher>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures a custom content filter evaluator.
+    /// </summary>
+    public static IWebhookPublishingBuilder UseContentEvaluator<TEvaluator>(this IWebhookPublishingBuilder builder)
+        where TEvaluator : class, IWebhookContentFilterEvaluator {
+        Preca.ThrowIfNull(builder);
+        builder.Services.RemoveAll<IWebhookContentFilterEvaluator>();
+        builder.Services.AddSingleton<IWebhookContentFilterEvaluator, TEvaluator>();
         return builder;
     }
 

@@ -24,7 +24,7 @@ public readonly struct PooledObject<T> : IDisposable, IAsyncDisposable where T :
     /// </summary>
     public T Item => this._lease is not null
         ? this._lease.Item
-        : throw new ObjectDisposedException(nameof(PooledObject<T>), "Object has already been returned to pool.");
+        : throw new ObjectDisposedException(nameof(PooledObject<>), "Object has already been returned to pool.");
 
     /// <summary>
     /// Returns the object to the pool safely and idempotently.

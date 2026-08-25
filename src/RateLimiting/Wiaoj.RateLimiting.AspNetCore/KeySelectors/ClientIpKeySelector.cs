@@ -5,20 +5,27 @@ using Wiaoj.Preconditions;
 namespace Wiaoj.RateLimiting.AspNetCore;
 
 /// <summary>
-/// Extracts a rate limiting key based on the client's IP address with zero heap allocations for formatting.
+/// Extracts a rate limiting key based on the client's IP address.
 /// </summary>
 public sealed class ClientIpKeySelector : IRateLimitKeySelector<HttpContext> {
     private readonly string _prefix;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ClientIpKeySelector"/> class.
+    /// Initializes a new instance of the <see cref="ClientIpKeySelector"/> class with the default <c>"ip:"</c> prefix.
     /// </summary>
-    /// <param name="prefix">An optional key prefix for scope isolation (e.g. <c>"ip:"</c>). Defaults to <c>"ip:"</c>.</param>
-    public ClientIpKeySelector(string prefix = "ip:") {
-        this._prefix = prefix ?? string.Empty;
+    public ClientIpKeySelector()
+        : this("ip:") { }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ClientIpKeySelector"/> class with a custom prefix.
+    /// </summary>
+    /// <param name="prefix">The key prefix for scope isolation.</param>
+    public ClientIpKeySelector(string prefix) {
+        Preca.ThrowIfNull(prefix);
+        this._prefix = prefix;
     }
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     public string GetKey(HttpContext context) {
         Preca.ThrowIfNull(context);
 
@@ -27,7 +34,6 @@ public sealed class ClientIpKeySelector : IRateLimitKeySelector<HttpContext> {
             return string.Concat(this._prefix, "unknown_ip");
         }
 
-        // IPv6 addresses can take up to 45 chars; 48 chars stack buffer guarantees zero heap allocation
         Span<char> ipBuffer = stackalloc char[48];
         if(ip.TryFormat(ipBuffer, out int charsWritten)) {
             ReadOnlySpan<char> formattedIp = ipBuffer[..charsWritten];

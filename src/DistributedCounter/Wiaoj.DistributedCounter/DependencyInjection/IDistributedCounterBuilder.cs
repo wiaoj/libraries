@@ -1,26 +1,15 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 
-namespace Wiaoj.DistributedCounter.DependencyInjection;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.DistributedCounter;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
-/// A fluent builder for configuring Wiaoj Distributed Counter services, storages, and background workers.
+/// A minimal builder contract for configuring distributed counter components, registrations, and storages.
 /// </summary>
 public interface IDistributedCounterBuilder {
     /// <summary>
     /// Gets the application service collection being configured.
     /// </summary>
     IServiceCollection Services { get; }
-
-    /// <summary>
-    /// Configures global options for the distributed counter engine.
-    /// </summary>
-    /// <param name="configure">The delegate used to configure <see cref="DistributedCounterOptions"/>.</param>
-    /// <returns>The builder instance for fluent chaining.</returns>
-    IDistributedCounterBuilder Configure(Action<DistributedCounterOptions> configure);
-
-    /// <summary>
-    /// Enables the background periodic auto-flush service for buffered counters.
-    /// </summary>
-    /// <returns>The builder instance for fluent chaining.</returns>
-    IDistributedCounterBuilder AddAutoFlush();
 }

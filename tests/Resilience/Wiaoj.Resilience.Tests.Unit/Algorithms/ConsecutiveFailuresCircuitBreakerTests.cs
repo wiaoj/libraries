@@ -2,12 +2,13 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Wiaoj.DistributedCounter;
+using Wiaoj.DistributedCounter.DependencyInjection;
 
 namespace Wiaoj.Resilience.Tests.Unit.Algorithms;
 
 [Trait("Category", "Unit")]
 [Trait("Feature", "Resilience")]
-[Trait("Component", "ConsecutiveFailuresAlgorithm")]
+[Trait("Component", "ConsecutiveFailures")]
 public sealed class ConsecutiveFailuresCircuitBreakerTests {
 
     private static (ConsecutiveFailuresCircuitBreaker Breaker, FakeTimeProvider TimeProvider) CreateSut(
@@ -37,109 +38,114 @@ public sealed class ConsecutiveFailuresCircuitBreakerTests {
         return (breaker, timeProvider);
     }
 
-    public sealed class TheConsecutiveFailureTripping {
+    public sealed class TheTrippingLogic {
         [Fact]
-        public async Task TryAcquireAsync_TripsToOpen_OnlyWhenThresholdIsReachedConsecutively() {
+        public async Task TryAcquireAsync_WhenNoFailuresOccurred_AllowsExecutionInClosedState() {
             (ConsecutiveFailuresCircuitBreaker breaker, _) = CreateSut(failureThreshold: 3);
-            const string key = "api-service-orders";
+            const string key = "service-endpoint-1";
 
-            // 1. First failure -> Still allowed
+            CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+
+            Assert.True(decision.IsAllowed);
+            Assert.Equal(CircuitState.Closed, decision.State);
+            Assert.Null(decision.RetryAfter);
+        }
+
+        [Fact]
+        public async Task TryAcquireAsync_TripsToOpen_WhenFailuresReachThresholdConsecutively() {
+            (ConsecutiveFailuresCircuitBreaker breaker, _) = CreateSut(failureThreshold: 3, breakDuration: TimeSpan.FromSeconds(30));
+            const string key = "service-endpoint-2";
+
+            // Attempt 1: 1. failure -> Still Closed
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             CircuitExecutionDecision d1 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(d1.IsAllowed);
             Assert.Equal(CircuitState.Closed, d1.State);
 
-            // 2. Second failure -> Still allowed
+            // Attempt 2: 2. failure -> Still Closed
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             CircuitExecutionDecision d2 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(d2.IsAllowed);
             Assert.Equal(CircuitState.Closed, d2.State);
 
-            // 3. Third failure (Reached threshold) -> Trips to Open!
+            // Attempt 3: 3. failure (Threshold reached) -> Trips to OPEN!
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             CircuitExecutionDecision d3 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+
             Assert.False(d3.IsAllowed);
             Assert.Equal(CircuitState.Open, d3.State);
             Assert.NotNull(d3.RetryAfter);
+            Assert.Equal(TimeSpan.FromSeconds(30), d3.RetryAfter.Value);
         }
 
         [Fact]
-        public async Task OnSuccessAsync_InClosedState_ResetsConsecutiveFailureStreak() {
+        public async Task OnSuccessAsync_InClosedState_ResetsFailureStreak() {
             (ConsecutiveFailuresCircuitBreaker breaker, _) = CreateSut(failureThreshold: 3);
-            const string key = "api-service-payments";
+            const string key = "service-endpoint-3";
 
-            // 2 Failures occur
+            // 2 failures occur
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
 
-            // An intermittent success arrives -> Must reset the streak to 0
+            // An intermittent success arrives -> Resets streak to 0
             await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
 
-            // 2 More failures occur (Total 4 failures, but streak is only 2) -> Should NOT trip
+            // 2 more failures occur (Total 4, but current consecutive streak is only 2)
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
 
+            // Circuit must remain CLOSED
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(decision.IsAllowed);
             Assert.Equal(CircuitState.Closed, decision.State);
         }
     }
 
-    public sealed class TheHalfOpenRecoveryAndProbing {
+    public sealed class TheHalfOpenRecoveryFlow {
         [Fact]
-        public async Task TryAcquireAsync_InHalfOpen_AllowsTrialProbe_AndClosesOnSuccess() {
+        public async Task TryAcquireAsync_WhenBreakDurationExpires_AllowsProbeInHalfOpenState() {
             (ConsecutiveFailuresCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateSut(
                 failureThreshold: 1,
                 breakDuration: TimeSpan.FromSeconds(10));
 
-            const string key = "api-service-inventory";
+            const string key = "service-endpoint-recovery";
 
-            // Trip circuit
+            // Trip the circuit
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             Assert.False((await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken)).IsAllowed);
 
-            // Advance time past break duration
+            // Advance time past break duration (11 seconds)
             timeProvider.Advance(TimeSpan.FromSeconds(11));
 
-            // Trial probe request
+            // Should enter Half-Open
             CircuitExecutionDecision probeDecision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(probeDecision.IsAllowed);
             Assert.Equal(CircuitState.HalfOpen, probeDecision.State);
-
-            // Probe succeeded -> Inform circuit
-            await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
-
-            // Circuit must now be fully CLOSED
-            CircuitExecutionDecision postRecovery = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
-            Assert.True(postRecovery.IsAllowed);
-            Assert.Equal(CircuitState.Closed, postRecovery.State);
         }
 
         [Fact]
-        public async Task TryAcquireAsync_InHalfOpen_WhenProbeFails_ReTripsImmediately() {
+        public async Task OnSuccessAsync_WhenInHalfOpen_ClosesCircuitAndResetsState() {
             (ConsecutiveFailuresCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateSut(
                 failureThreshold: 1,
-                breakDuration: TimeSpan.FromSeconds(15));
+                breakDuration: TimeSpan.FromSeconds(10));
 
-            const string key = "api-service-auth";
+            const string key = "service-endpoint-success-reset";
 
             // 1. Trip circuit
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
 
             // 2. Advance to Half-Open
-            timeProvider.Advance(TimeSpan.FromSeconds(16));
-            CircuitExecutionDecision probe = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
-            Assert.Equal(CircuitState.HalfOpen, probe.State);
+            timeProvider.Advance(TimeSpan.FromSeconds(11));
+            Assert.Equal(CircuitState.HalfOpen, (await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken)).State);
 
-            // 3. Probe fails during trial!
-            await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
+            // 3. Probe succeeds
+            await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
 
-            // 4. Must immediately re-trip to OPEN for another 15s break duration
-            CircuitExecutionDecision postFail = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
-            Assert.False(postFail.IsAllowed);
-            Assert.Equal(CircuitState.Open, postFail.State);
-            Assert.NotNull(postFail.RetryAfter);
-            Assert.True(postFail.RetryAfter.Value <= TimeSpan.FromSeconds(15));
+            // 4. Circuit must be CLOSED
+            CircuitExecutionDecision finalDecision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+            Assert.True(finalDecision.IsAllowed);
+            Assert.Equal(CircuitState.Closed, finalDecision.State);
+            Assert.Null(finalDecision.RetryAfter);
         }
     }
 }

@@ -16,6 +16,9 @@ public sealed class WebhookJobRecord : ICopyFrom<WebhookJobRecord> {
     /// <summary>Gets the unique identifier of the webhook job.</summary>
     public WebhookJobId Id { get; }
 
+    /// <summary>Gets the optional batch identifier if this job was created as part of a bulk dispatch operation.</summary>
+    public string? BatchId { get; init; }
+
     /// <summary>Gets the target endpoint identifier.</summary>
     public WebhookEndpointId EndpointId { get; }
 

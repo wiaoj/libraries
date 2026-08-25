@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using Wiaoj.Preconditions;
 
@@ -8,30 +9,47 @@ namespace Wiaoj.DistributedCounter.Internal;
 /// Default factory implementation for creating, resolving, and tracking <see cref="IDistributedCounter"/> instances.
 /// </summary>
 internal sealed class DistributedCounterFactory : IDistributedCounterFactory, IBufferedCounterSource {
-    private readonly ICounterStorage _storage;
+    private readonly ICounterStorage _defaultStorage;
     private readonly ICounterKeyBuilder _keyBuilder;
     private readonly DistributedCounterOptions _options;
+    private readonly IServiceProvider? _serviceProvider;
 
     private readonly ConcurrentBag<BufferedDistributedCounter> _bufferedCounters = [];
     private readonly ConcurrentDictionary<string, IDistributedCounter> _counters = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DistributedCounterFactory"/> class.
+    /// Initializes a new instance of the <see cref="DistributedCounterFactory"/> class with default storage.
     /// </summary>
-    /// <param name="storage">The underlying storage provider.</param>
+    /// <param name="defaultStorage">The default underlying storage provider.</param>
     /// <param name="keyBuilder">The counter key builder.</param>
     /// <param name="options">The distributed counter configuration options.</param>
     public DistributedCounterFactory(
-        ICounterStorage storage,
+        ICounterStorage defaultStorage,
         ICounterKeyBuilder keyBuilder,
-        IOptions<DistributedCounterOptions> options) {
-        Preca.ThrowIfNull(storage);
+        IOptions<DistributedCounterOptions> options)
+        : this(defaultStorage, keyBuilder, options, null) {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DistributedCounterFactory"/> class with service provider resolution.
+    /// </summary>
+    /// <param name="defaultStorage">The default underlying storage provider.</param>
+    /// <param name="keyBuilder">The counter key builder.</param>
+    /// <param name="options">The distributed counter configuration options.</param>
+    /// <param name="serviceProvider">The service provider used for per-tag storage resolution.</param>
+    public DistributedCounterFactory(
+        ICounterStorage defaultStorage,
+        ICounterKeyBuilder keyBuilder,
+        IOptions<DistributedCounterOptions> options,
+        IServiceProvider? serviceProvider) {
+        Preca.ThrowIfNull(defaultStorage);
         Preca.ThrowIfNull(keyBuilder);
         Preca.ThrowIfNull(options);
 
-        this._storage = storage;
+        this._defaultStorage = defaultStorage;
         this._keyBuilder = keyBuilder;
         this._options = options.Value;
+        this._serviceProvider = serviceProvider;
     }
 
     /// <inheritdoc/>
@@ -79,17 +97,37 @@ internal sealed class DistributedCounterFactory : IDistributedCounterFactory, IB
 
     private IDistributedCounter GetOrCreate(string name, CounterKey key) {
         return this._counters.GetOrAdd(key.Value, _ => {
-            CounterStrategy strategy = this._options.Registrations.TryGetValue(name, out CounterConfiguration? config)
-                ? config.Strategy
-                : this._options.DefaultStrategy;
+            bool hasConfig = this._options.Registrations.TryGetValue(name, out CounterConfiguration? config);
+            CounterStrategy strategy = hasConfig && config is not null ? config.Strategy : this._options.DefaultStrategy;
+            ICounterStorage storage = ResolveStorage(config);
 
             if(strategy == CounterStrategy.Immediate) {
-                return new ImmediateDistributedCounter(key, this._storage);
+                return new ImmediateDistributedCounter(key, storage);
             }
 
-            BufferedDistributedCounter buffered = new(key, this._storage);
+            BufferedDistributedCounter buffered = new(key, storage);
             this._bufferedCounters.Add(buffered);
             return buffered;
         });
+    }
+
+    private ICounterStorage ResolveStorage(CounterConfiguration? config) {
+        if(config is null || this._serviceProvider is null) {
+            return this._defaultStorage;
+        }
+
+        if(config.StorageFactory is not null) {
+            return config.StorageFactory(this._serviceProvider);
+        }
+
+        if(config.StorageKey is not null) {
+            return this._serviceProvider.GetRequiredKeyedService<ICounterStorage>(config.StorageKey);
+        }
+
+        if(config.StorageType is not null) {
+            return (ICounterStorage)ActivatorUtilities.GetServiceOrCreateInstance(this._serviceProvider, config.StorageType);
+        }
+
+        return this._defaultStorage;
     }
 }

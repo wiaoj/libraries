@@ -1,6 +1,4 @@
-﻿using Wiaoj.RateLimiting.Resilience;
-
-namespace Wiaoj.RateLimiting.Tests.Unit.Resilience;
+﻿namespace Wiaoj.RateLimiting.Tests.Unit.Resilience;
 
 public sealed class ResilientRateLimiterTests {
     private sealed class ThrowingAlgorithm : IRateLimitAlgorithm {

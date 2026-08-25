@@ -1,6 +1,4 @@
-﻿using Wiaoj.Preconditions.Exceptions;
-
-namespace Wiaoj.Webhooks.Tests.Unit.Delivery;
+﻿namespace Wiaoj.Webhooks.Tests.Unit.Delivery;
 
 [Trait("Category", "Unit")]
 [Trait("Component", "Delivery")]
@@ -79,13 +77,14 @@ public sealed class WebhookDeliveryResultTests {
 
     public sealed class TheTransientFailureCase {
         [Fact]
-        public void Constructor_WithErrorMessageOnly_SetsDefaults() {
+        public void Constructor_WithErrorMessageOnly_DefaultsToGeneralReason() {
             WebhookDeliveryResult.TransientFailure result = new("Connection timed out");
 
             Assert.False(result.IsSuccess);
             Assert.Equal("Connection timed out", result.ErrorMessage);
             Assert.Null(result.StatusCode);
             Assert.Null(result.RetryAfter);
+            Assert.Equal(TransientFailureReason.General, result.Reason);
             Assert.Null(result.Exception);
         }
 
@@ -98,12 +97,14 @@ public sealed class WebhookDeliveryResultTests {
                 "Gateway timeout",
                 statusCode: 504,
                 retryAfter: retryAfter,
+                reason: TransientFailureReason.ServerUnavailable,
                 exception: ex);
 
             Assert.False(result.IsSuccess);
             Assert.Equal("Gateway timeout", result.ErrorMessage);
             Assert.Equal(504, result.StatusCode);
             Assert.Equal(retryAfter, result.RetryAfter);
+            Assert.Equal(TransientFailureReason.ServerUnavailable, result.Reason);
             Assert.Same(ex, result.Exception);
         }
 
@@ -114,6 +115,7 @@ public sealed class WebhookDeliveryResultTests {
         public void Constructor_Throws_WhenErrorMessageIsInvalid(string? invalidMessage) {
             Assert.ThrowsAny<ArgumentException>(() => new WebhookDeliveryResult.TransientFailure(invalidMessage!));
             Assert.ThrowsAny<ArgumentException>(() => new WebhookDeliveryResult.TransientFailure(invalidMessage!, 500));
+            Assert.ThrowsAny<ArgumentException>(() => new WebhookDeliveryResult.TransientFailure(invalidMessage!, TransientFailureReason.General));
         }
     }
 
@@ -176,7 +178,7 @@ public sealed class WebhookDeliveryResultTests {
         public void Duplicate_Produces_DeduplicatedInstance() {
             WebhookDeliveryResult result = WebhookDeliveryResult.Duplicate("order_99");
 
-            var dedup = Assert.IsType<WebhookDeliveryResult.Deduplicated>(result);
+            WebhookDeliveryResult.Deduplicated dedup = Assert.IsType<WebhookDeliveryResult.Deduplicated>(result);
             Assert.Equal("order_99", dedup.DeduplicationKey);
         }
 
@@ -184,15 +186,42 @@ public sealed class WebhookDeliveryResultTests {
         public void Transient_Produces_TransientFailureInstance() {
             WebhookDeliveryResult r1 = WebhookDeliveryResult.Transient("Error 1");
             WebhookDeliveryResult r2 = WebhookDeliveryResult.Transient("Error 2", 503);
-            WebhookDeliveryResult r3 = WebhookDeliveryResult.Transient("Error 3", 429, TimeSpan.FromSeconds(10));
-            WebhookDeliveryResult r4 = WebhookDeliveryResult.Transient("Error 4", TimeSpan.FromSeconds(15));
-            WebhookDeliveryResult r5 = WebhookDeliveryResult.Transient("Error 5", new TimeoutException());
+            WebhookDeliveryResult r3 = WebhookDeliveryResult.Transient("Error 3", 503, TimeSpan.FromSeconds(10));
 
             Assert.IsType<WebhookDeliveryResult.TransientFailure>(r1);
             Assert.Equal(503, ((WebhookDeliveryResult.TransientFailure)r2).StatusCode);
             Assert.Equal(TimeSpan.FromSeconds(10), ((WebhookDeliveryResult.TransientFailure)r3).RetryAfter);
-            Assert.Equal(TimeSpan.FromSeconds(15), ((WebhookDeliveryResult.TransientFailure)r4).RetryAfter);
-            Assert.IsType<TimeoutException>(((WebhookDeliveryResult.TransientFailure)r5).Exception);
+        }
+
+        [Fact]
+        public void SpecializedTransientFactories_ProduceCorrectReasonAndStatusCode() {
+            // CircuitBroken
+            WebhookDeliveryResult cbResult = WebhookDeliveryResult.CircuitBroken("ep-1", TimeSpan.FromSeconds(45));
+            WebhookDeliveryResult.TransientFailure cb = Assert.IsType<WebhookDeliveryResult.TransientFailure>(cbResult);
+            Assert.Equal(503, cb.StatusCode);
+            Assert.Equal(TimeSpan.FromSeconds(45), cb.RetryAfter);
+            Assert.Equal(TransientFailureReason.CircuitBreakerOpen, cb.Reason);
+
+            // RateLimited
+            WebhookDeliveryResult rlResult = WebhookDeliveryResult.RateLimited("ep-2", TimeSpan.FromSeconds(15));
+            WebhookDeliveryResult.TransientFailure rl = Assert.IsType<WebhookDeliveryResult.TransientFailure>(rlResult);
+            Assert.Equal(429, rl.StatusCode);
+            Assert.Equal(TimeSpan.FromSeconds(15), rl.RetryAfter);
+            Assert.Equal(TransientFailureReason.RateLimitThrottled, rl.Reason);
+
+            // Timeout
+            WebhookDeliveryResult toResult = WebhookDeliveryResult.Timeout("Request timed out");
+            WebhookDeliveryResult.TransientFailure to = Assert.IsType<WebhookDeliveryResult.TransientFailure>(toResult);
+            Assert.Equal(408, to.StatusCode);
+            Assert.Equal(TransientFailureReason.Timeout, to.Reason);
+
+            // NetworkFailure
+            HttpRequestException ex = new("Socket reset");
+            WebhookDeliveryResult nfResult = WebhookDeliveryResult.NetworkFailure("Network failed", ex);
+            WebhookDeliveryResult.TransientFailure nf = Assert.IsType<WebhookDeliveryResult.TransientFailure>(nfResult);
+            Assert.Null(nf.StatusCode);
+            Assert.Equal(TransientFailureReason.NetworkGlitch, nf.Reason);
+            Assert.Same(ex, nf.Exception);
         }
 
         [Fact]
@@ -215,11 +244,12 @@ public sealed class WebhookDeliveryResultTests {
 
     public sealed class PatternMatchingBehavior {
         [Fact]
-        public void PatternMatching_CorrectlyDiscriminatesAllSubtypes() {
+        public void PatternMatching_CorrectlyDiscriminatesAllSubtypesAndReasons() {
             WebhookDeliveryResult[] results = [
                 WebhookDeliveryResult.Success(200),
                 WebhookDeliveryResult.Duplicate("k1"),
-                WebhookDeliveryResult.Transient("temporary", 503),
+                WebhookDeliveryResult.CircuitBroken("ep-1", TimeSpan.FromSeconds(30)),
+                WebhookDeliveryResult.RateLimited("ep-2", TimeSpan.FromSeconds(10)),
                 WebhookDeliveryResult.Permanent("terminal", 404, PermanentFailureReason.EndpointNotFound)
             ];
 
@@ -229,6 +259,8 @@ public sealed class WebhookDeliveryResultTests {
                 string action = result switch {
                     WebhookDeliveryResult.Delivered d => $"Delivered:{d.StatusCode}",
                     WebhookDeliveryResult.Deduplicated dedup => $"Deduplicated:{dedup.DeduplicationKey}",
+                    WebhookDeliveryResult.TransientFailure { Reason: TransientFailureReason.CircuitBreakerOpen } cb => $"CircuitOpen:{cb.RetryAfter?.TotalSeconds}s",
+                    WebhookDeliveryResult.TransientFailure { Reason: TransientFailureReason.RateLimitThrottled } rl => $"RateLimited:{rl.RetryAfter?.TotalSeconds}s",
                     WebhookDeliveryResult.TransientFailure tf => $"Retry:{tf.StatusCode}",
                     WebhookDeliveryResult.PermanentFailure pf => $"DeadLetter:{pf.Reason}",
                     _ => throw new InvalidOperationException("Unreachable case in closed hierarchy")
@@ -239,7 +271,8 @@ public sealed class WebhookDeliveryResultTests {
             Assert.Equal([
                 "Delivered:200",
                 "Deduplicated:k1",
-                "Retry:503",
+                "CircuitOpen:30s",
+                "RateLimited:10s",
                 "DeadLetter:EndpointNotFound"
             ], actionsTaken);
         }

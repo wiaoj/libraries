@@ -13,7 +13,6 @@ using Wiaoj.Serialization;
 using Wiaoj.Serialization.SystemTextJson;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Retries;
-using Wiaoj.Webhooks.Transports.InMemory;
 using Xunit;
 
 namespace Wiaoj.Webhooks.Tests.Integration.RateLimiting;
@@ -39,6 +38,8 @@ public sealed class DistributedRateLimitingIntegrationTests : IAsyncLifetime {
         builder.Services.AddSingleton<IWebhookEndpointResolver>(this._endpointResolver);
 
         builder.Services.AddDistributedCounter(dc => dc.UseInMemory());
+
+        //builder.Services.AddWiaojRateLimiting(rl => rl.UseFixedWindow(limit: 2, window: TimeSpan.FromSeconds(5)));
 
         builder.Services.AddWiaojWebhooks(webhooks => {
             webhooks.UseInMemoryTransport()

@@ -78,7 +78,7 @@ internal sealed class HttpWebhookDeliverer : IWebhookDeliverer {
         }
         catch(OperationCanceledException) when(!cancellationToken.IsCancellationRequested) {
             this._logger.LogHttpRequestTimedOut(context.TargetUrl, context.Endpoint.Id);
-            return WebhookDeliveryResult.Transient($"Request to '{context.TargetUrl}' timed out.");
+            return WebhookDeliveryResult.Timeout($"Request to '{context.TargetUrl}' timed out.");
         }
         catch(Exception ex) when(ex.TryGetSsrfException(out WebhookSsrfBlockedException? ssrfEx)) {
             return WebhookDeliveryResult.Permanent(
@@ -88,8 +88,8 @@ internal sealed class HttpWebhookDeliverer : IWebhookDeliverer {
         catch(HttpRequestException ex) {
             int? statusCode = (int?)ex.StatusCode;
             return HttpStatusClassifier.IsTransient(statusCode)
-                ? WebhookDeliveryResult.Transient($"HTTP network failure: {ex.Message}", statusCode ?? 0)
-                : WebhookDeliveryResult.Permanent($"HTTP client error: {ex.Message}", statusCode ?? 0, PermanentFailureReason.DestinationRejected);
+                ? WebhookDeliveryResult.NetworkFailure($"HTTP network failure: {ex.Message}", statusCode, ex)
+                : WebhookDeliveryResult.Permanent($"HTTP client error: {ex.Message}", statusCode, PermanentFailureReason.DestinationRejected);
         }
     }
 

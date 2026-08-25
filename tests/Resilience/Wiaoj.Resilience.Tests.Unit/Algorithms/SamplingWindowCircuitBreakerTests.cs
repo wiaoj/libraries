@@ -2,17 +2,21 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Wiaoj.DistributedCounter;
+using Wiaoj.DistributedCounter.DependencyInjection;
+using Wiaoj.Resilience;
+using Xunit;
 
 namespace Wiaoj.Resilience.Tests.Unit.Algorithms;
 
 [Trait("Category", "Unit")]
 [Trait("Feature", "Resilience")]
-[Trait("Component", "SamplingWindowAlgorithm")]
+[Trait("Component", "SamplingWindow")]
 public sealed class SamplingWindowCircuitBreakerTests {
 
     private static (SamplingWindowCircuitBreaker Breaker, FakeTimeProvider TimeProvider) CreateSut(
-        double failureRateThreshold = 0.5, // 50% failure rate
-        int minimumThroughput = 10,       // Minimum 10 requests before evaluating rate
+        double failureRateThreshold = 0.5,
+        int minimumThroughput = 10,
+        int permittedCallsInHalfOpen = 3,
         TimeSpan? samplingWindow = null,
         TimeSpan? breakDuration = null) {
 
@@ -28,7 +32,8 @@ public sealed class SamplingWindowCircuitBreakerTests {
         SamplingWindowCircuitBreakerOptions options = new() {
             FailureRateThreshold = failureRateThreshold,
             MinimumThroughput = minimumThroughput,
-            SamplingWindow = samplingWindow ?? TimeSpan.FromSeconds(20),
+            PermittedNumberOfCallsInHalfOpenState = permittedCallsInHalfOpen,
+            SamplingWindow = samplingWindow ?? TimeSpan.FromSeconds(30),
             BreakDuration = breakDuration ?? TimeSpan.FromSeconds(30)
         };
 
@@ -41,31 +46,31 @@ public sealed class SamplingWindowCircuitBreakerTests {
         return (breaker, timeProvider);
     }
 
-    public sealed class TheFailureRateEvaluation {
+    public sealed class TheFailureRateCalculation {
         [Fact]
-        public async Task TryAcquireAsync_DoesNotTrip_WhenThroughputIsBelowMinimumThreshold() {
-            // Arrange: 50% failure rate threshold, but requires minimum 10 requests
+        public async Task TryAcquireAsync_DoesNotTrip_WhenVolumeIsBelowMinimumThroughput() {
+            // Arrange: 50% failure rate threshold, minimum 10 requests required
             (SamplingWindowCircuitBreaker breaker, _) = CreateSut(failureRateThreshold: 0.5, minimumThroughput: 10);
-            const string key = "api-orders-low-traffic";
+            const string key = "service-low-volume";
 
-            // 5 failures and 0 successes (100% failure rate, but total requests = 5 < 10 minimum)
+            // 5 failures and 0 successes (100% failure rate, but total = 5 < 10 minimum)
             for(int i = 0; i < 5; i++) {
                 await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             }
 
-            // Circuit must remain CLOSED because minimum sample volume is not yet reached
+            // Circuit must remain CLOSED because sampling volume is insufficient
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(decision.IsAllowed);
             Assert.Equal(CircuitState.Closed, decision.State);
         }
 
         [Fact]
-        public async Task TryAcquireAsync_TripsToOpen_WhenFailureRateExceedsThresholdAtOrAboveMinimumVolume() {
-            // Arrange: Minimum 10 requests, 50% failure rate
+        public async Task TryAcquireAsync_TripsToOpen_WhenFailureRateExceedsThresholdAtMinimumVolume() {
+            // Arrange: 50% failure rate threshold, minimum 10 requests
             (SamplingWindowCircuitBreaker breaker, _) = CreateSut(failureRateThreshold: 0.5, minimumThroughput: 10);
-            const string key = "api-payments-failing";
+            const string key = "service-high-failure-rate";
 
-            // 4 Successes + 6 Failures = Total 10 requests (60% failure rate >= 50%)
+            // 4 successes + 6 failures = 10 total requests (60% failure rate >= 50%)
             for(int i = 0; i < 4; i++) {
                 await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
             }
@@ -73,7 +78,7 @@ public sealed class SamplingWindowCircuitBreakerTests {
                 await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             }
 
-            // Circuit must trip to OPEN!
+            // Circuit must trip to OPEN
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.False(decision.IsAllowed);
             Assert.Equal(CircuitState.Open, decision.State);
@@ -81,49 +86,69 @@ public sealed class SamplingWindowCircuitBreakerTests {
         }
 
         [Fact]
-        public async Task TryAcquireAsync_DoesNotTrip_WhenFailureRateIsBelowThreshold() {
-            // Arrange: Minimum 10 requests, 50% failure rate
-            (SamplingWindowCircuitBreaker breaker, _) = CreateSut(failureRateThreshold: 0.5, minimumThroughput: 10);
-            const string key = "api-healthy-service";
-
-            // 8 Successes + 2 Failures = Total 10 requests (20% failure rate < 50%)
-            for(int i = 0; i < 8; i++) {
-                await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
-            }
-            for(int i = 0; i < 2; i++) {
-                await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
-            }
-
-            CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
-            Assert.True(decision.IsAllowed);
-            Assert.Equal(CircuitState.Closed, decision.State);
-        }
-
-        [Fact]
-        public async Task TryAcquireAsync_ResetsSampleCounts_WhenSamplingWindowExpires() {
+        public async Task OnFailureAsync_ResetsMetrics_WhenSamplingWindowExpires() {
             (SamplingWindowCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateSut(
                 failureRateThreshold: 0.5,
                 minimumThroughput: 10,
                 samplingWindow: TimeSpan.FromSeconds(10));
 
-            const string key = "api-window-reset";
+            const string key = "service-rolling-window";
 
-            // 8 Failures in first window (Below minimum of 10)
+            // 8 failures in window 1 (Below 10 throughput)
             for(int i = 0; i < 8; i++) {
                 await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             }
 
-            // Advance time past 10s sampling window -> Old samples expire!
+            // Advance time past 10s sampling window -> Old window expires
             timeProvider.Advance(TimeSpan.FromSeconds(12));
 
-            // In the new window, 3 successes occur
+            // 3 successes in new window
             for(int i = 0; i < 3; i++) {
                 await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
             }
 
+            // Circuit must remain CLOSED
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(decision.IsAllowed);
             Assert.Equal(CircuitState.Closed, decision.State);
+        }
+    }
+
+    public sealed class TheOptionCHalfOpenPermittedCalls {
+        [Fact]
+        public async Task TryAcquireAsync_InHalfOpen_AllowsUpToNPermittedCalls_AndDeniesExcess() {
+            // Arrange: Permitted calls in half-open = 3
+            (SamplingWindowCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateSut(
+                failureRateThreshold: 0.5,
+                minimumThroughput: 1,
+                permittedCallsInHalfOpen: 3,
+                breakDuration: TimeSpan.FromSeconds(10));
+
+            const string key = "service-half-open-bounded";
+
+            // Trip circuit
+            await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
+
+            // Advance past break duration -> Enters Half-Open
+            timeProvider.Advance(TimeSpan.FromSeconds(11));
+
+            // First 3 concurrent probe claims must be allowed
+            CircuitExecutionDecision p1 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+            CircuitExecutionDecision p2 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+            CircuitExecutionDecision p3 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+
+            Assert.True(p1.IsAllowed);
+            Assert.Equal(CircuitState.HalfOpen, p1.State);
+            Assert.True(p2.IsAllowed);
+            Assert.Equal(CircuitState.HalfOpen, p2.State);
+            Assert.True(p3.IsAllowed);
+            Assert.Equal(CircuitState.HalfOpen, p3.State);
+
+            // 4th concurrent claim exceeds N=3 limit -> Must be DENIED to protect target!
+            CircuitExecutionDecision p4 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+            Assert.False(p4.IsAllowed);
+            Assert.Equal(CircuitState.Open, p4.State);
+            Assert.NotNull(p4.RetryAfter);
         }
     }
 }

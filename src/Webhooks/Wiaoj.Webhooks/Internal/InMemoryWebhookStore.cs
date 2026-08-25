@@ -41,6 +41,24 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     }
 
     /// <inheritdoc/>
+    public Task SaveBatchAsync(IReadOnlyList<WebhookJobRecord> jobs, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNull(jobs);
+        if(jobs.Count == 0) return Task.CompletedTask;
+
+        lock(this._lock) {
+            for(int i = 0; i < jobs.Count; i++) {
+                WebhookJobRecord job = jobs[i];
+                this._jobs[job.Id] = job;
+
+                List<WebhookJobId> list = this._endpointIndex.GetOrAdd(job.EndpointId, static _ => []);
+                list.Add(job.Id);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task<WebhookJobRecord?> GetJobAsync(WebhookJobId jobId, CancellationToken cancellationToken = default) {
         this._jobs.TryGetValue(jobId, out WebhookJobRecord? job);
         return Task.FromResult(job);

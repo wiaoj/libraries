@@ -1,52 +1,46 @@
-﻿using Wiaoj.Preconditions;
-
-namespace Wiaoj.RateLimiting;
+﻿namespace Wiaoj.RateLimiting;
 
 /// <summary>
-/// Represents the outcome of a <see cref="IRateLimitAlgorithm.TryAcquireAsync"/> call.
+/// Represents the result of a rate limiting evaluation.
 /// </summary>
-/// <remarks>
-/// Constructed exclusively through <see cref="Allowed"/> and <see cref="Denied"/> to keep the two
-/// valid states (allowed vs. denied) from drifting apart — e.g. an "allowed" decision can never
-/// accidentally carry a <see cref="RetryAfter"/> value.
-/// </remarks>
-public readonly record struct RateLimitDecision {
-    /// <summary>Gets a value indicating whether the operation is allowed to proceed.</summary>
-    public bool IsAllowed { get; }
+/// <param name="IsAllowed">Indicates whether the request is allowed to proceed.</param>
+/// <param name="RetryAfter">The duration to wait before retrying, if the request was denied.</param>
+/// <param name="Remaining">The remaining request capacity or tokens for the key, if available.</param>
+public readonly record struct RateLimitDecision(bool IsAllowed, TimeSpan? RetryAfter, long? Remaining) {
 
     /// <summary>
-    /// Gets the duration the caller should wait before retrying, when <see cref="IsAllowed"/> is <see langword="false"/>.
-    /// <see langword="null"/> when <see cref="IsAllowed"/> is <see langword="true"/>.
+    /// Creates a decision indicating the request was permitted with unknown remaining capacity.
     /// </summary>
-    public TimeSpan? RetryAfter { get; }
+    /// <returns>An allowed <see cref="RateLimitDecision"/>.</returns>
+    public static RateLimitDecision Allowed() {
+        return new RateLimitDecision(true, null, null);
+    }
 
     /// <summary>
-    /// Gets the number of remaining units within the current window, if the algorithm tracks and exposes it.
-    /// <see langword="null"/> when the underlying algorithm does not report remaining capacity.
+    /// Creates a decision indicating the request was permitted with a known remaining capacity.
     /// </summary>
-    public long? Remaining { get; }
-
-    private RateLimitDecision(bool isAllowed, TimeSpan? retryAfter, long? remaining) {
-        this.IsAllowed = isAllowed;
-        this.RetryAfter = retryAfter;
-        this.Remaining = remaining;
+    /// <param name="remaining">The remaining capacity or tokens.</param>
+    /// <returns>An allowed <see cref="RateLimitDecision"/>.</returns>
+    public static RateLimitDecision Allowed(long remaining) {
+        return new RateLimitDecision(true, null, remaining);
     }
 
-    /// <summary>Creates a decision indicating the operation is allowed to proceed.</summary>
-    /// <param name="remaining">Optional remaining capacity within the current window.</param>
-    public static RateLimitDecision Allowed(long? remaining = null) {
-        return new RateLimitDecision(true, retryAfter: null, remaining);
+    /// <summary>
+    /// Creates a decision indicating the request was denied with a retry duration.
+    /// </summary>
+    /// <param name="retryAfter">The duration to wait before retrying.</param>
+    /// <returns>A denied <see cref="RateLimitDecision"/>.</returns>
+    public static RateLimitDecision Denied(TimeSpan retryAfter) {
+        return new RateLimitDecision(false, retryAfter, 0);
     }
 
-    /// <summary>Creates a decision indicating the operation is denied.</summary>
-    /// <param name="retryAfter">How long the caller should wait before retrying. Must be a non-negative duration.</param>
-    /// <param name="remaining">Optional remaining capacity within the current window (typically <c>0</c>).</param>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="retryAfter"/> is negative.</exception>
-    public static RateLimitDecision Denied(TimeSpan retryAfter, long? remaining = null) {
-        Preca.ThrowIfNegative(
-            retryAfter,
-            static (param) => new ArgumentOutOfRangeException(nameof(retryAfter), "Retry-after duration must be non-negative."),
-            nameof(retryAfter));
+    /// <summary>
+    /// Creates a decision indicating the request was denied with a retry duration and remaining capacity.
+    /// </summary>
+    /// <param name="retryAfter">The duration to wait before retrying.</param>
+    /// <param name="remaining">The remaining capacity.</param>
+    /// <returns>A denied <see cref="RateLimitDecision"/>.</returns>
+    public static RateLimitDecision Denied(TimeSpan retryAfter, long remaining) {
         return new RateLimitDecision(false, retryAfter, remaining);
     }
 }

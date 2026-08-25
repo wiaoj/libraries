@@ -15,6 +15,11 @@ public sealed class NullWebhookStore : IWebhookStore {
     }
 
     /// <inheritdoc/>
+    public Task SaveBatchAsync(IReadOnlyList<WebhookJobRecord> jobs, CancellationToken cancellationToken = default) {
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task<WebhookJobRecord?> GetJobAsync(WebhookJobId jobId, CancellationToken cancellationToken = default) {
         return Task.FromResult<WebhookJobRecord?>(null);
     }

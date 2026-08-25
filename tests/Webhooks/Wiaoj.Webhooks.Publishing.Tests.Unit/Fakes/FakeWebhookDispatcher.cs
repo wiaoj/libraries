@@ -37,8 +37,50 @@ internal sealed class FakeWebhookDispatcher : IWebhookDispatcher {
         return Task.FromResult(new WebhookDeliveryHandle(jobId));
     }
 
+    public Task<IReadOnlyList<WebhookDeliveryHandle>> DispatchBatchAsync<TEvent>(
+        WebhookEndpointId endpointId,
+        IEnumerable<TEvent> payloads,
+        CancellationToken cancellationToken = default)
+        where TEvent : IWebhookEvent {
+        return DispatchBatchAsync(endpointId, payloads, null, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<WebhookDeliveryHandle>> DispatchBatchAsync<TEvent>(
+        WebhookEndpointId endpointId,
+        IEnumerable<TEvent> payloads,
+        Func<TEvent, WebhookPartitionKey>? partitionKeySelector,
+        CancellationToken cancellationToken = default)
+        where TEvent : IWebhookEvent {
+
+        Preca.ThrowIfNull(payloads);
+        List<WebhookDeliveryHandle> handles = [];
+
+        foreach(TEvent payload in payloads) {
+            WebhookJobId jobId = WebhookJobId.NewJobId();
+            WebhookPartitionKey partitionKey = partitionKeySelector?.Invoke(payload) ?? WebhookPartitionKey.From(endpointId);
+            DispatchedCall call = new(endpointId, payload!, partitionKey, jobId);
+
+            lock(this._gate) {
+                this._calls.Add(call);
+            }
+
+            this.OnDispatched?.Invoke(call);
+            handles.Add(new WebhookDeliveryHandle(jobId));
+        }
+
+        return Task.FromResult<IReadOnlyList<WebhookDeliveryHandle>>(handles);
+    }
+
     public Task<WebhookDeliveryHandle> ReplayAsync(WebhookJobId jobId, CancellationToken cancellationToken = default) {
         return Task.FromResult(new WebhookDeliveryHandle(jobId));
+    }
+
+    public Task<WebhookPingResult> PingAsync(WebhookEndpointId endpointId, CancellationToken cancellationToken = default) {
+        return Task.FromResult(new WebhookPingResult(
+            isSuccess: true,
+            statusCode: 200,
+            latency: TimeSpan.FromMilliseconds(50),
+            errorMessage: null));
     }
 
     public sealed record DispatchedCall(

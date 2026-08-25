@@ -15,6 +15,7 @@ public sealed class WebhookPublishingBuilderExtensionsTests {
 
         services.AddWiaojWebhooks(webhooks => {
             webhooks.UseInMemoryTransport()
+                    .UseEndpointResolver(static (id, ct) => ValueTask.FromResult<WebhookEndpoint?>(null))
                     .AddPublishing();
         });
 
@@ -25,7 +26,7 @@ public sealed class WebhookPublishingBuilderExtensionsTests {
         Assert.NotNull(sp.GetService<IWebhookPublisher>());
 
         Assert.IsType<InMemoryWebhookSubscriptionStore>(sp.GetRequiredService<IWebhookSubscriptionStore>());
-        Assert.IsType<WildcardSubscriptionMatcher>(sp.GetRequiredService<IWebhookSubscriptionMatcher>());
+        Assert.IsType<CompositeSubscriptionMatcher>(sp.GetRequiredService<IWebhookSubscriptionMatcher>());
         Assert.IsType<WebhookPublisher>(sp.GetRequiredService<IWebhookPublisher>());
     }
 
@@ -37,6 +38,7 @@ public sealed class WebhookPublishingBuilderExtensionsTests {
         CustomSubscriptionStore customStore = new();
 
         services.AddWiaojWebhooks(webhooks => {
+            webhooks.UseEndpointResolver(static (id, ct) => ValueTask.FromResult<WebhookEndpoint?>(null));
             webhooks.AddPublishing(gateway => {
                 gateway.UseStore(customStore)
                        .UseMatcher<CustomSubscriptionMatcher>();
@@ -51,6 +53,10 @@ public sealed class WebhookPublishingBuilderExtensionsTests {
 
     private sealed class CustomSubscriptionStore : IWebhookSubscriptionStore {
         public ValueTask<IReadOnlyList<WebhookSubscription>> GetActiveSubscriptionsAsync(CancellationToken cancellationToken = default) {
+            return ValueTask.FromResult<IReadOnlyList<WebhookSubscription>>([]);
+        }
+
+        public ValueTask<IReadOnlyList<WebhookSubscription>> GetActiveSubscriptionsAsync(WebhookNamespace @namespace, CancellationToken cancellationToken = default) {
             return ValueTask.FromResult<IReadOnlyList<WebhookSubscription>>([]);
         }
 

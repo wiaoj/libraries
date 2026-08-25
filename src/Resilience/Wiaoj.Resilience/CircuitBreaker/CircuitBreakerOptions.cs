@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Resilience;
+﻿using Wiaoj.Preconditions;
+
+namespace Wiaoj.Resilience;
 
 /// <summary>
 /// Configuration options for the consecutive failures circuit breaker strategy.

@@ -19,8 +19,10 @@ public static class WebhookBuilderPublishingExtensions {
     public static IWebhookBuilder AddPublishing(this IWebhookBuilder builder) {
         Preca.ThrowIfNull(builder);
 
+        builder.Services.TryAddSingleton<IWebhookTopicMatcher, WildcardTopicMatcher>();
+        builder.Services.TryAddSingleton<IWebhookContentFilterEvaluator, SimpleContentFilterEvaluator>();
+        builder.Services.TryAddSingleton<IWebhookSubscriptionMatcher, CompositeSubscriptionMatcher>();
         builder.Services.TryAddSingleton<IWebhookSubscriptionStore, InMemoryWebhookSubscriptionStore>();
-        builder.Services.TryAddSingleton<IWebhookSubscriptionMatcher, WildcardSubscriptionMatcher>();
         builder.Services.TryAddSingleton<IWebhookBatchStore>(NullWebhookBatchStore.Instance);
         builder.Services.TryAddSingleton<IWebhookPublisher, WebhookPublisher>();
 
@@ -34,14 +36,14 @@ public static class WebhookBuilderPublishingExtensions {
     /// <param name="configure">The delegate configuring gateway subscription stores, matchers, or custom routing rules.</param>
     /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
-    public static IWebhookBuilder AddPublishing(
-        this IWebhookBuilder builder,
-        Action<IWebhookPublishingBuilder> configure) {
+    public static IWebhookBuilder AddPublishing(this IWebhookBuilder builder, Action<IWebhookPublishingBuilder> configure) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(configure);
 
+        builder.Services.TryAddSingleton<IWebhookTopicMatcher, WildcardTopicMatcher>();
+        builder.Services.TryAddSingleton<IWebhookContentFilterEvaluator, SimpleContentFilterEvaluator>();
+        builder.Services.TryAddSingleton<IWebhookSubscriptionMatcher, CompositeSubscriptionMatcher>();
         builder.Services.TryAddSingleton<IWebhookSubscriptionStore, InMemoryWebhookSubscriptionStore>();
-        builder.Services.TryAddSingleton<IWebhookSubscriptionMatcher, WildcardSubscriptionMatcher>();
         builder.Services.TryAddSingleton<IWebhookBatchStore>(NullWebhookBatchStore.Instance);
         builder.Services.TryAddSingleton<IWebhookPublisher, WebhookPublisher>();
 

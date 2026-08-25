@@ -23,11 +23,11 @@ public static class RateLimitingApplicationBuilderExtensions {
     /// </summary>
     public static IApplicationBuilder UseWiaojRateLimiting(
         this IApplicationBuilder app,
-        Action<RateLimitingOptions> configureOptions) {
+        Action<RateLimiterAspNetCoreOptions> configureOptions) {
         Preca.ThrowIfNull(app);
         Preca.ThrowIfNull(configureOptions);
 
-        RateLimitingOptions options = new();
+        RateLimiterAspNetCoreOptions options = new();
         configureOptions(options);
 
         return app.UseMiddleware<RateLimitingMiddleware>(Microsoft.Extensions.Options.Options.Create(options));

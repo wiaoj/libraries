@@ -30,29 +30,20 @@ public abstract record WebhookDeliveryResult {
     /// Represents a successful outbound delivery that reached the destination and was accepted.
     /// </summary>
     public sealed record Delivered : WebhookDeliveryResult {
-        /// <summary>
-        /// Gets the transport-level status code returned by the destination target (e.g., HTTP 200, 201, 204).
-        /// </summary>
+        /// <summary>Gets the transport-level status code returned by the destination target (e.g., HTTP 200, 201, 204).</summary>
         public int StatusCode { get; }
 
-        /// <summary>
-        /// Gets the optional response body returned by the destination target.
-        /// </summary>
+        /// <summary>Gets the optional response body returned by the destination target.</summary>
         public string? ResponseBody { get; }
 
         /// <inheritdoc/>
         public override bool IsSuccess => true;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Delivered"/> class with a status code.
-        /// </summary>
+        /// <summary>Initializes a new instance of the <see cref="Delivered"/> class with a status code.</summary>
         /// <param name="statusCode">The transport-level status code.</param>
-        public Delivered(int statusCode) : this(statusCode, null) {
-        }
+        public Delivered(int statusCode) : this(statusCode, null) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Delivered"/> class with a status code and response body.
-        /// </summary>
+        /// <summary>Initializes a new instance of the <see cref="Delivered"/> class with a status code and response body.</summary>
         /// <param name="statusCode">The transport-level status code.</param>
         /// <param name="responseBody">The response payload string received from the destination target.</param>
         public Delivered(int statusCode, string? responseBody) {
@@ -69,17 +60,13 @@ public abstract record WebhookDeliveryResult {
     /// Represents a delivery that was intentionally suppressed because an identical event was already successfully delivered.
     /// </summary>
     public sealed record Deduplicated : WebhookDeliveryResult {
-        /// <summary>
-        /// Gets the deduplication key matched by the deduplication filter.
-        /// </summary>
+        /// <summary>Gets the deduplication key matched by the deduplication filter.</summary>
         public string DeduplicationKey { get; }
 
         /// <inheritdoc/>
         public override bool IsSuccess => true;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Deduplicated"/> class.
-        /// </summary>
+        /// <summary>Initializes a new instance of the <see cref="Deduplicated"/> class.</summary>
         /// <param name="deduplicationKey">The deduplication key that matched.</param>
         public Deduplicated(string deduplicationKey) {
             Preca.ThrowIfNullOrWhiteSpace(deduplicationKey);
@@ -88,155 +75,95 @@ public abstract record WebhookDeliveryResult {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 3. TRANSIENT FAILURE
+    // 3. TRANSIENT FAILURE (Retryable with Classified Reason)
     // ────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Represents a temporary delivery failure (e.g., 5xx error, network timeout, rate limit throttle) that is eligible for retry.
+    /// Represents a temporary delivery failure (e.g., 5xx error, timeout, rate limit, circuit breaker) eligible for retry.
     /// </summary>
     public sealed record TransientFailure : WebhookDeliveryResult {
-        /// <summary>
-        /// Gets the diagnostic error message describing the failure.
-        /// </summary>
+        /// <summary>Gets the diagnostic error message describing the failure.</summary>
         public string ErrorMessage { get; }
 
-        /// <summary>
-        /// Gets the optional transport status code (e.g., HTTP 503, 429, 408), if received before failure.
-        /// </summary>
+        /// <summary>Gets the optional transport status code (e.g., HTTP 503, 429, 408), if received before failure.</summary>
         public int? StatusCode { get; }
 
-        /// <summary>
-        /// Gets the optional delay requested before attempting the next retry (e.g., from a Retry-After header or rate limiter window).
-        /// </summary>
+        /// <summary>Gets the optional delay requested before attempting the next retry.</summary>
         public TimeSpan? RetryAfter { get; }
 
-        /// <summary>
-        /// Gets the underlying exception that caused the failure, if any.
-        /// </summary>
+        /// <summary>Gets the classified domain reason for this transient failure.</summary>
+        public TransientFailureReason Reason { get; }
+
+        /// <summary>Gets the underlying exception that caused the failure, if any.</summary>
         public Exception? Exception { get; }
 
         /// <inheritdoc/>
         public override bool IsSuccess => false;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TransientFailure"/> class.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
+        /// <summary>Initializes a new instance of the <see cref="TransientFailure"/> class with an error message.</summary>
         public TransientFailure(string errorMessage)
-            : this(errorMessage, null, null, null) {
-        }
+            : this(errorMessage, null, null, TransientFailureReason.General, null) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TransientFailure"/> class with a status code.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="statusCode">The transport status code.</param>
+        /// <summary>Initializes a new instance of the <see cref="TransientFailure"/> class with an error message and status code.</summary>
         public TransientFailure(string errorMessage, int statusCode)
-            : this(errorMessage, statusCode, null, null) {
-        }
+            : this(errorMessage, statusCode, null, TransientFailureReason.ServerUnavailable, null) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TransientFailure"/> class with a status code and retry delay.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="statusCode">The transport status code.</param>
-        /// <param name="retryAfter">The suggested delay before the next retry.</param>
+        /// <summary>Initializes a new instance of the <see cref="TransientFailure"/> class with a classified reason.</summary>
+        public TransientFailure(string errorMessage, TransientFailureReason reason)
+            : this(errorMessage, null, null, reason, null) { }
+
+        /// <summary>Initializes a new instance of the <see cref="TransientFailure"/> class with a status code and retry delay.</summary>
         public TransientFailure(string errorMessage, int statusCode, TimeSpan? retryAfter)
-            : this(errorMessage, statusCode, retryAfter, null) {
-        }
+            : this(errorMessage, statusCode, retryAfter, TransientFailureReason.ServerUnavailable, null) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TransientFailure"/> class with a retry delay.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="retryAfter">The suggested delay before the next retry.</param>
-        public TransientFailure(string errorMessage, TimeSpan? retryAfter)
-            : this(errorMessage, null, retryAfter, null) {
-        }
+        /// <summary>Initializes a new instance of the <see cref="TransientFailure"/> class with status code, retry delay, and reason.</summary>
+        public TransientFailure(string errorMessage, int? statusCode, TimeSpan? retryAfter, TransientFailureReason reason)
+            : this(errorMessage, statusCode, retryAfter, reason, null) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TransientFailure"/> class with an underlying exception.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="exception">The underlying exception.</param>
-        public TransientFailure(string errorMessage, Exception exception)
-            : this(errorMessage, null, null, exception) {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TransientFailure"/> class with all parameters.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="statusCode">The transport status code.</param>
-        /// <param name="retryAfter">The suggested delay before the next retry.</param>
-        /// <param name="exception">The underlying exception.</param>
-        public TransientFailure(string errorMessage, int? statusCode, TimeSpan? retryAfter, Exception? exception) {
+        /// <summary>Initializes a new instance of the <see cref="TransientFailure"/> class with all parameters.</summary>
+        public TransientFailure(string errorMessage, int? statusCode, TimeSpan? retryAfter, TransientFailureReason reason, Exception? exception) {
             Preca.ThrowIfNullOrWhiteSpace(errorMessage);
             this.ErrorMessage = errorMessage;
             this.StatusCode = statusCode;
             this.RetryAfter = retryAfter;
+            this.Reason = reason;
             this.Exception = exception;
         }
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 4. PERMANENT FAILURE
+    // 4. PERMANENT FAILURE (Terminal / Non-Retryable)
     // ────────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Represents a terminal delivery failure that cannot succeed upon retry and must transition directly to dead-letter.
     /// </summary>
     public sealed record PermanentFailure : WebhookDeliveryResult {
-        /// <summary>
-        /// Gets the diagnostic error message describing the failure.
-        /// </summary>
+        /// <summary>Gets the diagnostic error message describing the failure.</summary>
         public string ErrorMessage { get; }
 
-        /// <summary>
-        /// Gets the optional transport status code (e.g., HTTP 400, 401, 404), if received before failure.
-        /// </summary>
+        /// <summary>Gets the optional transport status code (e.g., HTTP 400, 401, 404), if received before failure.</summary>
         public int? StatusCode { get; }
 
-        /// <summary>
-        /// Gets the classified domain category for this permanent failure.
-        /// </summary>
+        /// <summary>Gets the classified domain category for this permanent failure.</summary>
         public PermanentFailureReason Reason { get; }
 
         /// <inheritdoc/>
         public override bool IsSuccess => false;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PermanentFailure"/> class.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
+        /// <summary>Initializes a new instance of the <see cref="PermanentFailure"/> class.</summary>
         public PermanentFailure(string errorMessage)
-            : this(errorMessage, null, PermanentFailureReason.General) {
-        }
+            : this(errorMessage, null, PermanentFailureReason.General) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PermanentFailure"/> class with a status code.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="statusCode">The transport status code.</param>
+        /// <summary>Initializes a new instance of the <see cref="PermanentFailure"/> class with a status code.</summary>
         public PermanentFailure(string errorMessage, int statusCode)
-            : this(errorMessage, statusCode, PermanentFailureReason.General) {
-        }
+            : this(errorMessage, statusCode, PermanentFailureReason.General) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PermanentFailure"/> class with a classification reason.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="reason">The classified permanent failure reason.</param>
+        /// <summary>Initializes a new instance of the <see cref="PermanentFailure"/> class with a classification reason.</summary>
         public PermanentFailure(string errorMessage, PermanentFailureReason reason)
-            : this(errorMessage, null, reason) {
-        }
+            : this(errorMessage, null, reason) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PermanentFailure"/> class with all parameters.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="statusCode">The transport status code.</param>
-        /// <param name="reason">The classified permanent failure reason.</param>
+        /// <summary>Initializes a new instance of the <see cref="PermanentFailure"/> class with all parameters.</summary>
         public PermanentFailure(string errorMessage, int? statusCode, PermanentFailureReason reason) {
             Preca.ThrowIfNullOrWhiteSpace(errorMessage);
             this.ErrorMessage = errorMessage;
@@ -246,124 +173,86 @@ public abstract record WebhookDeliveryResult {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // FACTORY METHODS
+    // FACTORY METHODS (Domain-Driven & Intent-Revealing)
     // ────────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Creates a new successful <see cref="Delivered"/> result.
-    /// </summary>
-    /// <param name="statusCode">The transport status code.</param>
-    /// <returns>A new <see cref="Delivered"/> result instance.</returns>
+    /// <summary>Creates a successful <see cref="Delivered"/> result.</summary>
     public static WebhookDeliveryResult Success(int statusCode) {
         return new Delivered(statusCode);
     }
 
-    /// <summary>
-    /// Creates a new successful <see cref="Delivered"/> result with response body.
-    /// </summary>
-    /// <param name="statusCode">The transport status code.</param>
-    /// <param name="responseBody">The response payload received.</param>
-    /// <returns>A new <see cref="Delivered"/> result instance.</returns>
+    /// <summary>Creates a successful <see cref="Delivered"/> result with response body.</summary>
     public static WebhookDeliveryResult Success(int statusCode, string responseBody) {
         return new Delivered(statusCode, responseBody);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="Deduplicated"/> result representing an event suppressed due to prior delivery.
-    /// </summary>
-    /// <param name="deduplicationKey">The matched deduplication key.</param>
-    /// <returns>A new <see cref="Deduplicated"/> result instance.</returns>
+    /// <summary>Creates a <see cref="Deduplicated"/> result representing an event suppressed due to prior delivery.</summary>
     public static WebhookDeliveryResult Duplicate(string deduplicationKey) {
         return new Deduplicated(deduplicationKey);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="TransientFailure"/> result.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <returns>A new <see cref="TransientFailure"/> result instance.</returns>
+    /// <summary>Creates a general <see cref="TransientFailure"/> result.</summary>
     public static WebhookDeliveryResult Transient(string errorMessage) {
         return new TransientFailure(errorMessage);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="TransientFailure"/> result with a status code.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="statusCode">The transport status code.</param>
-    /// <returns>A new <see cref="TransientFailure"/> result instance.</returns>
+    /// <summary>Creates a general <see cref="TransientFailure"/> result with a status code.</summary>
     public static WebhookDeliveryResult Transient(string errorMessage, int statusCode) {
         return new TransientFailure(errorMessage, statusCode);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="TransientFailure"/> result with a status code and retry delay.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="statusCode">The transport status code.</param>
-    /// <param name="retryAfter">The optional delay before the next retry attempt.</param>
-    /// <returns>A new <see cref="TransientFailure"/> result instance.</returns>
+    /// <summary>Creates a general <see cref="TransientFailure"/> result with a status code and retry delay.</summary>
     public static WebhookDeliveryResult Transient(string errorMessage, int statusCode, TimeSpan? retryAfter) {
         return new TransientFailure(errorMessage, statusCode, retryAfter);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="TransientFailure"/> result with a retry delay.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="retryAfter">The optional delay before the next retry attempt.</param>
-    /// <returns>A new <see cref="TransientFailure"/> result instance.</returns>
-    public static WebhookDeliveryResult Transient(string errorMessage, TimeSpan? retryAfter) {
-        return new TransientFailure(errorMessage, retryAfter);
+    /// <summary>Creates a <see cref="TransientFailure"/> result specifically caused by an open circuit breaker.</summary>
+    public static WebhookDeliveryResult CircuitBroken(string endpointId, TimeSpan retryAfter) {
+        return new TransientFailure($"Circuit breaker is OPEN for endpoint '{endpointId}'.", 503, retryAfter, TransientFailureReason.CircuitBreakerOpen);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="TransientFailure"/> result with an underlying exception.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="exception">The underlying exception.</param>
-    /// <returns>A new <see cref="TransientFailure"/> result instance.</returns>
-    public static WebhookDeliveryResult Transient(string errorMessage, Exception exception) {
-        return new TransientFailure(errorMessage, exception);
+    /// <summary>Creates a <see cref="TransientFailure"/> result specifically caused by rate limiting throttling.</summary>
+    public static WebhookDeliveryResult RateLimited(string endpointId, TimeSpan retryAfter) {
+        return new TransientFailure($"Rate limit exceeded for endpoint '{endpointId}'.", 429, retryAfter, TransientFailureReason.RateLimitThrottled);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="PermanentFailure"/> result.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <returns>A new <see cref="PermanentFailure"/> result instance.</returns>
+    /// <summary>Creates a <see cref="TransientFailure"/> result caused by an outbound request timeout.</summary>
+    public static WebhookDeliveryResult Timeout(string errorMessage) {
+        return new TransientFailure(errorMessage, 408, null, TransientFailureReason.Timeout);
+    }
+
+    /// <summary>Creates a <see cref="TransientFailure"/> result caused by a network socket or DNS failure.</summary>
+    public static WebhookDeliveryResult NetworkFailure(string errorMessage, Exception? exception) {
+        return new TransientFailure(errorMessage, null, null, TransientFailureReason.NetworkGlitch, exception);
+    }
+
+    /// <summary>Creates a <see cref="TransientFailure"/> result caused by a network exception with an optional status code.</summary>
+    public static WebhookDeliveryResult NetworkFailure(string errorMessage, int? statusCode, Exception? exception) {
+        return new TransientFailure(
+            errorMessage,
+            statusCode,
+            null,
+            statusCode.HasValue ? TransientFailureReason.ServerUnavailable : TransientFailureReason.NetworkGlitch,
+            exception);
+    }
+
+    /// <summary>Creates a <see cref="PermanentFailure"/> result.</summary>
     public static WebhookDeliveryResult Permanent(string errorMessage) {
         return new PermanentFailure(errorMessage);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="PermanentFailure"/> result with a status code.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="statusCode">The transport status code.</param>
-    /// <returns>A new <see cref="PermanentFailure"/> result instance.</returns>
+    /// <summary>Creates a <see cref="PermanentFailure"/> result with a status code.</summary>
     public static WebhookDeliveryResult Permanent(string errorMessage, int statusCode) {
         return new PermanentFailure(errorMessage, statusCode);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="PermanentFailure"/> result with a failure reason.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="reason">The classified permanent failure reason.</param>
-    /// <returns>A new <see cref="PermanentFailure"/> result instance.</returns>
+    /// <summary>Creates a <see cref="PermanentFailure"/> result with a classification reason.</summary>
     public static WebhookDeliveryResult Permanent(string errorMessage, PermanentFailureReason reason) {
         return new PermanentFailure(errorMessage, reason);
     }
 
-    /// <summary>
-    /// Creates a new <see cref="PermanentFailure"/> result with a status code and failure reason.
-    /// </summary>
-    /// <param name="errorMessage">The error message.</param>
-    /// <param name="statusCode">The transport status code.</param>
-    /// <param name="reason">The classified permanent failure reason.</param>
-    /// <returns>A new <see cref="PermanentFailure"/> result instance.</returns>
-    public static WebhookDeliveryResult Permanent(string errorMessage, int statusCode, PermanentFailureReason reason) {
+    /// <summary>Creates a <see cref="PermanentFailure"/> result with a status code and classification reason.</summary>
+    public static WebhookDeliveryResult Permanent(string errorMessage, int? statusCode, PermanentFailureReason reason) {
         return new PermanentFailure(errorMessage, statusCode, reason);
     }
 }

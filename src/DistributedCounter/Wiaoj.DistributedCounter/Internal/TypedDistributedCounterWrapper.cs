@@ -28,6 +28,16 @@ internal class TypedDistributedCounterWrapper<TTag>(IDistributedCounterFactory f
         return ForKey(key).TryDecrementAsync(amount, minLimit, expiry, cancellationToken);
     }
 
+    public ValueTask<bool> TryCompareExchangeAsync<TKey>(
+          TKey key,
+          CounterValue expectedValue,
+          CounterValue newValue,
+          CounterExpiry expiry,
+          CancellationToken cancellationToken) where TKey : notnull {
+        return ForKey(key).TryCompareExchangeAsync(expectedValue, newValue, expiry, cancellationToken);
+    }
+
+
     public ValueTask<CounterValue> GetValueAsync<TKey>(TKey key, CancellationToken cancellationToken) where TKey : notnull {
         return ForKey(key).GetValueAsync(cancellationToken);
     }
@@ -50,7 +60,15 @@ internal class TypedDistributedCounterWrapper<TTag>(IDistributedCounterFactory f
     }
 
     public ValueTask<CounterLimitResult> TryDecrementAsync(long amount, long minLimit, CounterExpiry expiry, CancellationToken cancellationToken) {
-        return this._inner.Value.TryDecrementAsync(minLimit, amount, expiry, cancellationToken);
+        return this._inner.Value.TryDecrementAsync(amount, minLimit, expiry, cancellationToken);
+    }
+
+    public ValueTask<bool> TryCompareExchangeAsync(
+        CounterValue expectedValue,
+        CounterValue newValue,
+        CounterExpiry expiry,
+        CancellationToken cancellationToken) {
+        return this._inner.Value.TryCompareExchangeAsync(expectedValue, newValue, expiry, cancellationToken);
     }
 
     public ValueTask<CounterValue> GetValueAsync(CancellationToken cancellationToken) {

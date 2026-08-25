@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Resilience;
+﻿using Wiaoj.Preconditions;
+
+namespace Wiaoj.Resilience;
 
 /// <summary>
 /// Extension methods for executing asynchronous delegates under circuit breaker protection.
@@ -54,6 +56,7 @@ public static class CircuitBreakerExecutionExtensions {
     /// <param name="operation">The asynchronous operation delegate.</param>
     /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="CircuitBreakerOpenException">Thrown when the circuit is open.</exception>
     public static async ValueTask ExecuteAsync(
         this ICircuitBreaker circuitBreaker,
         string key,

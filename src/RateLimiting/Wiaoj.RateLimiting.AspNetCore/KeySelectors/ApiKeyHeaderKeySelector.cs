@@ -13,25 +13,46 @@ public sealed class ApiKeyHeaderKeySelector : IRateLimitKeySelector<HttpContext>
     private readonly IRateLimitKeySelector<HttpContext> _fallbackSelector;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ApiKeyHeaderKeySelector"/> class.
+    /// Initializes a new instance of the <see cref="ApiKeyHeaderKeySelector"/> class with default header and fallback selector.
     /// </summary>
-    /// <param name="headerName">The name of the HTTP header containing the API key. Defaults to <see cref="RateLimitConstants.Headers.DefaultApiKey"/>.</param>
-    /// <param name="prefix">An optional key prefix for scope isolation (e.g. <c>"apikey:"</c>). Defaults to <c>"apikey:"</c>.</param>
-    /// <param name="fallbackSelector">
-    /// An optional fallback selector invoked when the specified header is missing or empty.
-    /// Defaults to a <see cref="ClientIpKeySelector"/> prefixed with <c>"anonymous_ip:"</c>.
-    /// </param>
+    public ApiKeyHeaderKeySelector()
+        : this(RateLimitConstants.Headers.DefaultApiKey, "apikey:", new ClientIpKeySelector("anonymous_ip:")) { }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ApiKeyHeaderKeySelector"/> class with a specified header name.
+    /// </summary>
+    /// <param name="headerName">The name of the HTTP header containing the API key.</param>
+    public ApiKeyHeaderKeySelector(string headerName)
+        : this(headerName, "apikey:", new ClientIpKeySelector("anonymous_ip:")) { }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ApiKeyHeaderKeySelector"/> class with a specified header name and key prefix.
+    /// </summary>
+    /// <param name="headerName">The name of the HTTP header containing the API key.</param>
+    /// <param name="prefix">The key prefix for scope isolation.</param>
+    public ApiKeyHeaderKeySelector(string headerName, string prefix)
+        : this(headerName, prefix, new ClientIpKeySelector("anonymous_ip:")) { }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ApiKeyHeaderKeySelector"/> class with header name, key prefix, and fallback selector.
+    /// </summary>
+    /// <param name="headerName">The name of the HTTP header containing the API key.</param>
+    /// <param name="prefix">The key prefix for scope isolation.</param>
+    /// <param name="fallbackSelector">The fallback selector invoked when the specified header is missing or empty.</param>
     public ApiKeyHeaderKeySelector(
-        string headerName = RateLimitConstants.Headers.DefaultApiKey,
-        string prefix = "apikey:",
-        IRateLimitKeySelector<HttpContext>? fallbackSelector = null) {
+        string headerName,
+        string prefix,
+        IRateLimitKeySelector<HttpContext> fallbackSelector) {
         Preca.ThrowIfNullOrWhiteSpace(headerName);
+        Preca.ThrowIfNull(prefix);
+        Preca.ThrowIfNull(fallbackSelector);
+
         this._headerName = headerName;
-        this._prefix = prefix ?? string.Empty;
-        this._fallbackSelector = fallbackSelector ?? new ClientIpKeySelector("anonymous_ip:");
+        this._prefix = prefix;
+        this._fallbackSelector = fallbackSelector;
     }
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     public string GetKey(HttpContext context) {
         Preca.ThrowIfNull(context);
 

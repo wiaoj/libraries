@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Resilience;
+﻿using Wiaoj.Preconditions;
+
+namespace Wiaoj.Resilience;
 
 /// <summary>
 /// Configuration options for the percentage-based sampling window circuit breaker strategy.
@@ -16,6 +18,9 @@ public sealed class SamplingWindowCircuitBreakerOptions {
     /// <summary>The default duration the circuit remains open upon tripping (1 minute).</summary>
     public static readonly TimeSpan DefaultBreakDuration = TimeSpan.FromMinutes(1);
 
+    /// <summary>The default maximum number of concurrent probe requests permitted during half-open state (5).</summary>
+    public const int DefaultPermittedNumberOfCallsInHalfOpenState = 5;
+
     /// <summary>Gets or sets the failure rate ratio (between 0.0 and 1.0) required to trip the circuit. Default is 0.5 (50%).</summary>
     public double FailureRateThreshold { get; set; } = DefaultFailureRateThreshold;
 
@@ -28,6 +33,9 @@ public sealed class SamplingWindowCircuitBreakerOptions {
     /// <summary>Gets or sets the duration the circuit remains open before entering half-open probing. Default is 1 minute.</summary>
     public TimeSpan BreakDuration { get; set; } = DefaultBreakDuration;
 
+    /// <summary>Gets or sets the maximum number of concurrent trial probe requests permitted during the half-open recovery state. Default is 5.</summary>
+    public int PermittedNumberOfCallsInHalfOpenState { get; set; } = DefaultPermittedNumberOfCallsInHalfOpenState;
+
     /// <summary>
     /// Validates the configuration values.
     /// </summary>
@@ -37,6 +45,7 @@ public sealed class SamplingWindowCircuitBreakerOptions {
             throw new ArgumentOutOfRangeException(nameof(this.FailureRateThreshold), "Failure rate threshold must be greater than 0.0 and less than or equal to 1.0.");
         }
         Preca.ThrowIfLessThan(this.MinimumThroughput, 1);
+        Preca.ThrowIfLessThan(this.PermittedNumberOfCallsInHalfOpenState, 1);
         if(this.SamplingWindow <= TimeSpan.Zero) {
             throw new ArgumentOutOfRangeException(nameof(this.SamplingWindow), "Sampling window must be greater than zero.");
         }

@@ -5,19 +5,19 @@ using Wiaoj.DistributedCounter.DependencyInjection;
 using Wiaoj.DistributedCounter.Redis.Internal;
 using Wiaoj.Preconditions;
 
-#pragma warning disable IDE0130 // Namespace does not match folder structure
+#pragma warning disable IDE0130
 namespace Wiaoj.DistributedCounter;
-#pragma warning restore IDE0130 // Namespace does not match folder structure
+#pragma warning restore IDE0130
 
 /// <summary>
-/// Extension methods for configuring Redis-backed storage on <see cref="IDistributedCounterBuilder"/>.
+/// Extension methods for configuring Redis-backed storage on <see cref="IDistributedCounterBuilder"/> and <see cref="CounterConfiguration"/>.
 /// </summary>
 public static class RedisDistributedCounterBuilderExtensions {
     /// <summary>
-    /// Configures the distributed counter to use Redis via connection string.
+    /// Configures the distributed counter engine to use Redis via connection string as the global default storage.
     /// </summary>
     /// <param name="builder">The counter builder.</param>
-    /// <param name="connectionString">The Redis connection string (e.g. "localhost:6379,abortConnect=false").</param>
+    /// <param name="connectionString">The Redis connection string.</param>
     /// <returns>The builder instance for fluent chaining.</returns>
     public static IDistributedCounterBuilder UseRedis(
         this IDistributedCounterBuilder builder,
@@ -26,7 +26,6 @@ public static class RedisDistributedCounterBuilderExtensions {
         Preca.ThrowIfNullOrWhiteSpace(connectionString);
 
         builder.Services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
-
         builder.Services.RemoveAll<ICounterStorage>();
         builder.Services.AddSingleton<ICounterStorage, RedisCounterStorage>();
 
@@ -34,7 +33,7 @@ public static class RedisDistributedCounterBuilderExtensions {
     }
 
     /// <summary>
-    /// Configures the distributed counter to use Redis via <see cref="ConfigurationOptions"/>.
+    /// Configures the distributed counter engine to use Redis via <see cref="ConfigurationOptions"/>.
     /// </summary>
     /// <param name="builder">The counter builder.</param>
     /// <param name="configurationOptions">The StackExchange.Redis configuration options.</param>
@@ -46,7 +45,6 @@ public static class RedisDistributedCounterBuilderExtensions {
         Preca.ThrowIfNull(configurationOptions);
 
         builder.Services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(configurationOptions));
-
         builder.Services.RemoveAll<ICounterStorage>();
         builder.Services.AddSingleton<ICounterStorage, RedisCounterStorage>();
 
@@ -54,7 +52,7 @@ public static class RedisDistributedCounterBuilderExtensions {
     }
 
     /// <summary>
-    /// Configures the distributed counter to use Redis with an existing <see cref="IConnectionMultiplexer"/> singleton instance.
+    /// Configures the distributed counter engine to use Redis with an existing <see cref="IConnectionMultiplexer"/> singleton instance.
     /// </summary>
     /// <param name="builder">The counter builder.</param>
     /// <param name="connectionMultiplexer">The active multiplexer instance.</param>
@@ -67,7 +65,6 @@ public static class RedisDistributedCounterBuilderExtensions {
 
         builder.Services.RemoveAll<IConnectionMultiplexer>();
         builder.Services.AddSingleton(connectionMultiplexer);
-
         builder.Services.RemoveAll<ICounterStorage>();
         builder.Services.AddSingleton<ICounterStorage, RedisCounterStorage>();
 
@@ -75,57 +72,33 @@ public static class RedisDistributedCounterBuilderExtensions {
     }
 
     /// <summary>
-    /// Configures the distributed counter to use Redis with a custom factory delegate.
+    /// Configures this specific counter or tag to use Redis resolved from the service provider.
     /// </summary>
-    /// <param name="builder">The counter builder.</param>
-    /// <param name="multiplexerFactory">Factory resolving the connection multiplexer from the container.</param>
-    /// <returns>The builder instance for fluent chaining.</returns>
-    public static IDistributedCounterBuilder UseRedis(
-        this IDistributedCounterBuilder builder,
-        Func<IServiceProvider, IConnectionMultiplexer> multiplexerFactory) {
-        Preca.ThrowIfNull(builder);
-        Preca.ThrowIfNull(multiplexerFactory);
-
-        builder.Services.RemoveAll<IConnectionMultiplexer>();
-        builder.Services.AddSingleton(multiplexerFactory);
-
-        builder.Services.RemoveAll<ICounterStorage>();
-        builder.Services.AddSingleton<ICounterStorage, RedisCounterStorage>();
-
-        return builder;
+    /// <param name="config">The counter configuration.</param>
+    /// <returns>The configuration instance for fluent chaining.</returns>
+    public static CounterConfiguration UseRedis(this CounterConfiguration config) {
+        Preca.ThrowIfNull(config);
+        return config.UseStorage(static sp => {
+            IConnectionMultiplexer multiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+            return new RedisCounterStorage(multiplexer);
+        });
     }
 
     /// <summary>
-    /// Configures the distributed counter to use Redis, assuming <see cref="IConnectionMultiplexer"/> is already registered in DI.
+    /// Configures this specific counter or tag to use Redis via a keyed <see cref="IConnectionMultiplexer"/> service.
     /// </summary>
-    /// <param name="builder">The counter builder.</param>
-    /// <returns>The builder instance for fluent chaining.</returns>
-    public static IDistributedCounterBuilder UseRedis(this IDistributedCounterBuilder builder) {
-        Preca.ThrowIfNull(builder);
-
-        builder.Services.RemoveAll<ICounterStorage>();
-        builder.Services.AddSingleton<ICounterStorage, RedisCounterStorage>();
-
-        return builder;
-    }
-
-    /// <summary>
-    /// Configures the distributed counter to use Redis resolving a Keyed <see cref="IConnectionMultiplexer"/> from DI.
-    /// </summary>
-    /// <param name="builder">The counter builder.</param>
+    /// <param name="config">The counter configuration.</param>
     /// <param name="serviceKey">The keyed service identifier for the multiplexer.</param>
-    /// <returns>The builder instance for fluent chaining.</returns>
-    public static IDistributedCounterBuilder UseRedisKeyed(
-        this IDistributedCounterBuilder builder,
-        object? serviceKey) {
-        Preca.ThrowIfNull(builder);
+    /// <returns>The configuration instance for fluent chaining.</returns>
+    public static CounterConfiguration UseRedisKeyed(
+        this CounterConfiguration config,
+        object serviceKey) {
+        Preca.ThrowIfNull(config);
+        Preca.ThrowIfNull(serviceKey);
 
-        builder.Services.RemoveAll<ICounterStorage>();
-        builder.Services.AddSingleton<ICounterStorage>(sp => {
+        return config.UseStorage(sp => {
             IConnectionMultiplexer multiplexer = sp.GetRequiredKeyedService<IConnectionMultiplexer>(serviceKey);
             return new RedisCounterStorage(multiplexer);
         });
-
-        return builder;
     }
 }

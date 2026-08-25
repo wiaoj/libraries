@@ -9,39 +9,36 @@ using Wiaoj.Preconditions;
 namespace Wiaoj.RateLimiting.AspNetCore.Middleware;
 
 /// <summary>
-/// ASP.NET Core middleware that enforces rate limiting using endpoint metadata, dynamic cost resolution, and RFC standards.
+/// ASP.NET Core middleware that enforces rate limiting using endpoint metadata, named policies, and RFC standards.
 /// </summary>
 internal sealed class RateLimitingMiddleware {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly RequestDelegate _next;
-    private readonly IRateLimitAlgorithm _algorithm;
-    private readonly IOptionsMonitor<RateLimitingOptions> _optionsMonitor;
+    private readonly IRateLimiter _rateLimiter;
+    private readonly IOptionsMonitor<RateLimiterAspNetCoreOptions> _optionsMonitor;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RateLimitingMiddleware"/> class.
     /// </summary>
     public RateLimitingMiddleware(
         RequestDelegate next,
-        IRateLimitAlgorithm algorithm,
-        IOptionsMonitor<RateLimitingOptions> optionsMonitor) {
+        IRateLimiter rateLimiter,
+        IOptionsMonitor<RateLimiterAspNetCoreOptions> optionsMonitor) {
         Preca.ThrowIfNull(next);
-        Preca.ThrowIfNull(algorithm);
+        Preca.ThrowIfNull(rateLimiter);
         Preca.ThrowIfNull(optionsMonitor);
 
         this._next = next;
-        this._algorithm = algorithm;
+        this._rateLimiter = rateLimiter;
         this._optionsMonitor = optionsMonitor;
     }
 
-    /// <summary>
-    /// Evaluates rate limits for the incoming request, considering endpoint metadata and dynamic costs.
-    /// </summary>
     public async Task InvokeAsync(HttpContext context) {
         Preca.ThrowIfNull(context);
 
-        RateLimitingOptions options = this._optionsMonitor.CurrentValue;
+        RateLimiterAspNetCoreOptions options = this._optionsMonitor.CurrentValue;
 
-        // 1. Endpoint Metadata Kontrolü: Devre dışı bırakılmış mı?
+        // 1. Endpoint Metadata Kontrolü
         Endpoint? endpoint = context.GetEndpoint();
         RateLimitMetadata? metadata = endpoint?.Metadata.GetMetadata<RateLimitMetadata>();
         DisableRateLimitingAttribute? disabledAttr = endpoint?.Metadata.GetMetadata<DisableRateLimitingAttribute>();
@@ -51,8 +48,7 @@ internal sealed class RateLimitingMiddleware {
             return;
         }
 
-        // 2. Dinamik Maliyet (Cost) Çözümleme:
-        // Öncelik: Metadata Dynamic Resolver > Metadata Static Cost > Attribute Cost > Global Default Resolver
+        // 2. Maliyet (Cost) Çözümleme
         int cost;
         if(metadata?.DynamicCostResolver is not null) {
             cost = Math.Max(1, metadata.DynamicCostResolver(context));
@@ -69,11 +65,12 @@ internal sealed class RateLimitingMiddleware {
 
         string key = options.KeySelector.GetKey(context);
 
-        RateLimitDecision decision = await this._algorithm
-            .TryAcquireAsync(key, cost, context.RequestAborted)
-            .ConfigureAwait(false);
+        // 3. Policy Seçimi ve Limit Kontrolü (Named vs Default)
+        RateLimitDecision decision = metadata?.PolicyName is not null
+            ? await this._rateLimiter.TryAcquireAsync(metadata.PolicyName, key, cost, context.RequestAborted).ConfigureAwait(false)
+            : await this._rateLimiter.TryAcquireAsync(key, cost, context.RequestAborted).ConfigureAwait(false);
 
-        // 3. İzin Verildi (200 OK Path)
+        // 4. İzin Verildi (200 OK Path)
         if(decision.IsAllowed) {
             if(options.EnableIetfHeaders && decision.Remaining.HasValue) {
                 context.Response.Headers[RateLimitConstants.Headers.RateLimitRemaining] = decision.Remaining.Value.ToString(CultureInfo.InvariantCulture);
@@ -83,7 +80,7 @@ internal sealed class RateLimitingMiddleware {
             return;
         }
 
-        // 4. Reddedildi (429 Path & RFC Header Yazımı)
+        // 5. Reddedildi (429 Too Many Requests)
         context.Response.StatusCode = options.StatusCode;
 
         int? retryAfterSeconds = null;
@@ -119,7 +116,7 @@ internal sealed class RateLimitingMiddleware {
 
     private static async Task WriteProblemDetailsResponseAsync(
         HttpContext context,
-        RateLimitingOptions options,
+        RateLimiterAspNetCoreOptions options,
         RateLimitDecision decision,
         int? retryAfterSeconds) {
 

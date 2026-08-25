@@ -1,9 +1,9 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Wiaoj.Preconditions;
 using Wiaoj.RateLimiting.AspNetCore;
-using Wiaoj.RateLimiting.DependencyInjection;
+using Wiaoj.RateLimiting;
 
-#pragma warning disable IDE0130 // Namespace matches standard DI convention
+#pragma warning disable IDE0130
 namespace Microsoft.Extensions.DependencyInjection;
 #pragma warning restore IDE0130
 
@@ -15,11 +15,11 @@ public static class RateLimitingBuilderExtensions {
     /// Configures ASP.NET Core rate limiting options directly within the rate limiting builder.
     /// </summary>
     /// <param name="builder">The rate limiting builder instance.</param>
-    /// <param name="configure">The delegate to configure <see cref="RateLimitingOptions"/>.</param>
+    /// <param name="configure">The delegate to configure <see cref="RateLimiterAspNetCoreOptions"/>.</param>
     /// <returns>The builder instance for fluent chaining.</returns>
     public static IRateLimitingBuilder WithAspNetCore(
         this IRateLimitingBuilder builder,
-        Action<RateLimitingOptions> configure) {
+        Action<RateLimiterAspNetCoreOptions> configure) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(configure);
 
@@ -39,7 +39,7 @@ public static class RateLimitingBuilderExtensions {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(configurationSection);
 
-        builder.Services.Configure<RateLimitingOptions>(configurationSection);
+        builder.Services.Configure<RateLimiterAspNetCoreOptions>(configurationSection);
         return builder;
     }
 }

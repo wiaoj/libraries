@@ -59,10 +59,10 @@ public sealed class ShardedWebhookTransportTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 2. ROUTING, HASHING & DETERMINISM (POWER-OF-TWO VS MODULO)
+    // 2. SINGLE-JOB ROUTING & DETERMINISM (POWER-OF-TWO VS MODULO)
     // ────────────────────────────────────────────────────────────────────────
 
-    public sealed class TheRoutingBehavior {
+    public sealed class TheSingleJobRoutingBehavior {
         [Fact]
         public async Task EnqueueAsync_WithPowerOfTwoShards_UsesBitmask_AndRoutesConsistently() {
             // Arrange: 8 shards (Power of Two -> Bitmask fast-path)
@@ -85,8 +85,8 @@ public sealed class ShardedWebhookTransportTests {
                 WebhookTestFactory.CreateEvent());
 
             // Act
-            await sharded.EnqueueAsync(job1);
-            await sharded.EnqueueAsync(job2);
+            await sharded.EnqueueAsync(job1, TestContext.Current.CancellationToken);
+            await sharded.EnqueueAsync(job2, TestContext.Current.CancellationToken);
 
             ulong hash = XxHash3.Compute(partitionKey.AsSpan()).Value;
             int expectedShardIndex = (int)(hash & 7ul);
@@ -123,8 +123,8 @@ public sealed class ShardedWebhookTransportTests {
                 WebhookTestFactory.CreateEvent());
 
             // Act
-            await sharded.EnqueueAsync(job1);
-            await sharded.EnqueueAsync(job2);
+            await sharded.EnqueueAsync(job1, TestContext.Current.CancellationToken);
+            await sharded.EnqueueAsync(job2, TestContext.Current.CancellationToken);
 
             ulong hash = XxHash3.Compute(partitionKey.AsSpan()).Value;
             int expectedShardIndex = (int)(hash % 5ul);
@@ -153,8 +153,8 @@ public sealed class ShardedWebhookTransportTests {
                 WebhookTestFactory.CreateEvent());
 
             // Act
-            await routerInstance1.EnqueueAsync(job);
-            await routerInstance2.EnqueueAsync(job);
+            await routerInstance1.EnqueueAsync(job, TestContext.Current.CancellationToken);
+            await routerInstance2.EnqueueAsync(job, TestContext.Current.CancellationToken);
 
             int receivedIndex1 = -1;
             int receivedIndex2 = -1;
@@ -191,7 +191,7 @@ public sealed class ShardedWebhookTransportTests {
                     "unicode.test",
                     WebhookTestFactory.CreateEvent());
 
-                await sharded.EnqueueAsync(job);
+                await sharded.EnqueueAsync(job, TestContext.Current.CancellationToken);
             }
 
             int totalEnqueued = shards.Sum(s => {
@@ -216,7 +216,7 @@ public sealed class ShardedWebhookTransportTests {
                 "long.key.test",
                 WebhookTestFactory.CreateEvent());
 
-            await sharded.EnqueueAsync(job);
+            await sharded.EnqueueAsync(job, TestContext.Current.CancellationToken);
 
             Assert.True(shard.Reader.TryRead(out WebhookDeliveryJob? dequeued));
             Assert.Same(job, dequeued);
@@ -224,7 +224,100 @@ public sealed class ShardedWebhookTransportTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 3. DELAYED SCHEDULING & RETRIES
+    // 3. BATCH ROUTING & BULK DISPATCHING (NEW)
+    // ────────────────────────────────────────────────────────────────────────
+
+    public sealed class TheBatchJobRoutingBehavior {
+        [Fact]
+        public async Task EnqueueBatchAsync_RoutesEachJobToCorrectShard_BasedOnPartitionKey() {
+            // Arrange: 4 Shards (Power of Two)
+            InMemoryWebhookTransport[] shards = [new(), new(), new(), new()];
+            using ShardedWebhookTransport sharded = new(shards);
+
+            WebhookDeliveryJob[] batchJobs = Enumerable.Range(1, 40).Select(i => {
+                string partKey = $"tenant-batch-{i}";
+                return WebhookTestFactory.CreateJob(
+                    WebhookJobId.NewJobId(),
+                    WebhookTestFactory.CreateEndpointId($"ep-{i}"),
+                    new WebhookPartitionKey(partKey),
+                    "order.created",
+                    WebhookTestFactory.CreateEvent());
+            }).ToArray();
+
+            // Act: Dispatch 40 jobs in a single batch call
+            await sharded.EnqueueBatchAsync(batchJobs, TestContext.Current.CancellationToken);
+
+            // Assert: Verify each job landed in its mathematically expected shard
+            int totalDequeued = 0;
+            for(int i = 0; i < batchJobs.Length; i++) {
+                WebhookDeliveryJob job = batchJobs[i];
+                ulong hash = XxHash3.Compute(job.PartitionKey.AsSpan()).Value;
+                int expectedShardIndex = (int)(hash & 3ul);
+
+                InMemoryWebhookTransport targetShard = shards[expectedShardIndex];
+                Assert.True(targetShard.Reader.TryRead(out WebhookDeliveryJob? dequeued));
+                Assert.Equal(job.Id, dequeued.Id);
+                Assert.Equal(job.PartitionKey, dequeued.PartitionKey);
+                totalDequeued++;
+            }
+
+            Assert.Equal(40, totalDequeued);
+        }
+
+        [Fact]
+        public async Task EnqueueBatchAsync_PreservesRelativeFifoOrder_ForIdenticalPartitionKeys() {
+            InMemoryWebhookTransport[] shards = [new(), new(), new(), new()];
+            using ShardedWebhookTransport sharded = new(shards);
+
+            const string sharedPartitionKey = "shared-batch-aggregate-1";
+            WebhookDeliveryJob[] sequentialJobs = Enumerable.Range(1, 10).Select(seq =>
+                WebhookTestFactory.CreateJob(
+                    WebhookJobId.NewJobId(),
+                    WebhookTestFactory.CreateEndpointId("customer-1"),
+                    new WebhookPartitionKey(sharedPartitionKey),
+                    $"order.seq.{seq}",
+                    WebhookTestFactory.CreateEvent())
+            ).ToArray();
+
+            // Act
+            await sharded.EnqueueBatchAsync(sequentialJobs, TestContext.Current.CancellationToken);
+
+            ulong hash = XxHash3.Compute(sharedPartitionKey.AsSpan()).Value;
+            int expectedShardIndex = (int)(hash & 3ul);
+            InMemoryWebhookTransport targetShard = shards[expectedShardIndex];
+
+            // Assert: All 10 jobs must drain from the target shard in exact sequence (1..10)
+            for(int expectedSeq = 1; expectedSeq <= 10; expectedSeq++) {
+                Assert.True(targetShard.Reader.TryRead(out WebhookDeliveryJob? dequeued));
+                Assert.Equal($"order.seq.{expectedSeq}", dequeued.EventType);
+            }
+        }
+
+        [Fact]
+        public async Task EnqueueBatchAsync_WhenBatchIsEmpty_CompletesImmediatelyWithoutWriting() {
+            InMemoryWebhookTransport[] shards = [new(), new()];
+            using ShardedWebhookTransport sharded = new(shards);
+
+            // Act
+            await sharded.EnqueueBatchAsync([], TestContext.Current.CancellationToken);
+
+            // Assert: No shards should contain any jobs
+            Assert.False(shards[0].Reader.TryRead(out _));
+            Assert.False(shards[1].Reader.TryRead(out _));
+        }
+
+        [Fact]
+        public async Task EnqueueBatchAsync_Throws_WhenBatchIsNull() {
+            using InMemoryWebhookTransport shard = new();
+            using ShardedWebhookTransport sharded = new([shard]);
+
+            await Assert.ThrowsAnyAsync<ArgumentNullException>(() =>
+                sharded.EnqueueBatchAsync(null!, TestContext.Current.CancellationToken));
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 4. DELAYED SCHEDULING & RETRIES
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheDelayedScheduling {
@@ -247,13 +340,13 @@ public sealed class ShardedWebhookTransportTests {
             InMemoryWebhookTransport targetShard = shards[expectedShardIndex];
 
             // Act: Enqueue with 50ms delay
-            await sharded.EnqueueAsync(job, TimeSpan.FromMilliseconds(50));
+            await sharded.EnqueueAsync(job, TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
 
             // Immediately: Job is buffered by scheduler, not yet readable
             Assert.False(targetShard.Reader.TryRead(out _));
 
             // Wait for timer flush
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
 
             // Assert: Job flushes into the exact intended shard
             Assert.True(targetShard.Reader.TryRead(out WebhookDeliveryJob? dequeued));
@@ -262,7 +355,7 @@ public sealed class ShardedWebhookTransportTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 4. HIGH CONCURRENCY & STRICT FIFO INVARIANT STRESS TEST
+    // 5. HIGH CONCURRENCY & STRICT FIFO INVARIANT STRESS TEST
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheConcurrencyStressTests {
@@ -288,9 +381,9 @@ public sealed class ShardedWebhookTransportTests {
                             $"event.seq.{sequenceId}",
                             payload);
 
-                        await sharded.EnqueueAsync(job);
+                        await sharded.EnqueueAsync(job, TestContext.Current.CancellationToken);
                     }
-                });
+                }, TestContext.Current.CancellationToken);
             }).ToArray();
 
             await Task.WhenAll(tasks);
@@ -324,7 +417,7 @@ public sealed class ShardedWebhookTransportTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 5. GUARDS AND CANCELLATION
+    // 6. GUARDS AND CANCELLATION
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheGuardsAndCancellation {
@@ -333,7 +426,8 @@ public sealed class ShardedWebhookTransportTests {
             using InMemoryWebhookTransport shard = new();
             using ShardedWebhookTransport sharded = new([shard]);
 
-            await Assert.ThrowsAnyAsync<ArgumentNullException>(() => sharded.EnqueueAsync(null!));
+            await Assert.ThrowsAnyAsync<ArgumentNullException>(() =>
+                sharded.EnqueueAsync(null!, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -342,7 +436,7 @@ public sealed class ShardedWebhookTransportTests {
             using ShardedWebhookTransport sharded = new([boundedShard]);
 
             WebhookDeliveryJob fillerJob = WebhookTestFactory.CreateJob();
-            await sharded.EnqueueAsync(fillerJob);
+            await sharded.EnqueueAsync(fillerJob, TestContext.Current.CancellationToken);
 
             using CancellationTokenSource cts = new();
             cts.Cancel();

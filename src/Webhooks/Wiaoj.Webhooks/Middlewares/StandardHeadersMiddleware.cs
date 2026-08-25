@@ -1,6 +1,6 @@
-﻿#pragma warning disable IDE0130
-using System.Reflection;
+﻿using System.Reflection;
 
+#pragma warning disable IDE0130
 namespace Wiaoj.Webhooks;
 #pragma warning restore IDE0130
 
@@ -9,7 +9,7 @@ namespace Wiaoj.Webhooks;
 /// (<c>User-Agent</c>, <c>Webhook-Id</c>, <c>Webhook-Event</c>, <c>Webhook-Attempt</c>)
 /// and endpoint-specific custom static headers into the outbound delivery context.
 /// </summary>
-public sealed class StandardHeadersMiddleware : IWebhookMiddleware {
+internal sealed class StandardHeadersMiddleware : IWebhookMiddleware {
     private static readonly string DefaultUserAgent =
         $"Wiaoj-Webhooks/{typeof(StandardHeadersMiddleware).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?

@@ -42,4 +42,12 @@ public interface IWebhookTransport {
     /// </param>
     /// <returns>A <see cref="Task"/> that completes once the job has been accepted by the transport.</returns>
     Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay);
+
+    /// <summary>
+    /// Enqueues a batch of webhook delivery jobs for asynchronous processing.
+    /// </summary>
+    /// <param name="jobs">The batch of delivery jobs to enqueue.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task representing the asynchronous enqueue operation.</returns>
+    Task EnqueueBatchAsync(IReadOnlyList<WebhookDeliveryJob> jobs, CancellationToken cancellationToken = default);
 }

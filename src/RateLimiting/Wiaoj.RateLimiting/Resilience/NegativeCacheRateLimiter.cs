@@ -4,11 +4,11 @@ using System.Collections.Concurrent;
 using Wiaoj.Preconditions;
 using Wiaoj.RateLimiting.Diagnostics;
 
-namespace Wiaoj.RateLimiting.Resilience;
+namespace Wiaoj.RateLimiting;
 
 /// <summary>
-/// A high-performance L1 negative-cache decorator that short-circuits rate-limited keys directly in memory,
-/// protecting the underlying distributed store (e.g. Redis) from high-frequency spam and DDoS attacks.
+/// An in-memory L1 negative-cache decorator that short-circuits rate-limited keys directly in RAM,
+/// deflecting repeated spam without querying remote storage.
 /// </summary>
 public sealed class NegativeCacheRateLimiter : IRateLimitAlgorithm {
     private readonly IRateLimitAlgorithm _inner;
@@ -28,18 +28,18 @@ public sealed class NegativeCacheRateLimiter : IRateLimitAlgorithm {
     /// Initializes a new instance of the <see cref="NegativeCacheRateLimiter"/> class with a custom time provider.
     /// </summary>
     /// <param name="inner">The underlying rate limiting algorithm to guard.</param>
-    /// <param name="timeProvider">The time provider driving cache expiration. Defaults to <see cref="TimeProvider.System"/> when omitted.</param>
+    /// <param name="timeProvider">The time provider instance.</param>
     public NegativeCacheRateLimiter(
         IRateLimitAlgorithm inner,
         TimeProvider timeProvider)
         : this(inner, timeProvider, NullLogger<NegativeCacheRateLimiter>.Instance) { }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="NegativeCacheRateLimiter"/> class with custom time provider and diagnostic logging.
+    /// Initializes a new instance of the <see cref="NegativeCacheRateLimiter"/> class with a custom time provider and diagnostic logging.
     /// </summary>
     /// <param name="inner">The underlying rate limiting algorithm to guard.</param>
-    /// <param name="timeProvider">The time provider driving cache expiration. Defaults to <see cref="TimeProvider.System"/> when omitted.</param>
-    /// <param name="logger">Optional logger for logging short-circuit events.</param>
+    /// <param name="timeProvider">The time provider instance.</param>
+    /// <param name="logger">The logger instance.</param>
     public NegativeCacheRateLimiter(
         IRateLimitAlgorithm inner,
         TimeProvider timeProvider,
@@ -54,27 +54,28 @@ public sealed class NegativeCacheRateLimiter : IRateLimitAlgorithm {
         this._logger = logger;
     }
 
-    /// <inheritdoc />
-    public async ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost = 1, CancellationToken cancellationToken = default) {
+    /// <inheritdoc/>
+    public async ValueTask<RateLimitDecision> TryAcquireAsync(
+        string key,
+        int cost,
+        CancellationToken cancellationToken = default) {
         Preca.ThrowIfNullOrEmpty(key);
         Preca.ThrowIfNegativeOrZero(cost);
 
         DateTimeOffset now = this._timeProvider.GetUtcNow();
-         
+
         if(this._denialCache.TryGetValue(key, out DateTimeOffset blockedUntil)) {
-            if(now < blockedUntil) { 
+            if(now < blockedUntil) {
                 TimeSpan retryAfter = blockedUntil - now;
-                if(this._logger.IsEnabled(LogLevel.Debug)) {
-                    this._logger.LogNegativeCacheHit(key, this._algorithmName, retryAfter.TotalSeconds);
-                }
+                this._logger.LogNegativeCacheHit(key, this._algorithmName, retryAfter.TotalSeconds);
                 return RateLimitDecision.Denied(retryAfter, remaining: 0);
             }
-             
+
             this._denialCache.TryRemove(key, out _);
         }
-         
+
         RateLimitDecision decision = await this._inner.TryAcquireAsync(key, cost, cancellationToken).ConfigureAwait(false);
-         
+
         if(!decision.IsAllowed && decision.RetryAfter is { } retryAfterSpan && retryAfterSpan > TimeSpan.Zero) {
             DateTimeOffset blockTarget = now.Add(retryAfterSpan);
             this._denialCache[key] = blockTarget;

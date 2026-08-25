@@ -8,7 +8,7 @@ namespace Wiaoj.Webhooks.BloomFilter;
 /// <summary>
 /// Webhook delivery middleware that prevents duplicate event deliveries using a high-performance <see cref="IBloomFilter"/>.
 /// </summary>
-public sealed class BloomFilterDeduplicationMiddleware : IWebhookMiddleware {
+internal sealed class BloomFilterDeduplicationMiddleware : IWebhookMiddleware {
     private readonly IBloomFilter _bloomFilter;
     private readonly BloomFilterDeduplicationOptions _options;
     private readonly ILogger<BloomFilterDeduplicationMiddleware> _logger;

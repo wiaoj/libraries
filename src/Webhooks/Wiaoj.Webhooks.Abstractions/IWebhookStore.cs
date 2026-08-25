@@ -13,6 +13,14 @@ public interface IWebhookStore {
     Task SaveAsync(WebhookJobRecord job, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Persists a batch of newly created webhook jobs in a single atomic database operation.
+    /// </summary>
+    /// <param name="jobs">The collection of job records to persist.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task representing the asynchronous save operation.</returns>
+    Task SaveBatchAsync(IReadOnlyList<WebhookJobRecord> jobs, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Retrieves a webhook job record by its unique identifier.
     /// </summary>
     /// <param name="jobId">The unique job identifier.</param>

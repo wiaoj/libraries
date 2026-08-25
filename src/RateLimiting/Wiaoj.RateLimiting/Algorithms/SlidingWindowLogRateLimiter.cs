@@ -7,40 +7,8 @@ using Wiaoj.RateLimiting.Diagnostics;
 namespace Wiaoj.RateLimiting;
 
 /// <summary>
-/// An exact sliding-window <see cref="IRateLimitAlgorithm"/>: every accepted request is recorded
-/// as an individual log entry (timestamp + cost); a request is allowed only if the sum of costs
-/// still inside the trailing <c>window</c> lookback — recomputed fresh on every call — does not
-/// exceed <c>limit</c>. Unlike <see cref="SlidingWindowRateLimiter"/> (which blends two adjacent
-/// fixed windows as a cheap approximation), this is the "real" sliding window the README calls out
-/// as the exactness/cost trade-off: no boundary burst is possible, but memory and per-request work
-/// scale with the number of requests actually seen inside a window, not with a constant.
+/// An exact sliding-window log <see cref="IRateLimitAlgorithm"/> that tracks individual request timestamps.
 /// </summary>
-/// <remarks>
-/// <para>
-/// <b>How entries expire:</b> each entry is evicted independently, exactly <c>window</c> after it
-/// was recorded — not all at once the way a fixed window resets. A key that has been steadily
-/// making requests never sees a sudden full reset; capacity trickles back in as old entries age out.
-/// This is the property <see cref="SlidingWindowRateLimiter"/> only approximates via weighting.
-/// </para>
-/// <para>
-/// <b>State shape:</b> this needs an ordered, atomically-trimmable log per key — conceptually a
-/// Redis sorted set scored by timestamp (<c>ZADD</c> to record, <c>ZREMRANGEBYSCORE</c> to evict,
-/// <c>ZCARD</c>/summed scores to count). A plain <see cref="DistributedCounter.IDistributedCounter"/>
-/// (a single <c>long</c> + TTL) can't express this, the same primitive mismatch
-/// <see cref="TokenBucketRateLimiter"/> calls out for its own state. This implementation therefore
-/// stores each key's log as an in-process <see cref="List{T}"/> guarded by a per-key lock — correct
-/// and atomic for a single process, but <b>not distributed</b>. A distributed backend would swap
-/// this for a Redis sorted set (or equivalent) behind the same trim-then-count-then-conditionally-add
-/// shape; this class is the reference behavior such an implementation should match in tests.
-/// </para>
-/// <para>
-/// <b>Rollback on denial:</b> a request is speculatively evaluated — expired entries are trimmed
-/// and the candidate total is computed — before deciding whether to append. A denied request is
-/// never appended, so it never occupies capacity another request could have used, and the trim
-/// itself (removing genuinely expired entries) is preserved either way since it isn't a rollback
-/// candidate, it's just bookkeeping that's always correct to apply.
-/// </para>
-/// </remarks>
 public sealed class SlidingWindowLogRateLimiter : IRateLimitAlgorithm {
     private const string AlgorithmName = "SlidingWindowLog";
     private readonly int _limit;
@@ -50,21 +18,21 @@ public sealed class SlidingWindowLogRateLimiter : IRateLimitAlgorithm {
     private readonly ConcurrentDictionary<string, KeyLog> _state = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Creates a new exact sliding-window-log rate limiter.
+    /// Initializes a new instance of the <see cref="SlidingWindowLogRateLimiter"/> class.
     /// </summary>
-    /// <param name="limit">The maximum total cost allowed per key within any rolling lookback. Must be greater than zero.</param>
-    /// <param name="window">The lookback duration. Must be greater than <see cref="TimeSpan.Zero"/>.</param>
+    /// <param name="limit">The maximum total cost allowed within any rolling lookback window.</param>
+    /// <param name="window">The rolling lookback window duration.</param>
     public SlidingWindowLogRateLimiter(
         int limit,
         TimeSpan window)
         : this(limit, window, TimeProvider.System, NullLogger<SlidingWindowLogRateLimiter>.Instance) { }
 
     /// <summary>
-    /// Creates a new exact sliding-window-log rate limiter with a custom time provider.
+    /// Initializes a new instance of the <see cref="SlidingWindowLogRateLimiter"/> class with a custom time provider.
     /// </summary>
-    /// <param name="limit">The maximum total cost allowed per key within any rolling lookback. Must be greater than zero.</param>
-    /// <param name="window">The lookback duration. Must be greater than <see cref="TimeSpan.Zero"/>.</param>
-    /// <param name="timeProvider">The time provider driving timestamps. Defaults to <see cref="TimeProvider.System"/> when omitted.</param>
+    /// <param name="limit">The maximum total cost allowed within any rolling lookback window.</param>
+    /// <param name="window">The rolling lookback window duration.</param>
+    /// <param name="timeProvider">The time provider instance.</param>
     public SlidingWindowLogRateLimiter(
         int limit,
         TimeSpan window,
@@ -72,12 +40,12 @@ public sealed class SlidingWindowLogRateLimiter : IRateLimitAlgorithm {
         : this(limit, window, timeProvider, NullLogger<SlidingWindowLogRateLimiter>.Instance) { }
 
     /// <summary>
-    /// Creates a new exact sliding-window-log rate limiter with custom time provider and diagnostic logging.
+    /// Initializes a new instance of the <see cref="SlidingWindowLogRateLimiter"/> class with a custom time provider and diagnostic logging.
     /// </summary>
-    /// <param name="limit">The maximum total cost allowed per key within any rolling lookback. Must be greater than zero.</param>
-    /// <param name="window">The lookback duration. Must be greater than <see cref="TimeSpan.Zero"/>.</param>
-    /// <param name="timeProvider">The time provider driving timestamps. Defaults to <see cref="TimeProvider.System"/> when omitted.</param>
-    /// <param name="logger">Optional logger for structured diagnostic logging.</param>
+    /// <param name="limit">The maximum total cost allowed within any rolling lookback window.</param>
+    /// <param name="window">The rolling lookback window duration.</param>
+    /// <param name="timeProvider">The time provider instance.</param>
+    /// <param name="logger">The logger instance.</param>
     public SlidingWindowLogRateLimiter(
         int limit,
         TimeSpan window,
@@ -94,8 +62,11 @@ public sealed class SlidingWindowLogRateLimiter : IRateLimitAlgorithm {
         this._logger = logger;
     }
 
-    /// <inheritdoc />
-    public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost = 1, CancellationToken cancellationToken = default) {
+    /// <inheritdoc/>
+    public ValueTask<RateLimitDecision> TryAcquireAsync(
+        string key,
+        int cost,
+        CancellationToken cancellationToken = default) {
         Preca.ThrowIfNullOrEmpty(key);
         Preca.ThrowIfNegativeOrZero(cost);
 
@@ -108,9 +79,6 @@ public sealed class SlidingWindowLogRateLimiter : IRateLimitAlgorithm {
         (bool allowed, long totalCost, DateTimeOffset? oldestExisting) = log.TryAdd(now, windowStart, cost, this._limit);
 
         if(!allowed) {
-            // No prior (still-live) entry to measure against means this is effectively a
-            // first-ever-for-this-window denial (e.g. cost alone exceeds the limit) — fall back to
-            // the full window rather than claiming "0s until you can retry".
             TimeSpan retryAfter = oldestExisting is { } oldest ? (oldest + this._window) - now : this._window;
             if(retryAfter < TimeSpan.Zero) {
                 retryAfter = TimeSpan.Zero;
@@ -127,21 +95,15 @@ public sealed class SlidingWindowLogRateLimiter : IRateLimitAlgorithm {
         return ValueTask.FromResult(allowedDecision);
     }
 
-    /// <summary>Clears all tracked state. Useful between test cases if the instance is reused.</summary>
+    /// <summary>
+    /// Clears all tracked in-memory timestamp log state.
+    /// </summary>
     public void Reset() {
         this._state.Clear();
     }
 
     private readonly record struct LogEntry(DateTimeOffset Timestamp, int Cost);
 
-    /// <summary>
-    /// Per-key append/trim/count log. A plain lock (rather than a lock-free CAS loop like
-    /// <see cref="TokenBucketRateLimiter"/> uses) is the right tool here: list mutation — removing
-    /// an arbitrary number of expired entries and conditionally appending — isn't naturally
-    /// expressible as a single compare-and-swap over an immutable value without either rebuilding
-    /// the whole list on every attempt or accepting more complexity than a short critical section
-    /// buys back for what is, per key, low-contention work.
-    /// </summary>
     private sealed class KeyLog {
         private readonly List<LogEntry> _entries = [];
         private readonly object _gate = new();

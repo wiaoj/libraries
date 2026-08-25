@@ -7,7 +7,7 @@ namespace Wiaoj.Webhooks;
 /// <summary>
 /// Extension methods for configuring standardized RFC/CNCF metadata headers on <see cref="IWebhookBuilder"/>.
 /// </summary>
-public static partial class WebhookBuilderStandardHeadersExtensions {
+internal static partial class WebhookBuilderStandardHeadersExtensions {
     /// <summary>
     /// Injects standard metadata headers (Webhook-Id, Webhook-Event, Webhook-Attempt, User-Agent).
     /// </summary>

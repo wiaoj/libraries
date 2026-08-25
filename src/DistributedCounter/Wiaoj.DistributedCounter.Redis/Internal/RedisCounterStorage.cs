@@ -32,12 +32,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
         TimeSpan ttl = expiry.Value.Value;
 
-        // Script: IncrementWithExpire
-        // KEYS[1]: Key
-        // ARGV[1]: Amount
-        // ARGV[2]: TTL (ms)
-        RedisKey[] keys = new RedisKey[] { key.Value };
-        RedisValue[] values = new RedisValue[] { amount, (long)ttl.TotalMilliseconds };
+        RedisKey[] keys = [key.Value];
+        RedisValue[] values = [amount, (long)ttl.TotalMilliseconds];
 
         RedisResult resultLua = await this.Db.ScriptEvaluateAsync(
             DistributedCounterRedisLuaScripts.IncrementWithExpire,
@@ -52,15 +48,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
     public async ValueTask<CounterLimitResult> TryIncrementAsync(CounterKey key, long amount, long limit, CounterExpiry expiry, CancellationToken cancellationToken) {
         long ttlMs = expiry.GetTtlMilliseconds();
 
-        // Script: IncrementIfLessThan
-        // KEYS[1]: Key
-        // ARGV[1]: Amount
-        // ARGV[2]: Limit
-        // ARGV[3]: TTL — set only on the first successful increment of a window (current == 0
-        // inside the script), which is what makes this a correct fixed-window primitive: the
-        // window starts on first use and every subsequent increment shares the same TTL.
-        RedisKey[] keys = new RedisKey[] { key.ToRedisKey() };
-        RedisValue[] values = new RedisValue[] { amount, limit, ttlMs };
+        RedisKey[] keys = [key.ToRedisKey()];
+        RedisValue[] values = [amount, limit, ttlMs];
 
         RedisResult result = await this.Db.ScriptEvaluateAsync(
             DistributedCounterRedisLuaScripts.IncrementIfLessThan,
@@ -75,13 +64,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
     public async ValueTask<CounterLimitResult> TryDecrementAsync(CounterKey key, long amount, long minLimit, CounterExpiry expiry, CancellationToken cancellationToken) {
         long ttlMs = expiry.GetTtlMilliseconds();
 
-        // Script: DecrementIfGreaterThan
-        // KEYS[1]: Key
-        // ARGV[1]: Amount
-        // ARGV[2]: MinLimit
-        // ARGV[3]: TTL
-        RedisKey[] keys = new RedisKey[] { key.ToRedisKey() };
-        RedisValue[] values = new RedisValue[] { amount, minLimit, ttlMs };
+        RedisKey[] keys = [key.ToRedisKey()];
+        RedisValue[] values = [amount, minLimit, ttlMs];
 
         RedisResult result = await this.Db.ScriptEvaluateAsync(
             DistributedCounterRedisLuaScripts.DecrementIfGreaterThan,
@@ -92,30 +76,54 @@ internal sealed class RedisCounterStorage : ICounterStorage {
         return ParseLimitResult(result, minLimit, isDecrement: true);
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<bool> TryCompareExchangeAsync(
+        CounterKey key,
+        CounterValue expectedValue,
+        CounterValue newValue,
+        CounterExpiry expiry,
+        CancellationToken cancellationToken) {
+
+        long ttlMs = expiry.GetTtlMilliseconds();
+        RedisKey[] keys = [key.ToRedisKey()];
+        RedisValue[] values = [expectedValue.Value, newValue.Value, ttlMs];
+
+        RedisResult result = await this.Db.ScriptEvaluateAsync(
+            DistributedCounterRedisLuaScripts.CompareExchangeWithExpire,
+            keys,
+            values
+        ).ConfigureAwait(false);
+
+        if(result.IsNull) return false;
+
+        RedisResult[] parts = (RedisResult[])result!;
+        return (long)parts[0] == 1;
+    }
+
     /// <summary>
-    /// Translates the raw Lua script result (a long, or <c>-1</c> to signal denial) into a
-    /// <see cref="CounterLimitResult"/>.
+    /// Translates the raw Lua script result ({isAllowed, currentValue, pttl}) into a <see cref="CounterLimitResult"/>.
     /// </summary>
     private static CounterLimitResult ParseLimitResult(RedisResult result, long limitOrMin, bool isDecrement = false) {
         if(result.IsNull) {
-            return new CounterLimitResult(IsAllowed: false, CurrentValue: limitOrMin, Remaining: 0, Ttl: null);
+            return new CounterLimitResult(IsAllowed: false, CurrentValue: 0, Remaining: 0, Ttl: null);
         }
 
         RedisResult[] parts = (RedisResult[])result!;
-        long val = (long)parts[0];
-        TimeSpan? ttl = ParsePttl((long)parts[1]);
+        bool isAllowed = (long)parts[0] == 1;
+        long val = (long)parts[1];
+        TimeSpan? ttl = ParsePttl((long)parts[2]);
 
-        if(val == -1) {
-            return new CounterLimitResult(IsAllowed: false, CurrentValue: limitOrMin, Remaining: 0, Ttl: ttl);
+        if(!isAllowed) {
+            return new CounterLimitResult(IsAllowed: false, CurrentValue: val, Remaining: 0, Ttl: ttl);
         }
 
         long remaining = isDecrement ? (val - limitOrMin) : (limitOrMin - val);
         return new CounterLimitResult(IsAllowed: true, CurrentValue: val, Remaining: remaining, Ttl: ttl);
     }
 
-    /// <summary>PTTL semantics: -2 = key missing, -1 = no expiry, >=0 = remaining ms.</summary>
-    private static TimeSpan? ParsePttl(long pttlMs)
-        => pttlMs >= 0 ? TimeSpan.FromMilliseconds(pttlMs) : null;
+    private static TimeSpan? ParsePttl(long pttlMs) {
+        return pttlMs >= 0 ? TimeSpan.FromMilliseconds(pttlMs) : null;
+    }
 
     /// <inheritdoc/>
     public async ValueTask<CounterValue> GetAsync(CounterKey key, CancellationToken cancellationToken = default) {
@@ -124,8 +132,7 @@ internal sealed class RedisCounterStorage : ICounterStorage {
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IDictionary<CounterKey, CounterValue>> GetManyAsync(IEnumerable<CounterKey> keys,
-                                                                               CancellationToken cancellationToken = default) {
+    public async ValueTask<IDictionary<CounterKey, CounterValue>> GetManyAsync(IEnumerable<CounterKey> keys, CancellationToken cancellationToken = default) {
         RedisKey[] keyArray = [.. keys.Select(k => k.ToRedisKey())];
         if(keyArray.Length == 0) return new Dictionary<CounterKey, CounterValue>();
 
@@ -200,10 +207,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
         for(int i = 0; i < span.Length; i++) {
             ref readonly CounterUpdate update = ref span[i];
-
             long ttlMs = update.Expiry.GetTtlMilliseconds();
 
-            // KEYS[1], ARGV[1]: Amount, ARGV[2]: TTL
             tasks[i] = batch.ScriptEvaluateAsync(
                 DistributedCounterRedisLuaScripts.IncrementWithExpire,
                 [update.Key.Value],
@@ -216,7 +221,6 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
         Span<long> destSpan = resultDestination.Span;
         for(int i = 0; i < tasks.Length; i++) {
-            // Lua script result döner, long'a cast ediyoruz
             destSpan[i] = (long)tasks[i].Result;
         }
     }

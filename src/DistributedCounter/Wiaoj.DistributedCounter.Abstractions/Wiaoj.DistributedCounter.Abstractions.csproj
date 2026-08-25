@@ -1,12 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-	<RootNamespace>Wiaoj.DistributedCounter</RootNamespace>
-	<AssemblyName>Wiaoj.DistributedCounter.Abstractions</AssemblyName>
-	<PackageId>Wiaoj.DistributedCounter.Abstractions</PackageId>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Wiaoj.DistributedCounter</RootNamespace>
+		<AssemblyName>Wiaoj.DistributedCounter.Abstractions</AssemblyName>
+		<PackageId>Wiaoj.DistributedCounter.Abstractions</PackageId>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Extensions\Abstractions\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
+		<ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
+		<ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+	</ItemGroup>
 
 </Project>

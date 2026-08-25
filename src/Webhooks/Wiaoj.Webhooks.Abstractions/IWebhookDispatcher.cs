@@ -21,6 +21,22 @@ public interface IWebhookDispatcher {
         where TEvent : IWebhookEvent;
 
     /// <summary>
+    /// Dispatches a batch of webhook events to a target endpoint in a single atomic storage save and transport enqueue operation.
+    /// </summary>
+    /// <typeparam name="TEvent">The event payload type implementing <see cref="IWebhookEvent"/>.</typeparam>
+    /// <param name="endpointId">The destination endpoint identifier.</param>
+    /// <param name="payloads">The collection of domain event payloads to dispatch.</param>
+    /// <param name="partitionKeySelector">An optional selector deriving partition keys per event. Defaults to <paramref name="endpointId"/>.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A read-only list of delivery handles corresponding to the scheduled jobs.</returns>
+    Task<IReadOnlyList<WebhookDeliveryHandle>> DispatchBatchAsync<TEvent>(
+        WebhookEndpointId endpointId,
+        IEnumerable<TEvent> payloads,
+        Func<TEvent, WebhookPartitionKey>? partitionKeySelector,
+        CancellationToken cancellationToken = default)
+        where TEvent : IWebhookEvent;
+
+    /// <summary>
     /// Re-enqueues an existing dead-lettered or failed job for immediate reprocessing.
     /// </summary>
     /// <param name="jobId">The unique identifier of the job to replay.</param>
@@ -134,5 +150,24 @@ public static class WebhookDispatcherExtensions {
         where TEvent : IWebhookEvent {
         Preca.ThrowIfNull(dispatcher);
         return dispatcher.DispatchAsync(endpointId, payload, WebhookPartitionKey.From(endpointId), cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Dispatches a batch of webhook events to a target endpoint, defaulting partition keys to the target <paramref name="endpointId"/>.
+    /// </summary>
+    /// <typeparam name="TEvent">The event payload type implementing <see cref="IWebhookEvent"/>.</typeparam>
+    /// <param name="dispatcher">The dispatcher instance.</param>
+    /// <param name="endpointId">The destination endpoint identifier.</param>
+    /// <param name="payloads">The collection of domain event payloads to dispatch.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A read-only list of delivery handles corresponding to the scheduled jobs.</returns>
+    public static Task<IReadOnlyList<WebhookDeliveryHandle>> DispatchBatchAsync<TEvent>(
+        this IWebhookDispatcher dispatcher,
+        WebhookEndpointId endpointId,
+        IEnumerable<TEvent> payloads,
+        CancellationToken cancellationToken = default)
+        where TEvent : IWebhookEvent {
+        return dispatcher.DispatchBatchAsync(endpointId, payloads, partitionKeySelector: null, cancellationToken);
     }
 }

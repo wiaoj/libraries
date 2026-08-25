@@ -283,6 +283,59 @@ public static partial class DistributedCounterExtensions {
             return counter.ForKey(key).TryDecrementAsync(amount, minLimit, expiry, cancellationToken);
         }
 
+        // --- TryCompareExchange ------------------------------------------
+
+        /// <summary>
+        /// Attempts to atomically replace the counter value scoped to <paramref name="key"/> if matching the expected value, using infinite expiration.
+        /// </summary>
+        /// <typeparam name="TKey">The type of the specific identity key.</typeparam>
+        /// <param name="key">The specific identity key.</param>
+        /// <param name="expectedValue">The value expected to be currently in storage.</param>
+        /// <param name="newValue">The new value to set if matching.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<bool> TryCompareExchangeAsync<TKey>(
+            TKey key,
+            CounterValue expectedValue,
+            CounterValue newValue) where TKey : notnull {
+            return counter.ForKey(key).TryCompareExchangeAsync(expectedValue, newValue, CounterExpiry.Infinite, default);
+        }
+
+        /// <summary>
+        /// Attempts to atomically replace the counter value scoped to <paramref name="key"/> if matching the expected value with a cancellation token.
+        /// </summary>
+        /// <typeparam name="TKey">The type of the specific identity key.</typeparam>
+        /// <param name="key">The specific identity key.</param>
+        /// <param name="expectedValue">The value expected to be currently in storage.</param>
+        /// <param name="newValue">The new value to set if matching.</param>
+        /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<bool> TryCompareExchangeAsync<TKey>(
+            TKey key,
+            CounterValue expectedValue,
+            CounterValue newValue,
+            CancellationToken cancellationToken) where TKey : notnull {
+            return counter.ForKey(key).TryCompareExchangeAsync(expectedValue, newValue, CounterExpiry.Infinite, cancellationToken);
+        }
+
+        /// <summary>
+        /// Attempts to atomically replace the counter value scoped to <paramref name="key"/> if matching the expected value with specific expiry and cancellation support.
+        /// </summary>
+        /// <typeparam name="TKey">The type of the specific identity key.</typeparam>
+        /// <param name="key">The specific identity key.</param>
+        /// <param name="expectedValue">The value expected to be currently in storage.</param>
+        /// <param name="newValue">The new value to set if matching.</param>
+        /// <param name="expiry">The expiration policy to apply upon replacement.</param>
+        /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<bool> TryCompareExchangeAsync<TKey>(
+            TKey key,
+            CounterValue expectedValue,
+            CounterValue newValue,
+            CounterExpiry expiry,
+            CancellationToken cancellationToken = default) where TKey : notnull {
+            return counter.ForKey(key).TryCompareExchangeAsync(expectedValue, newValue, expiry, cancellationToken);
+        }
+
         // --- Reset ---------------------------------------------------
 
         /// <summary>Resets the counter scoped to <paramref name="key"/> to zero and removes it from storage.</summary>

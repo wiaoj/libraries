@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.DistributedCounter;
-using Wiaoj.Resilience.Internal;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.Resilience;
 
@@ -9,21 +9,11 @@ namespace Wiaoj.Resilience;
 /// Implements an atomic circuit breaker strategy that trips to <see cref="CircuitState.Open"/>
 /// when consecutive transient failures reach a configured threshold.
 /// </summary>
-/// <remarks>
-/// This class is a thin, options-typed façade over <see cref="DistributedCircuitBreakerStore"/>.
-/// It used to re-implement the entire trip/half-open/retry state machine independently against
-/// <see cref="IDistributedCounterFactory"/> directly - which meant every fix made to the store
-/// (atomic single-probe claiming on Half-Open, precise <c>RetryAfter</c> via a stored absolute
-/// "blocked until" timestamp instead of always returning the full <see cref="CircuitBreakerOptions.BreakDuration"/>)
-/// had to be made twice, and in practice only ever got made once. Delegating here means there is
-/// exactly one implementation of "consecutive failure" circuit breaking to reason about and test.
-/// <see cref="SamplingWindowCircuitBreaker"/> is intentionally NOT refactored this way - its
-/// windowed failure-rate algorithm is genuinely different (multiple rolling counters, no single
-/// "consecutive failure count") and doesn't map onto the store's key shape.
-/// </remarks>
 public sealed class ConsecutiveFailuresCircuitBreaker : ICircuitBreaker {
-    private readonly DistributedCircuitBreakerStore _store;
+    private readonly IDistributedCounterFactory _counterFactory;
     private readonly CircuitBreakerOptions _options;
+    private readonly TimeProvider _timeProvider;
+    private readonly ILogger<ConsecutiveFailuresCircuitBreaker> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConsecutiveFailuresCircuitBreaker"/> class.
@@ -53,32 +43,108 @@ public sealed class ConsecutiveFailuresCircuitBreaker : ICircuitBreaker {
         Preca.ThrowIfNull(logger);
 
         options.Validate();
+        this._counterFactory = counterFactory;
         this._options = options;
-
-        // KNOWN LIMITATION: the store's own log lines (trip/re-trip warnings) currently go
-        // through a NullLogger instead of the caller-supplied `logger`, because
-        // DistributedCircuitBreakerStore requires an ILogger<DistributedCircuitBreakerStore>
-        // specifically and this constructor only receives an ILogger<ConsecutiveFailuresCircuitBreaker>.
-        // If the consumer's logging pipeline needs to see those trip events, thread an
-        // ILoggerFactory through here instead and call CreateLogger<DistributedCircuitBreakerStore>().
-        this._store = new DistributedCircuitBreakerStore(
-            counterFactory,
-            timeProvider,
-            NullLogger<DistributedCircuitBreakerStore>.Instance);
+        this._timeProvider = timeProvider;
+        this._logger = logger;
     }
 
     /// <inheritdoc/>
-    public ValueTask<CircuitExecutionDecision> TryAcquireAsync(string key, CancellationToken cancellationToken = default) {
-        return this._store.CanExecuteAsync(key, cancellationToken);
+    public async ValueTask<CircuitExecutionDecision> TryAcquireAsync(string key, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNullOrWhiteSpace(key);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string trippedKey = FormatTrippedKey(key);
+        IDistributedCounter trippedCounter = this._counterFactory.Create(trippedKey);
+
+        CounterValue trippedVal = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
+
+        if(trippedVal.Value > 0) {
+            DateTimeOffset now = this._timeProvider.GetUtcNow();
+            DateTimeOffset blockedUntil = new(trippedVal.Value, TimeSpan.Zero);
+
+            if(blockedUntil > now) {
+                TimeSpan retryAfter = blockedUntil - now;
+                return CircuitExecutionDecision.Denied(retryAfter);
+            }
+
+            // Half-Open state: Attempt atomic single-probe claim (limit 1)
+            string probeKey = FormatProbeKey(key);
+            IDistributedCounter probeCounter = this._counterFactory.Create(probeKey);
+
+            CounterLimitResult probeClaim = await probeCounter.TryIncrementAsync(
+                amount: 1,
+                limit: 1,
+                expiry: CounterExpiry.From(this._options.BreakDuration * 2),
+                cancellationToken).ConfigureAwait(false);
+
+            if(probeClaim.IsAllowed) {
+                return CircuitExecutionDecision.HalfOpenProbe();
+            }
+
+            // Another concurrent request already claimed the single trial probe: fast-fail
+            return CircuitExecutionDecision.Denied(TimeSpan.FromSeconds(1));
+        }
+
+        return CircuitExecutionDecision.Allowed();
     }
 
     /// <inheritdoc/>
-    public ValueTask OnSuccessAsync(string key, CancellationToken cancellationToken = default) {
-        return this._store.RecordSuccessAsync(key, cancellationToken);
+    public async ValueTask OnSuccessAsync(string key, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNullOrWhiteSpace(key);
+
+        string failuresKey = FormatFailuresKey(key);
+        string trippedKey = FormatTrippedKey(key);
+        string probeKey = FormatProbeKey(key);
+
+        IDistributedCounter failuresCounter = this._counterFactory.Create(failuresKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create(trippedKey);
+        IDistributedCounter probeCounter = this._counterFactory.Create(probeKey);
+
+        await failuresCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
+        await trippedCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
+        await probeCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public ValueTask OnFailureAsync(string key, CancellationToken cancellationToken = default) {
-        return this._store.RecordFailureAsync(key, this._options, cancellationToken);
+    public async ValueTask OnFailureAsync(string key, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNullOrWhiteSpace(key);
+
+        string failuresKey = FormatFailuresKey(key);
+        string trippedKey = FormatTrippedKey(key);
+        string probeKey = FormatProbeKey(key);
+
+        IDistributedCounter failuresCounter = this._counterFactory.Create(failuresKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create(trippedKey);
+        IDistributedCounter probeCounter = this._counterFactory.Create(probeKey);
+
+        // Immediate re-trip if failure occurs during an open or half-open state
+        CounterValue currentTripVal = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
+        if(currentTripVal.Value > 0) {
+            await TripAsync(key, trippedCounter, probeCounter, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        CounterExpiry failureExpiry = CounterExpiry.From(this._options.BreakDuration * 2);
+        CounterValue newFailureCount = await failuresCounter.IncrementAsync(1, failureExpiry, cancellationToken).ConfigureAwait(false);
+
+        if(newFailureCount.Value >= this._options.FailureThreshold) {
+            await TripAsync(key, trippedCounter, probeCounter, cancellationToken).ConfigureAwait(false);
+
+            this._logger.LogWarning("[ConsecutiveFailures] Circuit breaker TRIPPED to OPEN for key '{Key}'. Consecutive failures: {Failures}. Break duration: {DurationMs:F0}ms.",
+                key, newFailureCount.Value, this._options.BreakDuration.TotalMilliseconds);
+        }
     }
+
+    private async ValueTask TripAsync(string key, IDistributedCounter trippedCounter, IDistributedCounter probeCounter, CancellationToken cancellationToken) {
+        DateTimeOffset blockedUntil = this._timeProvider.GetUtcNow().Add(this._options.BreakDuration);
+        CounterExpiry tripExpiry = CounterExpiry.From(this._options.BreakDuration * 2);
+
+        await trippedCounter.SetAsync(blockedUntil.UtcTicks, tripExpiry, cancellationToken).ConfigureAwait(false);
+        await probeCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string FormatFailuresKey(string key) => $"wh:cb:cf:fail:{key}";
+    private static string FormatTrippedKey(string key) => $"wh:cb:cf:open:{key}";
+    private static string FormatProbeKey(string key) => $"wh:cb:cf:probe:{key}";
 }

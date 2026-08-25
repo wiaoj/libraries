@@ -21,24 +21,12 @@ public sealed class CompositeEventDiscriminatorExtractor : IWebhookEventDiscrimi
         new JsonPropertyEventDiscriminatorExtractor("event"));
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="CompositeEventDiscriminatorExtractor"/> class.
-    /// </summary>
-    /// <param name="extractors">The ordered collection of discriminator extractors to evaluate.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="extractors"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="extractors"/> is empty.</exception>
-    public CompositeEventDiscriminatorExtractor(params IWebhookEventDiscriminatorExtractor[] extractors) {
-        Preca.ThrowIfNull(extractors);
-        Preca.ThrowIfLessThan(extractors.Length, 1);
-        this._extractors = [.. extractors];
-    }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="CompositeEventDiscriminatorExtractor"/> class with a read-only list.
     /// </summary>
     /// <param name="extractors">The ordered collection of discriminator extractors to evaluate.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="extractors"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="extractors"/> is empty.</exception>
-    public CompositeEventDiscriminatorExtractor(IReadOnlyList<IWebhookEventDiscriminatorExtractor> extractors) {
+    public CompositeEventDiscriminatorExtractor(params IReadOnlyList<IWebhookEventDiscriminatorExtractor> extractors) {
         Preca.ThrowIfNull(extractors);
         Preca.ThrowIfLessThan(extractors.Count, 1);
         this._extractors = extractors;

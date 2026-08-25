@@ -101,6 +101,17 @@ public sealed class InMemoryWebhookTransport : IWebhookTransport, IDisposable {
     }
 
     /// <inheritdoc/>
+    public async Task EnqueueBatchAsync(IReadOnlyList<WebhookDeliveryJob> jobs, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNull(jobs);
+        if(jobs.Count == 0) return;
+
+        for(int i = 0; i < jobs.Count; i++) {
+            cancellationToken.ThrowIfCancellationRequested();
+            await this._channel.Writer.WriteAsync(jobs[i], cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc/>
     public void Dispose() {
         this._delayedScheduler.Dispose();
         this._channel.Writer.TryComplete();

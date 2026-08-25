@@ -9,7 +9,7 @@ namespace Wiaoj.Webhooks.RateLimiting;
 /// Webhook delivery middleware that enforces per-endpoint rate limiting
 /// using an <see cref="IRateLimitAlgorithm"/> and re-enqueues throttled deliveries.
 /// </summary>
-public sealed class WebhookRateLimitingMiddleware : IWebhookMiddleware {
+internal sealed class WebhookRateLimitingMiddleware : IWebhookMiddleware {
     private readonly IRateLimitAlgorithm _algorithm;
     private readonly WebhookRateLimitingOptions _options;
     private readonly ILogger<WebhookRateLimitingMiddleware> _logger;
@@ -48,12 +48,8 @@ public sealed class WebhookRateLimitingMiddleware : IWebhookMiddleware {
                : TimeSpan.FromSeconds(1);
 
             this._logger.LogRateLimitExceeded(context.Endpoint.Id.Value, retryAfter.TotalMilliseconds);
-
-            // Müşteri kotasını aştıysa teslimatı gecikmeli olarak tekrar sıraya al (Re-enqueue):
-            context.SetResult(WebhookDeliveryResult.Transient(
-                "Rate limit exceeded. Webhook delivery re-enqueued.",
-                statusCode: 429,
-                retryAfter: retryAfter));
+             
+            context.SetResult(WebhookDeliveryResult.RateLimited(context.Endpoint.Id.Value, retryAfter));
             return;
         }
 

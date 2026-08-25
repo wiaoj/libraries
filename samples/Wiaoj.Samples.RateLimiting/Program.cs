@@ -1,99 +1,59 @@
-using System.Text;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
 using Wiaoj.DistributedCounter;
 using Wiaoj.RateLimiting.AspNetCore;
-using Wiaoj.RateLimiting.AspNetCore.KeySelectors;
-
-Console.OutputEncoding = Encoding.UTF8;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-// 1. Logging Ayarları
-builder.Logging.ClearProviders();
-builder.Logging.AddSimpleConsole(opt => {
-    opt.SingleLine = true;
-    opt.TimestampFormat = "[HH:mm:ss.fff] ";
+// 1. Core Distributed Counter Infrastructure (In-Memory or Redis)
+builder.Services.AddDistributedCounter(counter => {
+    counter.UseInMemory(); // Local test için In-Memory (İsterseniz .UseRedis("localhost:6379") yapabilirsiniz)
 });
-builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
-// 2. DistributedCounter (In-Memory) ve RateLimiter Kaydı (Limit: 3 istek / 3 saniye)
-builder.Services.AddDistributedCounter(b => b.UseInMemory());
+// 2. Wiaoj Rate Limiting Setup with Negative Caching & Fail-Open
 builder.Services.AddWiaojRateLimiting(rl => {
-    rl.UseFixedWindow(limit: 3, window: TimeSpan.FromSeconds(3));
+    // 10 saniyede en fazla 5 istek (Fixed Window)
+    rl.UseFixedWindow(limit: 5, window: TimeSpan.FromSeconds(10));
+
+    // L1 RAM DDoS kalkanı (Spam istekleri Redis'e gitmeden RAM'de anında keser)
+    rl.WithNegativeCaching();
+
+    // Redis/Storage çökse bile API'yi çökertmeyip istekleri geçiren sigorta
+    rl.WithFailOpen();
 });
 
 WebApplication app = builder.Build();
 
-// 3. RateLimiting Middleware'ini Devreye Al (IP bazlı, ProblemDetails aktif)
-app.UseWiaojRateLimiting(options => {
-    options.KeySelector = new ClientIpKeySelector(prefix: "api_client_ip:");
-    options.UseProblemDetails = true;
-});
+// 3. Rate Limiting Middleware'ini Pipeline'a ekliyoruz
+app.UseWiaojRateLimiting();
 
-// 4. Test Endpoint'i
-app.MapGet("/api/orders", () => Results.Ok(new {
-    message = "Sipariş listesi başarıyla getirildi.",
-    timestamp = DateTimeOffset.UtcNow
+// --------------------------------------------------------------------------
+// CANLI TEST ENDPOINT'LERİ
+// --------------------------------------------------------------------------
+
+// Senaryo 1: Standart Korunan Endpoint (10 saniyede max 5 istek)
+app.MapGet("/api/standard", () => Results.Ok(new {
+    Status = "Success",
+    Message = "You are within rate limits!",
+    Timestamp = DateTimeOffset.UtcNow
 }));
 
-// API'yi arka planda localhost:5050 üzerinden başlat
-_ = app.RunAsync("http://localhost:5050");
-
-// --------------------------------------------------------------------------------
-// 5. CANLI HTTP TEST İSTEMCİSİ (Otomatik Olarak API'yi Test Eder)
-// --------------------------------------------------------------------------------
-await Task.Delay(1000); // API'nin ayağa kalkması için 1 saniye bekle
-
-Console.WriteLine("\n==================================================================");
-Console.WriteLine("🌐 Canlı HTTP API Testi Başlıyor (Hedef: http://localhost:5050/api/orders)");
-Console.WriteLine("🎯 Limit: 3 İstek / 3 Saniye");
-Console.WriteLine("==================================================================\n");
-
-using HttpClient client = new() { BaseAddress = new Uri("http://localhost:5050") };
-
-for(int i = 1; i <= 5; i++) {
-    Console.WriteLine($"\n➡️ [HTTP İSTEK #{i}] Gönderiliyor...");
-
-    HttpResponseMessage response = await client.GetAsync("/api/orders");
-    string body = await response.Content.ReadAsStringAsync();
-
-    if(response.IsSuccessStatusCode) {
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"✅ HTTP {(int)response.StatusCode} {response.StatusCode}");
-        Console.WriteLine($"   Headers: RateLimit-Remaining = {response.Headers.GetValues("RateLimit-Remaining").FirstOrDefault()}");
-        Console.WriteLine($"   Body: {body}");
-        Console.ResetColor();
+// Senaryo 2: Ağır/Toplu İşlem (Dinamik Cost - Query'den gelen adet kadar kota düşer)
+// Örnek: /api/bulk-import?count=3 çağrılırsa kotadan 3 birim birden düşer!
+app.MapPost("/api/bulk-import", ([FromQuery] int count) => Results.Ok(new {
+    Status = "Success",
+    ItemsProcessed = count,
+    Message = $"{count} quota units consumed."
+})).WithMetadata(new RateLimitMetadata {
+    DynamicCostResolver = ctx => {
+        return ctx.Request.Query.TryGetValue("count", out StringValues val) && int.TryParse(val, out int c) ? c : 1;
     }
-    else {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine($"🚫 HTTP {(int)response.StatusCode} {response.StatusCode} (LIMIT AŞILDI!)");
-        Console.ResetColor();
+});
 
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine($"   Headers: Retry-After = {response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 0}s");
-        Console.WriteLine($"   Headers: RateLimit-Reset = {response.Headers.GetValues("RateLimit-Reset").FirstOrDefault()}s");
-        Console.WriteLine($"   RFC 7807 ProblemDetails Body:\n{body}");
-        Console.ResetColor();
-    }
-}
+// Senaryo 3: Rate Limiter'dan Muaf Endpoint (Healthcheck / Ping)
+app.MapGet("/api/health", () => Results.Ok(new {
+    Status = "Healthy",
+    RateLimiting = "Bypassed"
+})).WithMetadata(new DisableRateLimitingAttribute());
 
-Console.WriteLine("\n==================================================================");
-Console.WriteLine("⏳ 3.5 Saniye bekleniyor (Pencere sıfırlanacak)...");
-await Task.Delay(3500);
-
-Console.WriteLine("\n➡️ [SIFIRLAMA SONRASI İSTEK #6] Gönderiliyor...");
-HttpResponseMessage resetResponse = await client.GetAsync("/api/orders");
-string resetBody = await resetResponse.Content.ReadAsStringAsync();
-
-Console.ForegroundColor = ConsoleColor.Green;
-Console.WriteLine($"✅ HTTP {(int)resetResponse.StatusCode} {resetResponse.StatusCode} (Pencere Sıfırlandı, İstek Kabul Edildi!)");
-Console.WriteLine($"   Headers: RateLimit-Remaining = {resetResponse.Headers.GetValues("RateLimit-Remaining").FirstOrDefault()}");
-Console.WriteLine($"   Body: {resetBody}");
-Console.ResetColor();
-
-Console.WriteLine("\n==================================================================");
-Console.WriteLine("🚀 API 'http://localhost:5050/api/orders' adresinde ÇALIŞMAYA DEVAM EDİYOR.");
-Console.WriteLine("Postman veya tarayıcınızdan istek atıp test edebilirsiniz. (Çıkış için Ctrl+C)");
-Console.WriteLine("==================================================================");
-
-// Program kapanmasın, API açık kalsın
-await Task.Delay(Timeout.Infinite);
+app.Run();

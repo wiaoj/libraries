@@ -22,6 +22,14 @@ internal sealed class ImmediateDistributedCounter(CounterKey key, ICounterStorag
         return storage.TryDecrementAsync(this.Key, amount, minLimit, expiry, cancellationToken);
     }
 
+    public ValueTask<bool> TryCompareExchangeAsync(
+        CounterValue expectedValue,
+        CounterValue newValue,
+        CounterExpiry expiry,
+        CancellationToken cancellationToken) {
+        return storage.TryCompareExchangeAsync(this.Key, expectedValue, newValue, expiry, cancellationToken);
+    }
+
     public ValueTask<CounterValue> GetValueAsync(CancellationToken cancellationToken) {
         return storage.GetAsync(this.Key, cancellationToken);
     }

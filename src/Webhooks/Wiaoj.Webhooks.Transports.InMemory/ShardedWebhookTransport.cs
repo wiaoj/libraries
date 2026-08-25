@@ -66,6 +66,19 @@ public sealed class ShardedWebhookTransport : IWebhookTransport, IDisposable {
         int shardIndex = GetShardIndex(job.PartitionKey.AsSpan());
         return this._shards[shardIndex].EnqueueAsync(job, delay, cancellationToken);
     }
+    
+    /// <inheritdoc/>
+    public async Task EnqueueBatchAsync(IReadOnlyList<WebhookDeliveryJob> jobs, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNull(jobs);
+        if(jobs.Count == 0) return;
+
+        for(int i = 0; i < jobs.Count; i++) {
+            cancellationToken.ThrowIfCancellationRequested();
+            WebhookDeliveryJob job = jobs[i];
+            int shardIndex = GetShardIndex(job.PartitionKey.AsSpan());
+            await this._shards[shardIndex].EnqueueAsync(job, null, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// Retrieves a specific underlying transport shard by its zero-based index.

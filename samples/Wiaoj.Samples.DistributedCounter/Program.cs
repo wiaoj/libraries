@@ -1,9 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Wiaoj.DistributedCounter;
+using Wiaoj.DistributedCounter.DependencyInjection;
 using Wiaoj.Primitives;
 
 // Console Ayarları

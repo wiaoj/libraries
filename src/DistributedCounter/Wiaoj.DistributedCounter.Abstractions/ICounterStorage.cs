@@ -34,6 +34,22 @@ public interface ICounterStorage {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Atomically compares the counter's current value with an expected value, and if they match, replaces it with a new value and expiry.
+    /// </summary>
+    /// <param name="key">The counter key to inspect and update.</param>
+    /// <param name="expectedValue">The value that is expected to be in storage.</param>
+    /// <param name="newValue">The value to set if the current value matches the expected value.</param>
+    /// <param name="expiry">The expiration policy to apply upon successful replacement.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns><see langword="true"/> if the value was successfully replaced; otherwise, <see langword="false"/>.</returns>
+    ValueTask<bool> TryCompareExchangeAsync(
+        CounterKey key,
+        CounterValue expectedValue,
+        CounterValue newValue,
+        CounterExpiry expiry,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Retrieves the current value of a counter from storage.
     /// </summary>
     ValueTask<CounterValue> GetAsync(CounterKey key, CancellationToken cancellationToken);

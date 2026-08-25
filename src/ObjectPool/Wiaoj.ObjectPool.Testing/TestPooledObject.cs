@@ -1,18 +1,28 @@
-﻿namespace Wiaoj.ObjectPool.Testing;
+﻿using Wiaoj.Preconditions;
+
+namespace Wiaoj.ObjectPool.Testing;
+
 /// <summary>
-/// Provides a factory method for creating valid <see cref="PooledObject{T}"/> instances for use in test environments.
-/// This is necessary to bypass the internal constructor of <see cref="PooledObject{T}"/>.
+/// Provides helper factory methods for creating valid <see cref="PooledObject{T}"/> instances in test environments.
 /// </summary>
 public static class TestPooledObject {
     /// <summary>
-    /// Creates a valid <see cref="PooledObject{T}"/> that wraps the provided item.
-    /// The returned object can be safely disposed without causing errors in a test environment.
+    /// Creates a valid <see cref="PooledObject{T}"/> wrapping the provided item with a no-op pool.
     /// </summary>
-    /// <typeparam name="T">The type of the object to wrap.</typeparam>
-    /// <param name="item">The object instance to be wrapped by the <see cref="PooledObject{T}"/>.</param>
-    /// <returns>A new instance of <see cref="PooledObject{T}"/> suitable for testing.</returns>
     public static PooledObject<T> CreateForTesting<T>(T item) where T : class {
-        NoOpObjectPool<T> noOpPool = new();
+        Preca.ThrowIfNull(item);
+        NoOpObjectPool<T> noOpPool = new(() => item);
         return new PooledObject<T>(item, noOpPool);
+    }
+
+    /// <summary>
+    /// Creates a valid <see cref="PooledObject{T}"/> that executes a callback when disposed.
+    /// </summary>
+    public static PooledObject<T> CreateWithCallback<T>(T item, Action<T> onDispose) where T : class {
+        Preca.ThrowIfNull(item);
+        Preca.ThrowIfNull(onDispose);
+
+        FakeObjectPool<T> pool = new(() => item, onDispose);
+        return pool.Lease();
     }
 }

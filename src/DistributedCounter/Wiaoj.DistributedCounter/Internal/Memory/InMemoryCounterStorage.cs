@@ -234,4 +234,46 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
         return ValueTask.FromCanceled<CounterLimitResult>(cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> TryCompareExchangeAsync(
+        CounterKey key,
+        CounterValue expectedValue,
+        CounterValue newValue,
+        CounterExpiry expiry,
+        CancellationToken cancellationToken) {
+
+        DateTimeOffset now = this._timeProvider.GetUtcNow();
+        DateTimeOffset expiresAt = expiry.Value.HasValue ? now.Add(expiry.Value.Value) : DateTimeOffset.MaxValue;
+
+        while(!cancellationToken.IsCancellationRequested) {
+            bool exists = this._counters.TryGetValue(key.Value, out CounterEntry current);
+            bool isExpired = exists && current.ExpiresAt <= now;
+            long startValue = (!exists || isExpired) ? 0 : current.Value;
+
+            if(startValue != expectedValue.Value) {
+                return new ValueTask<bool>(false);
+            }
+
+            CounterEntry newEntry = new(newValue.Value, expiresAt);
+
+            if(!exists || isExpired) {
+                if(isExpired) {
+                    if(this._counters.TryUpdate(key.Value, newEntry, current)) {
+                        return new ValueTask<bool>(true);
+                    }
+                }
+                else if(this._counters.TryAdd(key.Value, newEntry)) {
+                    return new ValueTask<bool>(true);
+                }
+            }
+            else {
+                if(this._counters.TryUpdate(key.Value, newEntry, current)) {
+                    return new ValueTask<bool>(true);
+                }
+            }
+        }
+
+        return ValueTask.FromCanceled<bool>(cancellationToken);
+    }
 }

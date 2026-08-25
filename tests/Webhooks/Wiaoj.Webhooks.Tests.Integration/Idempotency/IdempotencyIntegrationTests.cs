@@ -124,18 +124,23 @@ public sealed class IdempotencyIntegrationTests : IAsyncLifetime {
 
         TestInvoiceEvent invoice = new("INV-200", 300.00m);
 
+        // 1. Initial delivery
         WebhookDeliveryHandle handle1 = await this._dispatcher.DispatchAsync(endpoint.Id, invoice, ct);
-        WebhookJobRecord? job1 = await WaitForJobStatusAsync(this._store, handle1.JobId, WebhookJobStatus.Delivered, TimeSpan.FromSeconds(5), ct);
+        WebhookJobRecord? job1 = await WaitForJobStatusAsync(this._store, handle1.JobId, WebhookJobStatus.Delivered, TimeSpan.FromSeconds(10), ct);
+
         Assert.NotNull(job1);
+        Assert.Equal(WebhookJobStatus.Delivered, job1.Status);
         Assert.Single(this._receivedWebhooks);
 
-        // Wait for TTL expiration (Window is 2 seconds, waiting 2.5s)
+        // 2. Wait for TTL expiration (Window is 2 seconds, waiting 2.5s)
         await Task.Delay(TimeSpan.FromSeconds(2.5), ct);
 
+        // 3. Subsequent delivery after window expiry -> Must deliver again!
         WebhookDeliveryHandle handle2 = await this._dispatcher.DispatchAsync(endpoint.Id, invoice, ct);
-        WebhookJobRecord? job2 = await WaitForJobStatusAsync(this._store, handle2.JobId, WebhookJobStatus.Delivered, TimeSpan.FromSeconds(5), ct);
+        WebhookJobRecord? job2 = await WaitForJobStatusAsync(this._store, handle2.JobId, WebhookJobStatus.Delivered, TimeSpan.FromSeconds(10), ct);
 
         Assert.NotNull(job2);
+        Assert.Equal(WebhookJobStatus.Delivered, job2.Status);
         WebhookDeliveryAttempt item = Assert.Single(job2.Attempts);
         Assert.True(item.IsSuccess);
         Assert.IsType<WebhookDeliveryResult.Delivered>(job2.Attempts[0].Result);

@@ -6,7 +6,7 @@ namespace Wiaoj.Webhooks.Diagnostics;
 /// High-performance, zero-allocation structured logging extension methods for the Wiaoj Webhooks engine.
 /// Uses the C# [LoggerMessage] source generator with strongly-typed domain value objects.
 /// </summary>
-public static partial class WebhookLoggerExtensions {
+internal static partial class WebhookLoggerExtensions {
 
     // ── Trace (1000 - 1999) ───────────────────────────────────────────────────
 
@@ -37,6 +37,13 @@ public static partial class WebhookLoggerExtensions {
         Level = LogLevel.Trace,
         Message = "Persisting job record '{JobId}' for endpoint '{EndpointId}' (event: '{EventName}').")]
     public static partial void LogStoreSavingJob(this ILogger logger, WebhookJobId jobId, WebhookEndpointId endpointId, string eventName);
+
+    /// <summary>Logs that a batch dispatch operation is starting.</summary>
+    [LoggerMessage(
+        EventId = 1005,
+        Level = LogLevel.Trace,
+        Message = "Starting batch dispatch '{BatchId}' with {EventCount} events to endpoint '{EndpointId}'.")]
+    public static partial void LogBatchDispatchStarting(this ILogger logger, string batchId, int eventCount, WebhookEndpointId endpointId);
 
     // ── Debug (2000 - 2999) ───────────────────────────────────────────────────
 
@@ -125,6 +132,13 @@ public static partial class WebhookLoggerExtensions {
         Level = LogLevel.Information,
         Message = "Successfully recovered {RecoveredCount} stale in-flight webhook jobs and re-enqueued them for delivery.")]
     public static partial void LogRecoverySweepCompleted(this ILogger logger, int recoveredCount);
+
+    /// <summary>Logs that a batch dispatch operation completed successfully.</summary>
+    [LoggerMessage(
+        EventId = 3005,
+        Level = LogLevel.Information,
+        Message = "Successfully dispatched batch '{BatchId}' with {EventCount} events to endpoint '{EndpointId}'.")]
+    public static partial void LogBatchDispatchCompleted(this ILogger logger, string batchId, int eventCount, WebhookEndpointId endpointId);
 
     // ── Warning (4000 - 4999) ─────────────────────────────────────────────────
 
@@ -220,6 +234,13 @@ public static partial class WebhookLoggerExtensions {
         Level = LogLevel.Error,
         Message = "Unexpected error occurred during background stale job recovery sweep.")]
     public static partial void LogRecoverySweepFailed(this ILogger logger, Exception exception);
+
+    /// <summary>Logs that a batch dispatch operation failed.</summary>
+    [LoggerMessage(
+        EventId = 5007,
+        Level = LogLevel.Error,
+        Message = "Failed to dispatch batch '{BatchId}' with {EventCount} events to endpoint '{EndpointId}'.")]
+    public static partial void LogBatchDispatchFailed(this ILogger logger, Exception exception, string batchId, int eventCount, WebhookEndpointId endpointId);
 
     // ── Critical (6000 - 6999) ────────────────────────────────────────────────
 

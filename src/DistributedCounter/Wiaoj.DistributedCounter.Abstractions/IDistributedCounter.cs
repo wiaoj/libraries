@@ -60,6 +60,20 @@ public interface IDistributedCounter {
     ValueTask<CounterLimitResult> TryDecrementAsync(long amount, long minLimit, CounterExpiry expiry, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Atomically compares the counter's current value with an expected value, and if they match, sets the new value.
+    /// </summary>
+    /// <param name="expectedValue">The value that is expected to be in storage.</param>
+    /// <param name="newValue">The new value to set if matching.</param>
+    /// <param name="expiry">The expiration policy to apply.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns><see langword="true"/> if the replacement succeeded; otherwise, <see langword="false"/>.</returns>
+    ValueTask<bool> TryCompareExchangeAsync(
+        CounterValue expectedValue,
+        CounterValue newValue,
+        CounterExpiry expiry,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Gets the current value of the counter. For buffered strategies, this may return a locally cached estimate.
     /// </summary>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
@@ -217,6 +231,25 @@ public static partial class DistributedCounterExtensions {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<CounterLimitResult> TryDecrementAsync(long amount, long minLimit, CounterExpiry expiry, CancellationToken cancellationToken = default) {
             return counter.TryDecrementAsync(amount, minLimit, expiry, cancellationToken);
+        }
+
+        /// <summary>Attempts to replace the counter value if matching the expected value, using infinite expiration.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<bool> TryCompareExchangeAsync(
+            CounterValue expectedValue,
+            CounterValue newValue,
+            CancellationToken cancellationToken = default) {
+            return counter.TryCompareExchangeAsync(expectedValue, newValue, CounterExpiry.Infinite, cancellationToken);
+        }
+
+        /// <summary>Attempts to replace the counter value if matching the expected value with a specific expiry.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<bool> TryCompareExchangeAsync(
+            CounterValue expectedValue,
+            CounterValue newValue,
+            CounterExpiry expiry,
+            CancellationToken cancellationToken = default) {
+            return counter.TryCompareExchangeAsync(expectedValue, newValue, expiry, cancellationToken);
         }
 
         // --- Misc ---------------------------------------------------

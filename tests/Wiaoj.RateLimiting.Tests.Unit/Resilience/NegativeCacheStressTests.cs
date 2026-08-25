@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Time.Testing;
-using Wiaoj.RateLimiting.Resilience;
 
 namespace Wiaoj.RateLimiting.Tests.Unit.Resilience;
 

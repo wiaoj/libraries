@@ -7,7 +7,7 @@ namespace Wiaoj.Webhooks.Diagnostics;
 /// Central <see cref="Meter"/> and instruments for the Wiaoj Webhooks engine.
 /// Uses <c>System.Diagnostics.Metrics</c> — compatible with OpenTelemetry, dotnet-counters, Prometheus, etc.
 /// </summary>
-public static class WebhookMeter {
+internal static class WebhookMeter {
     /// <summary>
     /// The meter name used for subscribing in metrics configurations.
     /// </summary>
@@ -37,6 +37,20 @@ public static class WebhookMeter {
             "wiaoj.webhooks.dispatch.error.count",
             unit: "{errors}",
             description: "Total number of failed webhook event dispatches.");
+
+    /// <summary>Total number of batch dispatch operations executed.</summary>
+    public static readonly Counter<long> BatchDispatchCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.webhooks.dispatch.batch.count",
+            unit: "{batches}",
+            description: "Total number of batch dispatch operations executed.");
+
+    /// <summary>Distribution of event counts per batch dispatch operation.</summary>
+    public static readonly Histogram<int> BatchSizeHistogram =
+        _meter.CreateHistogram<int>(
+            "wiaoj.webhooks.dispatch.batch.size",
+            unit: "{events}",
+            description: "Distribution of event counts contained in batch dispatches.");
 
     // ── Delivery Metrics ──────────────────────────────────────────────────────
 

@@ -84,7 +84,7 @@ public static class WebhookServiceCollectionExtensions {
         });
 
         services.TryAddSingleton<IWebhookStore, InMemoryWebhookStore>();
-
+        services.TryAddSingleton<IWebhookEndpointResolver, InMemoryWebhookEndpointStore>();
         services.TryAddTransient<IWebhookDeliverer, HttpWebhookDeliverer>();
 
         services.TryAddTransient<WebhookPipelineRunner>(static sp => {
