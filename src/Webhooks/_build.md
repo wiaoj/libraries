@@ -60,11 +60,11 @@ Wiaoj.Webhooks.Persistence.EntityFrameworkCore
 Wiaoj.Webhooks.Inbound.AspNetCore
     └─ Gelen webhook'ları karşılama, signature doğrulama middleware'i.
 
-Wiaoj.Webhooks.Inbound.Providers.Stripe
-Wiaoj.Webhooks.Inbound.Providers.GitHub
+Wiaoj.Webhooks.Inbound.Providers.Stripe => Dropped
+Wiaoj.Webhooks.Inbound.Providers.GitHub => Dropped
     └─ Sağlayıcıya özel signature/format adaptörleri.
 
-Wiaoj.Webhooks.DependencyInjection
+Wiaoj.Webhooks.DependencyInjection => Wiaoj.Webhooks paketi içine alındı
     └─ AddWiajWebhooks(...) builder giriş noktası, tüm alt paketleri birbirine bağlar.
 
 Wiaoj.Webhooks.Testing

@@ -1,7 +1,6 @@
 # Wiaoj.Webhooks
 
-[![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Tests Passing](https://img.shields.io/badge/Unit%20Tests-Passing-success)](https://github.com/wiaoj/libraries)
+[![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/) 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 An ultra-high-throughput, modular, resilient, and enterprise-grade Webhook delivery and receiving engine built from the ground up for modern **.NET 10** architectures.
@@ -14,21 +13,20 @@ Engineered with zero-allocation span parsers, constant-time cryptographic verifi
 
 - [Architectural Overview](#-architectural-overview)
 - [Ecosystem Packages](#-ecosystem-packages)
+- [Performance & Benchmark Results](#-performance--benchmark-results)
 - [Key Features & Guarantees](#-key-features--guarantees)
 - [Quick Start](#-quick-start)
-  - [1. Register Core Engine (Outbound & Inbound)](#1-register-core-engine-outbound--inbound)
-  - [2. Dispatch Outbound Event](#2-dispatch-outbound-event)
-  - [3. Receive Inbound Event via Minimal API](#3-receive-inbound-event-via-minimal-api)
-- [Core Architecture & Modules](#-core-architecture--modules)
-  - [1. End-to-End Partitioning & Sharded Concurrency](#1-end-to-end-partitioning--sharded-concurrency)
-  - [2. Inbound Receiving Engine (ASP.NET Core Minimal API)](#2-inbound-receiving-engine-aspnet-core-minimal-api)
-  - [3. Unmanaged Secrets & Cryptographic HMAC](#3-unmanaged-secrets--cryptographic-hmac)
-  - [4. Bloom Filter O(1) Deduplication](#4-bloom-filter-o1-deduplication)
+  - [1. Register Core Engine](#1-register-core-engine)
+  - [2. Outbound Dispatching](#2-outbound-dispatching)
+  - [3. Inbound Ingress Hub (Multi-Event Routing)](#3-inbound-ingress-hub-multi-event-routing)
+  - [4. 1-to-N Publishing & Fan-Out](#4-1-to-n-publishing--fan-out)
+- [Core Modules Breakdown](#-core-modules-breakdown)
+  - [1. Inbound Ingress Hub & Discriminator Extraction](#1-inbound-ingress-hub--discriminator-extraction)
+  - [2. Per-Endpoint Cryptographic Customization](#2-per-endpoint-cryptographic-customization)
+  - [3. End-to-End Partitioning & Sharded Concurrency](#3-end-to-end-partitioning--sharded-concurrency)
+  - [4. Self-Healing Stale & Zombie Job Recovery](#4-self-healing-stale--zombie-job-recovery)
   - [5. Outbound SSRF Hardening & Egress Proxy](#5-outbound-ssrf-hardening--egress-proxy)
-  - [6. Resilient Retries & Self-Healing Recovery](#6-resilient-retries--self-healing-recovery)
-  - [7. Distributed Rate Limiting](#7-distributed-rate-limiting)
 - [Observability & OpenTelemetry](#-observability--opentelemetry)
-- [Verification & Test Suite](#-verification--test-suite)
 - [License](#-license)
 
 ---
@@ -38,24 +36,27 @@ Engineered with zero-allocation span parsers, constant-time cryptographic verifi
 ```mermaid
 flowchart TD
     subgraph Inbound["(1) Inbound Ingress - Wiaoj.Webhooks.AspNetCore"]
-        Req["Webhook HTTP POST"] --> Filter["WebhookReceiverEndpointFilter"]
+        Req["Incoming Webhook HTTP POST"] --> Filter["WebhookHubEndpointFilter"]
         Filter -->|DoS Bounded Stream 64KB| Body["AsyncValueBuffer"]
         Body -->|Constant-Time HMAC & Replay| Auth["IWebhookSecretResolver"]
-        Auth -->|XxHash128 Dedup| Dedup["IIdempotencyStore"]
-        Dedup -->|ReadOnlySequence Deser| Handler["Minimal API / Class Handler"]
+        Auth -->|Header / JSON Discriminator| Extractor["IWebhookEventDiscriminatorExtractor"]
+        Extractor -->|XxHash128 Dedup| Dedup["IIdempotencyStore"]
+        Dedup -->|Match .On / .MapHandler| Handler["Minimal API / Class Handler"]
         Handler --> Res["200 OK Response"]
     end
-
+```
+```mermaid
+flowchart TD 
     subgraph Outbound["(2) Outbound Egress - Wiaoj.Webhooks & Transports"]
         App["Application Dispatch"] -->|DispatchAsync| Disp["IWebhookDispatcher"]
-        Disp -->|Store-First| Store[("IWebhookStore - State at Rest")]
-        Disp -->|Push with PartitionKey| Transport[("Sharded / Queue Transport")]
+        Disp -->|Store State| Store[("IWebhookStore - State at Rest")]
+        Disp -->|Push with PartitionKey| Transport[("Sharded / Channel Transport")]
         Transport --> Worker["Background Consumer Loop"]
         Worker --> Runner["WebhookPipelineRunner"]
         Runner --> M1["PartitionedDeliveryMiddleware<br/><i>Strict FIFO Lock</i>"]
-        M1 --> M2["Idempotency & BloomFilter<br/><i>O(1) Deduplication</i>"]
-        M2 --> M3["Standard Headers & Content-Digest<br/><i>RFC 9530 xxh128 / sha-256</i>"]
-        M3 --> M4["SigningMiddleware<br/><i>HMAC-SHA256 / SHA512</i>"]
+        M1 --> M2["Idempotency & BloomFilter<br/><i>Replay-Aware Deduplication</i>"]
+        M2 --> M3["Standard Headers & Content-Digest<br/><i>RFC 9530 / Static Headers</i>"]
+        M3 --> M4["SigningMiddleware<br/><i>Per-Endpoint Signer / Global HMAC</i>"]
         M4 --> M5["HttpWebhookDeliverer<br/><i>SSRF-Protected Sockets POST</i>"]
         M5 --> M6["RetryMiddleware<br/><i>Exponential Backoff + Jitter</i>"]
         M5 --> Target["Destination Webhook URL"]
@@ -68,29 +69,46 @@ flowchart TD
 
 | Package | Description | Reference Link |
 |---|---|---|
-| **`Wiaoj.Webhooks.Abstractions`** | Pure contracts, value objects (`WebhookPartitionKey`, `WebhookEndpointId`, `IdempotencyKey`, `WebhookSignature`), and context definitions with zero 3rd-party dependencies. | [README](./Wiaoj.Webhooks.Abstractions/README.md) |
-| **`Wiaoj.Webhooks`** | Core engine, middleware pipeline runner, HTTP delivery, HMAC signers, SSRF filter, backoff policies, and OpenTelemetry instrumentation. | [README](./Wiaoj.Webhooks/README.md) |
-| **`Wiaoj.Webhooks.AspNetCore`** | Inbound webhook receiver engine, DoS stream protection, policy routing, unmanaged secret verification, and Minimal API integration. | [README](./Wiaoj.Webhooks.AspNetCore/README.md) |
+| **`Wiaoj.Webhooks.Abstractions`** | Pure contracts, value objects (`WebhookPartitionKey`, `WebhookEndpointId`, `WebhookJobId`, `IdempotencyKey`, `WebhookSignature`), and context definitions with zero 3rd-party dependencies. | [README](./Wiaoj.Webhooks.Abstractions/README.md) |
+| **`Wiaoj.Webhooks`** | Core outbound engine, pipeline runner, HTTP deliverer, HMAC signers, SSRF filter, backoff policies, recovery services, and OpenTelemetry instrumentation. | [README](./Wiaoj.Webhooks/README.md) |
+| **`Wiaoj.Webhooks.AspNetCore`** | Inbound webhook receiver engine, DoS stream protection, policy routing, discriminator extractors, and Minimal API Multi-Event Hub integration. | [README](./Wiaoj.Webhooks.AspNetCore/README.md) |
+| **`Wiaoj.Webhooks.Publishing`** | 1-to-N Webhook Gateway and subscriber fan-out broker with wildcard topic matching. | [README](./Wiaoj.Webhooks.Publishing/README.md) |
+| **`Wiaoj.Webhooks.Signing.Asymmetric`** | Asymmetric cryptographic signers supporting RSA (PS256/RS256), ECDSA (ES256/ES384/ES512), and Ed25519. | [README](./Wiaoj.Webhooks.Signing.Asymmetric/README.md) |
 | **`Wiaoj.Webhooks.Transports.InMemory`** | High-performance in-memory channel transport, `ShardedWebhookTransport` partition router, and background worker pool. | [README](./Wiaoj.Webhooks.Transports.InMemory/README.md) |
 | **`Wiaoj.Webhooks.BloomFilter`** | O(1) duplicate webhook suppression plugin backed by `Wiaoj.BloomFilter` without database roundtrips. | [README](./Wiaoj.Webhooks.BloomFilter/README.md) |
-| **`Wiaoj.Webhooks.DistributedCounter`** | Distributed per-endpoint rate limiting plugin backed by `Wiaoj.DistributedCounter` with automatic delayed re-queuing. | [README](./Wiaoj.Webhooks.DistributedCounter/README.md) |
+| **`Wiaoj.Webhooks.RateLimiting`** | Distributed per-endpoint rate limiting middleware backed by `Wiaoj.RateLimiting` with automatic delayed re-queuing. | [README](./Wiaoj.Webhooks.RateLimiting/README.md) |
+
+---
+
+## 📊 Performance & Benchmark Results
+
+Measured with **BenchmarkDotNet v0.15.8** on an **AMD Ryzen 5 7500F (.NET 10.0.9, x86-64-v4)** running 100% full dispatch lifecycle:
+
+| Method | Mean | Allocated | Alloc Ratio | Gen0 |
+|---|---|---|---|---|
+| **Wiaoj.Webhooks** | **1.615 μs** | **816 B** | **1.00** | **0.0038** |
+| **Wolverine** | 1.481 μs | 1,696 B | 2.08 | 0.1659 |
+| **MassTransit** | 3.190 μs | 8,153 B | 9.99 | 0.0153 |
+
+* **10x Lower Memory:** Wiaoj allocated only **816 Bytes** compared to MassTransit's **8,153 Bytes**.
+* **43x Lower GC Pressure:** Wiaoj triggered Gen0 collections at a rate of **0.0038** compared to Wolverine's **0.1659**, ensuring flat and predictable P99 latency curves under sustained enterprise workloads.
 
 ---
 
 ## ⚡ Key Features & Guarantees
 
-- **Zero-Allocation Primitives:** Core value objects (`WebhookPartitionKey`, `WebhookEndpointId`, `WebhookJobId`, `IdempotencyKey`, `WebhookSignature`) strictly implement `ISpanParsable<T>`, `IUtf8SpanParsable<T>`, `ISpanFormattable`, `IUtf8SpanFormattable`, and `IAlternateEqualityComparer<ReadOnlySpan<char>, T>` for allocation-free lookups.
-- **End-to-End Deterministic Partitioning:** Outbox, transport queues, and execution middleware share a unified `WebhookPartitionKey`, guaranteeing **strict FIFO message sequence** per partition while executing different partitions in massive parallel throughput.
-- **Constant-Time Verification & Unmanaged Secrets:** Secrets are held in GC-immune unmanaged memory (`Secret<byte>`) or at-rest encrypted envelopes (`EncryptedSecret<T>`), completely preventing plain-text secret leakage to memory dumps or logs.
-- **Dual Inbound Invocation Model:** Full support for Minimal API delegate injection (`DbContext`, `ILogger`, `CancellationToken`, `WebhookReceiverContext<T>`) and class-based handlers (`IWebhookReceiverHandler<TEvent>`).
-- **DoS & SSRF Defense:** Bounded stream buffering (`AsyncValueBuffer<byte>`) prevents memory exhaustion, while socket-level IP validation (`WebhookIpFilter`) blocks cloud metadata, loopback, private ranges, and 6to4/NAT64/Teredo tunneling attacks.
-- **Comprehensive Observability:** OpenTelemetry distributed tracing spans (`ActivitySource`) and runtime delivery metrics (`Meter`) capturing attempt latencies, status codes, and failure distributions.
+- **Zero-Allocation Primitives:** Core value objects (`WebhookPartitionKey`, `WebhookEndpointId`, `WebhookJobId`, `IdempotencyKey`, `WebhookSignature`) strictly implement `ISpanParsable<T>`, `IUtf8SpanParsable<T>`, `ISpanFormattable`, `IUtf8SpanFormattable`, and `IAlternateEqualityComparer<ReadOnlySpan<char>, T>`.
+- **Inbound Multi-Event Ingress Hub:** Single-URL ingress routing (`app.MapWebhook("/path")`) supporting `.On<T>()`, `.MapHandler<T>()`, `.OnPing()`, and `.IgnoreUnhandledEvents()` with zero-allocation discriminator extraction.
+- **Per-Endpoint Outbound Customization:** Each destination endpoint supports independent secret keys, custom signing algorithms (HMAC-SHA256, SHA-512, RSA, Ed25519), and custom static HTTP headers (`Authorization: Bearer ...`).
+- **End-to-End Deterministic Partitioning:** Transport queues and execution middleware share a unified `WebhookPartitionKey`, guaranteeing **strict FIFO message sequence** per partition while executing different partitions concurrently.
+- **Unmanaged Secrets & Cryptographic HMAC:** Secrets are held in GC-immune native memory (`Secret<byte>`) or at-rest encrypted envelopes (`EncryptedSecret<T>`).
+- **Self-Healing Recovery:** Background service sweeping and recovering both expired `InFlight` leases and stranded `Queued` zombie jobs caused by node crashes.
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Register Core Engine (Outbound & Inbound)
+### 1. Register Core Engine
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
@@ -99,168 +117,150 @@ using Wiaoj.Webhooks.Retries;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Register Complete Webhooks Engine in a Single Unified Builder Call
 builder.Services.AddWiaojWebhooks(webhooks =>
 {
-    // ── 1. Outbound (Sending) Engine ──
-    webhooks.UseShardedInMemoryTransport(shardCount: 8, capacityPerShard: 10_000)
+    // ── Outbound Sending Engine ──
+    webhooks.UseShardedInMemoryTransport(shardCount: 8)
             .UsePartitionedDelivery()
             .UseStandardHeaders()
             .UseContentDigest(ContentDigestAlgorithm.XxHash128)
             .UseIdempotency(TimeSpan.FromHours(24))
             .UseHmacSha256Signing()
-            .UseExponentialBackoffRetry(new ExponentialBackoffOptions
-            {
-                MaxAttempts = 5,
-                InitialDelay = TimeSpan.FromSeconds(2),
-                Multiplier = 2.0,
-                Jitter = Wiaoj.Extensions.Jitter.Medium
-            });
+            .UseSnakeCaseJson()
+            .UseExponentialBackoffRetry();
 
-    // ── 2. Inbound (Receiving) Policy Engine ──
+    // ── Inbound Receiving Policies ──
     webhooks.AddInbound(inbound =>
     {
-        inbound.AddPolicy("Stripe", policy => policy
-            .UseHmacSha256("Stripe-Signature")
-            .WithTolerance(TimeSpan.FromMinutes(3))
-            .FromConfiguration(builder.Configuration.GetSection("Webhooks:Inbound:Stripe")));
+        inbound.AddPolicy("GitHub", policy => policy
+            .WithSigner<GitHubWebhookSigner>()
+            .WithEventFromHeader("X-GitHub-Event")
+            .WithTolerance(TimeSpan.FromMinutes(5))
+            .UseSecret(Secret.From("ghsec_production_secret_key")));
     });
 });
 
 var app = builder.Build();
 ```
 
-### 2. Dispatch Outbound Event
+### 2. Outbound Dispatching
 
 ```csharp
-// Define Event
 [WebhookEvent("order.created")]
 public sealed record OrderCreatedEvent(string OrderId, decimal Amount) : IWebhookEvent;
 
-// Dispatch with Order-Level Partitioning for strict FIFO
 public class OrderService(IWebhookDispatcher dispatcher)
 {
     public async Task CreateOrderAsync(string orderId, decimal amount, CancellationToken ct)
     {
         var @event = new OrderCreatedEvent(orderId, amount);
-        
+
         await dispatcher.DispatchAsync(
             endpointId: new WebhookEndpointId("customer-endpoint-1"),
             payload: @event,
-            partitionKey: orderId, // Strict FIFO for this specific order
+            partitionKey: orderId, // Strict FIFO ordering for this order
             cancellationToken: ct);
     }
 }
 ```
 
-### 3. Receive Inbound Event via Minimal API
+### 3. Inbound Ingress Hub (Multi-Event Routing)
 
 ```csharp
-app.MapWebhook<OrderCreatedEvent>("/api/webhooks/orders", async (
-    OrderCreatedEvent @event,
-    WebhookReceiverContext<OrderCreatedEvent> context,
-    AppDbContext db,
-    CancellationToken ct) =>
-{
-    await db.Orders.AddAsync(new Order(@event.OrderId, @event.Amount), ct);
-    await db.SaveChangesAsync(ct);
-})
-.UsePolicy("Stripe");
+app.MapWebhook("/api/webhooks/github")
+   .UsePolicy("GitHub")
+   .OnPing() // Automatically acknowledges ping healthchecks with 200 OK
+   .On<GitHubPushDto>("push", async (GitHubPushDto push, AppDbContext db, CancellationToken ct) =>
+   {
+       await db.Commits.AddRangeAsync(push.Commits, ct);
+   })
+   .On<GitHubIssueDto>("issues", async (GitHubIssueDto issue, ILogger<Program> logger) =>
+   {
+       logger.LogInformation("Issue: #{Number} {Title}", issue.Number, issue.Title);
+   })
+   .IgnoreUnhandledEvents(); // Returns 200 OK for other unhandled events (star, fork, etc.)
+```
 
-app.Run();
+### 4. 1-to-N Publishing & Fan-Out
+
+```csharp
+public class OrderService(IWebhookPublisher publisher)
+{
+    public async Task PublishOrderAsync(OrderCreatedEvent @event, CancellationToken ct)
+    {
+        // Fans out event to all matching subscriber endpoints across the system
+        IReadOnlyList<WebhookDeliveryHandle> handles = await publisher.PublishAsync(@event, ct);
+    }
+}
 ```
 
 ---
 
-## ⚙️ Core Architecture & Modules
+## ⚙️ Core Modules Breakdown
 
-### 1. End-to-End Partitioning & Sharded Concurrency
-Ensures events for the same partition key (`OrderId`, `CustomerId`, or `EndpointId`) execute sequentially in strict FIFO order, while distinct partition keys execute concurrently across CPU cores:
+### 1. Inbound Ingress Hub & Discriminator Extraction
+Supports extracting wire-format event names from headers or JSON root properties using `Utf8JsonReader`:
 
 ```csharp
-// 1. Dynamic Zero-Collision Mailbox Lock (In-Process Synchronization)
-webhooks.UsePartitionedDelivery();
+// Extract from custom header
+policy.WithEventFromHeader("X-Shopify-Topic");
 
-// 2. Composed Transport Sharding (Lock-Free FIFO with XxHash3 SIMD routing)
+// Extract from root JSON property without string allocation
+policy.WithEventFromJsonProperty("type");
+```
+
+### 2. Per-Endpoint Cryptographic Customization
+Configure destination endpoints with dedicated signers, secrets, and static headers:
+
+```csharp
+WebhookEndpoint enterpriseEndpoint = await new WebhookEndpointBuilder()
+    .WithId("ep_bank_1")
+    .WithTargetUrl("https://bank.com/webhooks")
+    .WithSecret("whsec_secure_key", secretProtector)
+    .WithSigner(new HmacSha512WebhookSigner("X-Enterprise-Signature"))
+    .WithHeader("Authorization", "Bearer static_token_123")
+    .BuildAsync();
+```
+
+### 3. End-to-End Partitioning & Sharded Concurrency
+Guarantees sequential FIFO delivery per partition key while executing distinct partitions in parallel:
+
+```csharp
+webhooks.UsePartitionedDelivery();
 webhooks.UseShardedInMemoryTransport(shardCount: Environment.ProcessorCount * 2);
 ```
 
-### 2. Inbound Receiving Engine (ASP.NET Core Minimal API)
-Provides high-performance, DoS-protected inbound webhook endpoints with automatic signature verification, idempotency deduplication, and RFC 9457 Problem Details error responses:
+### 4. Self-Healing Stale & Zombie Job Recovery
+Sweeps both expired in-flight leases and stranded queued jobs caused by node crashes:
 
 ```csharp
-// Declarative endpoint toggles
-app.MapWebhook<DiagnosticEvent>("/webhooks/internal")
-   .AllowUnsigned()                  // Disables signature requirement for internal networks
-   .DisableIdempotency()             // Disables deduplication cache
-   .WithMaxBodySize(1024 * 1024);    // Increases DoS stream limit to 1 MB
-```
-
-### 3. Unmanaged Secrets & Cryptographic HMAC
-Supports constant-time HMAC-SHA256 and HMAC-SHA512 verification. Keys are stored in GC-immune unmanaged memory (`Secret<byte>`) or at-rest encrypted envelopes (`EncryptedSecret<T>`):
-
-```csharp
-using var secret = Secret.From("whsec_production_secret_key");
-app.MapWebhook<OrderCreatedEvent>("/webhooks/orders")
-   .WithSecret(secret);
-```
-
-### 4. Bloom Filter O(1) Deduplication
-Intercepts identical events before HTTP transmission using probabilistic in-memory bit vectors, short-circuiting with `WebhookDeliveryResult.Duplicate` in sub-microsecond timeframes:
-
-```csharp
-builder.Services.AddBloomFilter(bf => bf.AddFilter("webhook-dedup", 1_000_000, 0.001));
-builder.Services.AddSingleton<IBloomFilter>(sp => sp.GetRequiredKeyedService<IBloomFilter>("webhook-dedup"));
-
-webhooks.UseBloomFilterDeduplication();
-```
-
-### 5. Outbound SSRF Hardening & Egress Proxy
-Protects internal infrastructure from Server-Side Request Forgery by inspecting destination IP addresses at the TCP socket layer:
-
-```csharp
-webhooks.ConfigureSecurity(options =>
-{
-    options.AllowPrivateNetworks = false;            // Strict SSRF defense
-    options.ConnectTimeout = TimeSpan.FromSeconds(5);
-    options.Proxy = new WebProxy("http://egress-proxy:8080");
-});
-```
-
-### 6. Resilient Retries & Self-Healing Recovery
-Classifies HTTP status codes into transient (`5xx`, `429`, `408`, socket drops) vs permanent (`400`, `401`, `403`, `404`) failures with jittered backoff, while `StaleJobRecoveryService` recovers abandoned jobs from crashed workers:
-
-```csharp
-webhooks.UseExponentialBackoffRetry(new ExponentialBackoffOptions
-{
-    MaxAttempts = 5,
-    InitialDelay = TimeSpan.FromSeconds(2),
-    Multiplier = 2.0
-});
-
 webhooks.UseStaleJobRecovery(options =>
 {
     options.PollingInterval = TimeSpan.FromSeconds(30);
+    options.QueuedJobStaleThreshold = TimeSpan.FromMinutes(2);
     options.RecoveryLeaseDuration = TimeSpan.FromMinutes(2);
 });
 ```
 
-### 7. Distributed Rate Limiting
-Enforces per-endpoint delivery rate limits across a multi-node cluster using sliding-window counters:
+### 5. Outbound SSRF Hardening & Egress Proxy
+Inspects resolved IP addresses at the TCP socket layer to block private ranges and cloud metadata:
 
 ```csharp
-webhooks.UseDistributedRateLimiting(maxRequestsPerWindow: 50, window: TimeSpan.FromSeconds(1));
+webhooks.ConfigureSecurity(options =>
+{
+    options.AllowPrivateNetworks = false;
+    options.ConnectTimeout = TimeSpan.FromSeconds(5);
+    options.Proxy = new WebProxy("http://egress-proxy:8080");
+});
 ```
 
 ---
 
 ## 📊 Observability & OpenTelemetry
 
-The engine emits comprehensive distributed tracing and metrics:
-
 - **ActivitySource:** `Wiaoj.Webhooks`
   - Spans: `webhook.dispatch`, `webhook.deliver`, `webhook.http.post`
-  - Tags: `webhook.endpoint_id`, `webhook.partition_key`, `webhook.status_code`, `webhook.success`
+  - Tags: `webhook.endpoint_id`, `webhook.partition_key`, `webhook.status_code`, `webhook.success`, `webhook.is_replay`
 - **Meter Instruments:** `Wiaoj.Webhooks`
   - `wiaoj.webhooks.dispatch.count` (Counter)
   - `wiaoj.webhooks.delivery.attempt.count` (Counter)
@@ -269,16 +269,6 @@ The engine emits comprehensive distributed tracing and metrics:
   - `wiaoj.webhooks.delivery.duration` (Histogram in ms)
   - `wiaoj.webhooks.retry.count` (Counter)
   - `wiaoj.webhooks.dead_letter.count` (Counter)
-
----
-
-## 🧪 Verification & Test Suite
-
-All modules are strictly verified through comprehensive unit, security, and concurrency stress tests covering edge cases, DoS defenses, clock skews, and multi-threaded race conditions:
-
-```bash
-dotnet test tests/Wiaoj.Webhooks.Tests.Unit/Wiaoj.Webhooks.Tests.Unit.csproj
-```
 
 ---
 

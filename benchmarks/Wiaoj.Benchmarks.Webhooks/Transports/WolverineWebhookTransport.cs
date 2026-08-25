@@ -22,22 +22,21 @@ public sealed class WolverineWebhookTransport : IWebhookTransport {
     /// <inheritdoc/>
     public Task EnqueueAsync(WebhookDeliveryJob job, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(job);
+        Interlocked.Increment(ref ProcessedCounters.SentWolverine);
         return this._bus.PublishAsync(job).AsTask();
     }
 
     /// <inheritdoc/>
-    public Task EnqueueAsync(WebhookDeliveryJob job) {
-        return EnqueueAsync(job, null, CancellationToken.None);
-    }
+    public Task EnqueueAsync(WebhookDeliveryJob job) => EnqueueAsync(job, null, CancellationToken.None);
 
     /// <inheritdoc/>
-    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) {
-        return EnqueueAsync(job, delay, CancellationToken.None);
-    }
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) => EnqueueAsync(job, delay, CancellationToken.None);
 
     /// <inheritdoc/>
     public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {
         Preca.ThrowIfNull(job);
+        Interlocked.Increment(ref ProcessedCounters.SentWolverine);
+
         return delay.HasValue && delay.Value > TimeSpan.Zero
             ? this._bus.PublishAsync(job, new DeliveryOptions { ScheduleDelay = delay.Value }).AsTask()
             : this._bus.PublishAsync(job).AsTask();

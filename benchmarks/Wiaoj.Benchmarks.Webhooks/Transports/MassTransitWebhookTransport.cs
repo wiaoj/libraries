@@ -22,22 +22,21 @@ public sealed class MassTransitWebhookTransport : IWebhookTransport {
     /// <inheritdoc/>
     public Task EnqueueAsync(WebhookDeliveryJob job, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(job);
+        Interlocked.Increment(ref ProcessedCounters.SentMassTransit);
         return this._bus.Publish(job, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public Task EnqueueAsync(WebhookDeliveryJob job) {
-        return EnqueueAsync(job, null, CancellationToken.None);
-    }
+    public Task EnqueueAsync(WebhookDeliveryJob job) => EnqueueAsync(job, null, CancellationToken.None);
 
     /// <inheritdoc/>
-    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) {
-        return EnqueueAsync(job, delay, CancellationToken.None);
-    }
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) => EnqueueAsync(job, delay, CancellationToken.None);
 
     /// <inheritdoc/>
     public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {
         Preca.ThrowIfNull(job);
+        Interlocked.Increment(ref ProcessedCounters.SentMassTransit);
+
         return delay.HasValue && delay.Value > TimeSpan.Zero
             ? this._bus.Publish(job, ctx => ctx.Delay = delay.Value, cancellationToken)
             : this._bus.Publish(job, cancellationToken);

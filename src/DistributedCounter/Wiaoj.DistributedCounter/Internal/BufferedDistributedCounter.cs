@@ -104,6 +104,15 @@ internal sealed class BufferedDistributedCounter : IDistributedCounter {
         // Ancak Reset zaten "0" kabul ettiğimiz için _baseValue=0 ataması yeterli.
     }
 
+    public async ValueTask SetAsync(long value, CounterExpiry expiry, CancellationToken cancellationToken) {
+        Atomic.Exchange(ref this._localDelta, 0);
+        Atomic.Write(ref this._baseValue, value);
+        if(expiry.Value.HasValue) {
+            Atomic.Exchange(ref this._expiryTicks, expiry.Value.Value.Ticks);
+        }
+        await this._storage.SetAsync(this.Key, new CounterValue(value), expiry, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Servis tarafından çağrılır. Biriken farkı (delta) çeker ve yerel sayacı sıfırlar.
     /// </summary>

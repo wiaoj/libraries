@@ -99,6 +99,9 @@
     <Project Path="src/RateLimiting/Wiaoj.RateLimiting.Testing/Wiaoj.RateLimiting.Testing.csproj" Id="fdd5f4cc-8356-4161-b605-6bc9331778a9" />
     <Project Path="src/RateLimiting/Wiaoj.RateLimiting/Wiaoj.RateLimiting.csproj" Id="3350a94a-e110-4126-99c7-88f98a7b8e98" />
   </Folder>
+  <Folder Name="/src/Resilience/">
+    <Project Path="src/Resilience/Wiaoj.Resilience/Wiaoj.Resilience.csproj" Id="d22f366f-a6eb-45d7-aec7-665427c3c236" />
+  </Folder>
   <Folder Name="/src/Serialization/">
     <File Path="src/Serialization/README.md" />
   </Folder>
@@ -128,6 +131,7 @@
     <Project Path="src/Webhooks/Wiaoj.Webhooks.BloomFilter/Wiaoj.Webhooks.BloomFilter.csproj" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.Publishing/Wiaoj.Webhooks.Publishing.csproj" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.RateLimiting/Wiaoj.Webhooks.RateLimiting.csproj" Id="de8eb093-7633-4975-959c-2576f1d6ca8c" />
+    <Project Path="src/Webhooks/Wiaoj.Webhooks.Resilience/Wiaoj.Webhooks.Resilience.csproj" Id="7e178253-35cc-4eba-af03-ec58d5061fde" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.Signing.Asymmetric/Wiaoj.Webhooks.Signing.Asymmetric.csproj" Id="df73ef3b-fa21-48f0-a628-4ea4766eebb6" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.Transports.InMemory/Wiaoj.Webhooks.Transports.InMemory.csproj" Id="c5f5ba7b-56ee-472b-8ea9-fdd151a4a93a" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks/Wiaoj.Webhooks.csproj" Id="a57fc1bd-5360-4e7e-bdee-416daf229af5" />
@@ -145,6 +149,9 @@
   </Folder>
   <Folder Name="/tests/Ddd/">
     <Project Path="tests/Ddd/Wiaoj.Ddd.Tests.Unit/Wiaoj.Ddd.Tests.Unit.csproj" Id="ac985ecb-c629-44c3-b5a7-3ee827cbffe6" />
+  </Folder>
+  <Folder Name="/tests/Resilience/">
+    <Project Path="tests/Resilience/Wiaoj.Resilience.Tests.Unit/Wiaoj.Resilience.Tests.Unit.csproj" Id="415fcbe2-6fa6-4343-98bc-bea12a543110" />
   </Folder>
   <Folder Name="/tests/Serialization/">
     <Project Path="tests/Serialization/Wiaoj.Serialization.Memory.Tests.Unit/Wiaoj.Serialization.Memory.Tests.Unit.csproj" Id="063bdb25-945b-4204-8f44-66e063fc31b8" />

@@ -259,6 +259,19 @@ public static class WebhookRouteHandlerBuilderExtensions {
             hub => hub.IgnoreUnhandledEvents = ignore);
     }
 
+    /// <summary>
+    /// Configures a nested JSON property path to unwrap before deserializing into the target payload model (e.g. <c>"data.object"</c>).
+    /// </summary>
+    /// <param name="builder">The route handler builder.</param>
+    /// <param name="payloadPath">The dot-separated JSON property path.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static RouteHandlerBuilder WithPayloadPath(this RouteHandlerBuilder builder, string payloadPath) {
+        Preca.ThrowIfNullOrWhiteSpace(payloadPath);
+        return builder.ConfigureAllMetadata(
+            single => single.PayloadPath = payloadPath,
+            hub => hub.PayloadPath = payloadPath);
+    }
+
     // ────────────────────────────────────────────────────────────────────────
     // INTERNAL HELPERS
     // ────────────────────────────────────────────────────────────────────────

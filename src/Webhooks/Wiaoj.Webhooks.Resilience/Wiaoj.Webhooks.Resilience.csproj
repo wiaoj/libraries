@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.Webhooks.Resilience</RootNamespace>
+	  <AssemblyName>Wiaoj.Webhooks.Resilience</AssemblyName>
+	  <PackageId>Wiaoj.Webhooks.Resilience</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Resilience\Wiaoj.Resilience\Wiaoj.Resilience.csproj" />
+    <ProjectReference Include="..\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
+  </ItemGroup>
+</Project>

@@ -70,6 +70,11 @@ public interface IDistributedCounter {
     /// </summary>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     ValueTask ResetAsync(CancellationToken cancellationToken);
+     
+    /// <summary>
+    /// Atomically overwrites the counter with an absolute value and updates its time-to-live expiration.
+    /// </summary>
+    ValueTask SetAsync(long value, CounterExpiry expiry = default, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

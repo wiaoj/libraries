@@ -139,8 +139,18 @@ public sealed class WebhookHubEndpointFilter : IEndpointFilter {
             }
         }
 
-        // 8. Payload Deserialization
-        object? payload = serializer.DeserializeFromString(Encoding.UTF8.GetString(rawPayload.Span), registration.EventType);
+        // 8. Payload Subtree Unwrapping & Deserialization
+        ReadOnlySpan<byte> targetPayloadSlice = rawPayload.Span;
+        if(policy.PayloadPathSegmentsUtf8 is { Length: > 0 } pathSegments) {
+            if(!Utf8JsonPayloadNavigator.TryExtractSubtree(rawPayload.Span, pathSegments, out targetPayloadSlice)) {
+                if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
+                    await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
+                }
+                return WebhookReceiverResponses.DeserializationFailed(eventName, httpContext.Request.Path);
+            }
+        }
+
+        object? payload = serializer.DeserializeFromString(Encoding.UTF8.GetString(targetPayloadSlice), registration.EventType);
         if(payload is null) {
             if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
                 await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
@@ -214,7 +224,8 @@ public sealed class WebhookHubEndpointFilter : IEndpointFilter {
             SecretResolver = this._metadata.SecretResolver ?? basePolicy.SecretResolver,
             EventExtractor = this._metadata.EventExtractor ?? basePolicy.EventExtractor,
             IgnoreUnhandledEvents = this._metadata.IgnoreUnhandledEvents ?? basePolicy.IgnoreUnhandledEvents,
-            IdempotencyKeyExtractor = basePolicy.IdempotencyKeyExtractor
+            IdempotencyKeyExtractor = basePolicy.IdempotencyKeyExtractor,
+            PayloadPath = this._metadata.PayloadPath ?? basePolicy.PayloadPath
         };
     }
 

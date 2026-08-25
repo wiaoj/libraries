@@ -29,4 +29,8 @@ internal sealed class ImmediateDistributedCounter(CounterKey key, ICounterStorag
     public ValueTask ResetAsync(CancellationToken cancellationToken) {
         return storage.DeleteAsync(this.Key, cancellationToken);
     }
+
+    public ValueTask SetAsync(long value, CounterExpiry expiry, CancellationToken cancellationToken) {
+        return storage.SetAsync(this.Key, new CounterValue(value), expiry, cancellationToken);
+    }
 }

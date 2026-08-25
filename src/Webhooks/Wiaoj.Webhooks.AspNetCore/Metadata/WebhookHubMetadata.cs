@@ -39,6 +39,21 @@ public sealed class WebhookHubMetadata {
     /// <summary>Gets or sets an override indicating whether unhandled incoming events should be acknowledged with 200 OK.</summary>
     public bool? IgnoreUnhandledEvents { get; set; }
 
+
+    /// <summary>Gets or sets an override for the JSON payload path to unwrap before deserialization.</summary>
+    public string? PayloadPath {
+        get;
+        set {
+            field = value;
+            this.PayloadPathSegmentsUtf8 = !string.IsNullOrWhiteSpace(value)
+                ? Utf8JsonPayloadNavigator.TokenizePath(value)
+                : null;
+        }
+    }
+
+    /// <summary>Gets the pre-computed UTF-8 path segments for the hub endpoint.</summary>
+    public byte[][]? PayloadPathSegmentsUtf8 { get; private set; }
+
     /// <summary>Gets the collection of registered event bindings.</summary>
     public IReadOnlyDictionary<string, WebhookHubRegistration> Registrations => this._registrations;
 

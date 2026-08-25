@@ -190,6 +190,36 @@ public sealed class WebhookReceiverPolicy {
     }
 
     /// <summary>
+    /// Gets or sets the dot-delimited JSON property path to unwrap before deserialization (e.g. <c>"data.object"</c>).
+    /// When <see langword="null"/>, the root JSON payload is deserialized directly.
+    /// </summary>
+    public string? PayloadPath {
+        get;
+        set {
+            field = value;
+            this.PayloadPathSegmentsUtf8 = !string.IsNullOrWhiteSpace(value)
+                ? Utf8JsonPayloadNavigator.TokenizePath(value)
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the pre-computed UTF-8 path segments for zero-allocation payload unwrapping.
+    /// </summary>
+    public byte[][]? PayloadPathSegmentsUtf8 { get; private set; }
+
+    /// <summary>
+    /// Configures the dot-delimited JSON property path to unwrap before deserialization (e.g. <c>"data.object"</c>).
+    /// </summary>
+    /// <param name="payloadPath">The dot-separated JSON path.</param>
+    /// <returns>This policy instance for fluent chaining.</returns>
+    public WebhookReceiverPolicy WithPayloadPath(string payloadPath) {
+        Preca.ThrowIfNullOrWhiteSpace(payloadPath);
+        this.PayloadPath = payloadPath;
+        return this;
+    }
+
+    /// <summary>
     /// Disables inbound idempotency deduplication for this policy.
     /// </summary>
     /// <returns>This policy instance for fluent method chaining.</returns>

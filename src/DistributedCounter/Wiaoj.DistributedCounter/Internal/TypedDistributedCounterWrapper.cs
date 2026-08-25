@@ -60,4 +60,8 @@ internal class TypedDistributedCounterWrapper<TTag>(IDistributedCounterFactory f
     public ValueTask ResetAsync(CancellationToken cancellationToken) {
         return this._inner.Value.ResetAsync(cancellationToken);
     }
+
+    public ValueTask SetAsync(long value, CounterExpiry expiry = default, CancellationToken cancellationToken = default) {
+        return this._inner.Value.SetAsync(value, expiry, cancellationToken);
+    }
 }

@@ -126,15 +126,25 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             }
         }
 
-        // 6. Payload Deserialization
-        ReadOnlySequence<byte> payloadSequence = new(rawPayload);
+        // 6. Payload Subtree Unwrapping & Deserialization
+        ReadOnlySpan<byte> targetPayloadSlice = rawPayload.Span;
+        if(policy.PayloadPathSegmentsUtf8 is { Length: > 0 } pathSegments) {
+            if(!Utf8JsonPayloadNavigator.TryExtractSubtree(rawPayload.Span, pathSegments, out targetPayloadSlice)) {
+                if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
+                    await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
+                }
+                return WebhookReceiverResponses.DeserializationFailed(eventName, httpContext.Request.Path);
+            }
+        }
+
+        ReadOnlySequence<byte> payloadSequence = new(targetPayloadSlice.ToArray());
         if(!serializer.TryDeserialize(in payloadSequence, out TEvent? payload) || payload is null) {
             if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
                 await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
             }
             return WebhookReceiverResponses.DeserializationFailed(eventName, httpContext.Request.Path);
         }
-         
+
         WebhookReceiverContext<TEvent> receiverContext = new() {
             HttpContext = httpContext,
             Payload = payload,
@@ -201,7 +211,8 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             EnforceIdempotency = this._metadata.EnforceIdempotency ?? basePolicy.EnforceIdempotency,
             IdempotencyWindow = this._metadata.IdempotencyWindow ?? basePolicy.IdempotencyWindow,
             SecretResolver = this._metadata.SecretResolver ?? basePolicy.SecretResolver,
-            IdempotencyKeyExtractor = this._metadata.IdempotencyKeyExtractor ?? basePolicy.IdempotencyKeyExtractor
+            IdempotencyKeyExtractor = this._metadata.IdempotencyKeyExtractor ?? basePolicy.IdempotencyKeyExtractor,
+            PayloadPath = this._metadata.PayloadPath ?? basePolicy.PayloadPath
         };
     }
 

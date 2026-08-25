@@ -1,4 +1,4 @@
-using Wiaoj.Webhooks.Concurrency;
+﻿using Wiaoj.Webhooks.Concurrency;
 using Wiaoj.Webhooks.Tests.Unit.TestData;
 
 namespace Wiaoj.Webhooks.Tests.Unit.Concurrency;
@@ -83,9 +83,8 @@ public sealed class EndpointMailboxDeliveryLockTests {
         }
 
         // 2nd acquisition creates a fresh node without ObjectDisposedException
-        using(IDisposable handle2 = await this._lock.AcquireLockAsync(endpointId)) {
-            Assert.NotNull(handle2);
-        }
+        using IDisposable handle2 = await this._lock.AcquireLockAsync(endpointId);
+        Assert.NotNull(handle2);
     }
 
     [Fact]

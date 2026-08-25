@@ -65,17 +65,19 @@ internal sealed class WebhookPublisher : IWebhookPublisher {
     }
 
     private async Task<IReadOnlyList<WebhookDeliveryHandle>> PublishCoreAsync<TEvent>(
-        WebhookNamespace @namespace,
-        TEvent payload,
-        WebhookPartitionKey? partitionKey,
-        CancellationToken cancellationToken)
-        where TEvent : IWebhookEvent {
+         WebhookNamespace @namespace,
+         TEvent payload,
+         WebhookPartitionKey? partitionKey,
+         CancellationToken cancellationToken)
+         where TEvent : IWebhookEvent {
 
         Preca.ThrowIfNull(payload);
         cancellationToken.ThrowIfCancellationRequested();
 
         string eventName = this._eventRegistry.GetEventName<TEvent>();
-        IReadOnlyList<WebhookSubscription> activeSubscriptions = await this._store.GetActiveSubscriptionsAsync(cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<WebhookSubscription> activeSubscriptions = await this._store
+            .GetActiveSubscriptionsAsync(@namespace, cancellationToken)
+            .ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -128,7 +130,6 @@ internal sealed class WebhookPublisher : IWebhookPublisher {
                 handles.Add(handle);
             }
 
-            // Exactly ONE database update when all dispatches complete successfully
             await this._batchStore.UpdateBatchProgressAsync(
                 batchId,
                 handles.Count,
@@ -140,7 +141,6 @@ internal sealed class WebhookPublisher : IWebhookPublisher {
             return handles;
         }
         catch(OperationCanceledException) {
-            // Exactly ONE database update capturing partial progress on cancellation
             WebhookBatchStatus status = handles.Count > 0
                 ? WebhookBatchStatus.PartiallyCompleted
                 : WebhookBatchStatus.Pending;
@@ -154,7 +154,6 @@ internal sealed class WebhookPublisher : IWebhookPublisher {
             throw;
         }
         catch(Exception) {
-            // Exactly ONE database update capturing partial progress on unexpected failure
             WebhookBatchStatus status = handles.Count > 0
                 ? WebhookBatchStatus.PartiallyCompleted
                 : WebhookBatchStatus.Failed;

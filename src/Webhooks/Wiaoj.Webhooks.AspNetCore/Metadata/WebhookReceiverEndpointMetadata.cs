@@ -7,6 +7,7 @@ namespace Wiaoj.Webhooks.AspNetCore.Metadata;
 /// Endpoint metadata attached via route builder extensions to configure or override inbound webhook policy behaviors.
 /// </summary>
 public sealed class WebhookReceiverEndpointMetadata {
+
     /// <summary>Gets or sets the name of the registered policy to inherit from.</summary>
     public string? PolicyName { get; set; }
 
@@ -36,10 +37,24 @@ public sealed class WebhookReceiverEndpointMetadata {
 
     /// <summary>Gets or sets an override for the idempotency key extraction delegate.</summary>
     public Func<HttpContext, ReadOnlyMemory<byte>, IdempotencyKey?>? IdempotencyKeyExtractor { get; set; }
-    
+
     /// <summary>Gets or sets an override for the event discriminator extractor.</summary>
     public IWebhookEventDiscriminatorExtractor? EventExtractor { get; set; }
 
     /// <summary>Gets or sets an override indicating whether unhandled incoming events should be gracefully acknowledged with 200 OK.</summary>
     public bool? IgnoreUnhandledEvents { get; set; }
+
+    /// <summary>Gets or sets an override for the JSON payload path to unwrap before deserialization.</summary>
+    public string? PayloadPath {
+        get;
+        set {
+            field = value;
+            this.PayloadPathSegmentsUtf8 = !string.IsNullOrWhiteSpace(value)
+                ? Utf8JsonPayloadNavigator.TokenizePath(value)
+                : null;
+        }
+    }
+
+    /// <summary>Gets the pre-computed UTF-8 path segments for the endpoint.</summary>
+    public byte[][]? PayloadPathSegmentsUtf8 { get; private set; }
 }
