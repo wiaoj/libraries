@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 using Wiaoj.Preconditions;
+using Wiaoj.Primitives;
 using Wiaoj.RateLimiting.Diagnostics;
 
 namespace Wiaoj.RateLimiting;
@@ -72,11 +73,11 @@ public sealed class SlidingWindowLogRateLimiter : IRateLimitAlgorithm {
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        DateTimeOffset now = this._timeProvider.GetUtcNow();
-        DateTimeOffset windowStart = now - this._window;
+        MonotonicTimestamp now = this._timeProvider.GetMonotonicTimestamp();
+        MonotonicTimestamp windowStart = now - this._window;
 
         KeyLog log = this._state.GetOrAdd(key, static _ => new KeyLog());
-        (bool allowed, long totalCost, DateTimeOffset? oldestExisting) = log.TryAdd(now, windowStart, cost, this._limit);
+        (bool allowed, long totalCost, MonotonicTimestamp? oldestExisting) = log.TryAdd(now, windowStart, cost, this._limit);
 
         if(!allowed) {
             TimeSpan retryAfter = oldestExisting is { } oldest ? (oldest + this._window) - now : this._window;
@@ -102,18 +103,18 @@ public sealed class SlidingWindowLogRateLimiter : IRateLimitAlgorithm {
         this._state.Clear();
     }
 
-    private readonly record struct LogEntry(DateTimeOffset Timestamp, int Cost);
+    private readonly record struct LogEntry(MonotonicTimestamp Timestamp, int Cost);
 
     private sealed class KeyLog {
         private readonly List<LogEntry> _entries = [];
         private readonly object _gate = new();
 
-        public (bool Allowed, long TotalCost, DateTimeOffset? OldestExisting) TryAdd(
-            DateTimeOffset now, DateTimeOffset windowStart, int cost, int limit) {
+        public (bool Allowed, long TotalCost, MonotonicTimestamp? OldestExisting) TryAdd(
+            MonotonicTimestamp now, MonotonicTimestamp windowStart, int cost, int limit) {
             lock(this._gate) {
                 this._entries.RemoveAll(entry => entry.Timestamp < windowStart);
 
-                DateTimeOffset? oldestExisting = null;
+                MonotonicTimestamp? oldestExisting = null;
                 long existingCost = 0;
                 foreach(LogEntry entry in this._entries) {
                     existingCost += entry.Cost;

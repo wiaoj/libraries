@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Time.Testing;
-using Xunit;
+using Wiaoj.RateLimiting.Tests.Unit.Fakes;
 
 namespace Wiaoj.RateLimiting.Tests.Unit.Algorithms;
 
@@ -218,6 +218,36 @@ public sealed class TokenBucketRateLimiterTests {
             // Assert: Bucket is full again
             RateLimitDecision decision = await limiter.TryAcquireAsync(key, cost: 5, ct);
             Assert.True(decision.IsAllowed);
+        }
+    }
+
+    public sealed class TheClockSkewAndNtpImmunity {
+
+        [Fact]
+        public async Task WhenSystemClockJumpsBackward_TokenRefillDoesNotFreeze() {
+            // Arrange
+            FakeTimeProvider fakeTime = new();
+            ClockSkewTimeProvider timeProvider = new(fakeTime);
+            TokenBucketRateLimiter limiter = new(capacity: 10, window: TimeSpan.FromSeconds(10), timeProvider: timeProvider);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "token_ntp_freeze";
+
+            // Drain all tokens at T0
+            RateLimitDecision initial = await limiter.TryAcquireAsync(key, cost: 10, ct);
+            Assert.True(initial.IsAllowed);
+
+            // Act
+            // System wall-clock jumps backward by 1 hour
+            timeProvider.WallClockOffset = TimeSpan.FromHours(-1);
+
+            // 5 seconds elapse in physical monotonic time (should refill 5 tokens)
+            fakeTime.Advance(TimeSpan.FromSeconds(5));
+
+            RateLimitDecision afterSkew = await limiter.TryAcquireAsync(key, cost: 5, ct);
+
+            // Assert
+            Assert.True(afterSkew.IsAllowed);
+            Assert.Equal(0, afterSkew.Remaining);
         }
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 using Wiaoj.Extensions;
 using Wiaoj.Preconditions;
+using Wiaoj.Primitives;
 using Wiaoj.RateLimiting.Diagnostics;
 using Wiaoj.RateLimiting.Internal;
 
@@ -10,6 +11,7 @@ namespace Wiaoj.RateLimiting;
 
 /// <summary>
 /// A leaky-bucket-as-queue traffic shaping <see cref="IRateLimitAlgorithm"/> that smooths bursts by delaying admitted requests.
+/// Utilizes <see cref="MonotonicTimestamp"/> to guarantee immune operation against system wall-clock skew and NTP corrections.
 /// </summary>
 public sealed class LeakyBucketQueueRateLimiter : IRateLimitAlgorithm {
     private const string AlgorithmName = "LeakyBucketQueue";
@@ -19,7 +21,7 @@ public sealed class LeakyBucketQueueRateLimiter : IRateLimitAlgorithm {
     private readonly long _maxBacklogTicks;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<LeakyBucketQueueRateLimiter> _logger;
-    private readonly ConcurrentDictionary<string, DateTimeOffset> _state = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, MonotonicTimestamp> _state = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LeakyBucketQueueRateLimiter"/> class.
@@ -84,64 +86,51 @@ public sealed class LeakyBucketQueueRateLimiter : IRateLimitAlgorithm {
             return ValueTask.FromResult(overCapacityDecision);
         }
 
-        DateTimeOffset now = this._timeProvider.GetUtcNow();
-        long incrementTicks = this._emissionIntervalTicks * cost;
+        MonotonicTimestamp now = this._timeProvider.GetMonotonicTimestamp();
+        TimeSpan incrementDuration = TimeSpan.FromTicks(this._emissionIntervalTicks * cost);
 
-        bool admitted = false;
-        DateTimeOffset baseline = default;
-        DateTimeOffset newTat = default;
-        DateTimeOffset rejectAllowAt = default;
+        while(!cancellationToken.IsCancellationRequested) {
+            bool exists = this._state.TryGetValue(key, out MonotonicTimestamp existingTat);
+            MonotonicTimestamp baseline = (!exists || now > existingTat) ? now : existingTat;
+            MonotonicTimestamp newTat = baseline + incrementDuration;
 
-        this._state.AddOrUpdate(
-            key,
-            addValueFactory: _ => {
-                baseline = now;
-                newTat = baseline.AddTicks(incrementTicks);
-                admitted = true;
-                return newTat;
-            },
-            updateValueFactory: (_, existingTat) => {
-                baseline = existingTat > now ? existingTat : now;
-                newTat = baseline.AddTicks(incrementTicks);
-                long backlogTicks = (newTat - now).Ticks;
+            TimeSpan backlog = newTat - now;
 
-                if(backlogTicks > this._maxBacklogTicks) {
-                    admitted = false;
-                    rejectAllowAt = newTat.AddTicks(-this._maxBacklogTicks);
-                    return existingTat;
-                }
+            if(backlog.Ticks > this._maxBacklogTicks) {
+                MonotonicTimestamp rejectAllowAt = newTat - TimeSpan.FromTicks(this._maxBacklogTicks);
+                TimeSpan retryAfter = (rejectAllowAt - now).ToPositiveOrDefault(TimeSpan.Zero);
 
-                admitted = true;
-                return newTat;
-            });
-
-        if(!admitted) {
-            TimeSpan retryAfter = rejectAllowAt - now;
-            if(retryAfter < TimeSpan.Zero) {
-                retryAfter = TimeSpan.Zero;
+                RateLimitDecision deniedDecision = RateLimitDecision.Denied(retryAfter, remaining: 0);
+                RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision);
+                return ValueTask.FromResult(deniedDecision);
             }
 
-            RateLimitDecision deniedDecision = RateLimitDecision.Denied(retryAfter, remaining: 0);
-            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision);
-            return ValueTask.FromResult(deniedDecision);
+            bool updated = exists
+                ? this._state.TryUpdate(key, newTat, existingTat)
+                : this._state.TryAdd(key, newTat);
+
+            if(updated) {
+                TimeSpan wait = (baseline - now).ToPositiveOrDefault(TimeSpan.Zero);
+
+                if(wait == TimeSpan.Zero) {
+                    long remaining = GcraMath.ComputeRemaining(newTat, now, this._maxBacklogTicks, this._emissionIntervalTicks);
+                    RateLimitDecision allowedDecision = RateLimitDecision.Allowed(remaining);
+                    RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision);
+                    return ValueTask.FromResult(allowedDecision);
+                }
+
+                RateLimitingDiagnostics.RecordQueueSuspended(this._logger, AlgorithmName, key, cost, wait);
+                return new ValueTask<RateLimitDecision>(WaitForTurnAndCompleteAsync(key, cost, incrementDuration, wait, cancellationToken));
+            }
         }
 
-        TimeSpan wait = baseline - now;
-        if(wait <= TimeSpan.Zero) {
-            long remaining = GcraMath.ComputeRemaining(newTat, now, this._maxBacklogTicks, this._emissionIntervalTicks);
-            RateLimitDecision allowedDecision = RateLimitDecision.Allowed(remaining);
-            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision);
-            return ValueTask.FromResult(allowedDecision);
-        }
-
-        RateLimitingDiagnostics.RecordQueueSuspended(this._logger, AlgorithmName, key, cost, wait);
-        return new ValueTask<RateLimitDecision>(WaitForTurnAndCompleteAsync(key, cost, incrementTicks, wait, cancellationToken));
+        return ValueTask.FromResult(RateLimitDecision.Denied(this._period, remaining: 0));
     }
 
     private async Task<RateLimitDecision> WaitForTurnAndCompleteAsync(
         string key,
         int cost,
-        long incrementTicks,
+        TimeSpan incrementDuration,
         TimeSpan wait,
         CancellationToken cancellationToken) {
 
@@ -150,10 +139,7 @@ public sealed class LeakyBucketQueueRateLimiter : IRateLimitAlgorithm {
             await this._timeProvider.Delay(wait, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException) {
-            this._state.AddOrUpdate(
-                key,
-                addValueFactory: static _ => default,
-                updateValueFactory: (_, existingTat) => existingTat.AddTicks(-incrementTicks));
+            RollbackTat(key, incrementDuration);
             RateLimitingDiagnostics.RecordQueueCancelled(this._logger, AlgorithmName, key, cost);
             throw;
         }
@@ -161,13 +147,22 @@ public sealed class LeakyBucketQueueRateLimiter : IRateLimitAlgorithm {
         TimeSpan actualElapsed = this._timeProvider.GetElapsedTime(startTimestamp);
         RateLimitingDiagnostics.RecordQueueReleased(this._logger, AlgorithmName, key, actualElapsed);
 
-        DateTimeOffset now = this._timeProvider.GetUtcNow();
-        DateTimeOffset currentTat = this._state.TryGetValue(key, out DateTimeOffset tat) ? tat : now;
+        MonotonicTimestamp now = this._timeProvider.GetMonotonicTimestamp();
+        MonotonicTimestamp currentTat = this._state.GetValueOrDefault(key, now);
         long remaining = GcraMath.ComputeRemaining(currentTat, now, this._maxBacklogTicks, this._emissionIntervalTicks);
         RateLimitDecision allowedDecision = RateLimitDecision.Allowed(remaining);
 
         RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision);
         return allowedDecision;
+    }
+
+    private void RollbackTat(string key, TimeSpan rollbackDuration) {
+        while(this._state.TryGetValue(key, out MonotonicTimestamp existing)) {
+            MonotonicTimestamp rolledBack = existing - rollbackDuration;
+            if(this._state.TryUpdate(key, rolledBack, existing)) {
+                break;
+            }
+        }
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Time.Testing;
+using Wiaoj.RateLimiting.Tests.Unit.Fakes;
 using Xunit;
 
 namespace Wiaoj.RateLimiting.Tests.Unit.Algorithms;
@@ -228,6 +229,58 @@ public sealed class LeakyBucketQueueRateLimiterTests {
 
             timeProvider.Advance(TimeSpan.FromSeconds(1));
             await aQueued;
+        }
+    }
+
+    public sealed class TheClockSkewAndNtpImmunity {
+
+        [Fact]
+        public async Task WhenSystemClockJumpsBackward_NewRequestsAreNotBlockedByDrift() {
+            // Arrange
+            FakeTimeProvider fakeTime = new();
+            ClockSkewTimeProvider timeProvider = new(fakeTime);
+            LeakyBucketQueueRateLimiter limiter = new(capacity: 2, period: TimeSpan.FromSeconds(2), timeProvider: timeProvider);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "leaky_ntp_subsequent";
+
+            // First request consumes initial slot at T0
+            RateLimitDecision first = await limiter.TryAcquireAsync(key, cost: 1, ct);
+            Assert.True(first.IsAllowed);
+
+            // Act
+            // System wall-clock jumps backward by 1 hour
+            timeProvider.WallClockOffset = TimeSpan.FromHours(-1);
+
+            // 2 seconds elapse in physical monotonic time (draining the backlog)
+            fakeTime.Advance(TimeSpan.FromSeconds(2));
+
+            // Subsequent request arrives after clock skew
+            RateLimitDecision second = await limiter.TryAcquireAsync(key, cost: 1, ct);
+
+            // Assert
+            Assert.True(second.IsAllowed);
+        }
+
+        [Fact]
+        public async Task WhenSystemClockJumpsBackward_QueuedTasksExecuteOnAccurateMonotonicIntervals() {
+            // Arrange
+            FakeTimeProvider fakeTime = new();
+            ClockSkewTimeProvider timeProvider = new(fakeTime);
+            LeakyBucketQueueRateLimiter limiter = new(capacity: 2, period: TimeSpan.FromSeconds(2), timeProvider: timeProvider);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "leaky_ntp_queued";
+
+            await limiter.TryAcquireAsync(key, cost: 1, ct);
+            ValueTask<RateLimitDecision> queuedTask = limiter.TryAcquireAsync(key, cost: 1, ct);
+            Assert.False(queuedTask.IsCompleted);
+
+            // Act
+            timeProvider.WallClockOffset = TimeSpan.FromHours(-1);
+            fakeTime.Advance(TimeSpan.FromSeconds(1));
+            RateLimitDecision queuedResult = await queuedTask;
+
+            // Assert
+            Assert.True(queuedResult.IsAllowed);
         }
     }
 }

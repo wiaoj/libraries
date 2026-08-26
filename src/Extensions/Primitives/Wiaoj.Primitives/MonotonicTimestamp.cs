@@ -116,8 +116,17 @@ public readonly record struct MonotonicTimestamp :
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="timeProvider"/> is null.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MonotonicTimestamp From(TimeProvider timeProvider) {
-        Preca.ThrowIfNull(timeProvider);
-        return new MonotonicTimestamp(timeProvider.GetTimestamp());
+        Preca.ThrowIfNull(timeProvider); 
+        
+        long rawTicks = timeProvider.GetTimestamp();
+        long providerFreq = timeProvider.TimestampFrequency;
+
+        if(providerFreq == Stopwatch.Frequency) {
+            return new MonotonicTimestamp(rawTicks);
+        }
+
+        long normalizedTicks = (long)((double)rawTicks * Stopwatch.Frequency / providerFreq);
+        return new MonotonicTimestamp(normalizedTicks);
     }
 
     // -------------------------------------------------------------------------

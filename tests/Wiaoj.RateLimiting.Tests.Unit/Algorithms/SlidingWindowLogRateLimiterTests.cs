@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Time.Testing;
-using Xunit;
+using Wiaoj.RateLimiting.Tests.Unit.Fakes;
 
 namespace Wiaoj.RateLimiting.Tests.Unit.Algorithms;
 
@@ -201,6 +201,37 @@ public sealed class SlidingWindowLogRateLimiterTests {
             Assert.False(user1Denied.IsAllowed);
             Assert.True(user2Allowed.IsAllowed);
             Assert.Equal(0, user2Allowed.Remaining);
+        }
+    }
+
+    public sealed class TheClockSkewAndNtpImmunity {
+
+        [Fact]
+        public async Task WhenSystemClockJumpsBackward_LogEntriesAreEvictedByMonotonicAge() {
+            // Arrange
+            FakeTimeProvider fakeTime = new();
+            ClockSkewTimeProvider timeProvider = new(fakeTime);
+            SlidingWindowLogRateLimiter limiter = new(limit: 2, window: TimeSpan.FromSeconds(10), timeProvider: timeProvider);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "log_ntp_eviction";
+
+            // Fill capacity at T0
+            await limiter.TryAcquireAsync(key, cost: 2, ct);
+            RateLimitDecision deniedBefore = await limiter.TryAcquireAsync(key, cost: 1, ct);
+            Assert.False(deniedBefore.IsAllowed);
+
+            // Act
+            // System wall-clock jumps backward by 2 hours
+            timeProvider.WallClockOffset = TimeSpan.FromHours(-2);
+
+            // Advance monotonic time past the 10-second window
+            fakeTime.Advance(TimeSpan.FromSeconds(11));
+
+            RateLimitDecision allowedAfterWindow = await limiter.TryAcquireAsync(key, cost: 2, ct);
+
+            // Assert
+            Assert.True(allowedAfterWindow.IsAllowed);
+            Assert.Equal(0, allowedAfterWindow.Remaining);
         }
     }
 }

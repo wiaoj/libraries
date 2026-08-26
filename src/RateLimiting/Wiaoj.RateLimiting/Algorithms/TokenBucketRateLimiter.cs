@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
+using Wiaoj.Concurrency;
 using Wiaoj.Preconditions;
+using Wiaoj.Primitives;
 using Wiaoj.RateLimiting.Diagnostics;
 
 namespace Wiaoj.RateLimiting;
@@ -80,43 +82,70 @@ public sealed class TokenBucketRateLimiter : IRateLimitAlgorithm {
             return ValueTask.FromResult(overCapacityDecision);
         }
 
-        DateTimeOffset now = this._timeProvider.GetUtcNow();
-        bool allowed = false;
-        double tokensAfter = 0;
+        MonotonicTimestamp now = this._timeProvider.GetMonotonicTimestamp();
+        RateLimitDecision fallbackDenied = RateLimitDecision.Denied(this._window, remaining: 0);
 
-        this._state.AddOrUpdate(
+        RateLimitDecision decision = this._state.CompareAndSwap(
             key,
-            addValueFactory: _ => {
-                allowed = true;
-                tokensAfter = this._capacity - cost;
-                return new BucketState(tokensAfter, now);
-            },
-            updateValueFactory: (_, existing) => {
-                double elapsedSeconds = Math.Max(0, (now - existing.LastRefill).TotalSeconds);
-                double refilled = Math.Min(this._capacity, existing.Tokens + (elapsedSeconds * this._refillPerSecond));
-
-                if(refilled >= cost) {
-                    allowed = true;
-                    tokensAfter = refilled - cost;
-                    return new BucketState(tokensAfter, now);
+            (cost, capacity: this._capacity, refillPerSec: this._refillPerSecond, now),
+            static (current, state) => {
+                if(current is null) {
+                    BucketState initial = new(state.capacity - state.cost, state.now);
+                    return (initial, RateLimitDecision.Allowed((long)initial.Tokens), true);
                 }
+                 
+                BucketState existing = current.Value;
+                double elapsed = Math.Max(0, (state.now - existing.LastRefill).TotalSeconds);
+                double refilled = Math.Min(state.capacity, existing.Tokens + (elapsed * state.refillPerSec));
+                 
+                if(refilled < state.cost) {
+                    double deficit = state.cost - refilled;
+                    TimeSpan retryAfter = TimeSpan.FromSeconds(deficit / state.refillPerSec);
+                    return (default, RateLimitDecision.Denied(retryAfter, remaining: (long)refilled), false);
+                }
+                 
+                BucketState next = new(refilled - state.cost, state.now);
+                return (next, RateLimitDecision.Allowed((long)next.Tokens), true);
+            },
+            fallbackDenied,
+            cancellationToken);
 
-                allowed = false;
-                tokensAfter = refilled;
-                return new BucketState(refilled, now);
-            });
+        RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, decision);
+        return ValueTask.FromResult(decision);
 
-        if(!allowed) {
-            double deficit = cost - tokensAfter;
-            TimeSpan retryAfter = TimeSpan.FromSeconds(deficit / this._refillPerSecond);
-            RateLimitDecision deniedDecision = RateLimitDecision.Denied(retryAfter, remaining: (long)tokensAfter);
-            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision);
-            return ValueTask.FromResult(deniedDecision);
-        }
+        //while(!cancellationToken.IsCancellationRequested) {
+        //    if(!this._state.TryGetValue(key, out BucketState current)) {
+        //        BucketState initialState = new(this._capacity - cost, now);
+        //        if(this._state.TryAdd(key, initialState)) {
+        //            RateLimitDecision firstAllowed = RateLimitDecision.Allowed((long)initialState.Tokens);
+        //            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, firstAllowed);
+        //            return ValueTask.FromResult(firstAllowed);
+        //        }
 
-        RateLimitDecision allowedDecision = RateLimitDecision.Allowed((long)tokensAfter);
-        RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision);
-        return ValueTask.FromResult(allowedDecision);
+        //        continue;
+        //    }
+
+        //    double elapsedSeconds = Math.Max(0, (now - current.LastRefill).TotalSeconds);
+        //    double refilled = Math.Min(this._capacity, current.Tokens + (elapsedSeconds * this._refillPerSecond));
+
+        //    if(refilled < cost) {
+        //        double deficit = cost - refilled;
+        //        TimeSpan retryAfter = TimeSpan.FromSeconds(deficit / this._refillPerSecond);
+        //        RateLimitDecision deniedDecision = RateLimitDecision.Denied(retryAfter, remaining: (long)refilled);
+        //        RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision);
+        //        return ValueTask.FromResult(deniedDecision);
+        //    }
+
+        //    BucketState nextState = new(refilled - cost, now);
+
+        //    if(this._state.TryUpdate(key, nextState, current)) {
+        //        RateLimitDecision allowedDecision = RateLimitDecision.Allowed((long)nextState.Tokens);
+        //        RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision);
+        //        return ValueTask.FromResult(allowedDecision);
+        //    }
+        //}
+
+        //return ValueTask.FromResult(RateLimitDecision.Denied(this._window, remaining: 0));
     }
 
     /// <summary>
@@ -126,5 +155,5 @@ public sealed class TokenBucketRateLimiter : IRateLimitAlgorithm {
         this._state.Clear();
     }
 
-    private readonly record struct BucketState(double Tokens, DateTimeOffset LastRefill);
+    private readonly record struct BucketState(double Tokens, MonotonicTimestamp LastRefill);
 }

@@ -40,6 +40,8 @@ public sealed class InMemoryDelayedSchedulerLockFreeEdgeTests {
             // Ensure late job is still waiting
             Assert.False(channel.Reader.TryRead(out _));
 
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+
             // Advance remaining time -> late job flushes
             timeProvider.Advance(TimeSpan.FromHours(2));
             WebhookDeliveryJob flushedLate = await channel.Reader.ReadAsync(timeoutCts.Token);

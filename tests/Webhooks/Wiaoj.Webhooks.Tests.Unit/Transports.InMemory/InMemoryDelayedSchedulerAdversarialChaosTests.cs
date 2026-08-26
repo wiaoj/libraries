@@ -75,21 +75,13 @@ public sealed class InMemoryDelayedSchedulerAdversarialChaosTests {
 
             WebhookDeliveryJob job = WebhookTestFactory.CreateJob();
 
-            // 10 saniyelik bir iş planlıyoruz
             scheduler.Schedule(job, TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
-            // 💣 CHAOS: NTP sunucusu saati 1 SAAT GERİYE ALIYOR! (Duvar saati manipülasyonu)
             timeProvider.WallClockOffset = TimeSpan.FromHours(-1);
 
-            // Aradan gerçekte/işlemcide 10 saniye geçiyor:
             fakeTime.Advance(TimeSpan.FromSeconds(10));
 
-            // Assert:
-            // ❌ ESKİ KODDA: dueTime (12:00:10) - now (11:00:10) = 1 SAAT BEKLEME HESAPLAR! 
-            //                Bu ReadAsync 2 saniyede TIMEOUT olur ve TEST PATLAR (RED)!
-            //
-            // ✅ YENİ KODDA: MonotonicTimestamp işlemci tick'ine bakar, SetUtcNow'dan ETKİLENMEZ.
-            //                10 saniye sonra iş anında kanala düşer ve TEST GEÇER (GREEN)!
+            // Assert
             using CancellationTokenSource timeoutCts = new(TimeSpan.FromSeconds(2));
             WebhookDeliveryJob delivered = await channel.Reader.ReadAsync(timeoutCts.Token);
 
