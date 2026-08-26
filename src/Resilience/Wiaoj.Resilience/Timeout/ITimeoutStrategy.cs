@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Resilience;
+﻿using System.Runtime.CompilerServices;
+
+namespace Wiaoj.Resilience;
 
 /// <summary>
 /// Defines an execution strategy that bounds asynchronous operations within a temporal deadline.
@@ -14,6 +16,7 @@ public interface ITimeoutStrategy {
     /// <returns>A task representing the result of the operation.</returns>
     /// <exception cref="TimeoutException">Thrown when the operation exceeds the configured deadline.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels the operation before completion.</exception>
+    [OverloadResolutionPriority(1)]
     ValueTask<TResult> ExecuteAsync<TResult>(
         string key,
         Func<CancellationToken, ValueTask<TResult>> operation,
