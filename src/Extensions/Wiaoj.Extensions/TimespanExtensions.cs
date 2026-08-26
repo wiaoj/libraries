@@ -11,6 +11,7 @@ public static partial class TimeSpanExtensions {
         /// <param name="first">The first TimeSpan to compare.</param>
         /// <param name="second">The second TimeSpan to compare.</param>
         /// <returns>The smaller of the two TimeSpan values.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Min(TimeSpan first, TimeSpan second) {
             return first < second ? first : second;
         }
@@ -21,6 +22,7 @@ public static partial class TimeSpanExtensions {
         /// <param name="first">The first TimeSpan to compare.</param>
         /// <param name="second">The second TimeSpan to compare.</param>
         /// <returns>The larger of the two TimeSpan values.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Max(TimeSpan first, TimeSpan second) {
             return first > second ? first : second;
         }

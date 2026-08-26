@@ -98,8 +98,7 @@ public sealed class LeakyBucketQueueRateLimiter : IRateLimitAlgorithm {
 
             if(backlog.Ticks > this._maxBacklogTicks) {
                 MonotonicTimestamp rejectAllowAt = newTat - TimeSpan.FromTicks(this._maxBacklogTicks);
-                TimeSpan retryAfter = (rejectAllowAt - now).ToPositiveOrDefault(TimeSpan.Zero);
-
+                TimeSpan retryAfter = TimeSpan.Max((rejectAllowAt - now), TimeSpan.Zero);
                 RateLimitDecision deniedDecision = RateLimitDecision.Denied(retryAfter, remaining: 0);
                 RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision);
                 return ValueTask.FromResult(deniedDecision);
@@ -110,7 +109,7 @@ public sealed class LeakyBucketQueueRateLimiter : IRateLimitAlgorithm {
                 : this._state.TryAdd(key, newTat);
 
             if(updated) {
-                TimeSpan wait = (baseline - now).ToPositiveOrDefault(TimeSpan.Zero);
+                TimeSpan wait = TimeSpan.Max((baseline - now), TimeSpan.Zero);
 
                 if(wait == TimeSpan.Zero) {
                     long remaining = GcraMath.ComputeRemaining(newTat, now, this._maxBacklogTicks, this._emissionIntervalTicks);
