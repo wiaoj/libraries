@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using System.Runtime.CompilerServices;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.Extensions;
@@ -29,5 +30,15 @@ public static class NumericExtensions {
     /// <returns>A strongly-typed <see cref="UnixTimestamp"/>.</returns>
     public static UnixTimestamp ToUnixTimestamp(this long milliseconds) {
         return UnixTimestamp.FromMilliseconds(milliseconds);
+    }
+
+    /// <summary>
+    /// Interprets the long value as raw performance counter ticks and wraps it into a <see cref="MonotonicTimestamp"/>.
+    /// </summary>
+    /// <param name="rawTicks">The raw monotonic tick count.</param>
+    /// <returns>A strongly-typed <see cref="MonotonicTimestamp"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MonotonicTimestamp ToMonotonicTimestamp(this long rawTicks) {
+        return MonotonicTimestamp.FromRawTicks(rawTicks);
     }
 }

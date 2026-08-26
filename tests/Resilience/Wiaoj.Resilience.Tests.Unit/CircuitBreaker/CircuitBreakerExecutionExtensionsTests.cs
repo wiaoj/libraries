@@ -2,8 +2,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Wiaoj.DistributedCounter;
-using Wiaoj.DistributedCounter.DependencyInjection;
-using Xunit;
 
 namespace Wiaoj.Resilience.Tests.Unit.CircuitBreaker;
 
@@ -59,6 +57,13 @@ public sealed class CircuitBreakerExecutionExtensionsTests {
             (ICircuitBreaker breaker, _) = CreateSut();
             await Assert.ThrowsAnyAsync<ArgumentNullException>(() =>
                 breaker.ExecuteAsync<string>("key", null!, TestContext.Current.CancellationToken).AsTask());
+        }
+
+        [Fact]
+        public async Task ExecuteWithFallbackAsync_Throws_OnNullFallbackFactory() {
+            (ICircuitBreaker breaker, _) = CreateSut();
+            await Assert.ThrowsAnyAsync<ArgumentNullException>(() =>
+                breaker.ExecuteWithFallbackAsync("key", ct => ValueTask.FromResult("test"), (Func<Exception, CancellationToken, ValueTask<string>>)null!, TestContext.Current.CancellationToken).AsTask());
         }
     }
 
@@ -150,6 +155,109 @@ public sealed class CircuitBreakerExecutionExtensionsTests {
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.False(decision.IsAllowed);
             Assert.Equal(CircuitState.Open, decision.State);
+        }
+    }
+
+    public sealed class TheFallbackExecution {
+        [Fact]
+        public async Task ExecuteWithFallbackAsync_WhenOperationSucceeds_ReturnsPrimaryResult() {
+            (ICircuitBreaker breaker, _) = CreateSut();
+            const string key = "service-primary-success";
+
+            string result = await breaker.ExecuteWithFallbackAsync(
+                key,
+                ct => ValueTask.FromResult("Live_Data"),
+                fallbackValue: "Fallback_Data",
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal("Live_Data", result);
+        }
+
+        [Fact]
+        public async Task ExecuteWithFallbackAsync_WhenOperationFails_ReturnsStaticFallbackValue() {
+            (ICircuitBreaker breaker, _) = CreateSut(failureThreshold: 5);
+            const string key = "service-op-fail";
+
+            string result = await breaker.ExecuteWithFallbackAsync(
+                key,
+                ct => throw new HttpRequestException("Remote API Down"),
+                fallbackValue: "Static_Stale_Catalog",
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal("Static_Stale_Catalog", result);
+        }
+
+        [Fact]
+        public async Task ExecuteWithFallbackAsync_WhenCircuitIsOpen_ReturnsStaticFallbackWithoutCallingOperation() {
+            (ICircuitBreaker breaker, _) = CreateSut(failureThreshold: 1);
+            const string key = "service-circuit-open-fallback";
+
+            // 1. Trip circuit to OPEN
+            await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
+
+            // 2. Execute under open circuit
+            bool primaryCalled = false;
+            string result = await breaker.ExecuteWithFallbackAsync(
+                key,
+                ct => {
+                    primaryCalled = true;
+                    return ValueTask.FromResult("Live");
+                },
+                fallbackValue: "Cached_Fallback",
+                TestContext.Current.CancellationToken);
+
+            Assert.False(primaryCalled);
+            Assert.Equal("Cached_Fallback", result);
+        }
+
+        [Fact]
+        public async Task ExecuteWithFallbackAsync_WhenCircuitIsOpen_InvokesDynamicFallbackFactory() {
+            (ICircuitBreaker breaker, _) = CreateSut(failureThreshold: 1);
+            const string key = "service-dynamic-fallback";
+
+            // 1. Trip circuit to OPEN
+            await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
+
+            // 2. Execute with dynamic factory receiving the CircuitBreakerOpenException
+            Exception? capturedException = null;
+            string result = await breaker.ExecuteWithFallbackAsync(
+                key,
+                ct => ValueTask.FromResult("Live"),
+                fallbackFactory: (ex, ct) => {
+                    capturedException = ex;
+                    return ValueTask.FromResult($"Recovered_From_{ex.GetType().Name}");
+                },
+                TestContext.Current.CancellationToken);
+
+            Assert.NotNull(capturedException);
+            Assert.IsType<CircuitBreakerOpenException>(capturedException);
+            Assert.Equal("Recovered_From_CircuitBreakerOpenException", result);
+        }
+
+        [Fact]
+        public async Task ExecuteWithFallbackAsync_WhenCallerCancels_DoesNotInvokeFallback_AndThrowsOperationCanceledException() {
+            (ICircuitBreaker breaker, _) = CreateSut();
+            const string key = "service-cancel-fallback";
+
+            using CancellationTokenSource cts = new();
+            cts.Cancel();
+
+            bool fallbackInvoked = false;
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                breaker.ExecuteWithFallbackAsync(
+                    key,
+                    async ct => {
+                        ct.ThrowIfCancellationRequested();
+                        await Task.Yield();
+                        return "Live";
+                    },
+                    fallbackFactory: (ex, ct) => {
+                        fallbackInvoked = true;
+                        return ValueTask.FromResult("Fallback");
+                    },
+                    cts.Token).AsTask());
+
+            Assert.False(fallbackInvoked);
         }
     }
 }

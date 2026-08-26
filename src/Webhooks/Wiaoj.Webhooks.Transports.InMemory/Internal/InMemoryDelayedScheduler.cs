@@ -4,16 +4,26 @@ using System.Threading.Channels;
 namespace Wiaoj.Webhooks.Transports.InMemory.Internal;
 
 /// <summary>
-/// In-memory delayed job scheduler that orders jobs by due time using a priority queue and flushes expired jobs to a channel.
-/// Uses <see cref="DisposeState"/> to coordinate safe synchronous and asynchronous disposal.
+/// High-performance, lock-free in-memory delayed job scheduler that orders jobs by monotonic timestamp.
+/// Confines the priority queue to a single consumer loop driven by a lock-free channel inbox.
+/// Monotonic timing ensures immunity against system wall-clock skew and NTP corrections.
 /// </summary>
 internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
     private readonly ChannelWriter<WebhookDeliveryJob> _writer;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger _logger;
-    private readonly PriorityQueue<ScheduledJobItem, DateTimeOffset> _queue = new();
-    private readonly SemaphoreSlim _signal = new(0);
-    private readonly Lock _lock = new();
+
+    // Lock-free MPSC (Multi-Producer Single-Consumer) Inbox
+    private readonly Channel<ScheduledJobItem> _inbox = Channel.CreateUnbounded<ScheduledJobItem>(
+        new UnboundedChannelOptions {
+            SingleReader = true,
+            SingleWriter = false,
+            AllowSynchronousContinuations = false
+        });
+
+    // Confined exclusively to the single consumer thread - NO locks needed!
+    private readonly PriorityQueue<ScheduledJobItem, MonotonicTimestamp> _queue = new();
+
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _processingTask;
     private readonly DisposeState _disposeState = new();
@@ -37,86 +47,93 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
 
     /// <summary>
     /// Schedules a delivery job to be enqueued when its delay window expires, observing the cancellation token.
+    /// Lock-free operation: posts directly to the internal concurrent channel.
     /// </summary>
     public void Schedule(WebhookDeliveryJob job, TimeSpan delay, CancellationToken cancellationToken) {
         Preca.ThrowIfNull(job);
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(InMemoryDelayedScheduler));
 
-        DateTimeOffset dueTime = this._timeProvider.GetUtcNow().Add(delay);
+        MonotonicTimestamp dueTimestamp = this._timeProvider.GetMonotonicTimestamp().Add(delay);
 
-        lock(this._lock) {
-            if(this._disposeState.IsDisposingOrDisposed) {
-                return;
-            }
+        this._logger.LogJobScheduledDelayed(job.Id.Value, job.EndpointId.Value, delay.TotalMilliseconds);
 
-            this._logger.LogJobScheduledDelayed(job.Id.Value, job.EndpointId.Value, delay.TotalMilliseconds);
-            this._queue.Enqueue(new ScheduledJobItem(job, cancellationToken), dueTime);
-        }
-
-        lock(this._lock) {
-            if(this._signal.CurrentCount == 0) {
-                this._signal.Release();
-            }
+        if(!this._inbox.Writer.TryWrite(new ScheduledJobItem(job, dueTimestamp, cancellationToken))) {
+            this._disposeState.ThrowIfDisposingOrDisposed(nameof(InMemoryDelayedScheduler));
         }
     }
 
     private async Task ProcessQueueAsync() {
         CancellationToken ct = this._cts.Token;
+        ChannelReader<ScheduledJobItem> reader = this._inbox.Reader;
 
         while(!ct.IsCancellationRequested) {
-            ScheduledJobItem nextItem = default;
-            bool hasJob = false;
-            TimeSpan waitDuration = Timeout.InfiniteTimeSpan;
-
-            lock(this._lock) {
-                if(this._queue.TryPeek(out _, out DateTimeOffset dueTime)) {
-                    DateTimeOffset now = this._timeProvider.GetUtcNow();
-                    if(dueTime <= now) {
-                        nextItem = this._queue.Dequeue();
-                        hasJob = true;
-                    }
-                    else {
-                        waitDuration = dueTime - now;
-                    }
-                }
+            // 1. Drain all pending incoming jobs from the lock-free inbox into the priority queue
+            while(reader.TryRead(out ScheduledJobItem incoming)) {
+                this._queue.Enqueue(incoming, incoming.DueTimestamp);
             }
 
-            if(hasJob) {
-                if(nextItem.CancellationToken.IsCancellationRequested) {
-                    this._logger.LogDelayedJobCancelled(nextItem.Job.Id.Value, nextItem.Job.EndpointId.Value);
+            // 2. Check the earliest scheduled job
+            if(this._queue.TryPeek(out ScheduledJobItem nextItem, out MonotonicTimestamp dueTimestamp)) {
+                MonotonicTimestamp now = this._timeProvider.GetMonotonicTimestamp();
+
+                // If due time has passed, dequeue and flush immediately
+                if(dueTimestamp <= now) {
+                    this._queue.Dequeue();
+
+                    if(nextItem.CancellationToken.IsCancellationRequested) {
+                        this._logger.LogDelayedJobCancelled(nextItem.Job.Id.Value, nextItem.Job.EndpointId.Value);
+                        continue;
+                    }
+
+                    try {
+                        await this._writer.WriteAsync(nextItem.Job, ct).ConfigureAwait(false);
+                        this._logger.LogDelayedJobFlushed(nextItem.Job.Id.Value, nextItem.Job.EndpointId.Value);
+                    }
+                    catch(ChannelClosedException) {
+                        break;
+                    }
+                    catch(OperationCanceledException) {
+                        break;
+                    }
+
                     continue;
                 }
 
+                // 3. Queue has items, but not yet due: wait for EITHER a new incoming job OR the timer to expire
+                TimeSpan waitDuration = dueTimestamp - now;
+
+                using CancellationTokenSource delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                using ITimer timer = this._timeProvider.CreateTimer(
+                    static state => ((CancellationTokenSource)state!).Cancel(),
+                    delayCts,
+                    waitDuration,
+                    Timeout.InfiniteTimeSpan);
+
                 try {
-                    await this._writer.WriteAsync(nextItem.Job, ct).ConfigureAwait(false);
-                    this._logger.LogDelayedJobFlushed(nextItem.Job.Id.Value, nextItem.Job.EndpointId.Value);
+                    // Wakes up if:
+                    // a) A new job is written to inbox (WaitToReadAsync returns true)
+                    // b) Timer fires and cancels delayCts (OperationCanceledException)
+                    // c) Application is shutting down (ct is canceled)
+                    if(!await reader.WaitToReadAsync(delayCts.Token).ConfigureAwait(false)) {
+                        break; // Channel completed
+                    }
                 }
-                catch(ChannelClosedException) {
-                    break;
+                catch(OperationCanceledException) when(!ct.IsCancellationRequested) {
+                    // Timer expired cleanly, loop will dequeue the expired item
                 }
                 catch(OperationCanceledException) {
-                    break;
-                }
-
-                continue;
-            }
-
-            if(waitDuration == Timeout.InfiniteTimeSpan) {
-                try {
-                    await this._signal.WaitAsync(ct).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) {
-                    break;
+                    break; // System shutdown
                 }
             }
             else {
-                using CancellationTokenSource delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                Task signalTask = this._signal.WaitAsync(delayCts.Token);
-                Task delayTask = Task.Delay(waitDuration, this._timeProvider, delayCts.Token);
-
-                Task completed = await Task.WhenAny(signalTask, delayTask).ConfigureAwait(false);
-                if(completed != signalTask) {
-                    delayCts.Cancel();
+                // 4. Queue is completely empty: wait indefinitely for the next job to arrive
+                try {
+                    if(!await reader.WaitToReadAsync(ct).ConfigureAwait(false)) {
+                        break; // Channel completed
+                    }
+                }
+                catch(OperationCanceledException) {
+                    break;
                 }
             }
         }
@@ -129,8 +146,8 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
         }
 
         try {
+            this._inbox.Writer.TryComplete();
             this._cts.Cancel();
-            this._signal.Dispose();
             this._cts.Dispose();
         }
         finally {
@@ -146,6 +163,7 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
         }
 
         try {
+            this._inbox.Writer.TryComplete();
             await this._cts.CancelAsync().ConfigureAwait(false);
 
             try {
@@ -153,7 +171,6 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
             }
             catch(OperationCanceledException) { }
 
-            this._signal.Dispose();
             this._cts.Dispose();
         }
         finally {
@@ -161,5 +178,8 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
         }
     }
 
-    private readonly record struct ScheduledJobItem(WebhookDeliveryJob Job, CancellationToken CancellationToken);
+    private readonly record struct ScheduledJobItem(
+        WebhookDeliveryJob Job,
+        MonotonicTimestamp DueTimestamp,
+        CancellationToken CancellationToken);
 }
