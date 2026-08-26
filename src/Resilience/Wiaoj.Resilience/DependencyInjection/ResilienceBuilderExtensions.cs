@@ -1,9 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Wiaoj.DistributedCounter;
-using Wiaoj.Resilience.DependencyInjection;
 
 namespace Wiaoj.Resilience;
 
@@ -119,31 +117,67 @@ public static class ResilienceBuilderExtensions {
     public static IResilienceBuilder AddCompositeBreaker(
         this IResilienceBuilder builder,
         string policyName,
-        params Action<IResilienceBuilder>[] tierConfigurators) {
+        params string[] subPolicyNames) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNullOrWhiteSpace(policyName);
-        Preca.ThrowIfNull(tierConfigurators);
+        Preca.ThrowIfNull(subPolicyNames);
 
-        if(tierConfigurators.Length == 0) {
-            throw new ArgumentException("Composite circuit breaker requires at least one breaker tier.", nameof(tierConfigurators));
+        if(subPolicyNames.Length == 0) {
+            throw new ArgumentException("Composite circuit breaker requires at least one sub-policy name.", nameof(subPolicyNames));
         }
 
         return builder.AddPolicy(policyName, sp => {
-            ICircuitBreaker[] breakers = new ICircuitBreaker[tierConfigurators.Length];
+            ICircuitBreakerFactory factory = sp.GetRequiredService<ICircuitBreakerFactory>();
+            ICircuitBreaker[] breakers = new ICircuitBreaker[subPolicyNames.Length];
 
-            for(int i = 0; i < tierConfigurators.Length; i++) {
-                string subPolicyName = $"{policyName}:tier_{i + 1}";
-                ResilienceBuilder subBuilder = new(builder.Services);
-                tierConfigurators[i](subBuilder);
-
-                IOptions<ResilienceOptions> subOptions = sp.GetRequiredService<IOptions<ResilienceOptions>>();
-                breakers[i] = subOptions.Value.Policies[subPolicyName](sp);
+            for(int i = 0; i < subPolicyNames.Length; i++) {
+                breakers[i] = factory.Create(subPolicyNames[i]);
             }
 
             ILogger<CompositeCircuitBreaker> logger = sp.GetService<ILogger<CompositeCircuitBreaker>>()
                 ?? NullLogger<CompositeCircuitBreaker>.Instance;
 
             return new CompositeCircuitBreaker(breakers, logger);
+        });
+    }
+
+
+    /// <summary>Registers a fixed timeout policy by name.</summary>
+    public static IResilienceBuilder AddFixedTimeout(
+        this IResilienceBuilder builder,
+        string policyName,
+        TimeSpan timeout) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNullOrWhiteSpace(policyName);
+        Preca.ThrowIfNegativeOrZero(timeout);
+
+        return builder.AddTimeoutPolicy(policyName, sp => {
+            TimeProvider timeProvider = sp.GetRequiredService<TimeProvider>();
+            ILogger<FixedTimeoutStrategy> logger = sp.GetService<ILogger<FixedTimeoutStrategy>>()
+                ?? NullLogger<FixedTimeoutStrategy>.Instance;
+            return new FixedTimeoutStrategy(timeout, timeProvider, logger);
+        });
+    }
+
+    /// <summary>Registers a fixed timeout policy with a strongly-typed tag.</summary>
+    public static IResilienceBuilder AddFixedTimeout<TPolicy>(
+        this IResilienceBuilder builder,
+        TimeSpan timeout) where TPolicy : notnull {
+        return builder.AddFixedTimeout(typeof(TPolicy).Name, timeout);
+    }
+
+    /// <summary>Configures the default fixed timeout strategy.</summary>
+    public static IResilienceBuilder UseDefaultFixedTimeout(
+        this IResilienceBuilder builder,
+        TimeSpan timeout) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNegativeOrZero(timeout);
+
+        return builder.UseDefaultTimeoutPolicy(sp => {
+            TimeProvider timeProvider = sp.GetRequiredService<TimeProvider>();
+            ILogger<FixedTimeoutStrategy> logger = sp.GetService<ILogger<FixedTimeoutStrategy>>()
+                ?? NullLogger<FixedTimeoutStrategy>.Instance;
+            return new FixedTimeoutStrategy(timeout, timeProvider, logger);
         });
     }
 }

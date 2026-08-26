@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.DistributedCounter;
+using Wiaoj.Resilience.Internal;
 
 namespace Wiaoj.Resilience.DependencyInjection;
 
@@ -9,9 +10,9 @@ internal sealed class ResilienceBuilder : IResilienceBuilder {
     public ResilienceBuilder(IServiceCollection services) {
         Preca.ThrowIfNull(services);
         this.Services = services;
-         
+
         services.Configure<DistributedCounterOptions>(static options => {
-            options.AddImmediateCounter("CircuitBreaker");
+            options.AddImmediateCounter<CircuitBreakerTag>();
         });
     }
 
@@ -31,6 +32,27 @@ internal sealed class ResilienceBuilder : IResilienceBuilder {
 
         this.Services.Configure<ResilienceOptions>(opt => {
             opt.DefaultPolicy = factory;
+        });
+
+        return this;
+    }
+
+    public IResilienceBuilder AddTimeoutPolicy(string policyName, Func<IServiceProvider, ITimeoutStrategy> factory) {
+        Preca.ThrowIfNullOrWhiteSpace(policyName);
+        Preca.ThrowIfNull(factory);
+
+        this.Services.Configure<ResilienceOptions>(opt => {
+            opt.TimeoutPolicies[policyName] = factory;
+        });
+
+        return this;
+    }
+
+    public IResilienceBuilder UseDefaultTimeoutPolicy(Func<IServiceProvider, ITimeoutStrategy> factory) {
+        Preca.ThrowIfNull(factory);
+
+        this.Services.Configure<ResilienceOptions>(opt => {
+            opt.DefaultTimeoutPolicy = factory;
         });
 
         return this;

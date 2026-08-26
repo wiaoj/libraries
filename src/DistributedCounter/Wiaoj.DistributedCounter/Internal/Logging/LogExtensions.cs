@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 
-namespace Wiaoj.DistributedCounter.Internal.Logging; 
+namespace Wiaoj.DistributedCounter.Internal.Logging;
+
 internal static partial class LogExtensions {
     [LoggerMessage(
        EventId = 101,
@@ -10,7 +11,7 @@ internal static partial class LogExtensions {
 
     [LoggerMessage(
         EventId = 102,
-        Level = LogLevel.Warning, // Warning yaptım çünkü drift olması inceleme gerektirebilir
+        Level = LogLevel.Debug,
         Message = "Self-Healing triggered! Key: {Key}. Expected: {Expected}, Actual from Redis: {Actual}. Drift: {Drift}")]
     public static partial void LogSelfHealing(this ILogger logger, string key, long expected, long actual, long drift);
 

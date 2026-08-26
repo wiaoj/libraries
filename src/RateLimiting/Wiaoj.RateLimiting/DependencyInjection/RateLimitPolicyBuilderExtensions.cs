@@ -244,7 +244,14 @@ public static class RateLimitPolicyBuilderExtensions {
 
     private static void EnsureImmediateCounter(IRateLimitPolicyBuilder builder) {
         builder.Services.Configure<DistributedCounterOptions>(options => {
-            options.AddImmediateCounter(builder.PolicyName);
+            //options.AddImmediateCounter(builder.PolicyName);
+
+            if(options.Registrations.TryGetValue(builder.PolicyName, out CounterConfiguration? existing)) {
+                existing.Strategy = CounterStrategy.Immediate;
+            }
+            else {
+                options.AddImmediateCounter(builder.PolicyName);
+            }
         });
     }
 }

@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.DistributedCounter;
 using Wiaoj.Resilience.Diagnostics;
+using Wiaoj.Resilience.Internal;
 
 namespace Wiaoj.Resilience;
 
@@ -10,8 +11,7 @@ namespace Wiaoj.Resilience;
 /// Uses bounded concurrent probe gating during half-open recovery.
 /// </summary>
 public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
-    private const string StrategyName = "SamplingWindow";
-    private const string PolicyCategory = "CircuitBreaker";
+    private const string StrategyName = "SamplingWindow"; 
 
     private readonly IDistributedCounterFactory _counterFactory;
     private readonly SamplingWindowCircuitBreakerOptions _options;
@@ -61,7 +61,7 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
         cancellationToken.ThrowIfCancellationRequested();
 
         string trippedKey = FormatTrippedKey(key);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create<CircuitBreakerTag, string>(trippedKey);
 
         CounterValue trippedVal = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
 
@@ -78,7 +78,7 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
 
             // Half-Open: Allow up to N permitted concurrent trial probes
             string probeKey = FormatProbeKey(key);
-            IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
+            IDistributedCounter probeCounter = this._counterFactory.Create<CircuitBreakerTag, string>(probeKey);
 
             CounterLimitResult probeClaim = await probeCounter.TryIncrementAsync(
                 amount: 1,
@@ -111,9 +111,9 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
         string trippedKey = FormatTrippedKey(key);
         string probeKey = FormatProbeKey(key);
 
-        IDistributedCounter successCounter = this._counterFactory.Create(PolicyCategory, successKey);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
-        IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
+        IDistributedCounter successCounter = this._counterFactory.Create<CircuitBreakerTag, string>(successKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create<CircuitBreakerTag, string>(trippedKey);
+        IDistributedCounter probeCounter = this._counterFactory.Create<CircuitBreakerTag, string>(probeKey);
 
         CounterExpiry expiry = CounterExpiry.From(this._options.SamplingWindow * 2);
         await successCounter.IncrementAsync(1, expiry, cancellationToken).ConfigureAwait(false);
@@ -142,8 +142,8 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
 
         string trippedKey = FormatTrippedKey(key);
         string probeKey = FormatProbeKey(key);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
-        IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create<CircuitBreakerTag, string>(trippedKey);
+        IDistributedCounter probeCounter = this._counterFactory.Create<CircuitBreakerTag, string>(probeKey);
 
         CounterValue currentTrip = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
         if(currentTrip.Value > 0) {
@@ -155,8 +155,8 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
         string successKey = FormatSuccessKey(key, windowId);
         string failureKey = FormatFailureKey(key, windowId);
 
-        IDistributedCounter successCounter = this._counterFactory.Create(PolicyCategory, successKey);
-        IDistributedCounter failureCounter = this._counterFactory.Create(PolicyCategory, failureKey);
+        IDistributedCounter successCounter = this._counterFactory.Create<CircuitBreakerTag, string>(successKey);
+        IDistributedCounter failureCounter = this._counterFactory.Create<CircuitBreakerTag, string>(failureKey);
 
         CounterExpiry expiry = CounterExpiry.From(this._options.SamplingWindow * 2);
         CounterValue newFailureVal = await failureCounter.IncrementAsync(1, expiry, cancellationToken).ConfigureAwait(false);

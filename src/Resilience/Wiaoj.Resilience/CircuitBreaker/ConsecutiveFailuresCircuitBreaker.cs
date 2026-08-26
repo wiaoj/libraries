@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.DistributedCounter;
 using Wiaoj.Resilience.Diagnostics;
+using Wiaoj.Resilience.Internal;
 
 namespace Wiaoj.Resilience;
 
@@ -11,7 +12,6 @@ namespace Wiaoj.Resilience;
 /// </summary>
 public sealed class ConsecutiveFailuresCircuitBreaker : ICircuitBreaker {
     private const string StrategyName = "ConsecutiveFailures";
-    private const string PolicyCategory = "CircuitBreaker";
 
     private readonly IDistributedCounterFactory _counterFactory;
     private readonly CircuitBreakerOptions _options;
@@ -61,7 +61,7 @@ public sealed class ConsecutiveFailuresCircuitBreaker : ICircuitBreaker {
         cancellationToken.ThrowIfCancellationRequested();
 
         string trippedKey = FormatTrippedKey(key);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create<CircuitBreakerTag, string>(trippedKey);
 
         CounterValue trippedVal = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
 
@@ -77,7 +77,7 @@ public sealed class ConsecutiveFailuresCircuitBreaker : ICircuitBreaker {
             }
 
             string probeKey = FormatProbeKey(key);
-            IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
+            IDistributedCounter probeCounter = this._counterFactory.Create<CircuitBreakerTag, string>(probeKey);
 
             CounterLimitResult probeClaim = await probeCounter.TryIncrementAsync(
                 amount: 1,
@@ -109,9 +109,9 @@ public sealed class ConsecutiveFailuresCircuitBreaker : ICircuitBreaker {
         string trippedKey = FormatTrippedKey(key);
         string probeKey = FormatProbeKey(key);
 
-        IDistributedCounter failuresCounter = this._counterFactory.Create(PolicyCategory, failuresKey);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
-        IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
+        IDistributedCounter failuresCounter = this._counterFactory.Create<CircuitBreakerTag, string>(failuresKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create<CircuitBreakerTag, string>(trippedKey);
+        IDistributedCounter probeCounter = this._counterFactory.Create<CircuitBreakerTag, string>(probeKey);
 
         await failuresCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
 
@@ -140,9 +140,9 @@ public sealed class ConsecutiveFailuresCircuitBreaker : ICircuitBreaker {
         string trippedKey = FormatTrippedKey(key);
         string probeKey = FormatProbeKey(key);
 
-        IDistributedCounter failuresCounter = this._counterFactory.Create(PolicyCategory, failuresKey);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
-        IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
+        IDistributedCounter failuresCounter = this._counterFactory.Create<CircuitBreakerTag, string>(failuresKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create<CircuitBreakerTag, string>(trippedKey);
+        IDistributedCounter probeCounter = this._counterFactory.Create<CircuitBreakerTag, string>(probeKey);
 
         CounterValue currentTripVal = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
         if(currentTripVal.Value > 0) {
