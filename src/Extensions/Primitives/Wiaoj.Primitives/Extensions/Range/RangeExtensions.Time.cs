@@ -1,6 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 
 namespace Wiaoj.Primitives;
+
 public static partial class RangeExtensions {
     /// <summary>Calculates the duration between the start and end of the <see cref="DateTime"/> range.</summary>
     /// <param name="range">The range to calculate.</param>
@@ -34,6 +35,14 @@ public static partial class RangeExtensions {
         return TimeSpan.FromMilliseconds(range.Max.TotalMilliseconds - range.Min.TotalMilliseconds);
     }
 
+    /// <summary>Calculates the duration between the start and end of the <see cref="MonotonicTimestamp"/> range.</summary>
+    /// <param name="range">The range to calculate.</param>
+    /// <returns>A <see cref="TimeSpan"/> representing the total duration.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TimeSpan Duration(this Range<MonotonicTimestamp> range) {
+        return range.Max - range.Min;
+    }
+
     /// <summary>Calculates the total number of days between the start and end of the <see cref="DateOnly"/> range.</summary>
     /// <param name="range">The range to calculate.</param>
     /// <returns>An integer representing the day count.</returns>
@@ -41,7 +50,6 @@ public static partial class RangeExtensions {
     public static int DurationDays(this Range<DateOnly> range) {
         return range.Max.DayNumber - range.Min.DayNumber;
     }
-
 
     /// <summary>Checks if the entire time range is in the past (i.e., Max is strictly less than current UTC time).</summary>
     /// <param name="range">The range to check.</param>
@@ -58,6 +66,19 @@ public static partial class RangeExtensions {
     /// <inheritdoc cref="IsPast(Range{DateTime})"/>
     public static bool IsPast(this Range<DateOnly> range) {
         return range.Max < DateOnly.FromDateTime(DateTime.UtcNow);
+    }
+
+    /// <summary>Checks if the entire monotonic range is in the past relative to <see cref="MonotonicTimestamp.Now"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsPast(this Range<MonotonicTimestamp> range) {
+        return range.Max < MonotonicTimestamp.Now;
+    }
+
+    /// <summary>Checks if the entire monotonic range is in the past relative to the provided <see cref="TimeProvider"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsPast(this Range<MonotonicTimestamp> range, TimeProvider timeProvider) {
+        Preca.ThrowIfNull(timeProvider);
+        return range.Max < MonotonicTimestamp.From(timeProvider);
     }
 
     /// <summary>Checks if the entire time range is in the future (i.e., Min is strictly greater than current UTC time).</summary>
@@ -77,6 +98,18 @@ public static partial class RangeExtensions {
         return range.Min > DateOnly.FromDateTime(DateTime.UtcNow);
     }
 
+    /// <summary>Checks if the entire monotonic range is in the future relative to <see cref="MonotonicTimestamp.Now"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsFuture(this Range<MonotonicTimestamp> range) {
+        return range.Min > MonotonicTimestamp.Now;
+    }
+
+    /// <summary>Checks if the entire monotonic range is in the future relative to the provided <see cref="TimeProvider"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsFuture(this Range<MonotonicTimestamp> range, TimeProvider timeProvider) {
+        Preca.ThrowIfNull(timeProvider);
+        return range.Min > MonotonicTimestamp.From(timeProvider);
+    }
 
     /// <summary>Checks if the current UTC time falls within the inclusive range.</summary>
     /// <param name="range">The range to check.</param>
@@ -88,6 +121,19 @@ public static partial class RangeExtensions {
     /// <inheritdoc cref="IsNowWithin(Range{DateTime})"/>
     public static bool IsNowWithin(this Range<DateTimeOffset> range) {
         return range.Contains(DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>Checks if the current monotonic instant falls within the inclusive range.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsNowWithin(this Range<MonotonicTimestamp> range) {
+        return range.Contains(MonotonicTimestamp.Now);
+    }
+
+    /// <summary>Checks if the current monotonic instant from <see cref="TimeProvider"/> falls within the inclusive range.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsNowWithin(this Range<MonotonicTimestamp> range, TimeProvider timeProvider) {
+        Preca.ThrowIfNull(timeProvider);
+        return range.Contains(MonotonicTimestamp.From(timeProvider));
     }
 
     /// <summary>Checks if the current UTC date falls within the inclusive range.</summary>
