@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using Wiaoj.Webhooks.Tests.Unit.Fakes;
 using Wiaoj.Webhooks.Tests.Unit.TestData;
 using Wiaoj.Webhooks.Transports.InMemory.Internal;
 
@@ -86,21 +87,6 @@ public sealed class InMemoryDelayedSchedulerAdversarialChaosTests {
             WebhookDeliveryJob delivered = await channel.Reader.ReadAsync(timeoutCts.Token);
 
             Assert.Same(job, delivered);
-        }
-
-        /// <summary>
-        /// Wraps FakeTimeProvider to simulate real-world NTP wall-clock drift/skew independently of monotonic timers.
-        /// </summary>
-        private sealed class ClockSkewTimeProvider(FakeTimeProvider inner) : TimeProvider {
-            public TimeSpan WallClockOffset { get; set; } = TimeSpan.Zero;
-
-            public override DateTimeOffset GetUtcNow() => inner.GetUtcNow() + this.WallClockOffset;
-            public override long GetTimestamp() => inner.GetTimestamp();
-            public override long TimestampFrequency => inner.TimestampFrequency;
-            public override TimeZoneInfo LocalTimeZone => inner.LocalTimeZone;
-
-            public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
-                => inner.CreateTimer(callback, state, dueTime, period);
         }
     }
 

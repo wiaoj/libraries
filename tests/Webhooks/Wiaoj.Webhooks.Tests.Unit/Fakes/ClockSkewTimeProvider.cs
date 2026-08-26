@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Time.Testing;
 
-namespace Wiaoj.RateLimiting.Tests.Unit.Fakes;
+namespace Wiaoj.Webhooks.Tests.Unit.Fakes;
 
 /// <summary>
 /// A test fake that wraps <see cref="FakeTimeProvider"/> to simulate independent wall-clock drift
