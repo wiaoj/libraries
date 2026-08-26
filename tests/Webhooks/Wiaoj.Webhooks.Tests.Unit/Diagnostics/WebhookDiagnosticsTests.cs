@@ -28,12 +28,17 @@ public sealed class WebhookDiagnosticsTests {
 
     [Fact]
     public async Task PipelineRunner_StartsActivity_AndSetsActivityTags() {
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-deliver-tracing-unique");
+        WebhookEndpoint endpoint = WebhookTestFactory.CreateEndpoint(endpointId);
+        WebhookDeliveryContext context = WebhookTestFactory.CreateContext(endpoint: endpoint);
+
         Activity? capturedActivity = null;
         using ActivityListener listener = new() {
             ShouldListenTo = source => source.Name == "Wiaoj.Webhooks",
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => {
-                if(activity.OperationName == "webhook.deliver") {
+                // Sadece bu teste ait benzersiz endpoint_id aktivitesini yakala:
+                if(activity.OperationName == "webhook.deliver" && (string?)activity.GetTagItem("webhook.endpoint_id") == endpointId.Value) {
                     capturedActivity = activity;
                 }
             }
@@ -42,12 +47,11 @@ public sealed class WebhookDiagnosticsTests {
 
         FakeWebhookDeliverer deliverer = new(WebhookTestFactory.CreateSuccessResult(200));
         WebhookPipelineRunner runner = new([], deliverer, TimeProvider.System, NullLogger<WebhookPipelineRunner>.Instance);
-        WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
 
-        await runner.RunAsync(context);
+        await runner.RunAsync(context, TestContext.Current.CancellationToken);
 
         Assert.NotNull(capturedActivity);
-        Assert.Equal(context.Endpoint.Id.Value, capturedActivity.GetTagItem("webhook.endpoint_id"));
+        Assert.Equal(endpointId.Value, capturedActivity.GetTagItem("webhook.endpoint_id"));
         Assert.Equal(context.TargetUrl.ToString(), capturedActivity.GetTagItem("webhook.target_url"));
         Assert.Equal(1, capturedActivity.GetTagItem("webhook.attempt_number"));
         Assert.Equal(true, capturedActivity.GetTagItem("webhook.success"));
@@ -111,7 +115,7 @@ public sealed class WebhookDiagnosticsTests {
         WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
 
         // Act
-        WebhookDeliveryResult result = await deliverer.DeliverAsync(context, CancellationToken.None);
+        WebhookDeliveryResult result = await deliverer.DeliverAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
         WebhookDeliveryResult.TransientFailure failure = Assert.IsType<WebhookDeliveryResult.TransientFailure>(result);
@@ -128,7 +132,7 @@ public sealed class WebhookDiagnosticsTests {
         WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
 
         // Act
-        WebhookDeliveryResult result = await deliverer.DeliverAsync(context, CancellationToken.None);
+        WebhookDeliveryResult result = await deliverer.DeliverAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
         WebhookDeliveryResult.TransientFailure failure = Assert.IsType<WebhookDeliveryResult.TransientFailure>(result);

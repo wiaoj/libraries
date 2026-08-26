@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.DistributedCounter;
-using Wiaoj.Preconditions;
+using Wiaoj.Resilience.Diagnostics;
 
 namespace Wiaoj.Resilience;
 
@@ -10,6 +10,9 @@ namespace Wiaoj.Resilience;
 /// Uses bounded concurrent probe gating during half-open recovery.
 /// </summary>
 public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
+    private const string StrategyName = "SamplingWindow";
+    private const string PolicyCategory = "CircuitBreaker";
+
     private readonly IDistributedCounterFactory _counterFactory;
     private readonly SamplingWindowCircuitBreakerOptions _options;
     private readonly TimeProvider _timeProvider;
@@ -18,20 +21,23 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
     /// <summary>
     /// Initializes a new instance of the <see cref="SamplingWindowCircuitBreaker"/> class.
     /// </summary>
-    /// <param name="counterFactory">The distributed counter factory.</param>
-    /// <param name="options">The sampling window options.</param>
     public SamplingWindowCircuitBreaker(
         IDistributedCounterFactory counterFactory,
         SamplingWindowCircuitBreakerOptions options)
         : this(counterFactory, options, TimeProvider.System, NullLogger<SamplingWindowCircuitBreaker>.Instance) { }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="SamplingWindowCircuitBreaker"/> class with a custom time provider.
+    /// </summary>
+    public SamplingWindowCircuitBreaker(
+        IDistributedCounterFactory counterFactory,
+        SamplingWindowCircuitBreakerOptions options,
+        TimeProvider timeProvider)
+        : this(counterFactory, options, timeProvider, NullLogger<SamplingWindowCircuitBreaker>.Instance) { }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SamplingWindowCircuitBreaker"/> class with custom time provider and logger.
     /// </summary>
-    /// <param name="counterFactory">The distributed counter factory.</param>
-    /// <param name="options">The sampling window options.</param>
-    /// <param name="timeProvider">The time provider.</param>
-    /// <param name="logger">The logger instance.</param>
     public SamplingWindowCircuitBreaker(
         IDistributedCounterFactory counterFactory,
         SamplingWindowCircuitBreakerOptions options,
@@ -55,7 +61,7 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
         cancellationToken.ThrowIfCancellationRequested();
 
         string trippedKey = FormatTrippedKey(key);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(trippedKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
 
         CounterValue trippedVal = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
 
@@ -65,12 +71,14 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
 
             if(blockedUntil > now) {
                 TimeSpan retryAfter = blockedUntil - now;
-                return CircuitExecutionDecision.Denied(retryAfter);
+                CircuitExecutionDecision deniedDecision = CircuitExecutionDecision.Denied(retryAfter);
+                ResilienceDiagnostics.RecordDecision(this._logger, StrategyName, key, deniedDecision);
+                return deniedDecision;
             }
 
-            // Half-Open: Allow up to N permitted concurrent trial probes (Option C)
+            // Half-Open: Allow up to N permitted concurrent trial probes
             string probeKey = FormatProbeKey(key);
-            IDistributedCounter probeCounter = this._counterFactory.Create(probeKey);
+            IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
 
             CounterLimitResult probeClaim = await probeCounter.TryIncrementAsync(
                 amount: 1,
@@ -79,13 +87,19 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
                 cancellationToken).ConfigureAwait(false);
 
             if(probeClaim.IsAllowed) {
-                return CircuitExecutionDecision.HalfOpenProbe();
+                CircuitExecutionDecision probeDecision = CircuitExecutionDecision.HalfOpenProbe();
+                ResilienceDiagnostics.RecordDecision(this._logger, StrategyName, key, probeDecision);
+                return probeDecision;
             }
 
-            return CircuitExecutionDecision.Denied(TimeSpan.FromSeconds(1));
+            CircuitExecutionDecision deniedProbeDecision = CircuitExecutionDecision.Denied(TimeSpan.FromSeconds(1));
+            ResilienceDiagnostics.RecordDecision(this._logger, StrategyName, key, deniedProbeDecision);
+            return deniedProbeDecision;
         }
 
-        return CircuitExecutionDecision.Allowed();
+        CircuitExecutionDecision allowedDecision = CircuitExecutionDecision.Allowed();
+        ResilienceDiagnostics.RecordDecision(this._logger, StrategyName, key, allowedDecision);
+        return allowedDecision;
     }
 
     /// <inheritdoc/>
@@ -97,19 +111,29 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
         string trippedKey = FormatTrippedKey(key);
         string probeKey = FormatProbeKey(key);
 
-        IDistributedCounter successCounter = this._counterFactory.Create(successKey);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(trippedKey);
-        IDistributedCounter probeCounter = this._counterFactory.Create(probeKey);
+        IDistributedCounter successCounter = this._counterFactory.Create(PolicyCategory, successKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
+        IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
 
         CounterExpiry expiry = CounterExpiry.From(this._options.SamplingWindow * 2);
         await successCounter.IncrementAsync(1, expiry, cancellationToken).ConfigureAwait(false);
 
-        // Reset tripped and probe states if recovering from a break
         CounterValue trippedVal = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
+        bool wasTripped = trippedVal.Value > 0;
+
         if(trippedVal.Value > 0) {
-            await trippedCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
-            await probeCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
+            DateTimeOffset now = this._timeProvider.GetUtcNow();
+            DateTimeOffset blockedUntil = new(trippedVal.Value, TimeSpan.Zero);
+
+            if(now >= blockedUntil) {
+                await trippedCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
+                await probeCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
+                ResilienceDiagnostics.RecordSuccess(this._logger, StrategyName, key, wasRecovered: true);
+                return;
+            }
         }
+
+        ResilienceDiagnostics.RecordSuccess(this._logger, StrategyName, key, wasRecovered: wasTripped);
     }
 
     /// <inheritdoc/>
@@ -118,13 +142,12 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
 
         string trippedKey = FormatTrippedKey(key);
         string probeKey = FormatProbeKey(key);
-        IDistributedCounter trippedCounter = this._counterFactory.Create(trippedKey);
-        IDistributedCounter probeCounter = this._counterFactory.Create(probeKey);
+        IDistributedCounter trippedCounter = this._counterFactory.Create(PolicyCategory, trippedKey);
+        IDistributedCounter probeCounter = this._counterFactory.Create(PolicyCategory, probeKey);
 
-        // Immediate re-trip if failure happens during half-open trial
         CounterValue currentTrip = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
         if(currentTrip.Value > 0) {
-            await TripAsync(key, trippedCounter, probeCounter, cancellationToken).ConfigureAwait(false);
+            await TripAsync(trippedCounter, probeCounter, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -132,28 +155,25 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
         string successKey = FormatSuccessKey(key, windowId);
         string failureKey = FormatFailureKey(key, windowId);
 
-        IDistributedCounter successCounter = this._counterFactory.Create(successKey);
-        IDistributedCounter failureCounter = this._counterFactory.Create(failureKey);
+        IDistributedCounter successCounter = this._counterFactory.Create(PolicyCategory, successKey);
+        IDistributedCounter failureCounter = this._counterFactory.Create(PolicyCategory, failureKey);
 
         CounterExpiry expiry = CounterExpiry.From(this._options.SamplingWindow * 2);
         CounterValue newFailureVal = await failureCounter.IncrementAsync(1, expiry, cancellationToken).ConfigureAwait(false);
         CounterValue successVal = await successCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
 
         long totalRequests = successVal.Value + newFailureVal.Value;
+        double failureRate = totalRequests > 0 ? (double)newFailureVal.Value / totalRequests : 0.0;
 
-        if(totalRequests >= this._options.MinimumThroughput) {
-            double failureRate = (double)newFailureVal.Value / totalRequests;
+        ResilienceDiagnostics.RecordFailure(this._logger, StrategyName, key, failureRate);
 
-            if(failureRate >= this._options.FailureRateThreshold) {
-                await TripAsync(key, trippedCounter, probeCounter, cancellationToken).ConfigureAwait(false);
-
-                this._logger.LogWarning("[SamplingWindow] Circuit breaker TRIPPED to OPEN for key '{Key}'. Failure rate {Rate:P1} exceeded threshold {Threshold:P1} across {Total} requests. Break: {DurationMs:F0}ms.",
-                    key, failureRate, this._options.FailureRateThreshold, totalRequests, this._options.BreakDuration.TotalMilliseconds);
-            }
+        if(totalRequests >= this._options.MinimumThroughput && failureRate >= this._options.FailureRateThreshold) {
+            await TripAsync(trippedCounter, probeCounter, cancellationToken).ConfigureAwait(false);
+            ResilienceDiagnostics.RecordTrip(this._logger, StrategyName, key, "SamplingWindowFailureRateThresholdExceeded", this._options.BreakDuration);
         }
     }
 
-    private async ValueTask TripAsync(string key, IDistributedCounter trippedCounter, IDistributedCounter probeCounter, CancellationToken cancellationToken) {
+    private async ValueTask TripAsync(IDistributedCounter trippedCounter, IDistributedCounter probeCounter, CancellationToken cancellationToken) {
         DateTimeOffset blockedUntil = this._timeProvider.GetUtcNow().Add(this._options.BreakDuration);
         CounterExpiry tripExpiry = CounterExpiry.From(this._options.BreakDuration * 2);
 
@@ -161,9 +181,23 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
         await probeCounter.ResetAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private long GetCurrentWindowId() => this._timeProvider.GetUtcNow().UtcTicks / this._options.SamplingWindow.Ticks;
-    private static string FormatSuccessKey(string key, long windowId) => $"wh:cb:sw:succ:{key}:{windowId}";
-    private static string FormatFailureKey(string key, long windowId) => $"wh:cb:sw:fail:{key}:{windowId}";
-    private static string FormatTrippedKey(string key) => $"wh:cb:sw:open:{key}";
-    private static string FormatProbeKey(string key) => $"wh:cb:sw:probe:{key}";
+    private long GetCurrentWindowId() {
+        return this._timeProvider.GetUtcNow().UtcTicks / this._options.SamplingWindow.Ticks;
+    }
+
+    private string FormatSuccessKey(string key, long windowId) {
+        return $"{this._options.KeyPrefix}sw:succ:{key}:{windowId}";
+    }
+
+    private string FormatFailureKey(string key, long windowId) {
+        return $"{this._options.KeyPrefix}sw:fail:{key}:{windowId}";
+    }
+
+    private string FormatTrippedKey(string key) {
+        return $"{this._options.KeyPrefix}sw:open:{key}";
+    }
+
+    private string FormatProbeKey(string key) {
+        return $"{this._options.KeyPrefix}sw:probe:{key}";
+    }
 }

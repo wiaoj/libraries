@@ -38,10 +38,10 @@ public sealed class BloomFilterDeduplicationMiddlewareTests {
         WebhookDelegate next = (ctx, ct) => Task.CompletedTask;
 
         await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-            middleware.InvokeAsync(null!, next, CancellationToken.None));
+            middleware.InvokeAsync(null!, next, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-            middleware.InvokeAsync(context, null!, CancellationToken.None));
+            middleware.InvokeAsync(context, null!, TestContext.Current.CancellationToken));
     }
 
     // ── 2. DEDUPLICATION & SUCCESS FLOWS ─────────────────────────────────────
@@ -67,7 +67,7 @@ public sealed class BloomFilterDeduplicationMiddlewareTests {
             endpoint: endpoint,
             serializedPayload: "{\"orderId\":\"ORD-100\"}");
 
-        await middleware.InvokeAsync(firstContext, next, CancellationToken.None);
+        await middleware.InvokeAsync(firstContext, next, TestContext.Current.CancellationToken);
         Assert.Equal(1, downstreamCallCount);
 
         // ── 2. İstek (Mükerrer Gönderim -> Downstream Çağrılmadan Engellenmeli) ──
@@ -75,7 +75,7 @@ public sealed class BloomFilterDeduplicationMiddlewareTests {
             endpoint: endpoint,
             serializedPayload: "{\"orderId\":\"ORD-100\"}");
 
-        await middleware.InvokeAsync(duplicateContext, next, CancellationToken.None);
+        await middleware.InvokeAsync(duplicateContext, next, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, downstreamCallCount); // Downstream tekrar çağrılmamalı
 
@@ -109,8 +109,8 @@ public sealed class BloomFilterDeduplicationMiddlewareTests {
             return Task.CompletedTask;
         };
 
-        await middleware.InvokeAsync(context1, successfulDeliverer, CancellationToken.None);
-        await middleware.InvokeAsync(context2, successfulDeliverer, CancellationToken.None);
+        await middleware.InvokeAsync(context1, successfulDeliverer, TestContext.Current.CancellationToken);
+        await middleware.InvokeAsync(context2, successfulDeliverer, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, delivererInvocationCount);
     }
@@ -135,7 +135,7 @@ public sealed class BloomFilterDeduplicationMiddlewareTests {
             endpoint: endpoint,
             serializedPayload: "{\"orderId\":\"ORD-FAIL\"}");
 
-        await middleware.InvokeAsync(firstAttempt, failingDeliverer, CancellationToken.None);
+        await middleware.InvokeAsync(firstAttempt, failingDeliverer, TestContext.Current.CancellationToken);
         Assert.Equal(1, delivererInvocationCount);
 
         // 2. Deneme (Retry Attempt)
@@ -147,7 +147,7 @@ public sealed class BloomFilterDeduplicationMiddlewareTests {
             serializedPayload: "{\"orderId\":\"ORD-FAIL\"}",
             attemptHistory: [failedHistory]);
 
-        await middleware.InvokeAsync(retryAttempt, failingDeliverer, CancellationToken.None);
+        await middleware.InvokeAsync(retryAttempt, failingDeliverer, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, delivererInvocationCount); // Retry başarıyla teslimata gitmeli
     }
@@ -163,7 +163,7 @@ public sealed class BloomFilterDeduplicationMiddlewareTests {
             return Task.CompletedTask;
         };
 
-        await middleware.InvokeAsync(context, failingDeliverer, CancellationToken.None);
+        await middleware.InvokeAsync(context, failingDeliverer, TestContext.Current.CancellationToken);
 
         Assert.False(this._filter.Contains(key.AsSpan()));
     }
@@ -177,7 +177,7 @@ public sealed class BloomFilterDeduplicationMiddlewareTests {
         WebhookDelegate throwingDeliverer = (ctx, ct) => throw new HttpRequestException("Network unreachable");
 
         await Assert.ThrowsAsync<HttpRequestException>(() =>
-            middleware.InvokeAsync(context, throwingDeliverer, CancellationToken.None));
+            middleware.InvokeAsync(context, throwingDeliverer, TestContext.Current.CancellationToken));
 
         Assert.False(this._filter.Contains(key.AsSpan()));
     }

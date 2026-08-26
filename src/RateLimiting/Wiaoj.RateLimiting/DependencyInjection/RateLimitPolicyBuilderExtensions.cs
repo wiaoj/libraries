@@ -187,6 +187,61 @@ public static class RateLimitPolicyBuilderExtensions {
         });
     }
 
+    /// <summary>
+    /// Configures this rate limit policy to use a dedicated keyed storage instance from dependency injection (e.g. a specific Redis cluster).
+    /// </summary>
+    /// <param name="builder">The policy builder.</param>
+    /// <param name="serviceKey">The keyed service identifier for the storage.</param>
+    /// <returns>The policy builder instance for fluent chaining.</returns>
+    public static IRateLimitPolicyBuilder UseKeyedStorage(
+        this IRateLimitPolicyBuilder builder,
+        object serviceKey) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(serviceKey);
+
+        builder.Services.Configure<DistributedCounterOptions>(options => {
+            options.AddImmediateCounter(builder.PolicyName, cfg => cfg.UseKeyedStorage(serviceKey));
+        });
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures this rate limit policy to use a custom storage implementation type resolved from dependency injection.
+    /// </summary>
+    /// <typeparam name="TStorage">The type of counter storage.</typeparam>
+    /// <param name="builder">The policy builder.</param>
+    /// <returns>The policy builder instance for fluent chaining.</returns>
+    public static IRateLimitPolicyBuilder UseStorage<TStorage>(
+        this IRateLimitPolicyBuilder builder) where TStorage : ICounterStorage {
+        Preca.ThrowIfNull(builder);
+
+        builder.Services.Configure<DistributedCounterOptions>(options => {
+            options.AddImmediateCounter(builder.PolicyName, cfg => cfg.UseStorage<TStorage>());
+        });
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures this rate limit policy to use a custom storage factory delegate.
+    /// </summary>
+    /// <param name="builder">The policy builder.</param>
+    /// <param name="factory">The storage factory delegate.</param>
+    /// <returns>The policy builder instance for fluent chaining.</returns>
+    public static IRateLimitPolicyBuilder UseStorage(
+        this IRateLimitPolicyBuilder builder,
+        Func<IServiceProvider, ICounterStorage> factory) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(factory);
+
+        builder.Services.Configure<DistributedCounterOptions>(options => {
+            options.AddImmediateCounter(builder.PolicyName, cfg => cfg.UseStorage(factory));
+        });
+
+        return builder;
+    }
+
     private static void EnsureImmediateCounter(IRateLimitPolicyBuilder builder) {
         builder.Services.Configure<DistributedCounterOptions>(options => {
             options.AddImmediateCounter(builder.PolicyName);

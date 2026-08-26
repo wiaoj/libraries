@@ -1,151 +1,332 @@
-﻿//using Microsoft.AspNetCore.Http;
-//using Microsoft.AspNetCore.Http.Features;
-//using Microsoft.AspNetCore.Mvc;
-//using Microsoft.Extensions.Options;
-//using Microsoft.Extensions.Primitives;
-//using System.Text.Json;
-//using Wiaoj.RateLimiting.AspNetCore;
-//using Wiaoj.RateLimiting.AspNetCore.Middleware;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
+using System.Text.Json;
+using Wiaoj.RateLimiting.AspNetCore;
+using Wiaoj.RateLimiting.AspNetCore.Middleware;
 
-//namespace Wiaoj.RateLimiting.Tests.Unit.AspNetCore;
+namespace Wiaoj.RateLimiting.Tests.Unit.AspNetCore;
 
-//public sealed class RateLimitingMiddlewareTests {
-//    private sealed class FakeAlgorithm : IRateLimitAlgorithm {
-//        public int LastCostAcquired { get; private set; }
-//        public string? LastKeyAcquired { get; private set; }
-//        public RateLimitDecision DecisionToReturn { get; set; } = RateLimitDecision.Allowed(5);
+[Trait("Category", "Unit")]
+[Trait("Component", "AspNetCore")]
+[Trait("Feature", "Middleware")]
+public sealed class RateLimitingMiddlewareTests {
 
-//        public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost = 1, CancellationToken cancellationToken = default) {
-//            this.LastKeyAcquired = key;
-//            this.LastCostAcquired = cost;
-//            return ValueTask.FromResult(this.DecisionToReturn);
-//        }
-//    }
+    public sealed class TheAllowedPipelineExecution {
 
-//    private static (RateLimitingMiddleware Middleware, FakeAlgorithm Algorithm, RateLimitingOptions Options) CreateMiddleware(
-//        RequestDelegate? next = null,
-//        Action<RateLimitingOptions>? configure = null) {
+        [Fact]
+        public async Task InvokeAsync_WhenRequestAllowed_SetsRemainingHeaderAndExecutesNextDelegate() {
+            // Arrange
+            bool nextInvoked = false;
+            MockRateLimiter limiter = new(RateLimitDecision.Allowed(remaining: 9));
 
-//        RateLimitingOptions options = new();
-//        configure?.Invoke(options);
+            RateLimiterAspNetCoreOptions options = new() { EnableIetfHeaders = true };
+            RateLimitingMiddleware middleware = new(
+                next: _ => {
+                    nextInvoked = true;
+                    return Task.CompletedTask;
+                },
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
 
-//        IOptionsMonitor<RateLimitingOptions> optionsMonitor = new TestOptionsMonitor<RateLimitingOptions>(options);
-//        FakeAlgorithm algorithm = new();
-//        next ??= static _ => Task.CompletedTask;
+            DefaultHttpContext context = new();
 
-//        RateLimitingMiddleware middleware = new(next, algorithm, optionsMonitor);
-//        return (middleware, algorithm, options);
-//    }
+            // Act
+            await middleware.InvokeAsync(context);
 
-//    private sealed class TestOptionsMonitor<T>(T currentValue) : IOptionsMonitor<T> where T : class {
-//        public T CurrentValue => currentValue;
-//        public T Get(string? name) {
-//            return currentValue;
-//        }
+            // Assert
+            Assert.True(nextInvoked);
+            Assert.Equal("9", context.Response.Headers[RateLimitConstants.Headers.RateLimitRemaining]);
+            Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        }
+    }
 
-//        public IDisposable? OnChange(Action<T, string?> listener) {
-//            return null;
-//        }
-//    }
+    public sealed class TheRejectionAndRfcHeaders {
 
-//    [Fact]
-//    public async Task InvokeAsync_WhenRequestAllowed_SetsRemainingHeaderAndCallsNext() {
-//        bool nextCalled = false;
-//        (RateLimitingMiddleware middleware, FakeAlgorithm algorithm, _) = CreateMiddleware(
-//            next: _ => { nextCalled = true; return Task.CompletedTask; });
+        [Fact]
+        public async Task InvokeAsync_WhenRequestDenied_Emits429WithRfcHeadersAndProblemDetailsJson() {
+            // Arrange
+            MockRateLimiter limiter = new(RateLimitDecision.Denied(TimeSpan.FromSeconds(3.2), remaining: 0));
 
-//        DefaultHttpContext context = new();
-//        algorithm.DecisionToReturn = RateLimitDecision.Allowed(remaining: 9);
+            RateLimiterAspNetCoreOptions options = new() {
+                UseProblemDetails = true,
+                EnableIetfHeaders = true
+            };
 
-//        await middleware.InvokeAsync(context);
+            RateLimitingMiddleware middleware = new(
+                next: static _ => Task.CompletedTask,
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
 
-//        Assert.True(nextCalled);
-//        Assert.Equal("9", context.Response.Headers[RateLimitConstants.Headers.RateLimitRemaining]);
-//        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
-//    }
+            DefaultHttpContext context = new();
+            context.Response.Body = new MemoryStream();
 
-//    [Fact]
-//    public async Task InvokeAsync_WhenRequestDenied_Emits429WithRfcHeadersAndProblemDetailsJson() {
-//        (RateLimitingMiddleware middleware, FakeAlgorithm algorithm, _) = CreateMiddleware(configure: opt => {
-//            opt.UseProblemDetails = true;
-//        });
+            // Act
+            await middleware.InvokeAsync(context);
 
-//        DefaultHttpContext context = new();
-//        context.Response.Body = new MemoryStream();
-//        algorithm.DecisionToReturn = RateLimitDecision.Denied(TimeSpan.FromSeconds(3.2), remaining: 0);
+            // Assert: Status & RFC Headers
+            Assert.Equal(StatusCodes.Status429TooManyRequests, context.Response.StatusCode);
+            Assert.Equal("4", context.Response.Headers[RateLimitConstants.Headers.RetryAfter]); // Ceil(3.2s) = 4s
+            Assert.Equal("4", context.Response.Headers[RateLimitConstants.Headers.RateLimitReset]);
+            Assert.Equal("0", context.Response.Headers[RateLimitConstants.Headers.RateLimitRemaining]);
+            Assert.Equal(RateLimitConstants.ContentTypes.ProblemJson, context.Response.ContentType);
 
-//        await middleware.InvokeAsync(context);
+            // Assert: RFC 7807/9457 ProblemDetails Payload
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+            ProblemDetails? problem = await JsonSerializer.DeserializeAsync<ProblemDetails>(
+                context.Response.Body,
+                cancellationToken: TestContext.Current.CancellationToken);
 
-//        Assert.Equal(StatusCodes.Status429TooManyRequests, context.Response.StatusCode);
-//        Assert.Equal("4", context.Response.Headers[RateLimitConstants.Headers.RetryAfter]); // Ceil(3.2s) = 4s
-//        Assert.Equal("4", context.Response.Headers[RateLimitConstants.Headers.RateLimitReset]);
-//        Assert.Equal("0", context.Response.Headers[RateLimitConstants.Headers.RateLimitRemaining]);
-//        Assert.Equal(RateLimitConstants.ContentTypes.ProblemJson, context.Response.ContentType);
+            Assert.NotNull(problem);
+            Assert.Equal(429, problem.Status);
+            Assert.Equal(RateLimitConstants.Uris.Rfc6585, problem.Type);
+            Assert.True(problem.Extensions.TryGetValue("retryAfter", out object? rawRetryAfter));
 
-//        // Verify RFC 7807 ProblemDetails body
-//        context.Response.Body.Seek(0, SeekOrigin.Begin);
-//        ProblemDetails? problem = await JsonSerializer.DeserializeAsync<ProblemDetails>(
-//            context.Response.Body,
-//            cancellationToken: TestContext.Current.CancellationToken);
+            JsonElement retryAfterElement = Assert.IsType<JsonElement>(rawRetryAfter);
+            Assert.Equal(4, retryAfterElement.GetInt32());
+        }
 
-//        Assert.NotNull(problem);
-//        Assert.Equal(429, problem.Status);
-//        Assert.Equal(RateLimitConstants.Uris.Rfc6585, problem.Type);
+        [Fact]
+        public async Task InvokeAsync_WithCustomStatusCode_EmitsConfiguredStatusCode() {
+            // Arrange
+            MockRateLimiter limiter = new(RateLimitDecision.Denied(TimeSpan.FromSeconds(10)));
+            RateLimiterAspNetCoreOptions options = new() {
+                StatusCode = StatusCodes.Status503ServiceUnavailable,
+                UseProblemDetails = false
+            };
 
-//        Assert.NotNull(problem.Extensions);
-//        Assert.True(problem.Extensions.TryGetValue("retryAfter", out object? rawRetryAfter));
-//        Assert.NotNull(rawRetryAfter);
-//        JsonElement typed = Assert.IsType<JsonElement>(rawRetryAfter);
+            RateLimitingMiddleware middleware = new(
+                next: static _ => Task.CompletedTask,
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
 
-//        JsonElement retryAfterElement = typed;
-//        Assert.Equal(4, retryAfterElement.GetInt32());
-//    }
+            DefaultHttpContext context = new();
+            context.Response.Body = new MemoryStream();
 
-//    [Fact]
-//    public async Task InvokeAsync_WhenEndpointHasDisableRateLimiting_BypassesRateLimiterEntirely() {
-//        (RateLimitingMiddleware middleware, FakeAlgorithm algorithm, _) = CreateMiddleware();
+            // Act
+            await middleware.InvokeAsync(context);
 
-//        DefaultHttpContext context = new();
-//        EndpointMetadataCollection metadata = new(new DisableRateLimitingAttribute());
-//        context.Features.Set<IEndpointFeature>(new EndpointFeature { Endpoint = new Endpoint(static _ => Task.CompletedTask, metadata, "DisabledEndpoint") });
+            // Assert
+            Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+        }
 
-//        await middleware.InvokeAsync(context);
+        [Fact]
+        public async Task InvokeAsync_WithProblemDetailsCustomizer_EnrichesJsonPayload() {
+            // Arrange
+            MockRateLimiter limiter = new(RateLimitDecision.Denied(TimeSpan.FromSeconds(10)));
+            RateLimiterAspNetCoreOptions options = new() {
+                UseProblemDetails = true,
+                ProblemDetailsCustomizer = (problem, _, _) => {
+                    problem.Extensions["securityViolation"] = true;
+                    problem.Extensions["traceId"] = "trace_abc_999";
+                }
+            };
 
-//        Assert.Null(algorithm.LastKeyAcquired); // Algorithm was not even called
-//        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
-//    }
+            RateLimitingMiddleware middleware = new(
+                next: static _ => Task.CompletedTask,
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
 
-//    [Fact]
-//    public async Task InvokeAsync_WhenEndpointHasStaticRateLimitCost_PassesStaticCostToAlgorithm() {
-//        (RateLimitingMiddleware middleware, FakeAlgorithm algorithm, _) = CreateMiddleware();
+            DefaultHttpContext context = new();
+            context.Response.Body = new MemoryStream();
 
-//        DefaultHttpContext context = new();
-//        EndpointMetadataCollection metadata = new(new RateLimitMetadata { Cost = 5 });
-//        context.Features.Set<IEndpointFeature>(new EndpointFeature { Endpoint = new Endpoint(static _ => Task.CompletedTask, metadata, "StaticCostEndpoint") });
+            // Act
+            await middleware.InvokeAsync(context);
 
-//        await middleware.InvokeAsync(context);
+            // Assert
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+            ProblemDetails? problem = await JsonSerializer.DeserializeAsync<ProblemDetails>(
+                context.Response.Body,
+                cancellationToken: TestContext.Current.CancellationToken);
 
-//        Assert.Equal(5, algorithm.LastCostAcquired);
-//    }
+            Assert.NotNull(problem);
+            Assert.True(problem.Extensions.TryGetValue("securityViolation", out object? violation));
+            Assert.True(Assert.IsType<JsonElement>(violation).GetBoolean());
 
-//    [Fact]
-//    public async Task InvokeAsync_WhenEndpointHasDynamicCostResolver_ComputesCostFromRequestBatch() {
-//        (RateLimitingMiddleware middleware, FakeAlgorithm algorithm, _) = CreateMiddleware();
+            Assert.True(problem.Extensions.TryGetValue("traceId", out object? traceId));
+            Assert.Equal("trace_abc_999", Assert.IsType<JsonElement>(traceId).GetString());
+        }
 
-//        DefaultHttpContext context = new();
-//        context.Request.QueryString = new QueryString("?count=17"); // Bulk batch count
+        [Fact]
+        public async Task InvokeAsync_WithCustomOnRejectedAsync_ExecutesCallbackAndBypassesProblemDetails() {
+            // Arrange
+            bool customCallbackExecuted = false;
+            MockRateLimiter limiter = new(RateLimitDecision.Denied(TimeSpan.FromSeconds(10)));
+            RateLimiterAspNetCoreOptions options = new() {
+                OnRejectedAsync = (ctx, _) => {
+                    customCallbackExecuted = true;
+                    ctx.Response.StatusCode = StatusCodes.Status418ImATeapot;
+                    return ctx.Response.WriteAsync("Custom Teapot Body");
+                }
+            };
 
-//        EndpointMetadataCollection metadata = new(new RateLimitMetadata {
-//            DynamicCostResolver = ctx => ctx.Request.Query.TryGetValue("count", out StringValues val) && int.TryParse(val, out int count) ? count : 1
-//        });
-//        context.Features.Set<IEndpointFeature>(new EndpointFeature { Endpoint = new Endpoint(static _ => Task.CompletedTask, metadata, "DynamicBulkEndpoint") });
+            RateLimitingMiddleware middleware = new(
+                next: static _ => Task.CompletedTask,
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
 
-//        await middleware.InvokeAsync(context);
+            DefaultHttpContext context = new();
+            context.Response.Body = new MemoryStream();
 
-//        Assert.Equal(17, algorithm.LastCostAcquired); // Exactly 17 units deducted from quota!
-//    }
+            // Act
+            await middleware.InvokeAsync(context);
 
-//    private sealed class EndpointFeature : IEndpointFeature {
-//        public Endpoint? Endpoint { get; set; }
-//    }
-//}
+            // Assert
+            Assert.True(customCallbackExecuted);
+            Assert.Equal(StatusCodes.Status418ImATeapot, context.Response.StatusCode);
+
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+            using StreamReader reader = new(context.Response.Body);
+            string body = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
+            Assert.Equal("Custom Teapot Body", body);
+        }
+    }
+
+    public sealed class TheEndpointMetadataRouting {
+
+        [Fact]
+        public async Task InvokeAsync_WhenEndpointHasDisableRateLimiting_BypassesLimiterEntirely() {
+            // Arrange
+            MockRateLimiter limiter = new(RateLimitDecision.Denied(TimeSpan.FromMinutes(1)));
+            RateLimiterAspNetCoreOptions options = new();
+
+            RateLimitingMiddleware middleware = new(
+                next: static _ => Task.CompletedTask,
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
+
+            DefaultHttpContext context = new();
+            EndpointMetadataCollection metadata = new(new DisableRateLimitingAttribute());
+            context.Features.Set<IEndpointFeature>(new EndpointFeature {
+                Endpoint = new Endpoint(static _ => Task.CompletedTask, metadata, "DisabledEndpoint")
+            });
+
+            // Act
+            await middleware.InvokeAsync(context);
+
+            // Assert: Rate limiter was bypassed, next executed
+            Assert.Equal(0, limiter.CallCount);
+            Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        }
+
+        [Fact]
+        public async Task InvokeAsync_WhenEndpointHasStaticCost_PassesCostToLimiter() {
+            // Arrange
+            MockRateLimiter limiter = new(RateLimitDecision.Allowed(10));
+            RateLimiterAspNetCoreOptions options = new();
+
+            RateLimitingMiddleware middleware = new(
+                next: static _ => Task.CompletedTask,
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
+
+            DefaultHttpContext context = new();
+            EndpointMetadataCollection metadata = new(new RateLimitCostAttribute(5));
+            context.Features.Set<IEndpointFeature>(new EndpointFeature {
+                Endpoint = new Endpoint(static _ => Task.CompletedTask, metadata, "Cost5Endpoint")
+            });
+
+            // Act
+            await middleware.InvokeAsync(context);
+
+            // Assert
+            Assert.Equal(5, limiter.LastCostAcquired);
+        }
+
+        [Fact]
+        public async Task InvokeAsync_WhenEndpointHasDynamicCostResolver_ComputesCostFromQueryBatch() {
+            // Arrange
+            MockRateLimiter limiter = new(RateLimitDecision.Allowed(10));
+            RateLimiterAspNetCoreOptions options = new();
+
+            RateLimitingMiddleware middleware = new(
+                next: static _ => Task.CompletedTask,
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
+
+            DefaultHttpContext context = new();
+            context.Request.QueryString = new QueryString("?batchSize=17");
+
+            EndpointMetadataCollection metadata = new(new RateLimitMetadata {
+                DynamicCostResolver = ctx => ctx.Request.Query.TryGetValue("batchSize", out StringValues val) && int.TryParse(val, out int count) ? count : 1
+            });
+            context.Features.Set<IEndpointFeature>(new EndpointFeature {
+                Endpoint = new Endpoint(static _ => Task.CompletedTask, metadata, "DynamicBatchEndpoint")
+            });
+
+            // Act
+            await middleware.InvokeAsync(context);
+
+            // Assert: Exactly 17 units deducted
+            Assert.Equal(17, limiter.LastCostAcquired);
+        }
+
+        [Fact]
+        public async Task InvokeAsync_WhenEndpointHasNamedPolicy_InvokesMatchingPolicy() {
+            // Arrange
+            MockRateLimiter limiter = new(RateLimitDecision.Allowed(10));
+            RateLimiterAspNetCoreOptions options = new();
+
+            RateLimitingMiddleware middleware = new(
+                next: static _ => Task.CompletedTask,
+                rateLimiter: limiter,
+                optionsMonitor: new TestOptionsMonitor<RateLimiterAspNetCoreOptions>(options));
+
+            DefaultHttpContext context = new();
+            EndpointMetadataCollection metadata = new(new RateLimitMetadata { PolicyName = "strict_auth" });
+            context.Features.Set<IEndpointFeature>(new EndpointFeature {
+                Endpoint = new Endpoint(static _ => Task.CompletedTask, metadata, "StrictAuthEndpoint")
+            });
+
+            // Act
+            await middleware.InvokeAsync(context);
+
+            // Assert: Targeted named policy was evaluated
+            Assert.Equal("strict_auth", limiter.LastPolicyAcquired);
+        }
+    }
+
+    private sealed class MockRateLimiter(RateLimitDecision outcome) : IRateLimiter {
+        public int CallCount { get; private set; }
+        public int LastCostAcquired { get; private set; }
+        public string? LastKeyAcquired { get; private set; }
+        public string? LastPolicyAcquired { get; private set; }
+
+        public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost = 1, CancellationToken cancellationToken = default) {
+            this.CallCount++;
+            this.LastKeyAcquired = key;
+            this.LastCostAcquired = cost;
+            this.LastPolicyAcquired = null;
+            return ValueTask.FromResult(outcome);
+        }
+
+        public ValueTask<RateLimitDecision> TryAcquireAsync(string policyName, string key, int cost = 1, CancellationToken cancellationToken = default) {
+            this.CallCount++;
+            this.LastKeyAcquired = key;
+            this.LastCostAcquired = cost;
+            this.LastPolicyAcquired = policyName;
+            return ValueTask.FromResult(outcome);
+        }
+
+        public IRateLimitAlgorithm GetPolicy(string policyName) {
+            throw new NotImplementedException();
+        }
+    }
+
+    private sealed class TestOptionsMonitor<T>(T currentValue) : IOptionsMonitor<T> where T : class {
+        public T CurrentValue => currentValue;
+        public T Get(string? name) {
+            return currentValue;
+        }
+
+        public IDisposable? OnChange(Action<T, string?> listener) {
+            return null;
+        }
+    }
+
+    private sealed class EndpointFeature : IEndpointFeature {
+        public Endpoint? Endpoint { get; set; }
+    }
+}

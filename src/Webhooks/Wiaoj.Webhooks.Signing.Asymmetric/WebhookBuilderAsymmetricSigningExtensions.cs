@@ -2,9 +2,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Diagnostics.CodeAnalysis;
 using Wiaoj.Webhooks.Signing;
-using Wiaoj.Webhooks.Signing.Asymmetric;
-using Wiaoj.Webhooks.Signing.Asymmetric.Ed25519;
-using Wiaoj.Webhooks.Signing.Asymmetric.Rsa;
+using Wiaoj.Webhooks.Signing.Asymmetric; 
 
 #pragma warning disable IDE0130
 namespace Wiaoj.Webhooks;
@@ -61,21 +59,5 @@ public static partial class WebhookBuilderAsymmetricSigningExtensions {
         builder.AddMiddleware<SigningMiddleware>();
         return builder;
     }
-
-    /// <summary>
-    /// Configures asymmetric Ed25519 (Standard Webhooks / IETF) signing in the outbound pipeline.
-    /// </summary>
-    /// <param name="builder">The webhook builder being configured.</param>
-    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent chaining.</returns>
-    [Experimental(
-     diagnosticId: "WIAOJ_WEBHOOKS_ED25519",
-     UrlFormat = "https://github.com/dotnet/runtime/issues/63174")]
-    public static IWebhookBuilder UseEd25519Signing(this IWebhookBuilder builder) {
-        Preca.ThrowIfNull(builder);
-
-        builder.Services.RemoveAll<IWebhookSigner>();
-        builder.Services.AddSingleton<IWebhookSigner, Ed25519WebhookSigner>();
-        builder.AddMiddleware<SigningMiddleware>();
-        return builder;
-    }
+     
 }

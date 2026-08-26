@@ -1,45 +1,46 @@
 # Wiaoj.RateLimiting
 
-> High-performance, distributed, and RFC-compliant rate limiting infrastructure for modern .NET applications.
+A modular, policy-driven, and RFC-compliant rate limiting library for .NET applications.
 
-`Wiaoj.RateLimiting` is a modular, algorithm-agnostic rate limiting framework designed from the ground up to decouple rate limiting policies from underlying storage primitives and transport layers. It provides distributed cluster coordination via `Wiaoj.DistributedCounter`, built-in OpenTelemetry metrics, zero-allocation structured logging, and comprehensive ASP.NET Core middleware with full RFC 6585, RFC 9110, and RFC 7807/9457 compliance.
+`Wiaoj.RateLimiting` provides standalone in-memory algorithms, distributed rate limiting coordinated via `Wiaoj.DistributedCounter`, in-memory L1 negative caching, Fail-Open resilience, OpenTelemetry metrics, and ASP.NET Core middleware with full RFC 6585, RFC 9110, and RFC 7807/9457 compliance.
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
 - [Key Highlights](#-key-highlights)
 - [Architecture & Design Philosophy](#-architecture--design-philosophy)
 - [Package Ecosystem](#-package-ecosystem)
 - [Algorithm Matrix](#-algorithm-matrix)
 - [Quick Start](#-quick-start)
-  - [1. Core / Standalone Usage](#1-core--standalone-usage)
+  - [1. Core DI & Policy Setup](#1-core-di--policy-setup)
   - [2. ASP.NET Core Middleware](#2-aspnet-core-middleware)
-- [Dynamic Cost & Bulk Rate Limiting](#-dynamic-cost--bulk-rate-limiting)
+- [Resilience & L1 Negative Caching](#-resilience--l1-negative-caching)
+- [Dynamic Cost & Route Conventions](#-dynamic-cost--route-conventions)
 - [Observability (OpenTelemetry & Logging)](#-observability-opentelemetry--logging)
 - [Standards & RFC Compliance](#-standards--rfc-compliance)
-- [Zero-Allocation Design](#-zero-allocation-design)
+- [Allocation Efficiency](#-allocation-efficiency)
 - [License](#-license)
 
 ---
 
-## ⚡ Key Highlights
+## Key Highlights
 
-- **Decoupled Primitives:** Rate limit decisions (`IsAllowed`, `RetryAfter`, `Remaining`) are strictly decoupled from counter storage mechanics.
-- **Storage-Agnostic Distributed Engine:** Backed by `IDistributedCounter`, allowing seamless switching between high-performance in-memory CAS and distributed Redis storage with single-roundtrip Lua scripts.
-- **7 Native Algorithms:** From cheap fixed windows to sliding weighted approximations, exact sorted logs, token buckets, GCRA, and queue-based traffic shapers.
+- **Policy-Driven Architecture:** Supports named policies (`IRateLimiter`) and strongly-typed marker tags (`IRateLimiter<TPolicy>`).
+- **Distributed Engine Integration:** Seamlessly coordinates across cluster nodes via `Wiaoj.DistributedCounter` using single-roundtrip Redis Lua scripts and atomic CAS loops.
+- **7 Built-in Algorithms:** Fixed window, sliding weighted window, GCRA, token bucket, sliding window log, leaky bucket queue (traffic shaping), and multi-tier composite limiter.
+- **Built-in Resilience:** Optional `WithFailOpen()` (prevents API outages during storage failure) and `WithNegativeCaching()` (L1 RAM ban cache deflecting DDoS/spam).
 - **RFC Compliance:**
   - **RFC 6585:** `429 Too Many Requests` status code.
   - **RFC 9110 (RFC 7231):** Integer delta-seconds `Retry-After` header.
   - **RFC 7807 / RFC 9457:** Standardized `application/problem+json` `ProblemDetails` responses.
   - **IETF RateLimit Draft:** `RateLimit-Remaining` and `RateLimit-Reset` headers.
-- **Built-in OpenTelemetry:** Direct integration with `System.Diagnostics.Metrics` using stack-allocated `TagList` without external package bloat.
-- **High-Throughput / Zero-Allocation:** Span-based IP formatting (`stackalloc char[48]`), compile-time source-generated logging (`[LoggerMessage]`), and minimal heap allocations.
-- **Dynamic Endpoint Costing:** Native support for endpoint metadata, route conventions (`.WithRateLimitCost(17)`), and dynamic batch size resolvers for bulk operations.
+- **Observability:** OpenTelemetry metrics (`System.Diagnostics.Metrics`) using stack-allocated `TagList` and compile-time source-generated logging (`[LoggerMessage]`).
+- **Dynamic Endpoint Costing:** Fine-grained endpoint metadata, route conventions (`.WithRateLimitCost(5)`), and dynamic cost resolvers.
 
 ---
 
-## 🏛 Architecture & Design Philosophy
+## Architecture & Design Philosophy
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -50,7 +51,7 @@
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                     Wiaoj.RateLimiting.Abstractions                     │
-│        IRateLimitAlgorithm  │  RateLimitDecision  │  Key Selectors      │
+│    IRateLimiter  │  IRateLimiter<T>  │  IRateLimitAlgorithm  │ Decision │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
        ┌─────────────────────────────┴─────────────────────────────┐
@@ -58,9 +59,9 @@
 ┌───────────────────────────────┐               ┌───────────────────────────────┐
 │  Distributed Algorithms       │               │  In-Memory Engines & Shapers  │
 │  - FixedWindowRateLimiter     │               │  - TokenBucketRateLimiter     │
-│  - SlidingWindowRateLimiter   │               │  - GcraRateLimiter            │
-│    (Weighted Approximation)   │               │  - SlidingWindowLogRateLimiter│
-└──────────────┬────────────────┘               │  - LeakyBucketQueueRateLimiter│
+│  - SlidingWindowRateLimiter   │               │  - SlidingWindowLogRateLimiter│
+│  - GcraRateLimiter (CAS)      │               │  - LeakyBucketQueueRateLimiter│
+└──────────────┬────────────────┘               │  - CompositeRateLimiter       │
                │                                └───────────────────────────────┘
                ▼
 ┌───────────────────────────────┐
@@ -70,74 +71,86 @@
 └───────────────────────────────┘
 ```
 
-### Core Principles:
-1. **The Counter does not know about Rate Limiting:** `IDistributedCounter` remains a pure "Increment + TTL" primitive. All quota, window, and denial math lives strictly inside `IRateLimitAlgorithm`.
-2. **Algorithm is Swappable, Not Storage:** Switching between Fixed Window, Sliding Window, or Token Bucket requires zero change to your call-site contracts.
-3. **No Hidden Thread Starvation:** Algorithms are immediate meters by default. Asynchronous queueing is explicit via `LeakyBucketQueueRateLimiter`.
-
 ---
 
-## 📦 Package Ecosystem
+## Package Ecosystem
 
 | Package | Description | Target |
 | :--- | :--- | :--- |
-| **`Wiaoj.RateLimiting`** | Core engine, all 7 algorithms, DI builder, and OpenTelemetry/Logging diagnostics. | `.NET 8.0+` |
-| **`Wiaoj.RateLimiting.AspNetCore`** | ASP.NET Core middleware, zero-allocation key selectors, RFC headers, and endpoint conventions. | `.NET 8.0+` |
-| **`Wiaoj.RateLimiting.Testing`** | Deterministic `InMemoryRateLimitAlgorithm` test double for consumer testing. | `.NET 8.0+` |
+| **`Wiaoj.RateLimiting.Abstractions`** | Core contracts (`IRateLimiter`, `IRateLimitAlgorithm`, `RateLimitDecision`, `IRateLimitPolicyBuilder`). | `.NET 10.0+` |
+| **`Wiaoj.RateLimiting`** | Runtime engine, all 7 algorithms, policy builder, resilience decorators, and diagnostics. | `.NET 10.0+` |
+| **`Wiaoj.RateLimiting.AspNetCore`** | ASP.NET Core middleware, key selectors, RFC headers, endpoint conventions, and `ProblemDetails`. | `.NET 10.0+` |
 
 ---
 
-## 📊 Algorithm Matrix
+## Algorithm Matrix
 
 | Algorithm | State Model | Storage Backing | Concurrency & Behavior | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **Fixed Window** | Single counter + TTL | `IDistributedCounter` (Redis / Memory) | Atomic single round-trip. Potential burst at window seam. | Low/Medium precision, distributed APIs, cheap quotas. |
-| **Sliding Window (Weighted)** | 2 adjacent counter windows | `IDistributedCounter` (Redis / Memory) | Speculative increment + weighted decay calculation. Mitigates boundary bursts. | Cloudflare-style high-traffic distributed APIs. |
-| **Token Bucket** | Tokens count + Last refill timestamp | In-Memory (`ConcurrentDictionary`) | Absorbs immediate bursts up to capacity, refills steadily. | Burst-tolerant microservices, webhook delivery. |
-| **Generic Cell Rate (GCRA)** | Single TAT (Theoretical Arrival Time) | In-Memory (Redis compatible) | Single scalar timestamp projection. Mathematically equivalent to Token Bucket. | Burst-tolerant distributed rate limiting with minimal state. |
-| **Sliding Window Log** | Timestamped Log list | In-Memory (`List<LogEntry>`) | Exact sliding lookback. Zero boundary burst. Memory scales with request volume. | High-security endpoints (Login, Payment processing). |
-| **Leaky Bucket (Meter)** | Usage level + Last leak timestamp | In-Memory (`ConcurrentDictionary`) | Continuous leak at fixed rate. Immediate decision (no wait). | Metering resource consumption. |
-| **Leaky Bucket (Queue)** | TAT Projection + Backlog | In-Memory (`TimeProvider.Delay`) | **Traffic Shaper:** Delays admitted requests until their turn arrives. Immediate 429 only on queue overflow. | Outbound API throttling, database query smoothing. |
+| **Fixed Window** | Single counter + TTL | `IDistributedCounter` (Redis / Memory) | Atomic single round-trip. Potential burst at window boundary. | General API protection, cheap distributed quotas. |
+| **Sliding Window (Weighted)** | 2 adjacent counter windows | `IDistributedCounter` (Redis / Memory) | Blends previous window count with current window. Mitigates boundary bursts. | High-traffic distributed APIs. |
+| **GCRA** | Single TAT timestamp | `IDistributedCounter` (Redis / Memory) | Optimistic CAS loop. Burst-tolerant single-scalar state. | Distributed burst-tolerant rate limiting. |
+| **Token Bucket** | Tokens + Refill timestamp | In-Memory (`ConcurrentDictionary`) | Absorbs immediate bursts up to capacity, refills at constant rate. | In-memory burst-tolerant services. |
+| **Sliding Window Log** | Timestamped Log list | In-Memory (`List<LogEntry>`) | Exact sliding lookback. Zero boundary burst. Memory scales with request count. | High-security endpoints (Login, Payment processing). |
+| **Leaky Bucket (Queue)** | TAT Projection + Backlog | In-Memory (`TimeProvider.Delay`) | **Traffic Shaper:** Delays admitted requests to smooth traffic. 429 only on queue overflow. | Outbound webhook throttling, database query smoothing. |
+| **Composite** | Sequence of algorithms | Any (Mixed) | Evaluates multiple tiers in order (e.g. 10 req/sec AND 1,000 req/day). | Multi-tier enterprise rate limiting. |
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Core / Standalone Usage
+### 1. Core DI & Policy Setup
 
-Install the core package:
+Install the packages:
 ```bash
 dotnet add package Wiaoj.RateLimiting
 dotnet add package Wiaoj.DistributedCounter
 ```
 
-Configure via Dependency Injection:
+Configure policies in `Program.cs`:
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.DistributedCounter;
 using Wiaoj.RateLimiting;
+using Wiaoj.RateLimiting.DependencyInjection;
 
-var services = new ServiceCollection();
+var builder = WebApplication.CreateBuilder(args);
 
-// Configure counter backend (InMemory or Redis)
-services.AddDistributedCounter(b => b.UseInMemory());
+// 1. Configure storage backend (In-Memory or Redis)
+builder.Services.AddDistributedCounter(dc => dc.UseInMemory());
 
-// Configure Rate Limiting algorithm
-services.AddWiaojRateLimiting(rl => {
-    rl.UseFixedWindow(limit: 100, window: TimeSpan.FromMinutes(1));
+// 2. Configure rate limiting policies
+builder.Services.AddWiaojRateLimiting(limiter => {
+    // Named policy: Fixed window for auth
+    limiter.AddPolicy("auth", policy => {
+        policy.UseFixedWindow(limit: 5, window: TimeSpan.FromMinutes(1))
+              .WithFailOpen();
+    });
+
+    // Typed policy for orders
+    limiter.AddPolicy<OrderPolicy>(policy => {
+        policy.UseSlidingWindow(limit: 100, window: TimeSpan.FromMinutes(1));
+    });
+
+    // Default fallback policy
+    limiter.UseDefaultPolicy(policy => {
+        policy.UseFixedWindow(limit: 1000, window: TimeSpan.FromHours(1));
+    });
 });
 
-var serviceProvider = services.BuildServiceProvider();
-var limiter = serviceProvider.GetRequiredService<IRateLimitAlgorithm>();
+var app = builder.Build();
 
-// Evaluate an operation
-RateLimitDecision decision = await limiter.TryAcquireAsync("client_ip:192.168.1.1", cost: 1);
-
-if (decision.IsAllowed) {
-    Console.WriteLine($"Allowed! Remaining quota: {decision.Remaining}");
-} else {
-    Console.WriteLine($"Denied! Retry after: {decision.RetryAfter?.TotalSeconds}s");
+// Direct consumption in services
+public sealed class LoginService(IRateLimiter rateLimiter) {
+    public async Task<IResult> LoginAsync(string clientIp, CancellationToken ct) {
+        RateLimitDecision decision = await rateLimiter.TryAcquireAsync("auth", clientIp, ct);
+        if (!decision.IsAllowed) {
+            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+        }
+        return Results.Ok();
+    }
 }
+
+public sealed class OrderPolicy;
 ```
 
 ---
@@ -149,55 +162,112 @@ Install the ASP.NET Core package:
 dotnet add package Wiaoj.RateLimiting.AspNetCore
 ```
 
-Configure in `Program.cs`:
+Configure middleware in `Program.cs`:
 ```csharp
 using Wiaoj.DistributedCounter;
 using Wiaoj.RateLimiting;
 using Wiaoj.RateLimiting.AspNetCore;
-using Wiaoj.RateLimiting.AspNetCore.KeySelectors;
+using Wiaoj.RateLimiting.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Register DistributedCounter & Rate Limiter
-builder.Services.AddDistributedCounter(b => b.UseInMemory());
-builder.Services.AddWiaojRateLimiting(rl => {
-    rl.UseSlidingWindow(limit: 60, window: TimeSpan.FromMinutes(1));
-});
+builder.Services.AddDistributedCounter(dc => dc.UseInMemory());
 
-// 2. Configure ASP.NET Core Rate Limiting Options
-builder.Services.AddWiaojAspNetCoreRateLimiting(options => {
-    options.KeySelector = new ClientIpKeySelector(prefix: "ip:");
-    options.UseProblemDetails = true; // Returns RFC 7807 JSON on 429
+builder.Services.AddWiaojRateLimiting(limiter => {
+    limiter.AddPolicy("api", policy => policy.UseSlidingWindow(60, TimeSpan.FromMinutes(1)));
+
+    // Configure ASP.NET Core middleware options
+    limiter.WithAspNetCore(options => {
+        options.KeySelector = new ClientIpKeySelector(prefix: "ip:");
+        options.UseProblemDetails = true;
+    });
 });
 
 var app = builder.Build();
 
-// 3. Enable Middleware in the Pipeline
+// Enable rate limiting in pipeline
 app.UseWiaojRateLimiting();
 
-app.MapGet("/api/items", () => Results.Ok(new[] { "Item1", "Item2" }));
+app.MapGet("/api/items", () => Results.Ok(new[] { "Item1", "Item2" }))
+   .RequireRateLimiting("api");
 
 app.Run();
 ```
 
 ---
 
-## 🎯 Dynamic Cost & Bulk Rate Limiting
+## Per-Policy Storage Routing
+
+By default, distributed algorithms (`FixedWindow`, `SlidingWindow`, `Gcra`) route counter operations to the global storage configured in `AddDistributedCounter`. 
+
+Specific policies can be routed to dedicated storage instances, keyed Redis multiplexers, or custom database backends directly within the policy builder:
+
+```csharp
+// Register multiple Redis multiplexers in DI
+builder.Services.AddKeyedSingleton<IConnectionMultiplexer>(
+    "security-cluster", 
+    (_, _) => ConnectionMultiplexer.Connect("security-redis:6379"));
+
+builder.Services.AddDistributedCounter(dc => {
+    // Default fallback storage
+    dc.UseRedis("main-redis:6379");
+});
+
+builder.Services.AddWiaojRateLimiting(limiter => {
+    // 1. Critical authentication policy routed to an isolated Redis cluster via keyed storage
+    limiter.AddPolicy("auth", policy => {
+        policy.UseFixedWindow(limit: 5, window: TimeSpan.FromMinutes(1))
+              .UseKeyedStorage("security-cluster")
+              .WithFailOpen();
+    });
+
+    // 2. Billing policy routed to a custom storage implementation
+    limiter.AddPolicy("billing", policy => {
+        policy.UseGcra(limit: 100, period: TimeSpan.FromHours(1))
+              .UseStorage<PostgresCounterStorage>();
+    });
+
+    // 3. General API policy using default storage (main-redis)
+    limiter.AddPolicy("general_api", policy => {
+        policy.UseSlidingWindow(limit: 100, window: TimeSpan.FromMinutes(1));
+    });
+});
+```
+
+---
+
+## Resilience & L1 Negative Caching
+
+Policies support chaining resilience decorators directly in the fluent builder:
+
+```csharp
+limiter.AddPolicy("protected_api", policy => {
+    policy.UseFixedWindow(limit: 10, window: TimeSpan.FromMinutes(1))
+          // 1. L1 RAM negative cache: Deflects repeated spam during retry window without storage calls
+          .WithNegativeCaching()
+          // 2. Fail-Open: Allows request if remote storage (Redis) throws a network timeout
+          .WithFailOpen();
+});
+```
+
+---
+
+## Dynamic Cost & Route Conventions
 
 Endpoints can customize their quota consumption statically or dynamically based on request data:
 
 ```csharp
 // 1. Static Cost (Consumes 5 units per call)
-app.MapPost("/api/reports/generate", () => Results.Ok())
+app.MapPost("/api/reports", () => Results.Ok())
    .WithRateLimitCost(5);
 
-// 2. Dynamic Bulk Costing (Deducts quota equal to the batch item count!)
-app.MapPost("/api/orders/bulk", (int? count) => Results.Ok())
+// 2. Dynamic Bulk Costing (Deducts quota equal to the batch item count)
+app.MapPost("/api/orders/bulk", (int count) => Results.Ok())
    .WithRateLimitCost(ctx => {
        if (ctx.Request.Query.TryGetValue("count", out var val) && int.TryParse(val, out int batchCount)) {
-           return batchCount;
+           return Math.Max(1, batchCount);
        }
-       return 1; // Fallback cost
+       return 1;
    });
 
 // 3. Rate Limit Bypass (Exempt from all limits)
@@ -207,27 +277,18 @@ app.MapGet("/health", () => Results.Ok("Healthy"))
 
 ---
 
-## 📈 Observability (OpenTelemetry & Logging)
+## Observability (OpenTelemetry & Logging)
 
-`Wiaoj.RateLimiting` exposes standard .NET runtime metrics (`System.Diagnostics.Metrics`) and structured, compile-time logging (`[LoggerMessage]`) out of the box with zero third-party dependencies.
+`Wiaoj.RateLimiting` exports standard .NET runtime metrics (`System.Diagnostics.Metrics`) and structured, compile-time logging (`[LoggerMessage]`):
 
-### OpenTelemetry Setup:
-Subscribe to the meter in your OpenTelemetry configuration:
-```csharp
-builder.Services.AddOpenTelemetry()
-    .WithMetrics(metrics => {
-        metrics.AddMeter("Wiaoj.RateLimiting");
-    });
-```
-
-### Metrics Produced:
+### OpenTelemetry Metrics (`Wiaoj.RateLimiting`):
 - `ratelimit.decisions` (`Counter<long>`): Total count of rate limit evaluations partitioned by `algorithm` and `decision` (`allowed` / `denied`).
 - `ratelimit.cost.consumed` (`Counter<long>`): Total units consumed by permitted requests.
-- `ratelimit.queue.wait_duration` (`Histogram<double>`): Duration in milliseconds requests were suspended in `LeakyBucketQueueRateLimiter`.
+- `ratelimit.queue.wait_duration` (`Histogram<double>` in `ms`): Duration requests waited in `LeakyBucketQueueRateLimiter`.
 
 ---
 
-## 📜 Standards & RFC Compliance
+## Standards & RFC Compliance
 
 When a request exceeds quota, `Wiaoj.RateLimiting.AspNetCore` emits standard RFC responses:
 
@@ -251,14 +312,14 @@ RateLimit-Reset: 12
 
 ---
 
-## ⚡ Zero-Allocation Design
+## Allocation Efficiency
 
-- **IP Key Formatting:** `ClientIpKeySelector` formats IPv4 and IPv6 addresses directly into stack memory (`stackalloc char[48]`) using `IPAddress.TryFormat` before composing the final key, avoiding intermediate string allocations.
+- **Stack-Allocated IP Formatting:** `ClientIpKeySelector` formats IPv4 and IPv6 addresses into stack memory (`stackalloc char[48]`) via `IPAddress.TryFormat` before composing the final key, avoiding intermediate substring allocations.
 - **Metric Emits:** Uses stack-allocated `System.Diagnostics.TagList` struct rather than heap array allocations (`KeyValuePair[]`) on hot decision paths.
-- **Source-Generated Logging:** Log messages compile to static byte-template formatters via `[LoggerMessage]`, avoiding string formatting and parameter boxing when debug/trace logging is disabled.
+- **Source-Generated Logging:** Log messages compile to static byte-template formatters via `[LoggerMessage]`, avoiding string formatting and parameter boxing when logging levels are disabled.
 
 ---
 
-## 📄 License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.

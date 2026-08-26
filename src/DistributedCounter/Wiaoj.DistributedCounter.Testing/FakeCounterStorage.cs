@@ -21,6 +21,8 @@ public sealed class FakeCounterStorage : ICounterStorage {
     private int _deleteCallCount;
     private int _setCallCount;
     private int _batchIncrementCallCount;
+    private int _tryIncrementCallCount;
+    private int _tryDecrementCallCount;
 
     private TaskCompletionSource _batchIncrementSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -40,9 +42,6 @@ public sealed class FakeCounterStorage : ICounterStorage {
 
     private readonly record struct Entry(long Value, DateTimeOffset? ExpiresAt);
 
-    /// <summary>Gets the total number of <see cref="BatchIncrementAsync"/> calls triggered by flush operations.</summary>
-    public int BatchIncrementCallCount => Volatile.Read(ref this._batchIncrementCallCount);
-
     /// <summary>Gets the total number of <see cref="GetAsync"/> calls.</summary>
     public int GetCallCount => Volatile.Read(ref this._getCallCount);
 
@@ -54,6 +53,15 @@ public sealed class FakeCounterStorage : ICounterStorage {
 
     /// <summary>Gets the total number of <see cref="SetAsync"/> calls.</summary>
     public int SetCallCount => Volatile.Read(ref this._setCallCount);
+
+    /// <summary>Gets the total number of <see cref="BatchIncrementAsync"/> calls triggered by flush operations.</summary>
+    public int BatchIncrementCallCount => Volatile.Read(ref this._batchIncrementCallCount); 
+
+    /// <summary>Gets the total number of <see cref="TryIncrementAsync"/> calls.</summary>
+    public int TryIncrementCallCount => Volatile.Read(ref this._tryIncrementCallCount);
+
+    /// <summary>Gets the total number of <see cref="TryDecrementAsync"/> calls.</summary>
+    public int TryDecrementCallCount => Volatile.Read(ref this._tryDecrementCallCount);
 
     /// <summary>Gets an immutable snapshot of all counter updates recorded during batch flush operations.</summary>
     public IReadOnlyList<CounterUpdate> FlushedUpdates {
@@ -170,6 +178,8 @@ public sealed class FakeCounterStorage : ICounterStorage {
             Interlocked.Exchange(ref this._deleteCallCount, 0);
             Interlocked.Exchange(ref this._setCallCount, 0);
             Interlocked.Exchange(ref this._batchIncrementCallCount, 0);
+            Interlocked.Exchange(ref this._tryIncrementCallCount, 0);
+            Interlocked.Exchange(ref this._tryDecrementCallCount, 0);
         }
         ResetBatchIncrementSignal();
     }
@@ -242,6 +252,7 @@ public sealed class FakeCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask<CounterLimitResult> TryIncrementAsync(CounterKey key, long amount, long limit, CounterExpiry expiry, CancellationToken cancellationToken) {
+        Interlocked.Increment(ref this._tryIncrementCallCount); 
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset? expiresAt = expiry.Value.HasValue ? now + expiry.Value.Value : null;
 
@@ -267,6 +278,7 @@ public sealed class FakeCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask<CounterLimitResult> TryDecrementAsync(CounterKey key, long amount, long minLimit, CounterExpiry expiry, CancellationToken cancellationToken) {
+        Interlocked.Increment(ref this._tryDecrementCallCount);
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset? expiresAt = expiry.Value.HasValue ? now + expiry.Value.Value : null;
 

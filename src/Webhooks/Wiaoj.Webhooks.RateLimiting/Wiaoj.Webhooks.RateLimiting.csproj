@@ -14,6 +14,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\RateLimiting\Wiaoj.RateLimiting.Abstractions\Wiaoj.RateLimiting.Abstractions.csproj" />
 		<ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+		<ProjectReference Include="..\..\RateLimiting\Wiaoj.RateLimiting\Wiaoj.RateLimiting.csproj" />
 		<ProjectReference Include="..\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
 		<ProjectReference Include="..\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
 	</ItemGroup>

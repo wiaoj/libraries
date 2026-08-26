@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Wiaoj.Extensions;
 using Wiaoj.Preconditions;
 using Wiaoj.RateLimiting;
 using Wiaoj.Webhooks.RateLimiting.Diagnostics;
@@ -6,11 +7,11 @@ using Wiaoj.Webhooks.RateLimiting.Diagnostics;
 namespace Wiaoj.Webhooks.RateLimiting;
 
 /// <summary>
-/// Webhook delivery middleware that enforces per-endpoint rate limiting
-/// using an <see cref="IRateLimitAlgorithm"/> and re-enqueues throttled deliveries.
+/// Webhook delivery middleware that enforces rate limiting policies via <see cref="IRateLimiter"/>
+/// and re-enqueues throttled deliveries with calculated backoff delays.
 /// </summary>
 internal sealed class WebhookRateLimitingMiddleware : IWebhookMiddleware {
-    private readonly IRateLimitAlgorithm _algorithm;
+    private readonly IRateLimiter _rateLimiter;
     private readonly WebhookRateLimitingOptions _options;
     private readonly ILogger<WebhookRateLimitingMiddleware> _logger;
 
@@ -18,14 +19,14 @@ internal sealed class WebhookRateLimitingMiddleware : IWebhookMiddleware {
     /// Initializes a new instance of the <see cref="WebhookRateLimitingMiddleware"/> class.
     /// </summary>
     public WebhookRateLimitingMiddleware(
-        IRateLimitAlgorithm algorithm,
+        IRateLimiter rateLimiter,
         WebhookRateLimitingOptions options,
         ILogger<WebhookRateLimitingMiddleware> logger) {
-        Preca.ThrowIfNull(algorithm);
+        Preca.ThrowIfNull(rateLimiter);
         Preca.ThrowIfNull(options);
         Preca.ThrowIfNull(logger);
 
-        this._algorithm = algorithm;
+        this._rateLimiter = rateLimiter;
         this._options = options;
         this._logger = logger;
     }
@@ -38,17 +39,14 @@ internal sealed class WebhookRateLimitingMiddleware : IWebhookMiddleware {
         string key = this._options.KeySelector(context);
         int cost = this._options.CostResolver(context);
 
-        RateLimitDecision decision = await this._algorithm
-            .TryAcquireAsync(key, cost, cancellationToken)
-            .ConfigureAwait(false);
+        RateLimitDecision decision = this._options.PolicyName is not null
+            ? await this._rateLimiter.TryAcquireAsync(this._options.PolicyName, key, cost, cancellationToken).ConfigureAwait(false)
+            : await this._rateLimiter.TryAcquireAsync(key, cost, cancellationToken).ConfigureAwait(false);
 
         if(!decision.IsAllowed) {
-            TimeSpan retryAfter = decision.RetryAfter is { } ra && ra > TimeSpan.Zero
-               ? ra
-               : TimeSpan.FromSeconds(1);
+            TimeSpan retryAfter = decision.RetryAfter.ToPositiveOrDefault(1.Seconds());
 
             this._logger.LogRateLimitExceeded(context.Endpoint.Id.Value, retryAfter.TotalMilliseconds);
-             
             context.SetResult(WebhookDeliveryResult.RateLimited(context.Endpoint.Id.Value, retryAfter));
             return;
         }

@@ -98,7 +98,6 @@
     <File Path="src/RateLimiting/_build.md" />
     <Project Path="src/RateLimiting/Wiaoj.RateLimiting.Abstractions/Wiaoj.RateLimiting.Abstractions.csproj" Id="ce9067d2-256a-43c5-ac1c-f4375053ec75" />
     <Project Path="src/RateLimiting/Wiaoj.RateLimiting.AspNetCore/Wiaoj.RateLimiting.AspNetCore.csproj" Id="d2a0feb2-7acb-4406-a778-a78f711486eb" />
-    <Project Path="src/RateLimiting/Wiaoj.RateLimiting.Testing/Wiaoj.RateLimiting.Testing.csproj" Id="fdd5f4cc-8356-4161-b605-6bc9331778a9" />
     <Project Path="src/RateLimiting/Wiaoj.RateLimiting/Wiaoj.RateLimiting.csproj" Id="3350a94a-e110-4126-99c7-88f98a7b8e98" />
   </Folder>
   <Folder Name="/src/Resilience/">

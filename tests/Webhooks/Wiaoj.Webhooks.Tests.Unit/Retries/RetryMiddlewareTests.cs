@@ -25,7 +25,7 @@ public sealed class RetryMiddlewareTests {
             return Task.CompletedTask;
         };
 
-        await middleware.InvokeAsync(context, next, CancellationToken.None);
+        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         Assert.Single(transport.EnqueuedJobs);
         (WebhookDeliveryJob job, TimeSpan? delay) = transport.EnqueuedJobs[0];
@@ -47,7 +47,7 @@ public sealed class RetryMiddlewareTests {
             return Task.CompletedTask;
         };
 
-        await middleware.InvokeAsync(context, next, CancellationToken.None);
+        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         Assert.Empty(transport.EnqueuedJobs);
     }
@@ -70,7 +70,7 @@ public sealed class RetryMiddlewareTests {
             return Task.CompletedTask;
         };
 
-        await middleware.InvokeAsync(context, next, CancellationToken.None);
+        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         Assert.Empty(transport.EnqueuedJobs);
     }

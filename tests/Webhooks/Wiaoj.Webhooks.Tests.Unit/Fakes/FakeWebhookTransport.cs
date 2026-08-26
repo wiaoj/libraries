@@ -18,10 +18,10 @@ internal sealed class FakeWebhookTransport : IWebhookTransport {
         EnqueueAsync(job, null, cancellationToken);
 
     public Task EnqueueAsync(WebhookDeliveryJob job) =>
-        EnqueueAsync(job, null, CancellationToken.None);
+        EnqueueAsync(job, null, TestContext.Current.CancellationToken);
 
     public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) =>
-        EnqueueAsync(job, delay, CancellationToken.None);
+        EnqueueAsync(job, delay, TestContext.Current.CancellationToken);
 
     public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {
         lock(this._gate) {

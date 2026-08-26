@@ -99,6 +99,8 @@ public sealed class SlidingWindowRateLimiter : IRateLimitAlgorithm {
         Preca.ThrowIfNullOrEmpty(key);
         Preca.ThrowIfNegativeOrZero(cost);
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         long windowTicks = this._window.Ticks;
         long nowTicks = this._timeProvider.GetUtcNow().UtcTicks;
 

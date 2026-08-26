@@ -45,6 +45,8 @@ public sealed class CompositeRateLimiter : IRateLimitAlgorithm {
         Preca.ThrowIfNullOrEmpty(key);
         Preca.ThrowIfNegativeOrZero(cost);
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         long minRemaining = long.MaxValue;
         TimeSpan maxRetryAfter = TimeSpan.Zero;
 

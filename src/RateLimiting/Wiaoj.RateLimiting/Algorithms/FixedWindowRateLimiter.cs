@@ -77,7 +77,9 @@ public sealed class FixedWindowRateLimiter : IRateLimitAlgorithm {
         CancellationToken cancellationToken = default) {
         Preca.ThrowIfNullOrEmpty(key);
         Preca.ThrowIfNegativeOrZero(cost);
-         
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         IDistributedCounter counter = this._counterFactory.Create(this._policyName, key);
 
         CounterLimitResult result = await counter

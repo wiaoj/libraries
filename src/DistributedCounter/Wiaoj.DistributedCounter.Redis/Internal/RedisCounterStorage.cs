@@ -8,6 +8,13 @@ namespace Wiaoj.DistributedCounter.Redis.Internal;
 /// (<see cref="TryIncrementAsync"/>, <see cref="TryDecrementAsync"/>) execute as single-round-trip
 /// Lua scripts to keep the read-check-write sequence atomic under concurrent access.
 /// </summary>
+/// <remarks>
+/// StackExchange.Redis's async APIs do not accept a <see cref="CancellationToken"/>, so cancellation
+/// cannot interrupt an in-flight Redis round-trip here. Each method still checks the token up front
+/// via <see cref="CancellationToken.ThrowIfCancellationRequested"/> so an already-cancelled token
+/// short-circuits before a network call is issued, keeping behavior consistent with the other
+/// <see cref="ICounterStorage"/> implementations.
+/// </remarks>
 internal sealed class RedisCounterStorage : ICounterStorage {
     private readonly IConnectionMultiplexer _redis;
     private readonly int? _dbIndex = null;
@@ -24,6 +31,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
         long amount,
         CounterExpiry expiry,
         CancellationToken cancellationToken = default) {
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(!expiry.Value.HasValue) {
             long result = await this.Db.StringIncrementAsync(key.Value, amount).ConfigureAwait(false);
@@ -46,6 +55,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public async ValueTask<CounterLimitResult> TryIncrementAsync(CounterKey key, long amount, long limit, CounterExpiry expiry, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         long ttlMs = expiry.GetTtlMilliseconds();
 
         RedisKey[] keys = [key.ToRedisKey()];
@@ -62,6 +73,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public async ValueTask<CounterLimitResult> TryDecrementAsync(CounterKey key, long amount, long minLimit, CounterExpiry expiry, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         long ttlMs = expiry.GetTtlMilliseconds();
 
         RedisKey[] keys = [key.ToRedisKey()];
@@ -83,6 +96,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
         CounterValue newValue,
         CounterExpiry expiry,
         CancellationToken cancellationToken) {
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         long ttlMs = expiry.GetTtlMilliseconds();
         RedisKey[] keys = [key.ToRedisKey()];
@@ -127,12 +142,16 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public async ValueTask<CounterValue> GetAsync(CounterKey key, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         RedisValue val = await this.Db.StringGetAsync(key.Value).ConfigureAwait(false);
         return val.ToCounter();
     }
 
     /// <inheritdoc/>
     public async ValueTask<IDictionary<CounterKey, CounterValue>> GetManyAsync(IEnumerable<CounterKey> keys, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         RedisKey[] keyArray = [.. keys.Select(k => k.ToRedisKey())];
         if(keyArray.Length == 0) return new Dictionary<CounterKey, CounterValue>();
 
@@ -153,6 +172,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
         ReadOnlyMemory<CounterKey> keys,
         Memory<CounterValue> destination,
         CancellationToken cancellationToken = default) {
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(keys.IsEmpty) return;
         int count = keys.Length;
@@ -180,6 +201,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public async ValueTask DeleteAsync(CounterKey key, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await this.Db.KeyDeleteAsync(key.Value).ConfigureAwait(false);
     }
 
@@ -190,6 +213,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
         CounterExpiry expiry,
         CancellationToken cancellationToken = default) {
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         await this.Db.StringSetAsync(
             key.Value,
             value.Value,
@@ -199,6 +224,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public async ValueTask BatchIncrementAsync(ReadOnlyMemory<CounterUpdate> updates, Memory<long> resultDestination, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if(updates.IsEmpty) return;
 
         IBatch batch = this.Db.CreateBatch();
@@ -227,6 +254,8 @@ internal sealed class RedisCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public async ValueTask<TimeSpan?> GetTtlAsync(CounterKey key, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         return await this.Db.KeyTimeToLiveAsync(key.ToRedisKey()).ConfigureAwait(false);
     }
 }

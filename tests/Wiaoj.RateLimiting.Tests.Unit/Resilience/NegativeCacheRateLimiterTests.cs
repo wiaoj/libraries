@@ -2,124 +2,136 @@
 
 namespace Wiaoj.RateLimiting.Tests.Unit.Resilience;
 
+[Trait("Category", "Unit")]
+[Trait("Component", "Resilience")]
+[Trait("Feature", "NegativeCache")]
 public sealed class NegativeCacheRateLimiterTests {
-    private static readonly DateTimeOffset Epoch = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    // Spy algorithm used to count invocations to verify short-circuiting
-    private sealed class SpyRateLimitAlgorithm : IRateLimitAlgorithm {
-        public int InvocationCount { get; private set; }
-        public Func<string, int, RateLimitDecision> DecisionFactory { get; set; } = static (_, _) => RateLimitDecision.Allowed(10);
+    public sealed class TheConstructorValidation {
 
-        public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost = 1, CancellationToken cancellationToken = default) {
-            this.InvocationCount++;
-            return ValueTask.FromResult(this.DecisionFactory(key, cost));
+        [Fact]
+        public void GivenNullInnerAlgorithm_ThrowsArgumentNullException() {
+            Assert.ThrowsAny<ArgumentNullException>(() => new NegativeCacheRateLimiter(null!));
+        }
+
+        [Fact]
+        public void GivenNullTimeProvider_ThrowsArgumentNullException() {
+            MockRateLimitAlgorithm inner = new();
+            Assert.ThrowsAny<ArgumentNullException>(() => new NegativeCacheRateLimiter(inner, null!));
         }
     }
 
-    [Fact]
-    public async Task TryAcquireAsync_WhenUnderLimit_PassesThroughToInnerAndDoesNotCache() {
-        FakeTimeProvider time = new(Epoch);
-        SpyRateLimitAlgorithm spy = new() {
-            DecisionFactory = static (_, _) => RateLimitDecision.Allowed(remaining: 5)
-        };
-        NegativeCacheRateLimiter sut = new(spy, time);
+    public sealed class TheNegativeCacheShortCircuiting {
 
-        RateLimitDecision decision = await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
+        [Fact]
+        public async Task WhenInnerDeniesWithRetryAfter_CachesDenialAndShortCircuitsSubsequentRequests() {
+            // Arrange
+            FakeTimeProvider timeProvider = new();
+            MockRateLimitAlgorithm inner = new();
+            NegativeCacheRateLimiter negativeCache = new(inner, timeProvider);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "spammer_ip";
 
-        Assert.True(decision.IsAllowed);
-        Assert.Equal(5, decision.Remaining);
-        Assert.Equal(1, spy.InvocationCount);
+            // Configure inner to deny with 30s retry after
+            inner.SetOutcome(RateLimitDecision.Denied(TimeSpan.FromSeconds(30), remaining: 0));
+
+            // Act 1: First request hits inner algorithm
+            RateLimitDecision d1 = await negativeCache.TryAcquireAsync(key, cost: 1, ct);
+
+            // Assert 1
+            Assert.False(d1.IsAllowed);
+            Assert.Equal(1, inner.CallCount);
+
+            // Act 2: Advance time 10 seconds into the 30s ban window
+            timeProvider.Advance(TimeSpan.FromSeconds(10));
+
+            // Second request must be short-circuited in RAM (Zero call to inner!)
+            RateLimitDecision d2 = await negativeCache.TryAcquireAsync(key, cost: 1, ct);
+
+            // Assert 2
+            Assert.False(d2.IsAllowed);
+            Assert.Equal(1, inner.CallCount); // Still 1! Inner algorithm was bypassed
+            Assert.NotNull(d2.RetryAfter);
+            Assert.Equal(20, (int)Math.Round(d2.RetryAfter.Value.TotalSeconds)); // 30s - 10s = 20s remaining
+
+            // Act 3: Advance past the 30s ban window (21s more, total 31s)
+            timeProvider.Advance(TimeSpan.FromSeconds(21));
+
+            // Configure inner to allow on recovery
+            inner.SetOutcome(RateLimitDecision.Allowed(remaining: 5));
+
+            // Third request must now reach the inner algorithm again
+            RateLimitDecision d3 = await negativeCache.TryAcquireAsync(key, cost: 1, ct);
+
+            // Assert 3
+            Assert.True(d3.IsAllowed);
+            Assert.Equal(2, inner.CallCount); // Inner algorithm called again
+        }
+
+        [Fact]
+        public async Task WhenInnerAllows_DoesNotCacheAndAlwaysPassesThrough() {
+            // Arrange
+            FakeTimeProvider timeProvider = new();
+            MockRateLimitAlgorithm inner = new();
+            NegativeCacheRateLimiter negativeCache = new(inner, timeProvider);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "legit_user";
+
+            inner.SetOutcome(RateLimitDecision.Allowed(remaining: 10));
+
+            // Act: 5 consecutive allowed requests
+            for(int i = 0; i < 5; i++) {
+                RateLimitDecision decision = await negativeCache.TryAcquireAsync(key, cost: 1, ct);
+                Assert.True(decision.IsAllowed);
+            }
+
+            // Assert: All 5 reached the inner algorithm (no caching of allowed requests)
+            Assert.Equal(5, inner.CallCount);
+        }
     }
 
-    [Fact]
-    public async Task TryAcquireAsync_WhenInnerDenies_CachesDenialAndShortCircuitsSubsequentRequests() {
-        FakeTimeProvider time = new(Epoch);
-        TimeSpan retryAfter = TimeSpan.FromSeconds(5);
-        SpyRateLimitAlgorithm spy = new() {
-            DecisionFactory = (_, _) => RateLimitDecision.Denied(retryAfter, remaining: 0)
-        };
-        NegativeCacheRateLimiter sut = new(spy, time);
+    public sealed class TheStateReset {
 
-        // 1st request: Hits inner algorithm and gets denied
-        RateLimitDecision first = await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
-        Assert.False(first.IsAllowed);
-        Assert.Equal(retryAfter, first.RetryAfter);
-        Assert.Equal(1, spy.InvocationCount);
+        [Fact]
+        public async Task Reset_ClearsAllCachedDenialsImmediately() {
+            // Arrange
+            FakeTimeProvider timeProvider = new();
+            MockRateLimitAlgorithm inner = new();
+            NegativeCacheRateLimiter negativeCache = new(inner, timeProvider);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "cached_user";
 
-        // 2nd and 3rd requests (1 second later): Should short-circuit from RAM (inner invocation count stays 1!)
-        time.Advance(TimeSpan.FromSeconds(1));
-        RateLimitDecision second = await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
-        RateLimitDecision third = await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
+            // Deny and cache for 10 minutes
+            inner.SetOutcome(RateLimitDecision.Denied(TimeSpan.FromMinutes(10)));
+            await negativeCache.TryAcquireAsync(key, cost: 1, ct);
+            Assert.Equal(1, inner.CallCount);
 
-        Assert.False(second.IsAllowed);
-        Assert.False(third.IsAllowed);
-        Assert.Equal(TimeSpan.FromSeconds(4), second.RetryAfter); // 5s - 1s elapsed = 4s remaining
-        Assert.Equal(TimeSpan.FromSeconds(4), third.RetryAfter);
-        Assert.Equal(1, spy.InvocationCount); // Inner was NOT called again!
+            // Act: Reset cache
+            negativeCache.Reset();
+
+            // Next request should hit inner again instead of short-circuiting
+            inner.SetOutcome(RateLimitDecision.Allowed(5));
+            RateLimitDecision decision = await negativeCache.TryAcquireAsync(key, cost: 1, ct);
+
+            // Assert
+            Assert.True(decision.IsAllowed);
+            Assert.Equal(2, inner.CallCount);
+        }
     }
 
-    [Fact]
-    public async Task TryAcquireAsync_AfterRetryAfterExpires_EvictsFromCacheAndCallsInnerAgain() {
-        FakeTimeProvider time = new(Epoch);
-        TimeSpan retryAfter = TimeSpan.FromSeconds(3);
-        bool shouldAllow = false;
+    private sealed class MockRateLimitAlgorithm : IRateLimitAlgorithm {
+        private RateLimitDecision _outcome = RateLimitDecision.Allowed();
+        private int _callCount;
 
-        SpyRateLimitAlgorithm spy = new() {
-            DecisionFactory = (_, _) => shouldAllow ? RateLimitDecision.Allowed(5) : RateLimitDecision.Denied(retryAfter, remaining: 0)
-        };
-        NegativeCacheRateLimiter sut = new(spy, time);
+        public int CallCount => Volatile.Read(ref this._callCount);
 
-        // First call: Denied and cached for 3s
-        await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(1, spy.InvocationCount);
+        public void SetOutcome(RateLimitDecision outcome) {
+            this._outcome = outcome;
+        }
 
-        // Advance 3.1 seconds (denial cache entry expired)
-        time.Advance(TimeSpan.FromSeconds(3.1));
-        shouldAllow = true;
-
-        // Next call: Calls inner again
-        RateLimitDecision result = await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(result.IsAllowed);
-        Assert.Equal(2, spy.InvocationCount); // Inner was called!
-    }
-
-    [Fact]
-    public async Task TryAcquireAsync_DifferentKeys_DoNotBlockEachOtherInNegativeCache() {
-        FakeTimeProvider time = new(Epoch);
-        SpyRateLimitAlgorithm spy = new() {
-            DecisionFactory = (key, _) => key == "blocked"
-                ? RateLimitDecision.Denied(TimeSpan.FromSeconds(5))
-                : RateLimitDecision.Allowed(10)
-        };
-        NegativeCacheRateLimiter sut = new(spy, time);
-
-        await sut.TryAcquireAsync("blocked", cancellationToken: TestContext.Current.CancellationToken);
-        RateLimitDecision cleanKey = await sut.TryAcquireAsync("allowed_key", cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(cleanKey.IsAllowed);
-        Assert.Equal(2, spy.InvocationCount);
-    }
-
-    [Fact]
-    public void Reset_ClearsAllTrackedNegativeCacheState() {
-        FakeTimeProvider time = new(Epoch);
-        SpyRateLimitAlgorithm spy = new() {
-            DecisionFactory = static (_, _) => RateLimitDecision.Denied(TimeSpan.FromSeconds(10))
-        };
-        NegativeCacheRateLimiter sut = new(spy, time);
-
-        _ = sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(1, spy.InvocationCount);
-
-        sut.Reset(); // Clear cache
-
-        _ = sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(2, spy.InvocationCount); // Hit inner again because cache was cleared
-    }
-
-    [Fact]
-    public void Constructor_WithNullInner_ThrowsArgumentNullException() {
-        Assert.ThrowsAny<ArgumentNullException>(() => new NegativeCacheRateLimiter(null!));
+        public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost, CancellationToken cancellationToken = default) {
+            Interlocked.Increment(ref this._callCount);
+            return ValueTask.FromResult(this._outcome);
+        }
     }
 }

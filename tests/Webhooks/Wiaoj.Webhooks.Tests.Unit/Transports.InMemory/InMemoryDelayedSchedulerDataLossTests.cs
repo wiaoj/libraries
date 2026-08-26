@@ -7,89 +7,133 @@ using Xunit;
 
 namespace Wiaoj.Webhooks.Tests.Unit.Transports.InMemory;
 
-public sealed class InMemoryDelayedSchedulerDataLossTests {
-    [Fact]
-    public async Task Schedule_WhenBoundedChannelIsFullAtTimerExpiry_ShouldNotDropMessage() {
-        // Arrange: Configure bounded channel with capacity of 1 to simulate backpressure
-        Channel<WebhookDeliveryJob> channel = Channel.CreateBounded<WebhookDeliveryJob>(new BoundedChannelOptions(1) {
-            FullMode = BoundedChannelFullMode.Wait
-        });
+[Trait("Category", "Unit")]
+[Trait("Feature", "Transport")]
+[Trait("Component", "DelayedScheduler")]
+public sealed class InMemoryDelayedSchedulerTests {
 
-        FakeTimeProvider timeProvider = new();
-        using InMemoryDelayedScheduler scheduler = new(channel.Writer, timeProvider, NullLogger<InMemoryDelayedScheduler>.Instance);
+    public sealed class TheConstructorValidation {
+        [Fact]
+        public void GivenNullWriter_ThrowsArgumentNullException() {
+            Assert.ThrowsAny<ArgumentNullException>(() =>
+                new InMemoryDelayedScheduler(null!, TimeProvider.System, NullLogger<InMemoryDelayedScheduler>.Instance));
+        }
 
-        // Saturate the channel capacity with an initial blocking job
-        WebhookDeliveryJob blockingJob = WebhookTestFactory.CreateJob();
-        await channel.Writer.WriteAsync(blockingJob, TestContext.Current.CancellationToken);
+        [Fact]
+        public void GivenNullTimeProvider_ThrowsArgumentNullException() {
+            Channel<WebhookDeliveryJob> channel = Channel.CreateUnbounded<WebhookDeliveryJob>();
+            Assert.ThrowsAny<ArgumentNullException>(() =>
+                new InMemoryDelayedScheduler(channel.Writer, null!, NullLogger<InMemoryDelayedScheduler>.Instance));
+        }
 
-        // Schedule delayed job to trigger while channel is saturated
-        WebhookDeliveryJob delayedJob = WebhookTestFactory.CreateJob();
-        scheduler.Schedule(delayedJob, TimeSpan.FromMilliseconds(30), CancellationToken.None);
-
-        // Act: Advance fake clock past the delay threshold and wait for the scheduler loop to process
-        timeProvider.Advance(TimeSpan.FromMilliseconds(50));
-        await Task.Delay(20, TestContext.Current.CancellationToken);
-
-        // Drain the initial blocking job to free up channel capacity
-        bool readFirst = channel.Reader.TryRead(out WebhookDeliveryJob? dequeuedFirst);
-        Assert.True(readFirst);
-        Assert.Same(blockingJob, dequeuedFirst);
-
-        // Wait briefly for the suspended WriteAsync to complete now that capacity is available
-        await Task.Delay(20, TestContext.Current.CancellationToken);
-
-        // Assert: Delayed job must be queued successfully once capacity is freed
-        bool readDelayed = channel.Reader.TryRead(out WebhookDeliveryJob? dequeuedDelayed);
-        Assert.True(readDelayed, "Delayed job was dropped because channel buffer was saturated at timer expiration.");
-        Assert.Same(delayedJob, dequeuedDelayed);
+        [Fact]
+        public void GivenNullLogger_ThrowsArgumentNullException() {
+            Channel<WebhookDeliveryJob> channel = Channel.CreateUnbounded<WebhookDeliveryJob>();
+            Assert.ThrowsAny<ArgumentNullException>(() =>
+                new InMemoryDelayedScheduler(channel.Writer, TimeProvider.System, null!));
+        }
     }
 
-    [Fact]
-    public async Task Schedule_MultipleDelayedJobs_FlushesInChronologicalDueOrder() {
-        // Arrange
-        Channel<WebhookDeliveryJob> channel = Channel.CreateUnbounded<WebhookDeliveryJob>();
-        FakeTimeProvider timeProvider = new();
-        using InMemoryDelayedScheduler scheduler = new(channel.Writer, timeProvider, NullLogger<InMemoryDelayedScheduler>.Instance);
+    public sealed class TheBackpressureAndDataLoss {
+        [Fact]
+        public async Task Schedule_WhenBoundedChannelIsFullAtTimerExpiry_ShouldNotDropMessage() {
+            Channel<WebhookDeliveryJob> channel = Channel.CreateBounded<WebhookDeliveryJob>(new BoundedChannelOptions(1) {
+                FullMode = BoundedChannelFullMode.Wait
+            });
 
-        WebhookDeliveryJob earlyJob = WebhookTestFactory.CreateJob(WebhookTestFactory.CreateEndpointId("early"));
-        WebhookDeliveryJob lateJob = WebhookTestFactory.CreateJob(WebhookTestFactory.CreateEndpointId("late"));
+            FakeTimeProvider timeProvider = new();
+            await using InMemoryDelayedScheduler scheduler = new(channel.Writer, timeProvider, NullLogger<InMemoryDelayedScheduler>.Instance);
 
-        // Schedule late job first (80ms), then early job (20ms)
-        scheduler.Schedule(lateJob, TimeSpan.FromMilliseconds(80), CancellationToken.None);
-        scheduler.Schedule(earlyJob, TimeSpan.FromMilliseconds(20), CancellationToken.None);
+            WebhookDeliveryJob blockingJob = WebhookTestFactory.CreateJob();
+            await channel.Writer.WriteAsync(blockingJob, TestContext.Current.CancellationToken);
 
-        // Act: Advance fake time past both job thresholds
-        timeProvider.Advance(TimeSpan.FromMilliseconds(100));
-        await Task.Delay(20, TestContext.Current.CancellationToken);
+            WebhookDeliveryJob delayedJob = WebhookTestFactory.CreateJob();
+            scheduler.Schedule(delayedJob, TimeSpan.FromMilliseconds(30), TestContext.Current.CancellationToken);
 
-        // Assert: Early job must be flushed into the channel before the late job
-        bool readFirst = channel.Reader.TryRead(out WebhookDeliveryJob? first);
-        bool readSecond = channel.Reader.TryRead(out WebhookDeliveryJob? second);
+            timeProvider.Advance(TimeSpan.FromMilliseconds(50));
 
-        Assert.True(readFirst);
-        Assert.True(readSecond);
-        Assert.Same(earlyJob, first);
-        Assert.Same(lateJob, second);
+            using CancellationTokenSource timeoutCts = new(TimeSpan.FromSeconds(5));
+            using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, timeoutCts.Token);
+
+            WebhookDeliveryJob dequeuedFirst = await channel.Reader.ReadAsync(linkedCts.Token);
+            Assert.Same(blockingJob, dequeuedFirst);
+
+            WebhookDeliveryJob dequeuedDelayed = await channel.Reader.ReadAsync(linkedCts.Token);
+            Assert.Same(delayedJob, dequeuedDelayed);
+        }
     }
 
-    [Fact]
-    public async Task Dispose_CancelsPendingDelayedJobs_WithoutFlushingToChannel() {
-        // Arrange
-        Channel<WebhookDeliveryJob> channel = Channel.CreateUnbounded<WebhookDeliveryJob>();
-        FakeTimeProvider timeProvider = new();
-        InMemoryDelayedScheduler scheduler = new(channel.Writer, timeProvider, NullLogger<InMemoryDelayedScheduler>.Instance);
+    public sealed class TheOrderingAndExecution {
+        [Fact]
+        public async Task Schedule_MultipleDelayedJobs_FlushesInChronologicalDueOrder() {
+            Channel<WebhookDeliveryJob> channel = Channel.CreateUnbounded<WebhookDeliveryJob>();
+            FakeTimeProvider timeProvider = new();
+            await using InMemoryDelayedScheduler scheduler = new(channel.Writer, timeProvider, NullLogger<InMemoryDelayedScheduler>.Instance);
 
-        WebhookDeliveryJob job = WebhookTestFactory.CreateJob();
-        scheduler.Schedule(job, TimeSpan.FromMilliseconds(100), CancellationToken.None);
+            WebhookDeliveryJob earlyJob = WebhookTestFactory.CreateJob(WebhookTestFactory.CreateEndpointId("early"));
+            WebhookDeliveryJob lateJob = WebhookTestFactory.CreateJob(WebhookTestFactory.CreateEndpointId("late"));
 
-        // Act: Dispose scheduler before delay expires
-        scheduler.Dispose();
+            scheduler.Schedule(lateJob, TimeSpan.FromMilliseconds(80), TestContext.Current.CancellationToken);
+            scheduler.Schedule(earlyJob, TimeSpan.FromMilliseconds(20), TestContext.Current.CancellationToken);
 
-        // Advance time past the scheduled point
-        timeProvider.Advance(TimeSpan.FromMilliseconds(150));
-        await Task.Delay(20, TestContext.Current.CancellationToken);
+            timeProvider.Advance(TimeSpan.FromMilliseconds(100));
 
-        // Assert: Channel remains empty because scheduler was disposed
-        Assert.False(channel.Reader.TryRead(out _));
+            using CancellationTokenSource timeoutCts = new(TimeSpan.FromSeconds(5));
+            using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, timeoutCts.Token);
+
+            WebhookDeliveryJob first = await channel.Reader.ReadAsync(linkedCts.Token);
+            WebhookDeliveryJob second = await channel.Reader.ReadAsync(linkedCts.Token);
+
+            Assert.Same(earlyJob, first);
+            Assert.Same(lateJob, second);
+        }
+
+        [Fact]
+        public async Task Schedule_WhenJobCancellationTokenIsCancelled_DiscardsJobSilently() {
+            Channel<WebhookDeliveryJob> channel = Channel.CreateUnbounded<WebhookDeliveryJob>();
+            FakeTimeProvider timeProvider = new();
+            await using InMemoryDelayedScheduler scheduler = new(channel.Writer, timeProvider, NullLogger<InMemoryDelayedScheduler>.Instance);
+
+            using CancellationTokenSource jobCts = new();
+            WebhookDeliveryJob job = WebhookTestFactory.CreateJob();
+
+            scheduler.Schedule(job, TimeSpan.FromMilliseconds(30), jobCts.Token);
+
+            jobCts.Cancel();
+            timeProvider.Advance(TimeSpan.FromMilliseconds(50));
+
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+            Assert.False(channel.Reader.TryRead(out _));
+        }
+    }
+
+    public sealed class TheDisposalAndCancellation {
+        [Fact]
+        public async Task Dispose_CancelsPendingDelayedJobs_WithoutFlushingToChannel() {
+            Channel<WebhookDeliveryJob> channel = Channel.CreateUnbounded<WebhookDeliveryJob>();
+            FakeTimeProvider timeProvider = new();
+            InMemoryDelayedScheduler scheduler = new(channel.Writer, timeProvider, NullLogger<InMemoryDelayedScheduler>.Instance);
+
+            WebhookDeliveryJob job = WebhookTestFactory.CreateJob();
+            scheduler.Schedule(job, TimeSpan.FromMilliseconds(100), TestContext.Current.CancellationToken);
+
+            scheduler.Dispose();
+
+            timeProvider.Advance(TimeSpan.FromMilliseconds(150));
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+
+            Assert.False(channel.Reader.TryRead(out _));
+        }
+
+        [Fact]
+        public void Schedule_WhenDisposed_ThrowsObjectDisposedException() {
+            Channel<WebhookDeliveryJob> channel = Channel.CreateUnbounded<WebhookDeliveryJob>();
+            InMemoryDelayedScheduler scheduler = new(channel.Writer, TimeProvider.System, NullLogger<InMemoryDelayedScheduler>.Instance);
+
+            scheduler.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() =>
+                scheduler.Schedule(WebhookTestFactory.CreateJob(), TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken));
+        }
     }
 }

@@ -30,12 +30,12 @@ public sealed class IdempotencyMiddlewareTests {
 
             // 1st request -> Successfully passes through and gets committed
             WebhookDeliveryContext context1 = WebhookTestFactory.CreateContext(endpoint);
-            await middleware.InvokeAsync(context1, next, CancellationToken.None);
+            await middleware.InvokeAsync(context1, next, TestContext.Current.CancellationToken);
             Assert.Equal(1, downstreamCalls);
 
             // 2nd request -> Intercepted as duplicate without calling downstream
             WebhookDeliveryContext context2 = WebhookTestFactory.CreateContext(endpoint);
-            await middleware.InvokeAsync(context2, next, CancellationToken.None);
+            await middleware.InvokeAsync(context2, next, TestContext.Current.CancellationToken);
 
             Assert.Equal(1, downstreamCalls);
             Assert.True(context2.TryGetResult(out WebhookDeliveryResult? result));
@@ -63,8 +63,8 @@ public sealed class IdempotencyMiddlewareTests {
             WebhookDeliveryContext context1 = WebhookTestFactory.CreateContext(endpoint);
             WebhookDeliveryContext context2 = WebhookTestFactory.CreateContext(endpoint);
 
-            await middleware.InvokeAsync(context1, next, CancellationToken.None);
-            await middleware.InvokeAsync(context2, next, CancellationToken.None);
+            await middleware.InvokeAsync(context1, next, TestContext.Current.CancellationToken);
+            await middleware.InvokeAsync(context2, next, TestContext.Current.CancellationToken);
 
             Assert.Equal(1, downstreamCalls);
             Assert.True(context2.TryGetResult(out WebhookDeliveryResult? result));
@@ -97,7 +97,7 @@ public sealed class IdempotencyMiddlewareTests {
 
             // ── Attempt #1: Fails with transient 503 error ──
             WebhookDeliveryContext attempt1Context = WebhookTestFactory.CreateContext(endpoint);
-            await middleware.InvokeAsync(attempt1Context, downstream, CancellationToken.None);
+            await middleware.InvokeAsync(attempt1Context, downstream, TestContext.Current.CancellationToken);
 
             Assert.Equal(1, downstreamDeliveryCount);
             Assert.True(attempt1Context.TryGetResult(out WebhookDeliveryResult? result1));
@@ -113,7 +113,7 @@ public sealed class IdempotencyMiddlewareTests {
                 attemptHistory: [failedAttempt]);
 
             // Act
-            await middleware.InvokeAsync(attempt2Context, downstream, CancellationToken.None);
+            await middleware.InvokeAsync(attempt2Context, downstream, TestContext.Current.CancellationToken);
 
             // Assert: Retry must reach downstream deliverer and succeed
             Assert.Equal(2, downstreamDeliveryCount);

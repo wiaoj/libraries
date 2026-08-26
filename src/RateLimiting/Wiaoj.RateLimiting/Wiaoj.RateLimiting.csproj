@@ -1,26 +1,34 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-	  <RootNamespace>Wiaoj.RateLimiting</RootNamespace>
-	  <AssemblyName>Wiaoj.RateLimiting</AssemblyName>
-	  <PackageId>Wiaoj.RateLimiting</PackageId>
-	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
-	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Wiaoj.RateLimiting</RootNamespace>
+		<AssemblyName>Wiaoj.RateLimiting</AssemblyName>
+		<PackageId>Wiaoj.RateLimiting</PackageId>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
-  </ItemGroup>
-	
-  <ItemGroup>
-    <ProjectReference Include="..\..\DistributedCounter\Wiaoj.DistributedCounter.Abstractions\Wiaoj.DistributedCounter.Abstractions.csproj" />
-    <ProjectReference Include="..\..\Extensions\Wiaoj.Extensions\Wiaoj.Extensions.csproj" />
-    <ProjectReference Include="..\Wiaoj.RateLimiting.Abstractions\Wiaoj.RateLimiting.Abstractions.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Options" Version="10.0.2" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Extensions\Wiaoj.Extensions\Wiaoj.Extensions.csproj" />
+		<ProjectReference Include="..\Wiaoj.RateLimiting.Abstractions\Wiaoj.RateLimiting.Abstractions.csproj" />
+		<ProjectReference Include="..\..\DistributedCounter\Wiaoj.DistributedCounter.Abstractions\Wiaoj.DistributedCounter.Abstractions.csproj" />
+		<ProjectReference Include="..\..\DistributedCounter\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
+		<ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+		<ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
+	</ItemGroup>
 
 </Project>

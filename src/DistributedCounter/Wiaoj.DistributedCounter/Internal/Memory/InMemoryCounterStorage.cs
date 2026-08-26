@@ -39,6 +39,8 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask<CounterValue> AtomicIncrementAsync(CounterKey key, long amount, CounterExpiry expiry, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset expiresAt = expiry.Value.HasValue ? now.Add(expiry.Value.Value) : DateTimeOffset.MaxValue;
 
@@ -55,6 +57,8 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask<CounterValue> GetAsync(CounterKey key, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         if(this._counters.TryGetValue(key.Value, out CounterEntry entry) && entry.ExpiresAt > now) {
             return new ValueTask<CounterValue>(entry.Value);
@@ -73,6 +77,8 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
     /// <c>PTTL</c>/<c>KeyTimeToLiveAsync</c> semantics for a key with no expiration).
     /// </returns>
     public ValueTask<TimeSpan?> GetTtlAsync(CounterKey key, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         DateTimeOffset now = this._timeProvider.GetUtcNow();
 
         if(!this._counters.TryGetValue(key.Value, out CounterEntry entry) || entry.ExpiresAt <= now) {
@@ -84,12 +90,16 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask DeleteAsync(CounterKey key, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         this._counters.TryRemove(key.Value, out _);
         return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>
     public ValueTask SetAsync(CounterKey key, CounterValue value, CounterExpiry expiry, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset expiresAt = expiry.Value.HasValue ? now.Add(expiry.Value.Value) : DateTimeOffset.MaxValue;
         this._counters[key.Value] = new CounterEntry(value.Value, expiresAt);
@@ -98,11 +108,17 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask BatchIncrementAsync(ReadOnlyMemory<CounterUpdate> updates, Memory<long> resultDestination, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         ReadOnlySpan<CounterUpdate> span = updates.Span;
         Span<long> dest = resultDestination.Span;
         DateTimeOffset now = this._timeProvider.GetUtcNow();
 
         for(int i = 0; i < span.Length; i++) {
+            // Checked per-iteration too: a batch can be large enough that a mid-batch
+            // cancellation request should stop further mutation rather than run to completion.
+            cancellationToken.ThrowIfCancellationRequested();
+
             CounterUpdate update = span[i];
             long amount = update.Amount;
             DateTimeOffset expiresAt = update.Expiry.Value.HasValue ? now.Add(update.Expiry.Value.Value) : DateTimeOffset.MaxValue;
@@ -123,6 +139,8 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask<IDictionary<CounterKey, CounterValue>> GetManyAsync(IEnumerable<CounterKey> keys, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         Dictionary<CounterKey, CounterValue> result = [];
         DateTimeOffset now = this._timeProvider.GetUtcNow();
 
@@ -135,6 +153,8 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask GetManyAsync(ReadOnlyMemory<CounterKey> keys, Memory<CounterValue> destination, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         ReadOnlySpan<CounterKey> span = keys.Span;
         Span<CounterValue> dest = destination.Span;
         DateTimeOffset now = this._timeProvider.GetUtcNow();
@@ -150,6 +170,8 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask<CounterLimitResult> TryIncrementAsync(CounterKey key, long amount, long limit, CounterExpiry expiry, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset expiresAt = expiry.Value.HasValue ? now.Add(expiry.Value.Value) : DateTimeOffset.MaxValue;
 
@@ -161,8 +183,6 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
             long nextValue = startValue + amount;
             if(nextValue > limit) {
-                // Denied — report the TTL of whatever window is currently live (none, if the key
-                // never existed or already expired: nothing to wait out yet).
                 TimeSpan? deniedTtl = (exists && !isExpired) ? ToTtl(current.ExpiresAt, now) : null;
                 return new ValueTask<CounterLimitResult>(
                     new CounterLimitResult(IsAllowed: false, CurrentValue: startValue, Remaining: 0, Ttl: deniedTtl));
@@ -195,6 +215,8 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
 
     /// <inheritdoc/>
     public ValueTask<CounterLimitResult> TryDecrementAsync(CounterKey key, long amount, long minLimit, CounterExpiry expiry, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset expiresAt = expiry.Value.HasValue ? now.Add(expiry.Value.Value) : DateTimeOffset.MaxValue;
 
@@ -242,6 +264,8 @@ internal sealed class InMemoryCounterStorage : ICounterStorage {
         CounterValue newValue,
         CounterExpiry expiry,
         CancellationToken cancellationToken) {
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset expiresAt = expiry.Value.HasValue ? now.Add(expiry.Value.Value) : DateTimeOffset.MaxValue;

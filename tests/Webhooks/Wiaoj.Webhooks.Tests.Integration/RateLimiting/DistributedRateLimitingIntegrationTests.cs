@@ -13,7 +13,9 @@ using Wiaoj.Serialization;
 using Wiaoj.Serialization.SystemTextJson;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Retries;
+using Wiaoj.RateLimiting;
 using Xunit;
+using Wiaoj.Extensions;
 
 namespace Wiaoj.Webhooks.Tests.Integration.RateLimiting;
 
@@ -39,14 +41,16 @@ public sealed class DistributedRateLimitingIntegrationTests : IAsyncLifetime {
 
         builder.Services.AddDistributedCounter(dc => dc.UseInMemory());
 
-        //builder.Services.AddWiaojRateLimiting(rl => rl.UseFixedWindow(limit: 2, window: TimeSpan.FromSeconds(5)));
+        builder.Services.AddWiaojRateLimiting(rl => {  
+            rl.UseDefaultPolicy(p => p.UseFixedWindow(limit: 2, window: 500.Milliseconds()));
+        });
 
         builder.Services.AddWiaojWebhooks(webhooks => {
             webhooks.UseInMemoryTransport()
                     .AllowPrivateNetworks()
                     .UseExponentialBackoffRetry(new ExponentialBackoffOptions {
                         MaxAttempts = 5,
-                        InitialDelay = TimeSpan.FromMilliseconds(100),
+                        InitialDelay = TimeSpan.FromMilliseconds(50),
                         Multiplier = 1.5,
                         Jitter = null
                     })

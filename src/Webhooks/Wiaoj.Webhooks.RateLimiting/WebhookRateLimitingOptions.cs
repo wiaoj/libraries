@@ -7,6 +7,12 @@ namespace Wiaoj.Webhooks.RateLimiting;
 /// </summary>
 public sealed class WebhookRateLimitingOptions {
     /// <summary>
+    /// Gets or sets the name of the rate limiting policy to apply.
+    /// When <see langword="null"/>, the default rate limiting policy is used.
+    /// </summary>
+    public string? PolicyName { get; set; }
+
+    /// <summary>
     /// Gets or sets the delegate used to extract the rate-limiting key from a delivery context.
     /// Defaults to <c>"wh:ratelimit:{EndpointId}"</c>.
     /// </summary>

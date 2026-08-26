@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
+using Wiaoj.Extensions;
 using Wiaoj.Preconditions;
 using Wiaoj.Resilience;
+using Wiaoj.Webhooks.Resilience.Diagnostics;
 
 namespace Wiaoj.Webhooks.Resilience;
 
@@ -15,8 +17,6 @@ internal sealed class CircuitBreakerMiddleware : IWebhookMiddleware {
     /// <summary>
     /// Initializes a new instance of the <see cref="CircuitBreakerMiddleware"/> class.
     /// </summary>
-    /// <param name="circuitBreaker">The underlying circuit breaker algorithm instance.</param>
-    /// <param name="logger">The logger instance.</param>
     public CircuitBreakerMiddleware(
         ICircuitBreaker circuitBreaker,
         ILogger<CircuitBreakerMiddleware> logger) {
@@ -34,42 +34,36 @@ internal sealed class CircuitBreakerMiddleware : IWebhookMiddleware {
 
         string endpointKey = context.Endpoint.Id.Value;
 
-        // 1. Evaluate circuit breaker state before touching network sockets
+        // 1. Evaluate circuit breaker state before network I/O
         CircuitExecutionDecision decision = await this._circuitBreaker
             .TryAcquireAsync(endpointKey, cancellationToken)
             .ConfigureAwait(false);
 
         if(!decision.IsAllowed) {
-            TimeSpan retryAfter = decision.RetryAfter ?? TimeSpan.FromMinutes(1);
-            this._logger.LogWarning("Circuit breaker is OPEN for endpoint '{EndpointId}'. Fast-failing delivery and re-enqueuing with delay {RetryAfterMs:F0}ms.",
-                endpointKey, retryAfter.TotalMilliseconds);
-
-            // Fast-Fail: Shield target server and re-enqueue delivery as transient failure
+            TimeSpan retryAfter = decision.RetryAfter.ToPositiveOrDefault(1.Seconds());
+            this._logger.LogCircuitBreakerOpenFastFailed(endpointKey, retryAfter.TotalMilliseconds);
 
             context.SetResult(WebhookDeliveryResult.CircuitBroken(endpointKey, retryAfter));
             return;
         }
 
-        // 2. Execute downstream pipeline (Signing -> HTTP POST Deliverer -> Retry)
+        // 2. Execute downstream pipeline (Signing -> Deliverer -> Retry)
         try {
             await next(context, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested) {
-            // Caller cancellation must never count as a downstream server failure
             throw;
         }
         catch {
-            // Unexpected unhandled pipeline exception treated as transient failure
             await this._circuitBreaker.OnFailureAsync(endpointKey, cancellationToken).ConfigureAwait(false);
             throw;
         }
 
-        // 3. Update circuit breaker state based on delivery outcome
+        // 3. Update circuit breaker state based on outcome
         if(context.HasSuccessResult()) {
             await this._circuitBreaker.OnSuccessAsync(endpointKey, cancellationToken).ConfigureAwait(false);
         }
         else if(context.TryGetResult(out WebhookDeliveryResult? result) && result is WebhookDeliveryResult.TransientFailure) {
-            // Only transient failures (5xx, timeouts, network glitches) count toward tripping the breaker
             await this._circuitBreaker.OnFailureAsync(endpointKey, cancellationToken).ConfigureAwait(false);
         }
     }

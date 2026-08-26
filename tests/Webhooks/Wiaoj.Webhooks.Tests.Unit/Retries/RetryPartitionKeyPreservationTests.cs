@@ -26,7 +26,7 @@ public sealed class RetryPartitionKeyPreservationTests {
         };
 
         // Act
-        await middleware.InvokeAsync(context, next, CancellationToken.None);
+        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // Assert: Re-enqueued job must preserve original custom partition key
         Assert.Single(transport.EnqueuedJobs);
@@ -52,7 +52,7 @@ public sealed class RetryPartitionKeyPreservationTests {
         };
 
         // Act
-        await middleware.InvokeAsync(context, next, CancellationToken.None);
+        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // Assert: Partition key matches endpoint id
         Assert.Single(transport.EnqueuedJobs);
@@ -78,7 +78,7 @@ public sealed class RetryPartitionKeyPreservationTests {
         };
 
         // Act
-        await middleware.InvokeAsync(context, next, CancellationToken.None);
+        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // Assert: Preserves partition key and uses Retry-After delay
         Assert.Single(transport.EnqueuedJobs);
@@ -112,7 +112,7 @@ public sealed class RetryPartitionKeyPreservationTests {
         };
 
         // Act
-        await middleware.InvokeAsync(context, next, CancellationToken.None);
+        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // Assert: Preserves partition key on second failure
         Assert.Single(transport.EnqueuedJobs);

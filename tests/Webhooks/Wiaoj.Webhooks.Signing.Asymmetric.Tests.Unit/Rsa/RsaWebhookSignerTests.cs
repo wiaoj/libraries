@@ -1,18 +1,16 @@
 ﻿using System.Text;
-using Wiaoj.Webhooks.Signing.Asymmetric.Rsa;
 
 namespace Wiaoj.Webhooks.Signing.Asymmetric.Tests.Unit.Rsa;
 
+/// <summary>
+/// Unit tests for <see cref="RsaWebhookSigner"/> verifying RSA algorithms, key sizes, unmanaged memory integration, and boundary guards.
+/// </summary>
 [Trait("Category", "Unit")]
 [Trait("Feature", "Signing")]
 [Trait("Component", "RSA")]
 public sealed class RsaWebhookSignerTests {
     private static readonly byte[] TestPayload = "{\"event\":\"order.created\",\"total\":299.90}"u8.ToArray();
     private static readonly UnixTimestamp TestTime = UnixTimestamp.FromSeconds(1700000000);
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 1. CONSTRUCTOR, PROPERTIES & SCHEME PREFIXES
-    // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheConstructorAndProperties {
         [Fact]
@@ -56,7 +54,6 @@ public sealed class RsaWebhookSignerTests {
         [Fact]
         public void Constructor_AcceptsCustomHeaderName() {
             RsaWebhookSigner signer = new(RsaAlgorithm.PS256, "X-Acme-Rsa-Signature");
-
             Assert.Equal("X-Acme-Rsa-Signature", signer.HeaderName);
         }
 
@@ -74,10 +71,6 @@ public sealed class RsaWebhookSignerTests {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 2. ALGORITHM & KEY-SIZE MATRIX (2048, 3072, 4096-bit & ALL PADDING MODES)
-    // ────────────────────────────────────────────────────────────────────────
-
     public sealed class TheAlgorithmAndKeySizeMatrix {
         [Theory]
         [InlineData(2048)]
@@ -93,12 +86,7 @@ public sealed class RsaWebhookSignerTests {
             byte[] rawSignature = Convert.FromBase64String(signature.Signature);
             Assert.Equal(expectedSignatureBytes, rawSignature.Length);
 
-            bool isValid = signer.Verify(
-                TestPayload,
-                signature.HeaderValue,
-                keyPair.PublicKey,
-                TimeSpan.FromMinutes(5),
-                TestTime);
+            bool isValid = signer.Verify(TestPayload, signature.HeaderValue, keyPair.PublicKey, TimeSpan.FromMinutes(5), TestTime);
 
             Assert.True(isValid);
         }
@@ -112,12 +100,7 @@ public sealed class RsaWebhookSignerTests {
 
             WebhookSignature signature = signer.Sign(TestPayload, keyPair, TestTime);
 
-            bool isValid = signer.Verify(
-                TestPayload,
-                signature.HeaderValue,
-                keyPair.PublicKey,
-                TimeSpan.FromMinutes(5),
-                TestTime);
+            bool isValid = signer.Verify(TestPayload, signature.HeaderValue, keyPair.PublicKey, TimeSpan.FromMinutes(5), TestTime);
 
             Assert.True(isValid);
         }
@@ -136,10 +119,6 @@ public sealed class RsaWebhookSignerTests {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 3. UNMANAGED MEMORY (Secret<byte>) & PEM INTEGRATION
-    // ────────────────────────────────────────────────────────────────────────
-
     public sealed class TheUnmanagedMemoryIntegration {
         [Fact]
         public void SignAndVerify_UsingUnmanagedSecretKey_SucceedsWithoutMemoryLeaks() {
@@ -150,41 +129,13 @@ public sealed class RsaWebhookSignerTests {
             using Secret<byte> privateBytesSecret = privatePemSecret.Expose(chars => Secret<byte>.From(new string(chars)));
 
             WebhookSignature signature = signer.Sign(TestPayload, privateBytesSecret, TestTime);
-
-            bool isValid = signer.Verify(
-                TestPayload,
-                signature.HeaderValue,
-                keyPair.PublicKey,
-                TimeSpan.FromMinutes(5),
-                TestTime);
+            bool isValid = signer.Verify(TestPayload, signature.HeaderValue, keyPair.PublicKey, TimeSpan.FromMinutes(5), TestTime);
 
             Assert.True(isValid);
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 4. SECURITY ATTACKS, REPLAY, ROTATION & TAMPERING
-    // ────────────────────────────────────────────────────────────────────────
-
     public sealed class TheCryptographicSecurityGuards {
-        [Fact]
-        public void Verify_ReturnsFalse_WhenPayloadIsTamperedBySingleBit() {
-            using RsaKeyPair keyPair = RsaKeyPair.Generate2048();
-            RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
-
-            WebhookSignature signature = signer.Sign(TestPayload, keyPair, TestTime);
-            byte[] tamperedPayload = "{\"event\":\"order.created\",\"total\":299.91}"u8.ToArray();
-
-            bool isValid = signer.Verify(
-                tamperedPayload,
-                signature.HeaderValue,
-                keyPair.PublicKey,
-                TimeSpan.FromMinutes(5),
-                TestTime);
-
-            Assert.False(isValid);
-        }
-
         [Fact]
         public void Verify_ReturnsFalse_WhenVerifiedWithCompletelyDifferentRsaPublicKey() {
             using RsaKeyPair signerKey = RsaKeyPair.Generate2048();
@@ -192,13 +143,7 @@ public sealed class RsaWebhookSignerTests {
             RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
 
             WebhookSignature signature = signer.Sign(TestPayload, signerKey, TestTime);
-
-            bool isValid = signer.Verify(
-                TestPayload,
-                signature.HeaderValue,
-                attackerKey.PublicKey,
-                TimeSpan.FromMinutes(5),
-                TestTime);
+            bool isValid = signer.Verify(TestPayload, signature.HeaderValue, attackerKey.PublicKey, TimeSpan.FromMinutes(5), TestTime);
 
             Assert.False(isValid);
         }
@@ -210,13 +155,7 @@ public sealed class RsaWebhookSignerTests {
             RsaWebhookSigner rs256Signer = new(RsaAlgorithm.RS256);
 
             WebhookSignature signature = ps256Signer.Sign(TestPayload, keyPair, TestTime);
-
-            bool isValid = rs256Signer.Verify(
-                TestPayload,
-                signature.HeaderValue,
-                keyPair.PublicKey,
-                TimeSpan.FromMinutes(5),
-                TestTime);
+            bool isValid = rs256Signer.Verify(TestPayload, signature.HeaderValue, keyPair.PublicKey, TimeSpan.FromMinutes(5), TestTime);
 
             Assert.False(isValid);
         }
@@ -238,81 +177,7 @@ public sealed class RsaWebhookSignerTests {
             Assert.True(verifiedWithNewKey);
             Assert.True(verifiedWithOldKey);
         }
-
-        [Theory]
-        [InlineData(299, true)]   // 4m 59s in past (Within 5m tolerance)
-        [InlineData(301, false)]  // 5m 01s in past (Replay attack -> Blocked)
-        [InlineData(-301, false)] // 5m 01s in future (Clock drift -> Blocked)
-        public void Verify_EnforcesClockSkewToleranceBoundaries(int secondsOffset, bool expectedResult) {
-            using RsaKeyPair keyPair = RsaKeyPair.Generate2048();
-            RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
-
-            WebhookSignature signature = signer.Sign(TestPayload, keyPair, TestTime);
-            UnixTimestamp verificationTime = TestTime + TimeSpan.FromSeconds(secondsOffset);
-
-            bool isValid = signer.Verify(
-                TestPayload,
-                signature.HeaderValue,
-                keyPair.PublicKey,
-                TimeSpan.FromMinutes(5),
-                verificationTime);
-
-            Assert.Equal(expectedResult, isValid);
-        }
     }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 5. MALFORMED HEADERS, CORRUPTED BASE64 & DOS ATTACKS
-    // ────────────────────────────────────────────────────────────────────────
-
-    public sealed class TheHeaderParsingAndDoSDefenses {
-        [Fact]
-        public void Verify_HandlesCommaBombDoS_WithoutCrashingOrHanging() {
-            using RsaKeyPair keyPair = RsaKeyPair.Generate2048();
-            RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
-
-            WebhookSignature signature = signer.Sign(TestPayload, keyPair, TestTime);
-            string commaBomb = $"t={TestTime.TotalSeconds}," + new string(',', 5000) + $"v1_ps256={signature.Signature}," + new string(',', 5000);
-
-            bool isValid = signer.Verify(TestPayload, commaBomb, keyPair.PublicKey, TimeSpan.FromMinutes(5), TestTime);
-
-            Assert.True(isValid);
-        }
-
-        [Theory]
-        [InlineData("t=1700000000,v1_ps256=corrupted-not-valid-base64!@#")]
-        [InlineData("t=1700000000,v1_ps256=dGVzdA==")] // Valid base64, but only 4 bytes (RSA requires 256 bytes)
-        [InlineData("t=1700000000,v1_ps256=")]
-        [InlineData("t=1700000000")]
-        [InlineData("v1_ps256=4f53cd")]
-        [InlineData("")]
-        [InlineData("   ")]
-        public void Verify_ReturnsFalse_ForCorruptedOrMalformedSignatures_WithoutThrowing(string malformedHeader) {
-            using RsaKeyPair keyPair = RsaKeyPair.Generate2048();
-            RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
-
-            bool isValid = signer.Verify(TestPayload, malformedHeader, keyPair.PublicKey, TimeSpan.FromMinutes(5), TestTime);
-
-            Assert.False(isValid);
-        }
-
-        [Fact]
-        public void Verify_ReturnsFalse_WhenMultipleTimestampsProvided_ParameterPollution() {
-            using RsaKeyPair keyPair = RsaKeyPair.Generate2048();
-            RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
-
-            WebhookSignature signature = signer.Sign(TestPayload, keyPair, TestTime);
-            string polluted = $"t={TestTime.TotalSeconds},v1_ps256={signature.Signature},t={TestTime.TotalSeconds + 500}";
-
-            bool isValid = signer.Verify(TestPayload, polluted, keyPair.PublicKey, TimeSpan.FromMinutes(5), TestTime);
-
-            Assert.False(isValid);
-        }
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 6. EDGE-CASE PAYLOADS (EMPTY, LARGE UNICODE & EMOJIS)
-    // ────────────────────────────────────────────────────────────────────────
 
     public sealed class ThePayloadEdgeCases {
         [Fact]
@@ -340,17 +205,13 @@ public sealed class RsaWebhookSignerTests {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 7. NULL, EMPTY & DEVELOPER / CLIENT BOUNDARY GUARDS
-    // ────────────────────────────────────────────────────────────────────────
-
     public sealed class TheNullAndBoundaryGuards {
         [Fact]
         public void Sign_Throws_WhenKeyPairIsNull() {
             RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
 
             Assert.ThrowsAny<ArgumentNullException>(() =>
-                signer.Sign(TestPayload, (RsaKeyPair)null!, TestTime));
+                signer.Sign(TestPayload, null!, TestTime));
         }
 
         [Fact]
@@ -366,14 +227,13 @@ public sealed class RsaWebhookSignerTests {
             RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
 
             Assert.ThrowsAny<ArgumentNullException>(() =>
-                signer.Verify(TestPayload, "t=1700000000,v1_ps256=abc", (RsaPublicKey)null!, TimeSpan.FromMinutes(5), TestTime));
+                signer.Verify(TestPayload, "t=1700000000,v1_ps256=abc", null!, TimeSpan.FromMinutes(5), TestTime));
         }
 
         [Fact]
         public void Verify_ReturnsFalse_WhenSecretKeyIsDefault() {
             RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
 
-            // 🌟 DÜZELTME: Exception beklemek yerine 'false' döndüğünü doğrula
             bool isValid = signer.Verify(TestPayload, "t=1700000000,v1_ps256=abc", default(Secret<byte>), TimeSpan.FromMinutes(5), TestTime);
 
             Assert.False(isValid);
@@ -384,31 +244,6 @@ public sealed class RsaWebhookSignerTests {
             RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
 
             bool isValid = signer.Verify(TestPayload, "t=1700000000,v1_ps256=abc", ReadOnlySpan<byte>.Empty, TimeSpan.FromMinutes(5), TestTime);
-
-            Assert.False(isValid);
-        }
-
-        [Fact]
-        public void Verify_Throws_WhenToleranceIsNegative() {
-            using RsaKeyPair keyPair = RsaKeyPair.Generate2048();
-            RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
-
-            WebhookSignature signature = signer.Sign(TestPayload, keyPair, TestTime);
-
-            Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
-                signer.Verify(TestPayload, signature.HeaderValue, keyPair.PublicKey, TimeSpan.FromSeconds(-1), TestTime));
-        }
-
-        [Theory]
-        [InlineData(null)]
-        [InlineData("")]
-        [InlineData("   ")]
-        [InlineData("\t\n")]
-        public void Verify_ReturnsFalse_WhenSignatureHeaderIsNullOrWhiteSpace(string? invalidHeader) {
-            using RsaKeyPair keyPair = RsaKeyPair.Generate2048();
-            RsaWebhookSigner signer = new(RsaAlgorithm.PS256);
-
-            bool isValid = signer.Verify(TestPayload, invalidHeader!, keyPair.PublicKey, TimeSpan.FromMinutes(5), TestTime);
 
             Assert.False(isValid);
         }

@@ -1,5 +1,5 @@
-﻿using System.Buffers;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
+using System.Text;
 using Wiaoj.Primitives.Buffers;
 using Wiaoj.Primitives.Cryptography;
 
@@ -10,18 +10,21 @@ namespace Wiaoj.Webhooks.Signing.Asymmetric;
 /// ES256 (NIST P-256), ES384 (NIST P-384), and ES512 (NIST P-521) with IEEE P1363 signature format.
 /// </summary>
 public sealed class EcdsaWebhookSigner : AsymmetricWebhookSignerBase {
-    private readonly EcdsaAlgorithm _algorithm;
+    private const int SignedBytesStackBufferSize = 256;
+    private const int P256SignatureByteLength = 64;
+    private const int P384SignatureByteLength = 96;
+    private const int P521SignatureByteLength = 132;
 
     /// <inheritdoc/>
-    public override string AlgorithmName => $"ecdsa-{this._algorithm.Name.ToLowerInvariant()}";
+    public override string AlgorithmName => $"ecdsa-{this.Algorithm.Name.ToLowerInvariant()}";
 
     /// <inheritdoc/>
-    public override string SchemePrefix => $"v1_{this._algorithm.Name.ToLowerInvariant()}";
+    public override string SchemePrefix => $"v1_{this.Algorithm.Name.ToLowerInvariant()}";
 
     /// <summary>
     /// Gets the strongly-typed ECDSA algorithm configuration.
     /// </summary>
-    public EcdsaAlgorithm Algorithm => this._algorithm;
+    public EcdsaAlgorithm Algorithm { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EcdsaWebhookSigner"/> class defaulting to ES256 (P-256 with SHA-256).
@@ -41,35 +44,30 @@ public sealed class EcdsaWebhookSigner : AsymmetricWebhookSignerBase {
     /// <param name="headerName">The custom HTTP header name.</param>
     public EcdsaWebhookSigner(EcdsaAlgorithm algorithm, string headerName) : base(headerName) {
         Preca.ThrowIfNull(algorithm);
-        this._algorithm = algorithm;
+        this.Algorithm = algorithm;
     }
 
     /// <summary>
     /// Signs a payload using an asymmetric <see cref="EcdsaKeyPair"/> (Private Key).
     /// </summary>
-    /// <param name="payload">The raw UTF-8 payload bytes.</param>
+    /// <param name="payload">The raw payload byte span.</param>
     /// <param name="keyPair">The ECDSA key pair containing the private key.</param>
     /// <param name="timestamp">The Unix timestamp when the signature is generated.</param>
     /// <returns>A strongly-typed <see cref="WebhookSignature"/> instance.</returns>
     public WebhookSignature Sign(ReadOnlySpan<byte> payload, EcdsaKeyPair keyPair, UnixTimestamp timestamp) {
         Preca.ThrowIfNull(keyPair);
 
-        byte[] signedBytes = CreateSignedBytes(payload, timestamp, out int totalLength);
-        try {
-            byte[] signatureBytes = keyPair.Sign(signedBytes.AsSpan(0, totalLength), this._algorithm);
-            string signatureBase64 = Convert.ToBase64String(signatureBytes);
+        using ValueBuffer<byte> signedBytes = CreateSignedBytes(payload, timestamp, stackalloc byte[SignedBytesStackBufferSize]);
+        byte[] signatureBytes = keyPair.Sign(signedBytes.Span, this.Algorithm);
+        string signatureBase64 = Convert.ToBase64String(signatureBytes);
 
-            return new WebhookSignature(timestamp, this.SchemePrefix, signatureBase64);
-        }
-        finally {
-            ArrayPool<byte>.Shared.Return(signedBytes);
-        }
+        return new WebhookSignature(timestamp, this.SchemePrefix, signatureBase64);
     }
 
     /// <summary>
     /// Verifies that a webhook signature is authentic using an asymmetric <see cref="EcdsaPublicKey"/>.
     /// </summary>
-    /// <param name="payload">The raw UTF-8 payload bytes.</param>
+    /// <param name="payload">The raw payload byte span.</param>
     /// <param name="signatureHeader">The signature HTTP header value.</param>
     /// <param name="publicKey">The ECDSA public key.</param>
     /// <param name="tolerance">The maximum allowable clock skew drift.</param>
@@ -82,53 +80,28 @@ public sealed class EcdsaWebhookSigner : AsymmetricWebhookSignerBase {
         TimeSpan tolerance,
         UnixTimestamp currentTimestamp) {
 
-        Preca.ThrowIfNull(publicKey);
-
-        if(string.IsNullOrWhiteSpace(signatureHeader)) {
-            return false;
+        if(publicKey is null) {
+            throw new ArgumentNullException(nameof(publicKey));
         }
 
-        Span<Range> initialRangeBuffer = stackalloc Range[4];
-        ValueList<Range> signatureRanges = new(initialRangeBuffer);
-        try {
-            if(!ValidateAndExtractSignatures(signatureHeader.AsSpan(), tolerance, currentTimestamp, out UnixTimestamp headerTimestamp, ref signatureRanges)) {
-                return false;
-            }
+        int signatureByteLength = GetExpectedSignatureLength(publicKey.CurveName);
+        EcdsaVerifier verifier = new(this.Algorithm);
 
-            byte[] signedBytes = CreateSignedBytes(payload, headerTimestamp, out int totalLength);
-            try {
-                ReadOnlySpan<byte> dataToVerify = signedBytes.AsSpan(0, totalLength);
-                ReadOnlySpan<char> headerSpan = signatureHeader.AsSpan();
-
-                // IEEE P1363 signature size: P-256 = 64B, P-384 = 96B, P-521 = 132B
-                int signatureByteLength = GetExpectedSignatureLength(publicKey.CurveName);
-                Span<byte> decodedSignature = stackalloc byte[signatureByteLength];
-
-                for(int i = 0; i < signatureRanges.Count; i++) {
-                    ReadOnlySpan<char> sigCandidate = headerSpan[signatureRanges[i]];
-                    decodedSignature.Clear();
-
-                    if(Convert.TryFromBase64Chars(sigCandidate, decodedSignature, out int bytesWritten) && bytesWritten == signatureByteLength) {
-                        if(publicKey.Verify(dataToVerify, decodedSignature, this._algorithm)) {
-                            return true;
-                        }
-                    }
-                }
-
-                return false;
-            }
-            finally {
-                ArrayPool<byte>.Shared.Return(signedBytes);
-            }
-        }
-        finally {
-            signatureRanges.Dispose();
-        }
+        return VerifyAsymmetricCore(
+            payload,
+            signatureHeader,
+            publicKey,
+            tolerance,
+            currentTimestamp,
+            signatureByteLength,
+            verifier);
     }
 
     /// <inheritdoc/>
     public override WebhookSignature Sign(ReadOnlySpan<byte> payload, ReadOnlySpan<byte> secretKey, UnixTimestamp timestamp) {
-        using EcdsaKeyPair keyPair = EcdsaKeyPair.FromPem(System.Text.Encoding.UTF8.GetString(secretKey));
+        Preca.ThrowIfEmpty(secretKey);
+
+        using EcdsaKeyPair keyPair = EcdsaKeyPair.FromPem(Encoding.UTF8.GetString(secretKey));
         return Sign(payload, keyPair, timestamp);
     }
 
@@ -136,19 +109,16 @@ public sealed class EcdsaWebhookSigner : AsymmetricWebhookSignerBase {
     public override WebhookSignature Sign(ReadOnlySpan<byte> payload, Secret<byte> secretKey, UnixTimestamp timestamp) {
         Preca.ThrowIfDefault(secretKey);
 
-        byte[] signedBytes = CreateSignedBytes(payload, timestamp, out int totalLength);
-        try {
-            string signatureBase64 = secretKey.Expose(keySpan => {
-                using EcdsaKeyPair keyPair = EcdsaKeyPair.FromPem(System.Text.Encoding.UTF8.GetString(keySpan));
-                byte[] sigBytes = keyPair.Sign(signedBytes.AsSpan(0, totalLength), this._algorithm);
-                return Convert.ToBase64String(sigBytes);
-            });
+        using ValueBuffer<byte> signedBytes = CreateSignedBytes(payload, timestamp, stackalloc byte[SignedBytesStackBufferSize]);
+        EcdsaSignState state = new(signedBytes.Span, this.Algorithm);
 
-            return new WebhookSignature(timestamp, this.SchemePrefix, signatureBase64);
-        }
-        finally {
-            ArrayPool<byte>.Shared.Return(signedBytes);
-        }
+        string signatureBase64 = secretKey.Expose(state, static (s, keySpan) => {
+            using EcdsaKeyPair keyPair = EcdsaKeyPair.FromPem(Encoding.UTF8.GetString(keySpan));
+            byte[] sigBytes = keyPair.Sign(s.DataToSign, s.Algorithm);
+            return Convert.ToBase64String(sigBytes);
+        });
+
+        return new WebhookSignature(timestamp, this.SchemePrefix, signatureBase64);
     }
 
     /// <inheritdoc/>
@@ -159,10 +129,12 @@ public sealed class EcdsaWebhookSigner : AsymmetricWebhookSignerBase {
         TimeSpan tolerance,
         UnixTimestamp currentTimestamp) {
 
-        if(secretKey.IsEmpty) return false;
+        if(secretKey.IsEmpty) {
+            return false;
+        }
 
         try {
-            using EcdsaPublicKey publicKey = PemString.Parse(System.Text.Encoding.UTF8.GetString(secretKey)).ToEcdsaPublicKey();
+            using EcdsaPublicKey publicKey = PemString.Parse(Encoding.UTF8.GetString(secretKey)).ToEcdsaPublicKey();
             return Verify(payload, signatureHeader, publicKey, tolerance, currentTimestamp);
         }
         catch {
@@ -177,21 +149,35 @@ public sealed class EcdsaWebhookSigner : AsymmetricWebhookSignerBase {
         Secret<byte> secretKey,
         TimeSpan tolerance,
         UnixTimestamp currentTimestamp) {
-         
+
         if(secretKey.Length == 0 || string.IsNullOrWhiteSpace(signatureHeader)) {
             return false;
         }
-         
+
         return secretKey.Expose(payload, (state, keySpan) =>
             Verify(state, signatureHeader, keySpan, tolerance, currentTimestamp));
     }
 
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GetExpectedSignatureLength(string curveName) => curveName switch {
-        "P-256" => 64,
-        "P-384" => 96,
-        "P-521" => 132,
-        _ => 64
-    };
+    private static int GetExpectedSignatureLength(string curveName) {
+        return curveName switch {
+            "P-256" => P256SignatureByteLength,
+            "P-384" => P384SignatureByteLength,
+            "P-521" => P521SignatureByteLength,
+            _ => throw new NotSupportedException($"Unsupported curve: {curveName}")
+        };
+    }
+
+    private readonly struct EcdsaVerifier(EcdsaAlgorithm algorithm) : IVerifier<EcdsaPublicKey> {
+        private readonly EcdsaAlgorithm _algorithm = algorithm;
+
+        public bool Verify(EcdsaPublicKey key, ReadOnlySpan<byte> data, ReadOnlySpan<byte> signature) {
+            return key.Verify(data, signature, this._algorithm);
+        }
+    }
+
+    private readonly ref struct EcdsaSignState(ReadOnlySpan<byte> dataToSign, EcdsaAlgorithm algorithm) {
+        public readonly ReadOnlySpan<byte> DataToSign = dataToSign;
+        public readonly EcdsaAlgorithm Algorithm = algorithm;
+    }
 }

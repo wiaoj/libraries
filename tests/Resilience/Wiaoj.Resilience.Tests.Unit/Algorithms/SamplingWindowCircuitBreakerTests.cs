@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Wiaoj.DistributedCounter;
 using Wiaoj.DistributedCounter.DependencyInjection;
-using Wiaoj.Resilience;
 using Xunit;
 
 namespace Wiaoj.Resilience.Tests.Unit.Algorithms;
@@ -46,19 +45,59 @@ public sealed class SamplingWindowCircuitBreakerTests {
         return (breaker, timeProvider);
     }
 
+    public sealed class TheConstructorValidation {
+        [Fact]
+        public void GivenNullCounterFactory_ThrowsArgumentNullException() {
+            Assert.ThrowsAny<ArgumentNullException>(() =>
+                new SamplingWindowCircuitBreaker(null!, new SamplingWindowCircuitBreakerOptions()));
+        }
+
+        [Fact]
+        public void GivenNullOptions_ThrowsArgumentNullException() {
+            ServiceCollection services = new();
+            services.AddDistributedCounter(c => c.UseInMemory());
+            IDistributedCounterFactory factory = services.BuildServiceProvider().GetRequiredService<IDistributedCounterFactory>();
+
+            Assert.ThrowsAny<ArgumentNullException>(() =>
+                new SamplingWindowCircuitBreaker(factory, null!));
+        }
+
+        [Theory]
+        [InlineData(0.0)]
+        [InlineData(-0.1)]
+        [InlineData(1.1)]
+        public void GivenInvalidFailureRateThreshold_ThrowsArgumentOutOfRangeException(double invalidRate) {
+            ServiceCollection services = new();
+            services.AddDistributedCounter(c => c.UseInMemory());
+            IDistributedCounterFactory factory = services.BuildServiceProvider().GetRequiredService<IDistributedCounterFactory>();
+
+            Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
+                new SamplingWindowCircuitBreaker(factory, new SamplingWindowCircuitBreakerOptions { FailureRateThreshold = invalidRate }));
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        public void GivenInvalidMinimumThroughput_ThrowsArgumentOutOfRangeException(int invalidThroughput) {
+            ServiceCollection services = new();
+            services.AddDistributedCounter(c => c.UseInMemory());
+            IDistributedCounterFactory factory = services.BuildServiceProvider().GetRequiredService<IDistributedCounterFactory>();
+
+            Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
+                new SamplingWindowCircuitBreaker(factory, new SamplingWindowCircuitBreakerOptions { MinimumThroughput = invalidThroughput }));
+        }
+    }
+
     public sealed class TheFailureRateCalculation {
         [Fact]
         public async Task TryAcquireAsync_DoesNotTrip_WhenVolumeIsBelowMinimumThroughput() {
-            // Arrange: 50% failure rate threshold, minimum 10 requests required
             (SamplingWindowCircuitBreaker breaker, _) = CreateSut(failureRateThreshold: 0.5, minimumThroughput: 10);
             const string key = "service-low-volume";
 
-            // 5 failures and 0 successes (100% failure rate, but total = 5 < 10 minimum)
             for(int i = 0; i < 5; i++) {
                 await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             }
 
-            // Circuit must remain CLOSED because sampling volume is insufficient
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(decision.IsAllowed);
             Assert.Equal(CircuitState.Closed, decision.State);
@@ -66,11 +105,9 @@ public sealed class SamplingWindowCircuitBreakerTests {
 
         [Fact]
         public async Task TryAcquireAsync_TripsToOpen_WhenFailureRateExceedsThresholdAtMinimumVolume() {
-            // Arrange: 50% failure rate threshold, minimum 10 requests
             (SamplingWindowCircuitBreaker breaker, _) = CreateSut(failureRateThreshold: 0.5, minimumThroughput: 10);
             const string key = "service-high-failure-rate";
 
-            // 4 successes + 6 failures = 10 total requests (60% failure rate >= 50%)
             for(int i = 0; i < 4; i++) {
                 await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
             }
@@ -78,7 +115,6 @@ public sealed class SamplingWindowCircuitBreakerTests {
                 await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             }
 
-            // Circuit must trip to OPEN
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.False(decision.IsAllowed);
             Assert.Equal(CircuitState.Open, decision.State);
@@ -94,30 +130,25 @@ public sealed class SamplingWindowCircuitBreakerTests {
 
             const string key = "service-rolling-window";
 
-            // 8 failures in window 1 (Below 10 throughput)
             for(int i = 0; i < 8; i++) {
                 await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
             }
 
-            // Advance time past 10s sampling window -> Old window expires
             timeProvider.Advance(TimeSpan.FromSeconds(12));
 
-            // 3 successes in new window
             for(int i = 0; i < 3; i++) {
                 await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
             }
 
-            // Circuit must remain CLOSED
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(decision.IsAllowed);
             Assert.Equal(CircuitState.Closed, decision.State);
         }
     }
 
-    public sealed class TheOptionCHalfOpenPermittedCalls {
+    public sealed class TheHalfOpenRecoveryFlow {
         [Fact]
         public async Task TryAcquireAsync_InHalfOpen_AllowsUpToNPermittedCalls_AndDeniesExcess() {
-            // Arrange: Permitted calls in half-open = 3
             (SamplingWindowCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateSut(
                 failureRateThreshold: 0.5,
                 minimumThroughput: 1,
@@ -126,13 +157,9 @@ public sealed class SamplingWindowCircuitBreakerTests {
 
             const string key = "service-half-open-bounded";
 
-            // Trip circuit
             await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
-
-            // Advance past break duration -> Enters Half-Open
             timeProvider.Advance(TimeSpan.FromSeconds(11));
 
-            // First 3 concurrent probe claims must be allowed
             CircuitExecutionDecision p1 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             CircuitExecutionDecision p2 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             CircuitExecutionDecision p3 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
@@ -144,11 +171,81 @@ public sealed class SamplingWindowCircuitBreakerTests {
             Assert.True(p3.IsAllowed);
             Assert.Equal(CircuitState.HalfOpen, p3.State);
 
-            // 4th concurrent claim exceeds N=3 limit -> Must be DENIED to protect target!
             CircuitExecutionDecision p4 = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.False(p4.IsAllowed);
             Assert.Equal(CircuitState.Open, p4.State);
             Assert.NotNull(p4.RetryAfter);
+        }
+
+        [Fact]
+        public async Task OnSuccessAsync_InHalfOpen_ClosesCircuitAndResetsTripState() {
+            (SamplingWindowCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateSut(
+                failureRateThreshold: 0.5,
+                minimumThroughput: 1,
+                permittedCallsInHalfOpen: 2,
+                breakDuration: TimeSpan.FromSeconds(10));
+
+            const string key = "service-half-open-success";
+
+            await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
+            timeProvider.Advance(TimeSpan.FromSeconds(11));
+
+            await breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken);
+
+            CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+            Assert.True(decision.IsAllowed);
+            Assert.Equal(CircuitState.Closed, decision.State);
+        }
+
+        [Fact]
+        public async Task OnFailureAsync_InHalfOpen_ReTripsCircuitImmediately() {
+            (SamplingWindowCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateSut(
+                failureRateThreshold: 0.5,
+                minimumThroughput: 1,
+                permittedCallsInHalfOpen: 2,
+                breakDuration: TimeSpan.FromSeconds(10));
+
+            const string key = "service-half-open-probe-fail";
+
+            await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
+            timeProvider.Advance(TimeSpan.FromSeconds(11));
+
+            await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
+
+            CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+            Assert.False(decision.IsAllowed);
+            Assert.Equal(CircuitState.Open, decision.State);
+        }
+    }
+
+    public sealed class TheKeyIsolation {
+        [Fact]
+        public async Task DifferentKeys_MaintainIndependentFailureRatesAndWindows() {
+            (SamplingWindowCircuitBreaker breaker, _) = CreateSut(failureRateThreshold: 0.5, minimumThroughput: 2);
+
+            await breaker.OnFailureAsync("service_a", TestContext.Current.CancellationToken);
+            await breaker.OnFailureAsync("service_a", TestContext.Current.CancellationToken);
+
+            await breaker.OnSuccessAsync("service_b", TestContext.Current.CancellationToken);
+            await breaker.OnSuccessAsync("service_b", TestContext.Current.CancellationToken);
+
+            CircuitExecutionDecision decisionA = await breaker.TryAcquireAsync("service_a", TestContext.Current.CancellationToken);
+            CircuitExecutionDecision decisionB = await breaker.TryAcquireAsync("service_b", TestContext.Current.CancellationToken);
+
+            Assert.False(decisionA.IsAllowed);
+            Assert.True(decisionB.IsAllowed);
+        }
+    }
+
+    public sealed class TheCancellationBehavior {
+        [Fact]
+        public async Task GivenAlreadyCancelledToken_ThrowsOperationCanceledException() {
+            (SamplingWindowCircuitBreaker breaker, _) = CreateSut();
+            using CancellationTokenSource cts = new();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                breaker.TryAcquireAsync("service_cancel", cts.Token).AsTask());
         }
     }
 }

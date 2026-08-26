@@ -1,59 +1,96 @@
 ﻿namespace Wiaoj.RateLimiting.Tests.Unit.Resilience;
 
+[Trait("Category", "Unit")]
+[Trait("Component", "Resilience")]
+[Trait("Feature", "FailOpen")]
 public sealed class ResilientRateLimiterTests {
-    private sealed class ThrowingAlgorithm : IRateLimitAlgorithm {
-        public Exception? ExceptionToThrow { get; set; }
-        public RateLimitDecision DecisionToReturn { get; set; } = RateLimitDecision.Allowed(10);
 
-        public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost = 1, CancellationToken cancellationToken = default) {
-            if(this.ExceptionToThrow is not null) {
-                throw this.ExceptionToThrow;
-            }
-            return ValueTask.FromResult(this.DecisionToReturn);
+    public sealed class TheConstructorValidation {
+
+        [Fact]
+        public void GivenNullInnerAlgorithm_ThrowsArgumentNullException() {
+            Assert.ThrowsAny<ArgumentNullException>(() => new ResilientRateLimiter(null!));
         }
     }
 
-    [Fact]
-    public async Task TryAcquireAsync_WhenInnerSucceeds_ReturnsInnerDecisionIntact() {
-        ThrowingAlgorithm inner = new() {
-            DecisionToReturn = RateLimitDecision.Allowed(remaining: 7)
-        };
-        ResilientRateLimiter sut = new(inner);
+    public sealed class TheHealthyDelegation {
 
-        RateLimitDecision decision = await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
+        [Fact]
+        public async Task WhenInnerAllows_PropagatesAllowedDecision() {
+            // Arrange
+            MockAlgorithm mock = new(RateLimitDecision.Allowed(remaining: 15));
+            ResilientRateLimiter resilient = new(mock);
+            CancellationToken ct = TestContext.Current.CancellationToken;
 
-        Assert.True(decision.IsAllowed);
-        Assert.Equal(7, decision.Remaining);
+            // Act
+            RateLimitDecision decision = await resilient.TryAcquireAsync("healthy_key", cost: 1, ct);
+
+            // Assert
+            Assert.True(decision.IsAllowed);
+            Assert.Equal(15, decision.Remaining);
+            Assert.Equal(1, mock.CallCount);
+        }
+
+        [Fact]
+        public async Task WhenInnerDenies_PropagatesDeniedDecision() {
+            // Arrange
+            MockAlgorithm mock = new(RateLimitDecision.Denied(TimeSpan.FromSeconds(30), remaining: 0));
+            ResilientRateLimiter resilient = new(mock);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+
+            // Act
+            RateLimitDecision decision = await resilient.TryAcquireAsync("denied_key", cost: 1, ct);
+
+            // Assert
+            Assert.False(decision.IsAllowed);
+            Assert.Equal(TimeSpan.FromSeconds(30), decision.RetryAfter);
+            Assert.Equal(1, mock.CallCount);
+        }
     }
 
-    [Fact]
-    public async Task TryAcquireAsync_WhenInnerThrowsStorageException_ExecutesFailOpenAndAllowsRequest() {
-        ThrowingAlgorithm inner = new() {
-            ExceptionToThrow = new TimeoutException("Redis connection timed out.")
-        };
-        ResilientRateLimiter sut = new(inner);
+    public sealed class TheFailOpenBehavior {
 
-        RateLimitDecision decision = await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken);
+        [Fact]
+        public async Task WhenStorageThrowsException_FailsOpenAndAllowsRequest() {
+            // Arrange: Simulate storage failure (e.g. Redis socket timeout)
+            FailingAlgorithm failing = new(new TimeoutException("Redis connection timed out."));
+            ResilientRateLimiter resilient = new(failing);
+            CancellationToken ct = TestContext.Current.CancellationToken;
 
-        // Fail-Open guarantees the request is allowed rather than crashing the user's API
-        Assert.True(decision.IsAllowed);
-        Assert.Null(decision.Remaining);
-        Assert.Null(decision.RetryAfter);
+            // Act: Must not throw!
+            RateLimitDecision decision = await resilient.TryAcquireAsync("failing_storage_key", cost: 1, ct);
+
+            // Assert: Gracefully allowed through
+            Assert.True(decision.IsAllowed);
+            Assert.Null(decision.Remaining);
+            Assert.Null(decision.RetryAfter);
+        }
+
+        [Fact]
+        public async Task WhenCallerCancels_NeverSwallowsCancellationException() {
+            // Arrange: Simulate caller-side cancellation
+            FailingAlgorithm cancelling = new(new OperationCanceledException());
+            ResilientRateLimiter resilient = new(cancelling);
+
+            // Act & Assert: Must rethrow OperationCanceledException!
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                resilient.TryAcquireAsync("cancel_key", cost: 1, CancellationToken.None).AsTask());
+        }
     }
 
-    [Fact]
-    public async Task TryAcquireAsync_WhenCallerCancels_DoesNotSwallowOperationCanceledException() {
-        ThrowingAlgorithm inner = new() {
-            ExceptionToThrow = new OperationCanceledException()
-        };
-        ResilientRateLimiter sut = new(inner);
+    private sealed class MockAlgorithm(RateLimitDecision outcome) : IRateLimitAlgorithm {
+        private int _callCount;
+        public int CallCount => Volatile.Read(ref this._callCount);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await sut.TryAcquireAsync("key1", cancellationToken: TestContext.Current.CancellationToken));
+        public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost, CancellationToken cancellationToken = default) {
+            Interlocked.Increment(ref this._callCount);
+            return ValueTask.FromResult(outcome);
+        }
     }
 
-    [Fact]
-    public void Constructor_WithNullInner_ThrowsArgumentNullException() {
-        Assert.ThrowsAny<ArgumentNullException>(() => new ResilientRateLimiter(null!));
+    private sealed class FailingAlgorithm(Exception exceptionToThrow) : IRateLimitAlgorithm {
+        public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost, CancellationToken cancellationToken = default) {
+            throw exceptionToThrow;
+        }
     }
 }

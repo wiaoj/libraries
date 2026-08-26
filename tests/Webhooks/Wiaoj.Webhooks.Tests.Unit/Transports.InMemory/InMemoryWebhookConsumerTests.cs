@@ -39,7 +39,7 @@ public sealed class InMemoryWebhookConsumerTests {
         Assert.Same(job, handler.HandledJobs[0]);
 
         await cts.CancelAsync();
-        await consumer.StopAsync(CancellationToken.None);
+        await consumer.StopAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class InMemoryWebhookConsumerTests {
         Assert.Same(followingJob, handler.HandledJobs[0]);
 
         await cts.CancelAsync();
-        await consumer.StopAsync(CancellationToken.None);
+        await consumer.StopAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]

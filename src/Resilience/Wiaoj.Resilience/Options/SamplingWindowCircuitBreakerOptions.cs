@@ -1,11 +1,14 @@
-﻿using Wiaoj.Preconditions;
+﻿using Wiaoj.Abstractions;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.Resilience;
 
 /// <summary>
 /// Configuration options for the percentage-based sampling window circuit breaker strategy.
 /// </summary>
-public sealed class SamplingWindowCircuitBreakerOptions {
+public sealed class SamplingWindowCircuitBreakerOptions 
+    : IDeepCloneable<SamplingWindowCircuitBreakerOptions>, 
+    IMergeable<SamplingWindowCircuitBreakerOptions> {
     /// <summary>The default failure rate threshold (0.5 = 50%).</summary>
     public const double DefaultFailureRateThreshold = 0.5;
 
@@ -20,6 +23,12 @@ public sealed class SamplingWindowCircuitBreakerOptions {
 
     /// <summary>The default maximum number of concurrent probe requests permitted during half-open state (5).</summary>
     public const int DefaultPermittedNumberOfCallsInHalfOpenState = 5;
+
+    /// <summary>The default storage key prefix.</summary>
+    public const string DefaultKeyPrefix = "wiaoj:resilience:cb:";
+
+    /// <summary>Gets or sets the storage key prefix for isolation. Default is <c>"wiaoj:resilience:cb:"</c>.</summary>
+    public string KeyPrefix { get; set; } = DefaultKeyPrefix;
 
     /// <summary>Gets or sets the failure rate ratio (between 0.0 and 1.0) required to trip the circuit. Default is 0.5 (50%).</summary>
     public double FailureRateThreshold { get; set; } = DefaultFailureRateThreshold;
@@ -41,9 +50,11 @@ public sealed class SamplingWindowCircuitBreakerOptions {
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any value is out of valid bounds.</exception>
     public void Validate() {
+        Preca.ThrowIfNullOrWhiteSpace(this.KeyPrefix);
         if(this.FailureRateThreshold is <= 0.0 or > 1.0) {
             throw new ArgumentOutOfRangeException(nameof(this.FailureRateThreshold), "Failure rate threshold must be greater than 0.0 and less than or equal to 1.0.");
         }
+        
         Preca.ThrowIfLessThan(this.MinimumThroughput, 1);
         Preca.ThrowIfLessThan(this.PermittedNumberOfCallsInHalfOpenState, 1);
         if(this.SamplingWindow <= TimeSpan.Zero) {
@@ -52,5 +63,31 @@ public sealed class SamplingWindowCircuitBreakerOptions {
         if(this.BreakDuration <= TimeSpan.Zero) {
             throw new ArgumentOutOfRangeException(nameof(this.BreakDuration), "Break duration must be greater than zero.");
         }
+    }
+
+    /// <inheritdoc/>
+    public SamplingWindowCircuitBreakerOptions DeepClone() {
+        return new SamplingWindowCircuitBreakerOptions {
+            KeyPrefix = this.KeyPrefix,
+            FailureRateThreshold = this.FailureRateThreshold,
+            MinimumThroughput = this.MinimumThroughput,
+            SamplingWindow = this.SamplingWindow,
+            BreakDuration = this.BreakDuration,
+            PermittedNumberOfCallsInHalfOpenState = this.PermittedNumberOfCallsInHalfOpenState
+        };
+    }
+
+    /// <inheritdoc/>
+    public SamplingWindowCircuitBreakerOptions Merge(SamplingWindowCircuitBreakerOptions? other) {
+        SamplingWindowCircuitBreakerOptions clone = DeepClone();
+        if(other is null) return clone;
+
+        clone.KeyPrefix = string.IsNullOrWhiteSpace(other.KeyPrefix) ? clone.KeyPrefix : other.KeyPrefix;
+        clone.FailureRateThreshold = other.FailureRateThreshold;
+        clone.MinimumThroughput = other.MinimumThroughput;
+        clone.SamplingWindow = other.SamplingWindow;
+        clone.BreakDuration = other.BreakDuration;
+        clone.PermittedNumberOfCallsInHalfOpenState = other.PermittedNumberOfCallsInHalfOpenState;
+        return clone;
     }
 }

@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Wiaoj.DistributedCounter;
 using Wiaoj.DistributedCounter.DependencyInjection;
-using Wiaoj.Resilience;
 using Xunit;
 
 namespace Wiaoj.Resilience.Tests.Unit.Algorithms;
@@ -14,7 +13,7 @@ namespace Wiaoj.Resilience.Tests.Unit.Algorithms;
 [Trait("Component", "ConcurrencyStress")]
 public sealed class CircuitBreakerConcurrencyStressTests {
 
-    private static (ConsecutiveFailuresCircuitBreaker Breaker, FakeTimeProvider TimeProvider) CreateSut(
+    private static (ConsecutiveFailuresCircuitBreaker Breaker, FakeTimeProvider TimeProvider) CreateConsecutiveSut(
         int failureThreshold = 5,
         TimeSpan? breakDuration = null) {
 
@@ -41,10 +40,36 @@ public sealed class CircuitBreakerConcurrencyStressTests {
         return (breaker, timeProvider);
     }
 
+    private static (SamplingWindowCircuitBreaker Breaker, FakeTimeProvider TimeProvider) CreateSamplingSut() {
+        FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
+
+        ServiceCollection services = new();
+        services.AddSingleton<TimeProvider>(timeProvider);
+        services.AddDistributedCounter(c => c.UseInMemory());
+
+        ServiceProvider sp = services.BuildServiceProvider();
+        IDistributedCounterFactory counterFactory = sp.GetRequiredService<IDistributedCounterFactory>();
+
+        SamplingWindowCircuitBreakerOptions options = new() {
+            FailureRateThreshold = 0.5,
+            MinimumThroughput = 50,
+            PermittedNumberOfCallsInHalfOpenState = 5,
+            SamplingWindow = TimeSpan.FromMinutes(1),
+            BreakDuration = TimeSpan.FromMinutes(2)
+        };
+
+        SamplingWindowCircuitBreaker breaker = new(
+            counterFactory,
+            options,
+            timeProvider,
+            NullLogger<SamplingWindowCircuitBreaker>.Instance);
+
+        return (breaker, timeProvider);
+    }
+
     [Fact]
     public async Task OnFailureAsync_Under100ConcurrentFailures_TripsCleanlyToOpenWithoutStateCorruption() {
-        // Arrange: 100 tasks failing simultaneously on a fresh key
-        (ConsecutiveFailuresCircuitBreaker breaker, _) = CreateSut(failureThreshold: 5);
+        (ConsecutiveFailuresCircuitBreaker breaker, _) = CreateConsecutiveSut(failureThreshold: 5);
         const string key = "endpoint-concurrency-flood";
 
         Task[] tasks = Enumerable.Range(0, 100).Select(_ =>
@@ -53,7 +78,6 @@ public sealed class CircuitBreakerConcurrencyStressTests {
 
         await Task.WhenAll(tasks);
 
-        // Assert: Circuit must be OPEN
         CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
         Assert.False(decision.IsAllowed);
         Assert.Equal(CircuitState.Open, decision.State);
@@ -62,21 +86,17 @@ public sealed class CircuitBreakerConcurrencyStressTests {
 
     [Fact]
     public async Task TryAcquireAsync_WhenInHalfOpen_AllowsExactlyOneProbe_AndDeniesRemaining50ConcurrentCallers() {
-        // Arrange: Threshold = 1, BreakDuration = 30s
-        (ConsecutiveFailuresCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateSut(
+        (ConsecutiveFailuresCircuitBreaker breaker, FakeTimeProvider timeProvider) = CreateConsecutiveSut(
             failureThreshold: 1,
             breakDuration: TimeSpan.FromSeconds(30));
 
         const string key = "endpoint-half-open-race";
 
-        // 1. Trip circuit
         await breaker.OnFailureAsync(key, TestContext.Current.CancellationToken);
         Assert.False((await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken)).IsAllowed);
 
-        // 2. Advance time past break duration (31s) -> Enters Half-Open
         timeProvider.Advance(TimeSpan.FromSeconds(31));
 
-        // 3. 50 concurrent requests bombard the circuit in the exact same millisecond!
         ConcurrentBag<CircuitExecutionDecision> decisions = [];
 
         Task[] tasks = Enumerable.Range(0, 50).Select(async _ => {
@@ -86,11 +106,31 @@ public sealed class CircuitBreakerConcurrencyStressTests {
 
         await Task.WhenAll(tasks);
 
-        // Assert: Exactly 1 caller must receive HalfOpenProbe; remaining 49 must receive Denied!
         int probeCount = decisions.Count(d => d.IsAllowed && d.State == CircuitState.HalfOpen);
         int deniedCount = decisions.Count(d => !d.IsAllowed && d.State == CircuitState.Open);
 
         Assert.Equal(1, probeCount);
         Assert.Equal(49, deniedCount);
+    }
+
+    [Fact]
+    public async Task SamplingWindow_Under100ConcurrentRequests_CalculatesAccurateErrorRateAndTrips() {
+        (SamplingWindowCircuitBreaker breaker, _) = CreateSamplingSut();
+        const string key = "sampling-concurrency-race";
+
+        // 60 failures, 40 successes simultaneously = 60% failure rate >= 50% threshold
+        Task[] failureTasks = Enumerable.Range(0, 60).Select(_ =>
+            breaker.OnFailureAsync(key, TestContext.Current.CancellationToken).AsTask()
+        ).ToArray();
+
+        Task[] successTasks = Enumerable.Range(0, 40).Select(_ =>
+            breaker.OnSuccessAsync(key, TestContext.Current.CancellationToken).AsTask()
+        ).ToArray();
+
+        await Task.WhenAll(failureTasks.Concat(successTasks));
+
+        CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+        Assert.False(decision.IsAllowed);
+        Assert.Equal(CircuitState.Open, decision.State);
     }
 }

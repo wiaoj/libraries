@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace Wiaoj.Extensions;
 
@@ -68,6 +69,34 @@ public static partial class TimeSpanExtensions {
         /// </returns>
         public bool IsNullOrLessThanOrEqualToZero() {
             return timeSpan is null || timeSpan.Value <= TimeSpan.Zero;
+        }
+    }
+
+    extension(TimeSpan timeSpan) {
+        /// <summary>
+        /// Returns this <see cref="TimeSpan"/> if it is strictly positive (greater than zero);
+        /// otherwise returns the specified <paramref name="fallback"/> duration.
+        /// </summary>
+        /// <param name="value">The time span to validate.</param>
+        /// <param name="fallback">The fallback duration to use if zero or negative.</param>
+        /// <returns>A guaranteed positive <see cref="TimeSpan"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public TimeSpan ToPositiveOrDefault(TimeSpan fallback) {
+            return timeSpan > TimeSpan.Zero ? timeSpan : fallback;
+        }
+    }
+
+    extension(TimeSpan? timeSpan) {
+        /// <summary>
+        /// Returns the active <see cref="TimeSpan"/> if it has a value and is strictly positive (greater than zero);
+        /// otherwise returns the specified <paramref name="fallback"/> duration.
+        /// </summary>
+        /// <param name="value">The nullable time span to validate.</param>
+        /// <param name="fallback">The fallback duration to use if null, zero, or negative.</param>
+        /// <returns>A guaranteed positive <see cref="TimeSpan"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public TimeSpan ToPositiveOrDefault(TimeSpan fallback) {
+            return timeSpan is { } ts && ts > TimeSpan.Zero ? ts : fallback;
         }
     }
 }

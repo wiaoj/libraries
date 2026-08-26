@@ -44,7 +44,7 @@ public sealed class HttpWebhookSenderTests {
             HttpWebhookSender sender = CreateSender(new FakeHttpMessageHandler(HttpStatusCode.OK));
 
             await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-                sender.SendAsync(null!, WebhookTestConstants.PayloadJson, EmptyHeaders, CancellationToken.None));
+                sender.SendAsync(null!, WebhookTestConstants.PayloadJson, EmptyHeaders, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -52,7 +52,7 @@ public sealed class HttpWebhookSenderTests {
             HttpWebhookSender sender = CreateSender(new FakeHttpMessageHandler(HttpStatusCode.OK));
 
             await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-                sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), null!, EmptyHeaders, CancellationToken.None));
+                sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), null!, EmptyHeaders, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -60,7 +60,7 @@ public sealed class HttpWebhookSenderTests {
             HttpWebhookSender sender = CreateSender(new FakeHttpMessageHandler(HttpStatusCode.OK));
 
             await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-                sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), WebhookTestConstants.PayloadJson, null!, CancellationToken.None));
+                sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), WebhookTestConstants.PayloadJson, null!, TestContext.Current.CancellationToken));
         }
     }
 
@@ -74,7 +74,7 @@ public sealed class HttpWebhookSenderTests {
             FakeHttpMessageHandler handler = new(HttpStatusCode.OK);
             HttpWebhookSender sender = CreateSender(handler);
 
-            await sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), WebhookTestConstants.PayloadJson, EmptyHeaders, CancellationToken.None);
+            await sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), WebhookTestConstants.PayloadJson, EmptyHeaders, TestContext.Current.CancellationToken);
 
             Assert.NotNull(handler.LastRequest);
             Assert.Equal(HttpMethod.Post, handler.LastRequest.Method);
@@ -86,7 +86,7 @@ public sealed class HttpWebhookSenderTests {
             FakeHttpMessageHandler handler = new(HttpStatusCode.OK);
             HttpWebhookSender sender = CreateSender(handler);
 
-            await sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), WebhookTestConstants.PayloadJson, EmptyHeaders, CancellationToken.None);
+            await sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), WebhookTestConstants.PayloadJson, EmptyHeaders, TestContext.Current.CancellationToken);
 
             Assert.NotNull(handler.LastRequest);
             Assert.Equal(WebhookTestConstants.PayloadJson, handler.LastRequestBody);
@@ -102,7 +102,7 @@ public sealed class HttpWebhookSenderTests {
                 { "X-Custom-Trace-Id", "trace-999" }
             };
 
-            await sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), WebhookTestConstants.PayloadJson, customHeaders, CancellationToken.None);
+            await sender.SendAsync(WebhookTestFactory.CreateTargetUrl(), WebhookTestConstants.PayloadJson, customHeaders, TestContext.Current.CancellationToken);
 
             Assert.NotNull(handler.LastRequest);
             Assert.True(handler.LastRequest.Headers.Contains("Wiaoj-Signature"));
@@ -119,7 +119,7 @@ public sealed class HttpWebhookSenderTests {
                 WebhookTestFactory.CreateTargetUrl(),
                 WebhookTestConstants.PayloadJson,
                 EmptyHeaders,
-                CancellationToken.None);
+                TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         }

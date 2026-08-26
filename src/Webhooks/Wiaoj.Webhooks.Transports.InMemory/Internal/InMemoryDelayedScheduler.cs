@@ -3,10 +3,9 @@ using System.Threading.Channels;
 
 namespace Wiaoj.Webhooks.Transports.InMemory.Internal;
 
-file readonly record struct ScheduledJobItem(WebhookDeliveryJob Job, CancellationToken CancellationToken);
-
 /// <summary>
-/// High-throughput, asynchronous delayed job scheduler backed by a single priority queue and background worker loop.
+/// In-memory delayed job scheduler that orders jobs by due time using a priority queue and flushes expired jobs to a channel.
+/// Uses <see cref="DisposeState"/> to coordinate safe synchronous and asynchronous disposal.
 /// </summary>
 internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
     private readonly ChannelWriter<WebhookDeliveryJob> _writer;
@@ -17,11 +16,15 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
     private readonly Lock _lock = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _processingTask;
-    private bool _isDisposed;
+    private readonly DisposeState _disposeState = new();
 
-    public InMemoryDelayedScheduler(ChannelWriter<WebhookDeliveryJob> writer,
-                                    TimeProvider timeProvider,
-                                    ILogger logger) {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InMemoryDelayedScheduler"/> class.
+    /// </summary>
+    public InMemoryDelayedScheduler(
+        ChannelWriter<WebhookDeliveryJob> writer,
+        TimeProvider timeProvider,
+        ILogger logger) {
         Preca.ThrowIfNull(writer);
         Preca.ThrowIfNull(timeProvider);
         Preca.ThrowIfNull(logger);
@@ -37,11 +40,12 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
     /// </summary>
     public void Schedule(WebhookDeliveryJob job, TimeSpan delay, CancellationToken cancellationToken) {
         Preca.ThrowIfNull(job);
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(InMemoryDelayedScheduler));
 
         DateTimeOffset dueTime = this._timeProvider.GetUtcNow().Add(delay);
 
         lock(this._lock) {
-            if(this._isDisposed) {
+            if(this._disposeState.IsDisposingOrDisposed) {
                 return;
             }
 
@@ -49,7 +53,11 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
             this._queue.Enqueue(new ScheduledJobItem(job, cancellationToken), dueTime);
         }
 
-        this._signal.Release();
+        lock(this._lock) {
+            if(this._signal.CurrentCount == 0) {
+                this._signal.Release();
+            }
+        }
     }
 
     private async Task ProcessQueueAsync() {
@@ -61,7 +69,7 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
             TimeSpan waitDuration = Timeout.InfiniteTimeSpan;
 
             lock(this._lock) {
-                if(this._queue.TryPeek(out ScheduledJobItem candidate, out DateTimeOffset dueTime)) {
+                if(this._queue.TryPeek(out _, out DateTimeOffset dueTime)) {
                     DateTimeOffset now = this._timeProvider.GetUtcNow();
                     if(dueTime <= now) {
                         nextItem = this._queue.Dequeue();
@@ -106,34 +114,50 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
                 Task signalTask = this._signal.WaitAsync(delayCts.Token);
                 Task delayTask = Task.Delay(waitDuration, this._timeProvider, delayCts.Token);
 
-                await Task.WhenAny(signalTask, delayTask).ConfigureAwait(false);
-                await delayCts.CancelAsync();
+                Task completed = await Task.WhenAny(signalTask, delayTask).ConfigureAwait(false);
+                if(completed != signalTask) {
+                    delayCts.Cancel();
+                }
             }
         }
     }
 
     /// <inheritdoc/>
     public void Dispose() {
-        lock(this._lock) {
-            if(this._isDisposed) {
-                return;
-            }
-            this._isDisposed = true;
-            this._cts.Cancel();
+        if(!this._disposeState.TryBeginDispose()) {
+            return;
         }
 
-        this._signal.Dispose();
-        this._cts.Dispose();
+        try {
+            this._cts.Cancel();
+            this._signal.Dispose();
+            this._cts.Dispose();
+        }
+        finally {
+            this._disposeState.SetDisposed();
+        }
     }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() {
-        Dispose();
-        try {
-            await this._processingTask.ConfigureAwait(false);
+        if(!this._disposeState.TryBeginDispose()) {
+            await this._disposeState.WaitForDisposedAsync().ConfigureAwait(false);
+            return;
         }
-        catch(OperationCanceledException) {
-            // Task canceled gracefully during shutdown
+
+        try {
+            await this._cts.CancelAsync().ConfigureAwait(false);
+
+            try {
+                await this._processingTask.ConfigureAwait(false);
+            }
+            catch(OperationCanceledException) { }
+
+            this._signal.Dispose();
+            this._cts.Dispose();
+        }
+        finally {
+            this._disposeState.SetDisposed();
         }
     }
 

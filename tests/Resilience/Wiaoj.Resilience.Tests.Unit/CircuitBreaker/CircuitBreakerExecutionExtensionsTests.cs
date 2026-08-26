@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Wiaoj.DistributedCounter;
 using Wiaoj.DistributedCounter.DependencyInjection;
-using Wiaoj.Resilience;
 using Xunit;
 
 namespace Wiaoj.Resilience.Tests.Unit.CircuitBreaker;
@@ -37,6 +36,32 @@ public sealed class CircuitBreakerExecutionExtensionsTests {
         return (breaker, timeProvider);
     }
 
+    public sealed class TheArgumentValidation {
+        [Fact]
+        public async Task ExecuteAsync_Throws_OnNullCircuitBreaker() {
+            ICircuitBreaker breaker = null!;
+            await Assert.ThrowsAnyAsync<ArgumentNullException>(() =>
+                breaker.ExecuteAsync("key", ct => ValueTask.FromResult("test"), TestContext.Current.CancellationToken).AsTask());
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task ExecuteAsync_Throws_OnInvalidKey(string? invalidKey) {
+            (ICircuitBreaker breaker, _) = CreateSut();
+            await Assert.ThrowsAnyAsync<ArgumentException>(() =>
+                breaker.ExecuteAsync(invalidKey!, ct => ValueTask.FromResult("test"), TestContext.Current.CancellationToken).AsTask());
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_Throws_OnNullOperation() {
+            (ICircuitBreaker breaker, _) = CreateSut();
+            await Assert.ThrowsAnyAsync<ArgumentNullException>(() =>
+                breaker.ExecuteAsync<string>("key", null!, TestContext.Current.CancellationToken).AsTask());
+        }
+    }
+
     public sealed class TheGenericExecution {
         [Fact]
         public async Task ExecuteAsync_WhenOperationSucceeds_ReturnsValueAndReportsSuccess() {
@@ -50,7 +75,6 @@ public sealed class CircuitBreakerExecutionExtensionsTests {
 
             Assert.Equal("Order_Payload_777", result);
 
-            // Circuit must remain closed
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(decision.IsAllowed);
             Assert.Equal(CircuitState.Closed, decision.State);
@@ -61,15 +85,12 @@ public sealed class CircuitBreakerExecutionExtensionsTests {
             (ICircuitBreaker breaker, _) = CreateSut(failureThreshold: 2);
             const string key = "service-http-call";
 
-            // 1. First failure
             await Assert.ThrowsAsync<HttpRequestException>(() =>
                 breaker.ExecuteAsync<string>(key, ct => throw new HttpRequestException("503 Service Unavailable"), TestContext.Current.CancellationToken).AsTask());
 
-            // 2. Second failure -> Hits threshold of 2
             await Assert.ThrowsAsync<HttpRequestException>(() =>
                 breaker.ExecuteAsync<string>(key, ct => throw new HttpRequestException("503 Service Unavailable"), TestContext.Current.CancellationToken).AsTask());
 
-            // 3. Third call -> Circuit is now OPEN! Must throw CircuitBreakerOpenException without invoking user delegate!
             bool delegateExecuted = false;
             CircuitBreakerOpenException openEx = await Assert.ThrowsAsync<CircuitBreakerOpenException>(() =>
                 breaker.ExecuteAsync<string>(key, ct => {
@@ -88,9 +109,8 @@ public sealed class CircuitBreakerExecutionExtensionsTests {
             const string key = "service-cancel-test";
 
             using CancellationTokenSource cts = new();
-            cts.Cancel(); // Token is already cancelled by the caller
+            cts.Cancel();
 
-            // Act: Caller cancellation should throw OperationCanceledException
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 breaker.ExecuteAsync(key, async ct => {
                     ct.ThrowIfCancellationRequested();
@@ -98,7 +118,6 @@ public sealed class CircuitBreakerExecutionExtensionsTests {
                     return "Never";
                 }, cts.Token).AsTask());
 
-            // Assert: Caller cancellation is NOT a downstream failure! Circuit must remain CLOSED.
             CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
             Assert.True(decision.IsAllowed);
             Assert.Equal(CircuitState.Closed, decision.State);
@@ -118,6 +137,19 @@ public sealed class CircuitBreakerExecutionExtensionsTests {
             }, TestContext.Current.CancellationToken);
 
             Assert.True(actionExecuted);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_NonGeneric_WhenThrows_RecordsFailure() {
+            (ICircuitBreaker breaker, _) = CreateSut(failureThreshold: 1);
+            const string key = "service-void-fail";
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                breaker.ExecuteAsync(key, ct => throw new InvalidOperationException("Fatal"), TestContext.Current.CancellationToken).AsTask());
+
+            CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, TestContext.Current.CancellationToken);
+            Assert.False(decision.IsAllowed);
+            Assert.Equal(CircuitState.Open, decision.State);
         }
     }
 }

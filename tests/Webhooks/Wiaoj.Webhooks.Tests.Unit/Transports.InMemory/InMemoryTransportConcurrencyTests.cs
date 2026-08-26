@@ -40,6 +40,6 @@ public sealed class InMemoryTransportConcurrencyTests {
         Assert.Equal(jobCount, handler.HandledJobs.Count);
 
         await cts.CancelAsync();
-        await consumer.StopAsync(CancellationToken.None);
+        await consumer.StopAsync(TestContext.Current.CancellationToken);
     }
 }

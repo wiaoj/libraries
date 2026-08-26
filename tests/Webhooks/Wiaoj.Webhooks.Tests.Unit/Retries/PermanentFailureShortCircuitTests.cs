@@ -44,7 +44,7 @@ public sealed class PermanentFailureShortCircuitTests {
             };
 
             // Act: İlk denemede kalıcı hata döner
-            await middleware.InvokeAsync(context, next, CancellationToken.None);
+            await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
             // Assert: Sıfır retry işi, doğrudan Dead-Letter!
             Assert.Empty(transport.EnqueuedJobs);
@@ -78,7 +78,7 @@ public sealed class PermanentFailureShortCircuitTests {
                 return Task.CompletedTask;
             };
 
-            await middleware.InvokeAsync(context, next, CancellationToken.None);
+            await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
             Assert.Empty(transport.EnqueuedJobs);
             Assert.True(context.IsDeadLettered());
@@ -116,7 +116,7 @@ public sealed class PermanentFailureShortCircuitTests {
             };
 
             // Act
-            await middleware.InvokeAsync(context, next, CancellationToken.None);
+            await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
             // Assert: Retry kuyruğuna tam 1 iş atılmalı, Dead-Letter OLMAMALIDIR!
             Assert.Single(transport.EnqueuedJobs);
@@ -139,7 +139,7 @@ public sealed class PermanentFailureShortCircuitTests {
                 return Task.CompletedTask;
             };
 
-            await middleware.InvokeAsync(context, next, CancellationToken.None);
+            await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
             // Ağ kopmaları kalıcı sanılmamalı, yeniden denenmelidir!
             Assert.Single(transport.EnqueuedJobs);
@@ -168,7 +168,7 @@ public sealed class PermanentFailureShortCircuitTests {
                 return Task.CompletedTask;
             };
 
-            await middleware.InvokeAsync(context, next, CancellationToken.None);
+            await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
             // 401 olduğu için Retry-After'a kanmamalı, retry atmamalıdır!
             Assert.Empty(transport.EnqueuedJobs);
@@ -188,13 +188,13 @@ public sealed class PermanentFailureShortCircuitTests {
             await middleware.InvokeAsync(contextSuccess, (ctx, ct) => {
                 ctx.SetResult(WebhookDeliveryResult.Success(200));
                 return Task.CompletedTask;
-            }, CancellationToken.None);
+            }, TestContext.Current.CancellationToken);
 
             // Act 2: Deduplicated
             await middleware.InvokeAsync(contextDedup, (ctx, ct) => {
                 ctx.SetResult(WebhookDeliveryResult.Duplicate("dedup-1"));
                 return Task.CompletedTask;
-            }, CancellationToken.None);
+            }, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Empty(transport.EnqueuedJobs);

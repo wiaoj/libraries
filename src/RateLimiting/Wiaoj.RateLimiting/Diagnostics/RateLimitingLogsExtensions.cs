@@ -3,7 +3,7 @@
 namespace Wiaoj.RateLimiting.Diagnostics;
 
 /// <summary>
-/// High-performance, compile-time source-generated logging extension methods for rate limiting operations.
+/// Source-generated logging extensions for rate limiting operations.
 /// </summary>
 internal static partial class RateLimitingLogsExtensions {
     [LoggerMessage(

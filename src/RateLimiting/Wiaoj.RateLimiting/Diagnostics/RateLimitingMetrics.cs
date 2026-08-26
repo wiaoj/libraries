@@ -5,14 +5,9 @@ using System.Reflection;
 namespace Wiaoj.RateLimiting.Diagnostics;
 
 /// <summary>
-/// Central OpenTelemetry and .NET runtime metrics provider for <c>Wiaoj.RateLimiting</c>.
-/// Exposes standard meters, counters, and histograms for Prometheus and OpenTelemetry
-/// collectors with zero external package dependencies.
+/// Central metrics provider for rate limiting operations.
 /// </summary>
-public static class RateLimitingMetrics {
-    /// <summary>
-    /// The meter name used to subscribe to metrics via OpenTelemetry (<c>.AddMeter("Wiaoj.RateLimiting")</c>).
-    /// </summary>
+internal static class RateLimitingMetrics {
     public const string MeterName = "Wiaoj.RateLimiting";
 
     private static readonly string MeterVersion =
@@ -20,9 +15,6 @@ public static class RateLimitingMetrics {
         ?? typeof(RateLimitingMetrics).Assembly.GetName().Version?.ToString()
         ?? "1.0.0";
 
-    /// <summary>
-    /// The shared <see cref="System.Diagnostics.Metrics.Meter"/> instance for this package.
-    /// </summary>
     public static readonly Meter Meter = new(MeterName, MeterVersion);
 
     private static readonly Counter<long> DecisionsCounter = Meter.CreateCounter<long>(
@@ -40,18 +32,13 @@ public static class RateLimitingMetrics {
         unit: "ms",
         description: "Time in milliseconds requests spent waiting in traffic-shaping queues before execution.");
 
-    /// <summary>
-    /// Records a rate limit decision metric. Uses <see cref="TagList"/> to prevent heap allocations.
-    /// </summary>
-    /// <param name="algorithm">The name of the rate limiting algorithm.</param> 
-    /// <param name="isAllowed">Whether the operation was permitted.</param>
-    /// <param name="cost">The number of cost/token units requested.</param>
-    public static void RecordDecision(string algorithm, bool isAllowed, int cost) {
+    public static void RecordDecision(string policy, string algorithm, bool isAllowed, int cost) {
         if(!DecisionsCounter.Enabled && !CostCounter.Enabled) {
             return;
         }
 
         TagList tags = new() {
+            { "policy", policy },
             { "algorithm", algorithm },
             { "decision", isAllowed ? "allowed" : "denied" }
         };
@@ -60,23 +47,20 @@ public static class RateLimitingMetrics {
 
         if(isAllowed && CostCounter.Enabled) {
             TagList costTags = new() {
+                { "policy", policy },
                 { "algorithm", algorithm }
             };
             CostCounter.Add(cost, costTags);
         }
     }
 
-    /// <summary>
-    /// Records the time spent waiting in a traffic-shaping queue.
-    /// </summary>
-    /// <param name="algorithm">The name of the rate limiting algorithm.</param> 
-    /// <param name="milliseconds">The duration waited in milliseconds.</param>
-    public static void RecordQueueWait(string algorithm, double milliseconds) {
+    public static void RecordQueueWait(string policy, string algorithm, double milliseconds) {
         if(!QueueWaitDuration.Enabled) {
             return;
         }
 
         TagList tags = new() {
+            { "policy", policy },
             { "algorithm", algorithm }
         };
 

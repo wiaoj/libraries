@@ -30,5 +30,5 @@ internal sealed class FakeWebhookJobHandler : IWebhookJobHandler {
     }
 
     public Task<WebhookDeliveryAttempt> HandleAsync(WebhookDeliveryJob job) =>
-        HandleAsync(job, CancellationToken.None);
+        HandleAsync(job, TestContext.Current.CancellationToken);
 }

@@ -131,6 +131,72 @@ public sealed class FixedWindowRateLimiterTests {
 
             await Assert.ThrowsAnyAsync<ArgumentOutOfRangeException>(() => limiter.TryAcquireAsync("valid_key", invalidCost, TestContext.Current.CancellationToken).AsTask());
         }
+
+        [Fact]
+        public async Task TryAcquire_AfterWindowFullyExpires_ResetsCounterAndAllowsFullLimitAgain() {
+            // Arrange: window rollover was previously untested — only partial in-window
+            // advancement (TryAcquire_ExceedingLimit_...) existed, never a full expiry.
+            FakeTimeProvider timeProvider = new();
+            DistributedCounterTestContext context = new(timeProvider);
+            TimeSpan window = TimeSpan.FromSeconds(10);
+            FixedWindowRateLimiter limiter = new(context.Factory, "auth", limit: 5, window: window);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "client_ip_rollover";
+
+            // Exhaust the window (5/5)
+            RateLimitDecision first = await limiter.TryAcquireAsync(key, cost: 5, ct);
+            Assert.True(first.IsAllowed);
+            Assert.Equal(0, first.Remaining);
+
+            // Confirm still denied while inside the same window
+            RateLimitDecision stillDenied = await limiter.TryAcquireAsync(key, cost: 1, ct);
+            Assert.False(stillDenied.IsAllowed);
+
+            // Act: advance past the full window duration so the entry expires
+            timeProvider.Advance(window);
+            RateLimitDecision afterRollover = await limiter.TryAcquireAsync(key, cost: 5, ct);
+
+            // Assert: treated as a brand-new window, full capacity available again
+            Assert.True(afterRollover.IsAllowed);
+            Assert.Equal(0, afterRollover.Remaining);
+        }
+
+        [Fact]
+        public async Task TryAcquire_DeniedOnFreshKeyWithNoActiveTtl_FallsBackToFullWindowAsRetryAfter() {
+            // Arrange: on a brand-new key that alone exceeds the limit on the very first
+            // request, FakeCounterStorage reports a null Ttl (no prior entry to read an
+            // expiry from). FixedWindowRateLimiter must then fall back to using the full
+            // window as RetryAfter (see: `result.Ttl is { } ttl ... : this._window`).
+            // The existing CostGreaterThanLimit test hits this exact path but never
+            // asserted on RetryAfter — this closes that gap.
+            DistributedCounterTestContext context = new();
+            TimeSpan window = TimeSpan.FromMinutes(1);
+            FixedWindowRateLimiter limiter = new(context.Factory, "auth", limit: 5, window: window);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string key = "client_ip_fresh_denied";
+
+            // Act
+            RateLimitDecision decision = await limiter.TryAcquireAsync(key, cost: 10, ct);
+
+            // Assert
+            Assert.False(decision.IsAllowed);
+            Assert.NotNull(decision.RetryAfter);
+            Assert.Equal(window, decision.RetryAfter!.Value);
+        }
+
+        [Fact]
+        public async Task TryAcquire_GivenAlreadyCancelledToken_ThrowsOperationCanceledException() {
+            // Verifies FixedWindowRateLimiter now checks cancellation up front,
+            // matching GcraRateLimiter's behavior — brought into parity after
+            // the earlier inconsistency was identified.
+            DistributedCounterTestContext context = new();
+            FixedWindowRateLimiter limiter = new(context.Factory, "auth", limit: 5, window: TimeSpan.FromMinutes(1));
+            using CancellationTokenSource cts = new();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => limiter.TryAcquireAsync("client_precancelled", cost: 1, cts.Token).AsTask());
+        }
     }
 
     public sealed class ThePolicyAndKeyIsolation {
@@ -155,6 +221,28 @@ public sealed class FixedWindowRateLimiterTests {
             Assert.False(authDenied.IsAllowed);
             Assert.True(searchAllowed.IsAllowed);
             Assert.Equal(15, searchAllowed.Remaining); // 20 - 5 = 15
+        }
+
+        [Fact]
+        public async Task DifferentKeysUnderSamePolicy_MaintainIndependentQuotas() {
+            // Arrange: only cross-policy isolation was tested before; same-policy,
+            // different-key isolation (the far more common real-world case, e.g. two
+            // different client IPs hitting the same "auth" policy) was never covered.
+            DistributedCounterTestContext context = new();
+            FixedWindowRateLimiter limiter = new(context.Factory, "shared_policy", limit: 3, window: TimeSpan.FromMinutes(1));
+            CancellationToken ct = TestContext.Current.CancellationToken;
+
+            // Act: exhaust key A entirely
+            await limiter.TryAcquireAsync("client_a", cost: 3, ct);
+            RateLimitDecision aDenied = await limiter.TryAcquireAsync("client_a", cost: 1, ct);
+
+            // Key B under the same policy must be completely untouched
+            RateLimitDecision bAllowed = await limiter.TryAcquireAsync("client_b", cost: 3, ct);
+
+            // Assert
+            Assert.False(aDenied.IsAllowed);
+            Assert.True(bAllowed.IsAllowed);
+            Assert.Equal(0, bAllowed.Remaining);
         }
     }
 }

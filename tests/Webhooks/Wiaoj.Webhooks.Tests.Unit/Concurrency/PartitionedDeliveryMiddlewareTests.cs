@@ -56,7 +56,7 @@ public sealed class PartitionedDeliveryMiddlewareTests {
             // Act: 8 contexts having the exact same PartitionKey
             Task[] tasks = Enumerable.Range(0, 8).Select(_ => {
                 WebhookDeliveryContext context = WebhookTestFactory.CreateContext(partitionKey: sharedPartitionKey);
-                return middleware.InvokeAsync(context, downstream, CancellationToken.None);
+                return middleware.InvokeAsync(context, downstream, TestContext.Current.CancellationToken);
             }).ToArray();
 
             await Task.WhenAll(tasks);
@@ -101,8 +101,8 @@ public sealed class PartitionedDeliveryMiddlewareTests {
             WebhookDeliveryContext ctx2 = WebhookTestFactory.CreateContext(WebhookTestFactory.CreateEndpoint(WebhookTestFactory.CreateEndpointId("ep-2")));
             ctx2.Items["domain_key"] = "customer-aggregate-A";
 
-            Task task1 = middleware.InvokeAsync(ctx1, downstream, CancellationToken.None);
-            Task task2 = middleware.InvokeAsync(ctx2, downstream, CancellationToken.None);
+            Task task1 = middleware.InvokeAsync(ctx1, downstream, TestContext.Current.CancellationToken);
+            Task task2 = middleware.InvokeAsync(ctx2, downstream, TestContext.Current.CancellationToken);
 
             await Task.WhenAll(task1, task2);
 
@@ -115,11 +115,11 @@ public sealed class PartitionedDeliveryMiddlewareTests {
             PartitionedDeliveryMiddleware middleware = new(deliveryLock, new PartitionedDeliveryOptions(), NullLogger<PartitionedDeliveryMiddleware>.Instance);
 
             await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-                middleware.InvokeAsync(null!, (ctx, ct) => Task.CompletedTask, CancellationToken.None));
+                middleware.InvokeAsync(null!, (ctx, ct) => Task.CompletedTask, TestContext.Current.CancellationToken));
 
             WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
             await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-                middleware.InvokeAsync(context, null!, CancellationToken.None));
+                middleware.InvokeAsync(context, null!, TestContext.Current.CancellationToken));
         }
     }
 }
