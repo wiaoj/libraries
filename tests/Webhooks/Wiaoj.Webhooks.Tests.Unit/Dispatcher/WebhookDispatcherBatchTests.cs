@@ -32,9 +32,7 @@ public sealed class WebhookDispatcherBatchTests {
         WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-bulk-1");
 
         // 10 distinct domain events
-        OrderCreatedWebhookEvent[] events = Enumerable.Range(1, 10)
-            .Select(i => new OrderCreatedWebhookEvent($"ORD-BULK-{i}", i * 25.50m))
-            .ToArray();
+        OrderCreatedWebhookEvent[] events = [.. Enumerable.Range(1, 10).Select(i => new OrderCreatedWebhookEvent($"ORD-BULK-{i}", i * 25.50m))];
 
         // Act: Dispatch 10 events as a single batch
         IReadOnlyList<WebhookDeliveryHandle> handles = await dispatcher.DispatchBatchAsync(
@@ -91,7 +89,7 @@ public sealed class WebhookDispatcherBatchTests {
 
     [Fact]
     public async Task DispatchBatchAsync_WhenPayloadsListIsEmpty_ReturnsEmptyHandlesImmediately() {
-        (WebhookDispatcher dispatcher, InMemoryWebhookStore store, FakeWebhookTransport transport) = CreateSut();
+        (WebhookDispatcher dispatcher, _, FakeWebhookTransport transport) = CreateSut();
         WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-empty");
 
         IReadOnlyList<WebhookDeliveryHandle> handles = await dispatcher.DispatchBatchAsync(

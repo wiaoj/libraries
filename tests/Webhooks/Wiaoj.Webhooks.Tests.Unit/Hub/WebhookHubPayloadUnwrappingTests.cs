@@ -1,6 +1,6 @@
-﻿using System.Text;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text;
 using Wiaoj.Serialization;
 using Wiaoj.Serialization.SystemTextJson;
 using Wiaoj.Webhooks.AspNetCore;
@@ -84,7 +84,7 @@ public sealed class WebhookHubPayloadUnwrappingTests {
             static _ => ValueTask.FromResult<object?>(Results.Ok()));
 
         // Assert
-        IStatusCodeHttpResult status = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        IStatusCodeHttpResult status = Assert.IsType<IStatusCodeHttpResult>(result, exactMatch: false);
         Assert.Equal(StatusCodes.Status200OK, status.StatusCode);
 
         Assert.NotNull(capturedPayment);

@@ -70,7 +70,7 @@ public sealed class HttpWebhookDelivererTests {
             HttpWebhookDeliverer deliverer = WebhookTestFactory.CreateDeliverer();
 
             await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-                deliverer.DeliverAsync(null!));
+                deliverer.DeliverAsync(null!, TestContext.Current.CancellationToken));
         }
     }
 
@@ -88,7 +88,7 @@ public sealed class HttpWebhookDelivererTests {
             FakeHttpMessageHandler handler = new(statusCode, responseBody: responseBody);
             HttpWebhookDeliverer deliverer = CreateDeliverer(handler);
 
-            WebhookDeliveryResult result = await deliverer.DeliverAsync(WebhookTestFactory.CreateContext());
+            WebhookDeliveryResult result = await deliverer.DeliverAsync(WebhookTestFactory.CreateContext(), TestContext.Current.CancellationToken);
 
             WebhookDeliveryResult.Delivered delivered = Assert.IsType<WebhookDeliveryResult.Delivered>(result);
             Assert.True(delivered.IsSuccess);
@@ -102,7 +102,7 @@ public sealed class HttpWebhookDelivererTests {
             HttpWebhookDeliverer deliverer = CreateDeliverer(handler);
             WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
 
-            await deliverer.DeliverAsync(context);
+            await deliverer.DeliverAsync(context, TestContext.Current.CancellationToken);
 
             Assert.Equal(context.TargetUrl, handler.LastRequest?.RequestUri);
             Assert.Equal(context.SerializedPayload, handler.LastRequestBody);
@@ -118,7 +118,7 @@ public sealed class HttpWebhookDelivererTests {
             context.SetHeader("X-Signature", "sig_v1_12345");
             context.SetHeader("X-Event-Name", "order.created");
 
-            await deliverer.DeliverAsync(context);
+            await deliverer.DeliverAsync(context, TestContext.Current.CancellationToken);
 
             Assert.NotNull(handler.LastRequest);
             Assert.True(handler.LastRequest.Headers.Contains("X-Signature"));
@@ -142,7 +142,7 @@ public sealed class HttpWebhookDelivererTests {
             FakeHttpMessageHandler handler = new(statusCode);
             HttpWebhookDeliverer deliverer = CreateDeliverer(handler);
 
-            WebhookDeliveryResult result = await deliverer.DeliverAsync(WebhookTestFactory.CreateContext());
+            WebhookDeliveryResult result = await deliverer.DeliverAsync(WebhookTestFactory.CreateContext(), TestContext.Current.CancellationToken);
 
             WebhookDeliveryResult.TransientFailure failure = Assert.IsType<WebhookDeliveryResult.TransientFailure>(result);
             Assert.False(failure.IsSuccess);
@@ -166,7 +166,7 @@ public sealed class HttpWebhookDelivererTests {
             FakeHttpMessageHandler handler = new(statusCode);
             HttpWebhookDeliverer deliverer = CreateDeliverer(handler);
 
-            WebhookDeliveryResult result = await deliverer.DeliverAsync(WebhookTestFactory.CreateContext());
+            WebhookDeliveryResult result = await deliverer.DeliverAsync(WebhookTestFactory.CreateContext(), TestContext.Current.CancellationToken);
 
             WebhookDeliveryResult.PermanentFailure failure = Assert.IsType<WebhookDeliveryResult.PermanentFailure>(result);
             Assert.False(failure.IsSuccess);

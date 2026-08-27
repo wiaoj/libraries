@@ -32,7 +32,7 @@ public sealed class WebhookDeliveryContextTests {
         List<WebhookDeliveryAttempt> history = [WebhookTestFactory.CreateAttempt(attemptNumber: 1)];
         WebhookDeliveryContext context = WebhookTestFactory.CreateContext(attemptHistory: history);
 
-        Assert.Single(context.AttemptHistory);
-        Assert.Same(history[0], context.AttemptHistory[0]);
+        WebhookDeliveryAttempt item = Assert.Single(context.AttemptHistory);
+        Assert.Same(history[0], item);
     }
 }

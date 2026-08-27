@@ -18,10 +18,7 @@ namespace Wiaoj.Webhooks.Tests.Unit.Hub;
 [Trait("Category", "Unit")]
 [Trait("Feature", "InboundReceiver")]
 [Trait("Component", "WebhookHub")]
-public sealed class WebhookHubEndpointFilterTests {
-    private const string SecretKey = "whsec_hub_test_secret_1234567890";
-    private readonly HmacSha256WebhookSigner _signer = new();
-
+public sealed class WebhookHubEndpointFilterTests {  
     private sealed record PingPayload(string Zen);
     private sealed record OrderPayload(string OrderId, decimal Total);
 
@@ -88,7 +85,7 @@ public sealed class WebhookHubEndpointFilterTests {
         object? result1 = await filter.InvokeAsync(new DefaultEndpointFilterInvocationContext(pingCtx), static _ => ValueTask.FromResult<object?>(Results.Ok()));
 
         Assert.Equal("ping:Non-blocking is better than blocking.", executedEvent);
-        IStatusCodeHttpResult status1 = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result1);
+        IStatusCodeHttpResult status1 = Assert.IsType<IStatusCodeHttpResult>(result1, exactMatch: false);
         Assert.Equal(StatusCodes.Status200OK, status1.StatusCode);
 
         // 2. Send Order Request
@@ -99,7 +96,7 @@ public sealed class WebhookHubEndpointFilterTests {
         object? result2 = await filter.InvokeAsync(new DefaultEndpointFilterInvocationContext(orderCtx), static _ => ValueTask.FromResult<object?>(Results.Ok()));
 
         Assert.Equal("order:ORD-999", executedEvent);
-        IStatusCodeHttpResult status2 = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result2);
+        IStatusCodeHttpResult status2 = Assert.IsType<IStatusCodeHttpResult>(result2, exactMatch: false);
         Assert.Equal(StatusCodes.Status200OK, status2.StatusCode);
     }
 
@@ -122,7 +119,7 @@ public sealed class WebhookHubEndpointFilterTests {
 
         object? result = await filter.InvokeAsync(new DefaultEndpointFilterInvocationContext(ctx), static _ => ValueTask.FromResult<object?>(Results.Ok()));
 
-        IStatusCodeHttpResult status = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        IStatusCodeHttpResult status = Assert.IsType<IStatusCodeHttpResult>(result, exactMatch: false);
         Assert.Equal(StatusCodes.Status200OK, status.StatusCode);
     }
 
@@ -144,7 +141,7 @@ public sealed class WebhookHubEndpointFilterTests {
 
         object? result = await filter.InvokeAsync(new DefaultEndpointFilterInvocationContext(ctx), static _ => ValueTask.FromResult<object?>(Results.Ok()));
 
-        IStatusCodeHttpResult status = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        IStatusCodeHttpResult status = Assert.IsType<IStatusCodeHttpResult>(result, exactMatch: false);
         Assert.Equal(StatusCodes.Status400BadRequest, status.StatusCode);
     }
 
@@ -169,7 +166,7 @@ public sealed class WebhookHubEndpointFilterTests {
 
         object? result = await filter.InvokeAsync(new DefaultEndpointFilterInvocationContext(ctx), static _ => ValueTask.FromResult<object?>(Results.Ok()));
 
-        IStatusCodeHttpResult status = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        IStatusCodeHttpResult status = Assert.IsType<IStatusCodeHttpResult>(result, exactMatch: false);
         Assert.Equal(StatusCodes.Status200OK, status.StatusCode);
     }
     [Fact]
@@ -221,7 +218,7 @@ public sealed class WebhookHubEndpointFilterTests {
 
         // Assert: Filter must inherit policy and succeed with 200 OK
         Assert.True(handlerInvoked);
-        IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        IStatusCodeHttpResult statusResult = Assert.IsType<IStatusCodeHttpResult>(result, exactMatch: false);
         Assert.Equal(StatusCodes.Status200OK, statusResult.StatusCode);
     }
 
@@ -264,7 +261,7 @@ public sealed class WebhookHubEndpointFilterTests {
             static _ => ValueTask.FromResult<object?>(Results.Ok()));
 
         // Assert: Invalid signature must be rejected with 401 Unauthorized
-        IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        IStatusCodeHttpResult statusResult = Assert.IsType<IStatusCodeHttpResult>(result, exactMatch: false);
         Assert.Equal(StatusCodes.Status401Unauthorized, statusResult.StatusCode);
     }
 

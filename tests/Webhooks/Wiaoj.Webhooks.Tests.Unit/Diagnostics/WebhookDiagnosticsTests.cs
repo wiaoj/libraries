@@ -35,7 +35,7 @@ public sealed class WebhookDiagnosticsTests {
         Activity? capturedActivity = null;
         using ActivityListener listener = new() {
             ShouldListenTo = source => source.Name == "Wiaoj.Webhooks",
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => {
                 // Sadece bu teste ait benzersiz endpoint_id aktivitesini yakala:
                 if(activity.OperationName == "webhook.deliver" && (string?)activity.GetTagItem("webhook.endpoint_id") == endpointId.Value) {
@@ -64,7 +64,7 @@ public sealed class WebhookDiagnosticsTests {
         Activity? capturedActivity = null;
         using ActivityListener listener = new() {
             ShouldListenTo = source => source.Name == "Wiaoj.Webhooks",
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => {
                 if(activity.OperationName == "webhook.dispatch" && (string?)activity.GetTagItem("webhook.endpoint_id") == endpointId.Value) {
                     capturedActivity = activity;

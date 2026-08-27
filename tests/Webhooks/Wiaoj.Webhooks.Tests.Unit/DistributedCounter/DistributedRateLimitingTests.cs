@@ -39,14 +39,9 @@ public sealed class WebhookRateLimitingMiddlewareTests {
             return ValueTask.FromResult(this.DecisionToReturn);
         }
 
-        private sealed class StubAlgorithm : IRateLimitAlgorithm {
-            private readonly RateLimitDecision _decision;
-            public StubAlgorithm(RateLimitDecision decision) {
-                this._decision = decision;
-            }
-
+        private sealed class StubAlgorithm(RateLimitDecision decision) : IRateLimitAlgorithm {
             public ValueTask<RateLimitDecision> TryAcquireAsync(string key, int cost = 1, CancellationToken cancellationToken = default) {
-                return ValueTask.FromResult(this._decision);
+                return ValueTask.FromResult(decision);
             }
         }
     }

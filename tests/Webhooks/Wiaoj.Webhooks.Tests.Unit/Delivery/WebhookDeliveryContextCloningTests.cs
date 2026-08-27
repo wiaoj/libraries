@@ -40,8 +40,8 @@ public sealed class WebhookDeliveryContextCloningTests {
         WebhookDeliveryContext clone = original.DeepClone();
 
         // Assert: Same attempt data, but distinct list reference
-        Assert.Single(clone.AttemptHistory);
-        Assert.Same(original.AttemptHistory[0], clone.AttemptHistory[0]);
+        WebhookDeliveryAttempt item = Assert.Single(clone.AttemptHistory);
+        Assert.Same(original.AttemptHistory[0], item);
         Assert.NotSame(original.AttemptHistory, clone.AttemptHistory);
     }
 
