@@ -73,7 +73,7 @@ public sealed class CompositeEventDiscriminatorExtractorTests {
             CompositeEventDiscriminatorExtractor extractor = CompositeEventDiscriminatorExtractor.Default;
 
             Assert.ThrowsAny<ArgumentNullException>(() =>
-                extractor.TryExtractEventName(null!, ReadOnlySpan<byte>.Empty, out _));
+                extractor.TryExtractEventName(null!, [], out _));
         }
     }
 

@@ -7,7 +7,6 @@ namespace Wiaoj.Webhooks.Tests.Unit.Idempotency;
 [Trait("Feature", "Idempotency")]
 [Trait("Component", "KeyGenerator")]
 public sealed class DefaultIdempotencyKeyGeneratorTests {
-    private readonly DefaultIdempotencyKeyGenerator _generator = new();
 
     public sealed class TheGenerateKeyMethodWithContext {
         [Fact]

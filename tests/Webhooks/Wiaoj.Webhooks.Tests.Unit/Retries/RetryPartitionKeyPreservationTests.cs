@@ -81,8 +81,8 @@ public sealed class RetryPartitionKeyPreservationTests {
         await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // Assert: Preserves partition key and uses Retry-After delay
-        Assert.Single(transport.EnqueuedJobs);
-        (WebhookDeliveryJob reEnqueuedJob, TimeSpan? delay) = transport.EnqueuedJobs[0];
+        var item = Assert.Single(transport.EnqueuedJobs);
+        (WebhookDeliveryJob reEnqueuedJob, TimeSpan? delay) = item;
 
         Assert.Equal(customPartitionKey, reEnqueuedJob.PartitionKey.Value);
         Assert.Equal(explicitRetryAfter, delay);
@@ -115,7 +115,7 @@ public sealed class RetryPartitionKeyPreservationTests {
         await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // Assert: Preserves partition key on second failure
-        Assert.Single(transport.EnqueuedJobs);
-        Assert.Equal(customPartitionKey, transport.EnqueuedJobs[0].Job.PartitionKey.Value);
+        var item = Assert.Single(transport.EnqueuedJobs);
+        Assert.Equal(customPartitionKey, item.Job.PartitionKey.Value);
     }
 }

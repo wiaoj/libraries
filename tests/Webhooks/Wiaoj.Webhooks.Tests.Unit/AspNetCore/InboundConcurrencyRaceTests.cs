@@ -61,7 +61,7 @@ public sealed class InboundConcurrencyRaceTests {
         WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, slowHandler);
 
         // Act: Fire 10 concurrent requests targeting the same payload
-        Task[] tasks = Enumerable.Range(0, 10).Select(async _ => {
+        Task[] tasks = [.. Enumerable.Range(0, 10).Select(async _ => {
             DefaultHttpContext ctx = new() { RequestServices = sp };
             ctx.Request.Path = "/api/webhooks/orders";
             ctx.Request.Method = "POST";
@@ -71,7 +71,7 @@ public sealed class InboundConcurrencyRaceTests {
 
             EndpointFilterInvocationContext invCtx = new DefaultEndpointFilterInvocationContext(ctx);
             await filter.InvokeAsync(invCtx, static _ => ValueTask.FromResult<object?>(Results.Ok()));
-        }).ToArray();
+        })];
 
         await Task.WhenAll(tasks);
 
@@ -102,7 +102,7 @@ public sealed class InboundConcurrencyRaceTests {
         WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, handler);
 
         // Act: Fire 5 distinct order payloads in parallel
-        Task[] tasks = Enumerable.Range(1, 5).Select(async i => {
+        Task[] tasks = [.. Enumerable.Range(1, 5).Select(async i => {
             string body = $"{{\"OrderId\":\"ORD-DISTINCT-{i}\",\"Amount\":{i * 10}.0}}";
             UnixTimestamp timestamp = UnixTimestamp.FromSeconds(fixedNow.ToUnixTimeSeconds());
             WebhookSignature sig = this._signer.Sign(body.ToUtf8Bytes(), SecretKey.ToUtf8Bytes(), timestamp);
@@ -116,7 +116,7 @@ public sealed class InboundConcurrencyRaceTests {
 
             EndpointFilterInvocationContext invCtx = new DefaultEndpointFilterInvocationContext(ctx);
             await filter.InvokeAsync(invCtx, static _ => ValueTask.FromResult<object?>(Results.Ok()));
-        }).ToArray();
+        })];
 
         await Task.WhenAll(tasks);
 
@@ -172,7 +172,7 @@ public sealed class InboundConcurrencyRaceTests {
 
         // Assert: Rollback allowed the second attempt to execute and succeed
         Assert.Equal(2, executionAttempts);
-        IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(secondResult);
+        IStatusCodeHttpResult statusResult = Assert.IsType<IStatusCodeHttpResult>(secondResult, exactMatch: false);
         Assert.Equal(StatusCodes.Status200OK, statusResult.StatusCode);
     }
 }

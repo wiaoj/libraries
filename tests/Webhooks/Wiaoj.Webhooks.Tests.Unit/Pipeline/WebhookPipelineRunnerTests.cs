@@ -20,7 +20,7 @@ public sealed class WebhookPipelineRunnerTests {
             [new RecordingWebhookMiddleware("m1", log), new RecordingWebhookMiddleware("m2", log)],
             deliverer);
 
-        await runner.RunAsync(WebhookTestFactory.CreateContext());
+        await runner.RunAsync(WebhookTestFactory.CreateContext(), TestContext.Current.CancellationToken);
 
         Assert.Equal(["m1:before", "m2:before", "m2:after", "m1:after"], log);
     }
@@ -31,7 +31,7 @@ public sealed class WebhookPipelineRunnerTests {
         WebhookPipelineRunner runner = CreateRunner([], deliverer);
         WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
 
-        await runner.RunAsync(context);
+        await runner.RunAsync(context, TestContext.Current.CancellationToken);
 
         Assert.Single(deliverer.ReceivedContexts);
         Assert.Same(context, deliverer.ReceivedContexts[0]);
@@ -45,7 +45,7 @@ public sealed class WebhookPipelineRunnerTests {
             [new ShortCircuitingWebhookMiddleware(log), new RecordingWebhookMiddleware("never", log)],
             deliverer);
 
-        await runner.RunAsync(WebhookTestFactory.CreateContext());
+        await runner.RunAsync(WebhookTestFactory.CreateContext(), TestContext.Current.CancellationToken);
 
         Assert.Equal(["short-circuit"], log);
         Assert.Empty(deliverer.ReceivedContexts);
@@ -58,7 +58,7 @@ public sealed class WebhookPipelineRunnerTests {
         List<WebhookDeliveryAttempt> history = [WebhookTestFactory.CreateAttempt(attemptNumber: 1)];
         WebhookDeliveryContext context = WebhookTestFactory.CreateContext(attemptHistory: history);
 
-        WebhookDeliveryAttempt attempt = await runner.RunAsync(context);
+        WebhookDeliveryAttempt attempt = await runner.RunAsync(context, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, attempt.AttemptNumber);
     }
@@ -68,7 +68,7 @@ public sealed class WebhookPipelineRunnerTests {
         FakeWebhookDeliverer deliverer = new(WebhookTestFactory.CreateSuccessResult());
         WebhookPipelineRunner runner = CreateRunner([], deliverer);
 
-        WebhookDeliveryAttempt attempt = await runner.RunAsync(WebhookTestFactory.CreateContext());
+        WebhookDeliveryAttempt attempt = await runner.RunAsync(WebhookTestFactory.CreateContext(), TestContext.Current.CancellationToken);
 
         Assert.Equal(1, attempt.AttemptNumber);
     }
@@ -79,7 +79,7 @@ public sealed class WebhookPipelineRunnerTests {
         FakeWebhookDeliverer deliverer = new(failure);
         WebhookPipelineRunner runner = CreateRunner([], deliverer);
 
-        WebhookDeliveryAttempt attempt = await runner.RunAsync(WebhookTestFactory.CreateContext());
+        WebhookDeliveryAttempt attempt = await runner.RunAsync(WebhookTestFactory.CreateContext(), TestContext.Current.CancellationToken);
 
         Assert.False(attempt.IsSuccess);
         Assert.Same(failure, attempt.Result);
@@ -90,7 +90,7 @@ public sealed class WebhookPipelineRunnerTests {
         FakeWebhookDeliverer deliverer = new(WebhookTestFactory.CreateSuccessResult());
         WebhookPipelineRunner runner = CreateRunner([], deliverer);
 
-        WebhookDeliveryAttempt attempt = await runner.RunAsync(WebhookTestFactory.CreateContext());
+        WebhookDeliveryAttempt attempt = await runner.RunAsync(WebhookTestFactory.CreateContext(), TestContext.Current.CancellationToken);
 
         Assert.True(attempt.Duration >= TimeSpan.Zero);
     }
@@ -101,7 +101,7 @@ public sealed class WebhookPipelineRunnerTests {
         FakeWebhookDeliverer deliverer = new(WebhookTestFactory.CreateSuccessResult());
         WebhookPipelineRunner runner = CreateRunner([], deliverer);
 
-        WebhookDeliveryAttempt attempt = await runner.RunAsync(WebhookTestFactory.CreateContext(endpoint: endpoint));
+        WebhookDeliveryAttempt attempt = await runner.RunAsync(WebhookTestFactory.CreateContext(endpoint: endpoint), TestContext.Current.CancellationToken);
 
         Assert.Equal(endpoint.Id, attempt.EndpointId);
     }

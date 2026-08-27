@@ -49,19 +49,28 @@ public sealed class IdempotencyMiddleware : IWebhookMiddleware {
 
         bool shouldCheckDeduplication = !(this._options.BypassOnReplay && context.IsReplay());
 
-        // 1. Check if the event was already successfully processed within the active window
-        if(shouldCheckDeduplication && await this._store.ContainsAsync(key, cancellationToken).ConfigureAwait(false)) {
-            this._logger.LogPipelineShortCircuited(context.Endpoint.Id, $"Duplicate event intercepted by IdempotencyStore with key '{key.Value}'.");
-            context.SetResult(WebhookDeliveryResult.Duplicate(key.Value));
-            return;
+        // 1. Atomically reserve the key *before* running the downstream pipeline.
+        //    This closes the check-then-act race that existed when ContainsAsync (check)
+        //    and MarkProcessedAsync (commit) were two separate, non-atomic steps: two
+        //    concurrent deliveries carrying the same key could both observe "not yet
+        //    processed" and both reach the downstream pipeline. TryMarkProcessedAsync
+        //    performs the check-and-reserve as a single atomic operation on the store.
+        if(shouldCheckDeduplication) {
+            bool reserved = await this._store.TryMarkProcessedAsync(key, this._options.Window, cancellationToken).ConfigureAwait(false);
+            if(!reserved) {
+                this._logger.LogPipelineShortCircuited(context.Endpoint.Id, $"Duplicate event intercepted by IdempotencyStore with key '{key.Value}'.");
+                context.SetResult(WebhookDeliveryResult.Duplicate(key.Value));
+                return;
+            }
         }
 
         // 2. Execute downstream pipeline
         await next(context, cancellationToken).ConfigureAwait(false);
 
-        // 3. Atomically commit the idempotency key only upon confirmed successful delivery
-        if(context.HasSuccessResult()) {
-            await this._store.MarkProcessedAsync(key, this._options.Window, cancellationToken).ConfigureAwait(false);
+        // 3. If the delivery did not succeed, release the reservation so a legitimate
+        //    retry for the same key is not rejected as a false-positive duplicate.
+        if(shouldCheckDeduplication && !context.HasSuccessResult()) {
+            await this._store.RemoveAsync(key, cancellationToken).ConfigureAwait(false);
         }
     }
 }

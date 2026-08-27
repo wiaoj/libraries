@@ -16,7 +16,7 @@ public sealed class HeaderEventDiscriminatorExtractorTests {
             DefaultHttpContext context = new();
             context.Request.Headers["X-GitHub-Event"] = "push";
 
-            bool result = extractor.TryExtractEventName(context, ReadOnlySpan<byte>.Empty, out string? eventName);
+            bool result = extractor.TryExtractEventName(context, [], out string? eventName);
 
             Assert.True(result);
             Assert.Equal("push", eventName);
@@ -28,7 +28,7 @@ public sealed class HeaderEventDiscriminatorExtractorTests {
             DefaultHttpContext context = new();
             context.Request.Headers["Webhook-Event"] = "  order.created   ";
 
-            bool result = extractor.TryExtractEventName(context, ReadOnlySpan<byte>.Empty, out string? eventName);
+            bool result = extractor.TryExtractEventName(context, [], out string? eventName);
 
             Assert.True(result);
             Assert.Equal("order.created", eventName);
@@ -39,7 +39,7 @@ public sealed class HeaderEventDiscriminatorExtractorTests {
             HeaderEventDiscriminatorExtractor extractor = new("X-GitHub-Event");
             DefaultHttpContext context = new();
 
-            bool result = extractor.TryExtractEventName(context, ReadOnlySpan<byte>.Empty, out string? eventName);
+            bool result = extractor.TryExtractEventName(context, [], out string? eventName);
 
             Assert.False(result);
             Assert.Null(eventName);
@@ -53,7 +53,7 @@ public sealed class HeaderEventDiscriminatorExtractorTests {
             DefaultHttpContext context = new();
             context.Request.Headers["X-GitHub-Event"] = emptyHeaderValue;
 
-            bool result = extractor.TryExtractEventName(context, ReadOnlySpan<byte>.Empty, out string? eventName);
+            bool result = extractor.TryExtractEventName(context, [], out string? eventName);
 
             Assert.False(result);
             Assert.Null(eventName);
@@ -65,7 +65,7 @@ public sealed class HeaderEventDiscriminatorExtractorTests {
             DefaultHttpContext context = new();
             context.Request.Headers["X-GitHub-Event"] = new StringValues(["push", "admin.action"]);
 
-            bool result = extractor.TryExtractEventName(context, ReadOnlySpan<byte>.Empty, out string? eventName);
+            bool result = extractor.TryExtractEventName(context, [], out string? eventName);
 
             Assert.False(result);
             Assert.Null(eventName);
@@ -76,7 +76,7 @@ public sealed class HeaderEventDiscriminatorExtractorTests {
             HeaderEventDiscriminatorExtractor extractor = new("X-GitHub-Event");
 
             Assert.ThrowsAny<ArgumentNullException>(() =>
-                extractor.TryExtractEventName(null!, ReadOnlySpan<byte>.Empty, out _));
+                extractor.TryExtractEventName(null!, [], out _));
         }
     }
 

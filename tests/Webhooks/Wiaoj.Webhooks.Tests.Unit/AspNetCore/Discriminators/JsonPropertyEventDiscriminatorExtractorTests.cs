@@ -87,7 +87,7 @@ public sealed class JsonPropertyEventDiscriminatorExtractorTests {
             JsonPropertyEventDiscriminatorExtractor extractor = new("type");
             DefaultHttpContext context = new();
 
-            bool result = extractor.TryExtractEventName(context, ReadOnlySpan<byte>.Empty, out string? eventName);
+            bool result = extractor.TryExtractEventName(context, [], out string? eventName);
 
             Assert.False(result);
             Assert.Null(eventName);
@@ -98,7 +98,7 @@ public sealed class JsonPropertyEventDiscriminatorExtractorTests {
             JsonPropertyEventDiscriminatorExtractor extractor = new("type");
 
             Assert.ThrowsAny<ArgumentNullException>(() =>
-                extractor.TryExtractEventName(null!, ReadOnlySpan<byte>.Empty, out _));
+                extractor.TryExtractEventName(null!, [], out _));
         }
     }
 
