@@ -26,3 +26,9 @@ public interface ICircuitBreaker {
     /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
     ValueTask OnFailureAsync(string key, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Strongly-typed wrapper for injecting circuit breakers scoped to a specific marker policy.
+/// </summary>
+/// <typeparam name="TPolicy">The marker type representing the policy category.</typeparam>
+public interface ICircuitBreaker<TPolicy> : ICircuitBreaker where TPolicy : notnull { }

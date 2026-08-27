@@ -34,3 +34,14 @@ internal sealed class DefaultTimeoutStrategyFactory : ITimeoutStrategyFactory {
         throw new InvalidOperationException($"No timeout policy named '{policyName}' was registered and no default timeout policy was configured.");
     }
 }
+
+internal sealed class TypedTimeoutStrategyWrapper<TPolicy>(ITimeoutStrategyFactory factory)
+    : ITimeoutStrategy<TPolicy> where TPolicy : notnull {
+    private readonly Lazy<ITimeoutStrategy> _inner = new(() => factory.Create(typeof(TPolicy).Name));
+
+    public ValueTask<TResult> ExecuteAsync<TResult>(string key, Func<CancellationToken, ValueTask<TResult>> operation, CancellationToken cancellationToken = default)
+        => this._inner.Value.ExecuteAsync(key, operation, cancellationToken);
+
+    public ValueTask ExecuteAsync(string key, Func<CancellationToken, ValueTask> operation, CancellationToken cancellationToken = default)
+        => this._inner.Value.ExecuteAsync(key, operation, cancellationToken);
+}

@@ -36,3 +36,5 @@ public interface ITimeoutStrategy {
         Func<CancellationToken, ValueTask> operation,
         CancellationToken cancellationToken = default);
 }
+
+public interface ITimeoutStrategy<TPolicy> : ITimeoutStrategy where TPolicy : notnull;

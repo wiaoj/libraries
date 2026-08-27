@@ -24,7 +24,8 @@ public static class ResilienceServiceCollectionExtensions {
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<ICircuitBreakerFactory, DefaultCircuitBreakerFactory>();
         services.TryAddTransient(typeof(ICircuitBreaker<>), typeof(TypedCircuitBreakerWrapper<>)); 
-        services.TryAddSingleton<ITimeoutStrategyFactory, DefaultTimeoutStrategyFactory>();
+        services.TryAddSingleton<ITimeoutStrategyFactory, DefaultTimeoutStrategyFactory>(); 
+        services.TryAddTransient(typeof(ITimeoutStrategy<>), typeof(TypedTimeoutStrategyWrapper<>));
 
         ResilienceBuilder builder = new(services);
         configure(builder);
