@@ -10,6 +10,10 @@
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 	</PropertyGroup>
+	
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\RateLimiting\Wiaoj.RateLimiting.Abstractions\Wiaoj.RateLimiting.Abstractions.csproj" />

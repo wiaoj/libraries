@@ -4,9 +4,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.Webhooks.Publishing</RootNamespace>
+	  <AssemblyName>Wiaoj.Webhooks.Publishing</AssemblyName>
+	  <PackageId>Wiaoj.Webhooks.Publishing</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
     <ProjectReference Include="..\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
     <ProjectReference Include="..\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
   </ItemGroup>

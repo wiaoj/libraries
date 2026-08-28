@@ -12,6 +12,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+	
+	<ItemGroup>
 		<ProjectReference Include="..\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
 		<ProjectReference Include="..\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
 		<ProjectReference Include="..\Wiaoj.Webhooks.Publishing\Wiaoj.Webhooks.Publishing.csproj" />

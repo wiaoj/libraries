@@ -9,8 +9,12 @@
 	  <PackageId>Wiaoj.Webhooks.Abstractions</PackageId> 
 	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
-	
-  <ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
     <ProjectReference Include="..\..\Extensions\Abstractions\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
     <ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
     <ProjectReference Include="..\..\Extensions\Security\Wiaoj.Security.Abstractions\Wiaoj.Security.Abstractions.csproj" />

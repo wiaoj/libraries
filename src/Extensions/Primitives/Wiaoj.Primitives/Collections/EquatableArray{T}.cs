@@ -21,7 +21,15 @@ public readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IReadO
     /// <summary>
     /// Gets an empty <see cref="EquatableArray{T}"/> instance containing no elements.
     /// </summary>
-    public static EquatableArray<T> Empty { get; } = new(ImmutableArray<T>.Empty);
+    public static readonly EquatableArray<T> Empty = default;
+
+    /// <summary>
+    /// Gets a value indicating whether the current <see cref="EquatableArray{T}"/> contains no elements or is uninitialized.
+    /// </summary>
+    public bool IsEmpty {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this._items.IsDefaultOrEmpty;
+    }
 
     /// <summary>
     /// Initializes a new <see cref="EquatableArray{T}"/> from the specified standard array (<see cref="T:T[]"/>).

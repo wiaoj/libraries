@@ -89,6 +89,9 @@
     <Project Path="src/ObjectPool/Wiaoj.ObjectPool.Testing/Wiaoj.ObjectPool.Testing.csproj" Id="b0577e50-04b2-427b-bb9d-be52fe1aefbf" />
     <Project Path="src/ObjectPool/Wiaoj.ObjectPool/Wiaoj.ObjectPool.csproj" Id="f2d23627-085e-4e62-944f-899a3ded775c" />
   </Folder>
+  <Folder Name="/src/Pagination/">
+    <Project Path="src/Pagination/Wiaoj.Pagination/Wiaoj.Pagination.csproj" Id="d48d9dec-5903-4af9-a3c7-9e4804d40d96" />
+  </Folder>
   <Folder Name="/src/Preconditions/">
     <File Path="src/Preconditions/README.md" />
     <Project Path="src/Preconditions/Wiaoj.Preconditions/Wiaoj.Preconditions.csproj" />
@@ -155,6 +158,9 @@
   <Folder Name="/tests/DistributedCounter/">
     <Project Path="tests/DistributedCounter/Wiaoj.DistributedCounter.Redis.Tests.Integration/Wiaoj.DistributedCounter.Redis.Tests.Integration.csproj" Id="267e56ef-24da-47b0-98f4-b9b0173c8e68" />
     <Project Path="tests/DistributedCounter/Wiaoj.DistributedCounter.Tests.Unit/Wiaoj.DistributedCounter.Tests.Unit.csproj" Id="3b49f798-09fc-4e18-899b-5011603b215f" />
+  </Folder>
+  <Folder Name="/tests/Pagination/">
+    <Project Path="tests/Pagination/Wiaoj.Pagination.Tests.Unit/Wiaoj.Pagination.Tests.Unit.csproj" Id="63446244-a358-4a02-9cf8-e8d3dc69150d" />
   </Folder>
   <Folder Name="/tests/Resilience/">
     <Project Path="tests/Resilience/Wiaoj.Resilience.Tests.Unit/Wiaoj.Resilience.Tests.Unit.csproj" Id="415fcbe2-6fa6-4343-98bc-bea12a543110" />

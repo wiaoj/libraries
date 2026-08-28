@@ -11,7 +11,6 @@ using Wiaoj.Webhooks.Idempotency;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Signing;
 using Wiaoj.Webhooks.Tests.Unit.TestData;
-using Xunit;
 
 namespace Wiaoj.Webhooks.Tests.Unit.AspNetCore;
 
@@ -46,14 +45,13 @@ public sealed class InboundIdempotencyRaceTests {
         };
         WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, slowHandler);
 
-        // Act: Aynı anda 2 istek başlatılır
+        // Act
         Task task1 = SendRequestAsync();
         Task task2 = SendRequestAsync();
 
         await Task.WhenAll(task1, task2);
 
-        // Assert: Handler SADECE 1 KEZ çalışmalıdır!
-        // ❌ MEVCUT KODDA PATLAR: handlerExecutionCount == 2 olur!
+        // Assert
         Assert.Equal(1, handlerExecutionCount);
 
         async Task SendRequestAsync() {

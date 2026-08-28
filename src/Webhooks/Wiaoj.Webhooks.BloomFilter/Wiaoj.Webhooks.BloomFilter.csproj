@@ -11,7 +11,11 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
-  <ItemGroup>
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
     <ProjectReference Include="..\..\BloomFilter\Wiaoj.BloomFilter.Abstractions\Wiaoj.BloomFilter.Abstractions.csproj" />
     <ProjectReference Include="..\..\BloomFilter\Wiaoj.BloomFilter\Wiaoj.BloomFilter.csproj" />
     <ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
