@@ -225,14 +225,43 @@ public readonly record struct SemVer :
 
     #endregion
 
-    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable, IFormattable, ISpanFormattable, IUtf8SpanFormattable)
 
-    static SemVer IParsable<SemVer>.Parse(string s, IFormatProvider? provider) => Parse(s);
-    static bool IParsable<SemVer>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SemVer result) => TryParse(s, out result);
-    static SemVer ISpanParsable<SemVer>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
-    static bool ISpanParsable<SemVer>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SemVer result) => TryParse(s, out result);
-    static SemVer IUtf8SpanParsable<SemVer>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
-    static bool IUtf8SpanParsable<SemVer>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out SemVer result) => TryParse(utf8Text, out result);
+    static SemVer IParsable<SemVer>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<SemVer>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SemVer result) {
+        return TryParse(s, out result);
+    }
+
+    static SemVer ISpanParsable<SemVer>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<SemVer>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SemVer result) {
+        return TryParse(s, out result);
+    }
+
+    static SemVer IUtf8SpanParsable<SemVer>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<SemVer>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out SemVer result) {
+        return TryParse(utf8Text, out result);
+    }
+
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return ToString(format, formatProvider);
+    }
+
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return TryFormatInternal(destination, out charsWritten, format);
+    }
+
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return TryFormatUtf8Internal(utf8Destination, out bytesWritten, format);
+    }
 
     #endregion
 
@@ -273,7 +302,8 @@ public readonly record struct SemVer :
             return false;
         }
 
-        if(!AreIdentifiersValid(preRelease) || !AreIdentifiersValid(buildMetadata)) {
+        // SemVer 2.0.0 Section 9 (PreRelease disallows leading zeroes in numeric tags) and Section 10
+        if(!AreIdentifiersValid(preRelease, allowLeadingZeroes: false) || !AreIdentifiersValid(buildMetadata, allowLeadingZeroes: true)) {
             return false;
         }
 
@@ -297,15 +327,42 @@ public readonly record struct SemVer :
             return int.TryParse(part, NumberStyles.None, CultureInfo.InvariantCulture, out value);
         }
 
-        static bool AreIdentifiersValid(ReadOnlySpan<char> identifiers) {
+        static bool AreIdentifiersValid(ReadOnlySpan<char> identifiers, bool allowLeadingZeroes) {
             if(identifiers.IsEmpty) {
                 return true;
             }
 
             SpanSplitEnumerator enumerator = new(identifiers, '.');
-            foreach(ReadOnlySpan<char> identifier in enumerator) {
+            while(enumerator.MoveNext()) {
+                ReadOnlySpan<char> identifier = enumerator.Current;
                 if(identifier.IsEmpty) {
                     return false;
+                }
+
+                // Check allowed ASCII characters [0-9A-Za-z-]
+                for(int i = 0; i < identifier.Length; i++) {
+                    char c = identifier[i];
+                    bool isValid = c is >= '0' and <= '9' or
+                                   >= 'a' and <= 'z' or
+                                   >= 'A' and <= 'Z' or
+                                   '-';
+                    if(!isValid) {
+                        return false;
+                    }
+                }
+
+                // Reject numeric identifiers with leading zeroes (Section 9)
+                if(!allowLeadingZeroes && identifier.Length > 1 && identifier[0] == '0') {
+                    bool allDigits = true;
+                    for(int i = 1; i < identifier.Length; i++) {
+                        if(identifier[i] is < '0' or > '9') {
+                            allDigits = false;
+                            break;
+                        }
+                    }
+                    if(allDigits) {
+                        return false;
+                    }
                 }
             }
             return true;
@@ -425,77 +482,101 @@ public readonly record struct SemVer :
 
     #endregion
 
-    #region Formatting (ISpanFormattable, IUtf8SpanFormattable, IFormattable)
+    #region Formatting
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Supports: G (Default), f (Full), s (Stable), m (MajorMinor), M (Major).
+    /// Supports: G (Default / Full), f (Full with PreRelease), s (Stable: Major.Minor.Patch), m (Major.Minor), M (Major).
     /// </remarks>
-    public override string ToString() => ToString("G");
+    public override string ToString() {
+        return ToString("G", null);
+    }
 
     /// <summary>
     /// Formats the SemVer instance to a string using the specified format.
     /// </summary>
-    public string ToString(string? format) => ToString(format, null);
+    public string ToString(string? format) {
+        return ToString(format, null);
+    }
 
     /// <summary>
     /// Formats the SemVer instance to a string using the specified format and format provider.
     /// </summary>
     public string ToString(string? format, IFormatProvider? formatProvider) {
+        ReadOnlySpan<char> fmt = format.AsSpan();
+        if(!IsValidFormat(fmt)) {
+            throw new FormatException($"Format specifier '{format}' was invalid.");
+        }
+
         Span<char> buffer = stackalloc char[128];
-        if(TryFormatInternal(buffer, out int charsWritten, format.AsSpan())) {
+        if(TryFormatInternal(buffer, out int charsWritten, fmt)) {
             return buffer[..charsWritten].ToString();
         }
 
-        int requiredLength = GetRequiredLength(format.AsSpan());
-        return string.Create(requiredLength, this, (span, state) => {
-            state.TryFormatInternal(span, out _, format.AsSpan());
+        char specifier = fmt.IsEmpty ? 'G' : fmt[0];
+        int requiredLength = GetRequiredLength(fmt);
+        return string.Create(requiredLength, (Value: this, Specifier: specifier), (span, state) => {
+            Span<char> fmtSpan = [state.Specifier];
+            state.Value.TryFormatInternal(span, out _, fmtSpan);
         });
     }
 
     /// <summary>
-    /// Tries to format the SemVer instance into the destination character span.
+    /// Tries to format the SemVer instance into the destination character span using the default format ("G").
     /// </summary>
-    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+    public bool TryFormat(Span<char> destination, out int charsWritten) {
+        return TryFormatInternal(destination, out charsWritten, "G".AsSpan());
+    }
 
     /// <summary>
     /// Tries to format the SemVer instance into the destination character span using the specified format.
     /// </summary>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
-
-    /// <summary>
-    /// Tries to format the SemVer instance into the destination character span using the specified format and provider.
-    /// </summary>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
         return TryFormatInternal(destination, out charsWritten, format);
     }
 
     /// <summary>
-    /// Tries to format the SemVer instance into the destination UTF-8 byte span.
+    /// Tries to format the SemVer instance into the destination UTF-8 byte span using the default format ("G").
     /// </summary>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
+        return TryFormatUtf8Internal(utf8Destination, out bytesWritten, "G".AsSpan());
+    }
 
     /// <summary>
     /// Tries to format the SemVer instance into the destination UTF-8 byte span using the specified format.
     /// </summary>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) {
+        return TryFormatUtf8Internal(utf8Destination, out bytesWritten, format);
+    }
 
-    /// <summary>
-    /// Tries to format the SemVer instance into the destination UTF-8 byte span using the specified format and provider.
-    /// </summary>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        int required = GetRequiredLength(format.IsEmpty ? "G".AsSpan() : format);
-        if(utf8Destination.Length < required) { bytesWritten = 0; return false; }
+    private bool TryFormatUtf8Internal(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) {
+        ReadOnlySpan<char> fmt = format.IsEmpty ? "G".AsSpan() : format;
+        if(!IsValidFormat(fmt)) {
+            bytesWritten = 0;
+            return false;
+        }
+
+        int required = GetRequiredLength(fmt);
+        if(utf8Destination.Length < required) {
+            bytesWritten = 0;
+            return false;
+        }
+
         Span<char> charBuf = stackalloc char[required <= 128 ? required : 128];
         char[]? rented = required > 128 ? System.Buffers.ArrayPool<char>.Shared.Rent(required) : null;
         Span<char> buf = rented is not null ? rented.AsSpan(0, required) : charBuf;
         try {
-            if(!TryFormatInternal(buf, out int charsWritten, format)) { bytesWritten = 0; return false; }
+            if(!TryFormatInternal(buf, out int charsWritten, fmt)) {
+                bytesWritten = 0;
+                return false;
+            }
             bytesWritten = System.Text.Encoding.UTF8.GetBytes(buf[..charsWritten], utf8Destination);
             return true;
         }
         finally {
-            if(rented is not null) System.Buffers.ArrayPool<char>.Shared.Return(rented);
+            if(rented is not null) {
+                System.Buffers.ArrayPool<char>.Shared.Return(rented);
+            }
         }
     }
 
@@ -512,9 +593,13 @@ public readonly record struct SemVer :
     private sealed class SemVerOrdinalComparer : IEqualityComparer<SemVer>, IAlternateEqualityComparer<ReadOnlySpan<char>, SemVer> {
         public static SemVerOrdinalComparer Instance { get; } = new();
 
-        public bool Equals(SemVer x, SemVer y) => x.Equals(y);
+        public bool Equals(SemVer x, SemVer y) {
+            return x.Equals(y);
+        }
 
-        public int GetHashCode(SemVer obj) => obj.GetHashCode();
+        public int GetHashCode(SemVer obj) {
+            return obj.GetHashCode();
+        }
 
         public bool Equals(ReadOnlySpan<char> alternate, SemVer other) {
             if(SemVer.TryParse(alternate, out SemVer parsed)) {
@@ -530,31 +615,36 @@ public readonly record struct SemVer :
             return 0;
         }
 
-        public SemVer Create(ReadOnlySpan<char> alternate) => SemVer.Parse(alternate);
+        public SemVer Create(ReadOnlySpan<char> alternate) {
+            return SemVer.Parse(alternate);
+        }
     }
 
     #endregion
 
     // --- Internal Formatting Logic ---
 
-    private bool TryFormatInternal(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
-        if(format.IsEmpty) {
-            format = "G";
-        }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsValidFormat(ReadOnlySpan<char> format) {
+        return format.IsEmpty || (format.Length == 1 && format[0] is 'G' or 'f' or 's' or 'm' or 'M');
+    }
 
-        if(format.Length != 1) {
+    private bool TryFormatInternal(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
+        ReadOnlySpan<char> fmt = format.IsEmpty ? "G".AsSpan() : format;
+
+        if(!IsValidFormat(fmt)) {
             charsWritten = 0;
             return false;
         }
 
-        int requiredLength = GetRequiredLength(format);
+        int requiredLength = GetRequiredLength(fmt);
         if(destination.Length < requiredLength) {
             charsWritten = 0;
             return false;
         }
 
         charsWritten = 0;
-        char specifier = format[0];
+        char specifier = fmt[0];
 
         if(specifier is 'G' or 'f' or 's' or 'm' or 'M') {
             this.Major.TryFormat(destination[charsWritten..], out int written);
@@ -585,7 +675,7 @@ public readonly record struct SemVer :
             }
         }
 
-        return specifier is 'G' or 'f' or 's' or 'm' or 'M';
+        return true;
     }
 
     private int GetRequiredLength(ReadOnlySpan<char> format) {

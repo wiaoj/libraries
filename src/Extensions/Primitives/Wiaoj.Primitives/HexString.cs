@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -42,7 +41,7 @@ public readonly record struct HexString :
     /// <summary>
     /// Represents an empty hexadecimal string.
     /// </summary>
-    public static HexString Empty { get; } = new(string.Empty);
+    public static HexString Empty => default;
 
     /// <summary>
     /// Gets the underlying hexadecimal string value.
@@ -262,14 +261,43 @@ public readonly record struct HexString :
 
     #endregion
 
-    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable, IFormattable, ISpanFormattable, IUtf8SpanFormattable)
 
-    static HexString IParsable<HexString>.Parse(string s, IFormatProvider? provider) => Parse(s);
-    static bool IParsable<HexString>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out HexString result) => TryParse(s, out result);
-    static HexString ISpanParsable<HexString>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
-    static bool ISpanParsable<HexString>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out HexString result) => TryParse(s, out result);
-    static HexString IUtf8SpanParsable<HexString>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
-    static bool IUtf8SpanParsable<HexString>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out HexString result) => TryParse(utf8Text, out result);
+    static HexString IParsable<HexString>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<HexString>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out HexString result) {
+        return TryParse(s, out result);
+    }
+
+    static HexString ISpanParsable<HexString>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<HexString>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out HexString result) {
+        return TryParse(s, out result);
+    }
+
+    static HexString IUtf8SpanParsable<HexString>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<HexString>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out HexString result) {
+        return TryParse(utf8Text, out result);
+    }
+
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return ToString(format);
+    }
+
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return TryFormat(destination, out charsWritten, format);
+    }
+
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return TryFormat(utf8Destination, out bytesWritten, format);
+    }
 
     #endregion
 
@@ -373,89 +401,94 @@ public readonly record struct HexString :
 
     #endregion
 
-    #region Formatting & ISpanFormattable / IUtf8SpanFormattable
+    #region Formatting & Zero-Allocation Span Formattable
 
     /// <summary>
-    /// Formats the hex string using the specified format.
+    /// Formats the hexadecimal string using the specified format specifier.
     /// </summary>
-    /// <param name="format">The format string ("x" or "X2" for lowercase, default uppercase).</param>
-    /// <returns>The formatted hex string.</returns>
-    public string ToString(string? format) => ToString(format, null);
+    /// <param name="format">
+    /// The format specifier. Use <c>"x"</c> or <c>"x2"</c> for lowercase output, or <c>"X"</c> / <c>null</c> for uppercase output.
+    /// </param>
+    /// <returns>The formatted hexadecimal string.</returns>
+    public string ToString(string? format) {
+        if(string.IsNullOrEmpty(this._value)) return string.Empty;
+        return format is "x" or "X2" or "x2" ? ToLower().Value : this.Value;
+    }
 
     /// <summary>
-    /// Formats the hex string using the specified format and format provider.
-    /// </summary>
-    /// <param name="format">The format string.</param>
-    /// <param name="formatProvider">The format provider.</param>
-    /// <returns>The formatted hex string.</returns>
-    public string ToString(string? format, IFormatProvider? formatProvider) =>
-        format is "x" or "X2" ? this.ToLower().Value : this.Value;
-
-    /// <summary>
-    /// Tries to format the hex string into the destination character span.
+    /// Attempts to format the hexadecimal string into the destination character span without heap allocations.
     /// </summary>
     /// <param name="destination">The destination character span.</param>
     /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
+    /// <param name="format">The format span (<c>"x"</c> or <c>"x2"</c> for lowercase, default uppercase).</param>
     /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default) {
+        ReadOnlySpan<char> src = this.Value.AsSpan();
+        if(destination.Length < src.Length) {
+            charsWritten = 0;
+            return false;
+        }
 
-    /// <summary>
-    /// Tries to format the hex string into the destination character span using the specified format.
-    /// </summary>
-    /// <param name="destination">The destination character span.</param>
-    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
-    /// <param name="format">The format span ("x" for lowercase).</param>
-    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+        bool toLower = format.Equals("x", StringComparison.Ordinal) || format.Equals("x2", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Tries to format the hex string into the destination character span using the specified format and provider.
-    /// </summary>
-    /// <param name="destination">The destination character span.</param>
-    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
-    /// <param name="format">The format span.</param>
-    /// <param name="provider">The format provider.</param>
-    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        HexString src = format.Equals("x", StringComparison.Ordinal) ? this.ToLower() : this;
-        ReadOnlySpan<char> span = src.Value.AsSpan();
-        if(destination.Length < span.Length) { charsWritten = 0; return false; }
-        span.CopyTo(destination);
-        charsWritten = span.Length;
+        if(toLower) {
+            for(int i = 0; i < src.Length; i++) {
+                char c = src[i];
+                destination[i] = (c is >= 'A' and <= 'F') ? (char)(c + 32) : c;
+            }
+        }
+        else {
+            src.CopyTo(destination);
+        }
+
+        charsWritten = src.Length;
         return true;
     }
 
     /// <summary>
-    /// Tries to format the hex string into the destination UTF-8 byte span.
+    /// Attempts to format the hexadecimal string as uppercase into the destination character span.
     /// </summary>
-    /// <param name="utf8Destination">The destination byte span.</param>
-    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
+    /// <param name="destination">The destination character span.</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
     /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+    public bool TryFormat(Span<char> destination, out int charsWritten) {
+        return TryFormat(destination, out charsWritten, default);
+    }
 
     /// <summary>
-    /// Tries to format the hex string into the destination UTF-8 byte span using the specified format.
+    /// Attempts to format the hexadecimal string into the destination UTF-8 byte span without heap allocations.
     /// </summary>
     /// <param name="utf8Destination">The destination byte span.</param>
     /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
-    /// <param name="format">The format span ("x" for lowercase).</param>
+    /// <param name="format">The format span (<c>"x"</c> or <c>"x2"</c> for lowercase, default uppercase).</param>
     /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format = default) {
+        ReadOnlySpan<char> src = this.Value.AsSpan();
+        if(utf8Destination.Length < src.Length) {
+            bytesWritten = 0;
+            return false;
+        }
 
-    /// <summary>
-    /// Tries to format the hex string into the destination UTF-8 byte span using the specified format and provider.
-    /// </summary>
-    /// <param name="utf8Destination">The destination byte span.</param>
-    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
-    /// <param name="format">The format span.</param>
-    /// <param name="provider">The format provider.</param>
-    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        HexString src = format.Equals("x", StringComparison.Ordinal) ? this.ToLower() : this;
-        if(string.IsNullOrEmpty(src._value)) { bytesWritten = 0; return true; }
-        if(utf8Destination.Length < src._value.Length) { bytesWritten = 0; return false; }
-        bytesWritten = Encoding.UTF8.GetBytes(src._value.AsSpan(), utf8Destination);
+        bool toLower = format.Equals("x", StringComparison.Ordinal) || format.Equals("x2", StringComparison.OrdinalIgnoreCase);
+
+        for(int i = 0; i < src.Length; i++) {
+            char c = src[i];
+            char targetChar = (toLower && c is >= 'A' and <= 'F') ? (char)(c + 32) : c;
+            utf8Destination[i] = (byte)targetChar;
+        }
+
+        bytesWritten = src.Length;
         return true;
+    }
+
+    /// <summary>
+    /// Attempts to format the hexadecimal string as uppercase into the destination UTF-8 byte span.
+    /// </summary>
+    /// <param name="utf8Destination">The destination byte span.</param>
+    /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
+        return TryFormat(utf8Destination, out bytesWritten, default);
     }
 
     #endregion
@@ -467,7 +500,9 @@ public readonly record struct HexString :
     /// </summary>
     /// <param name="other">The other <see cref="HexString"/> to compare.</param>
     /// <returns>A value that indicates the relative order of the objects being compared.</returns>
-    public int CompareTo(HexString other) => string.Compare(this.Value, other.Value, StringComparison.Ordinal);
+    public int CompareTo(HexString other) {
+        return string.Compare(this.Value, other.Value, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Compares the current instance with another object.
@@ -482,16 +517,24 @@ public readonly record struct HexString :
     }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
-    public static bool operator <(HexString left, HexString right) => left.CompareTo(right) < 0;
+    public static bool operator <(HexString left, HexString right) {
+        return left.CompareTo(right) < 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
-    public static bool operator <=(HexString left, HexString right) => left.CompareTo(right) <= 0;
+    public static bool operator <=(HexString left, HexString right) {
+        return left.CompareTo(right) <= 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
-    public static bool operator >(HexString left, HexString right) => left.CompareTo(right) > 0;
+    public static bool operator >(HexString left, HexString right) {
+        return left.CompareTo(right) > 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
-    public static bool operator >=(HexString left, HexString right) => left.CompareTo(right) >= 0;
+    public static bool operator >=(HexString left, HexString right) {
+        return left.CompareTo(right) >= 0;
+    }
 
     #endregion
 
@@ -512,29 +555,49 @@ public readonly record struct HexString :
     private sealed class HexStringOrdinalComparer : IEqualityComparer<HexString>, IAlternateEqualityComparer<ReadOnlySpan<char>, HexString> {
         public static HexStringOrdinalComparer Instance { get; } = new();
 
-        public bool Equals(HexString x, HexString y) => string.Equals(x.Value, y.Value, StringComparison.Ordinal);
+        public bool Equals(HexString x, HexString y) {
+            return string.Equals(x.Value, y.Value, StringComparison.Ordinal);
+        }
 
-        public int GetHashCode(HexString obj) => string.GetHashCode(obj.Value.AsSpan(), StringComparison.Ordinal);
+        public int GetHashCode(HexString obj) {
+            return string.GetHashCode(obj.Value.AsSpan(), StringComparison.Ordinal);
+        }
 
-        public bool Equals(ReadOnlySpan<char> alternate, HexString other) => alternate.SequenceEqual(other.Value.AsSpan());
+        public bool Equals(ReadOnlySpan<char> alternate, HexString other) {
+            return alternate.SequenceEqual(other.Value.AsSpan());
+        }
 
-        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.Ordinal);
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            return string.GetHashCode(alternate, StringComparison.Ordinal);
+        }
 
-        public HexString Create(ReadOnlySpan<char> alternate) => HexString.Parse(alternate);
+        public HexString Create(ReadOnlySpan<char> alternate) {
+            return HexString.Parse(alternate);
+        }
     }
 
     private sealed class HexStringOrdinalIgnoreCaseComparer : IEqualityComparer<HexString>, IAlternateEqualityComparer<ReadOnlySpan<char>, HexString> {
         public static HexStringOrdinalIgnoreCaseComparer Instance { get; } = new();
 
-        public bool Equals(HexString x, HexString y) => string.Equals(x.Value, y.Value, StringComparison.OrdinalIgnoreCase);
+        public bool Equals(HexString x, HexString y) {
+            return string.Equals(x.Value, y.Value, StringComparison.OrdinalIgnoreCase);
+        }
 
-        public int GetHashCode(HexString obj) => string.GetHashCode(obj.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode(HexString obj) {
+            return string.GetHashCode(obj.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+        }
 
-        public bool Equals(ReadOnlySpan<char> alternate, HexString other) => MemoryExtensions.Equals(alternate, other.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+        public bool Equals(ReadOnlySpan<char> alternate, HexString other) {
+            return MemoryExtensions.Equals(alternate, other.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+        }
 
-        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            return string.GetHashCode(alternate, StringComparison.OrdinalIgnoreCase);
+        }
 
-        public HexString Create(ReadOnlySpan<char> alternate) => HexString.Parse(alternate);
+        public HexString Create(ReadOnlySpan<char> alternate) {
+            return HexString.Parse(alternate);
+        }
     }
 
     #endregion
@@ -542,13 +605,13 @@ public readonly record struct HexString :
     #region Helpers, Formatting, Equality & Operators
 
     /// <inheritdoc/>
-    public override string ToString() {
-        return this.Value;
+    public bool Equals(HexString other) {
+        return string.Equals(this.Value, other.Value, StringComparison.Ordinal);
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        return string.GetHashCode(this.Value.AsSpan(), StringComparison.Ordinal);
+    public override string ToString() {
+        return this.Value;
     }
 
     /// <summary>

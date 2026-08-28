@@ -34,8 +34,7 @@ public readonly partial record struct NanoId :
     ISpanFormattable,
     IUtf8SpanFormattable,
     IFormattable,
-    IComparisonOperators<NanoId, NanoId, bool>
-{
+    IComparisonOperators<NanoId, NanoId, bool> {
     // -------------------------------------------------------------------------
     // CONSTANTS & CONFIG
     // -------------------------------------------------------------------------
@@ -150,7 +149,9 @@ public readonly partial record struct NanoId :
     /// <summary>
     /// Generates a new cryptographically secure NanoId directly into the destination span without heap allocation using default length.
     /// </summary>
-    public static bool TryGenerate(Span<char> destination) => TryGenerate(destination, DefaultLength);
+    public static bool TryGenerate(Span<char> destination) {
+        return TryGenerate(destination, DefaultLength);
+    }
 
     /// <summary>
     /// Generates a new cryptographically secure NanoId directly into the destination span without heap allocation.
@@ -233,14 +234,43 @@ public readonly partial record struct NanoId :
         return false;
     }
 
-    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
+    #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable, IFormattable, ISpanFormattable, IUtf8SpanFormattable)
 
-    static NanoId IParsable<NanoId>.Parse(string s, IFormatProvider? provider) => Parse(s);
-    static bool IParsable<NanoId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out NanoId result) => TryParse(s, out result);
-    static NanoId ISpanParsable<NanoId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
-    static bool ISpanParsable<NanoId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out NanoId result) => TryParse(s, out result);
-    static NanoId IUtf8SpanParsable<NanoId>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
-    static bool IUtf8SpanParsable<NanoId>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out NanoId result) => TryParse(utf8Text, out result);
+    static NanoId IParsable<NanoId>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<NanoId>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out NanoId result) {
+        return TryParse(s, out result);
+    }
+
+    static NanoId ISpanParsable<NanoId>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<NanoId>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out NanoId result) {
+        return TryParse(s, out result);
+    }
+
+    static NanoId IUtf8SpanParsable<NanoId>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<NanoId>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out NanoId result) {
+        return TryParse(utf8Text, out result);
+    }
+
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return this.Value;
+    }
+
+    bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return TryFormat(destination, out charsWritten);
+    }
+
+    bool IUtf8SpanFormattable.TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+        return TryFormat(utf8Destination, out bytesWritten);
+    }
 
     #endregion
 
@@ -275,17 +305,21 @@ public readonly partial record struct NanoId :
         System.Text.Unicode.Utf8.FromUtf16(this._value, destination, out _, out bytesWritten);
         return true;
     }
-    
+
     /// <summary>
-     /// Returns a ReadOnlySpan representation of the identifier.
-     /// </summary>
-    public ReadOnlySpan<char> AsSpan() => this._value.AsSpan();
+    /// Returns a ReadOnlySpan representation of the identifier.
+    /// </summary>
+    public ReadOnlySpan<char> AsSpan() {
+        return this._value.AsSpan();
+    }
 
     /// <summary>
     /// Allows the NanoId to be used in 'fixed' statements.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public ref readonly char GetPinnableReference() => ref this._value.GetPinnableReference();
+    public ref readonly char GetPinnableReference() {
+        return ref this._value.GetPinnableReference();
+    }
 
     /// <summary>
     /// Writes the NanoId directly to the provided buffer writer.
@@ -295,6 +329,17 @@ public readonly partial record struct NanoId :
         Span<char> span = writer.GetSpan(this._value.Length);
         this._value.CopyTo(span);
         writer.Advance(this._value.Length);
+    }
+
+    /// <summary>
+    /// Writes the NanoId directly as UTF-8 bytes to the provided buffer writer.
+    /// </summary>
+    public void WriteUtf8To(IBufferWriter<byte> writer) {
+        if(string.IsNullOrEmpty(this._value)) return;
+        Span<byte> span = writer.GetSpan(this._value.Length);
+        if(System.Text.Unicode.Utf8.FromUtf16(this._value, span, out _, out int bytesWritten) == OperationStatus.Done) {
+            writer.Advance(bytesWritten);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -314,35 +359,17 @@ public readonly partial record struct NanoId :
     /// Returns the string value of the <see cref="NanoId"/>.
     /// </summary>
     /// <returns>The underlying string identifier.</returns>
-    public override string ToString() => this.Value;
-
-    /// <summary>
-    /// Returns the string value using the specified format.
-    /// </summary>
-    public string ToString(string? format) => this.Value;
-
-    /// <summary>
-    /// Returns the string value using the specified format and format provider.
-    /// </summary>
-    public string ToString(string? format, IFormatProvider? formatProvider) => this.Value;
+    public override string ToString() {
+        return this.Value;
+    }
 
     /// <summary>
     /// Attempts to format the <see cref="NanoId"/> into the provided character span.
     /// </summary>
-    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
-
-    /// <summary>
-    /// Attempts to format the <see cref="NanoId"/> into the provided character span using the specified format.
-    /// </summary>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
-
-    /// <summary>
-    /// Attempts to format the <see cref="NanoId"/> into the provided character span using the specified format and provider.
-    /// </summary>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    public bool TryFormat(Span<char> destination, out int charsWritten) {
         if(string.IsNullOrEmpty(this._value)) {
             charsWritten = 0;
-            return false;
+            return true;
         }
 
         if(destination.Length < this._value.Length) {
@@ -358,17 +385,7 @@ public readonly partial record struct NanoId :
     /// <summary>
     /// Attempts to format the <see cref="NanoId"/> into the provided UTF-8 byte span.
     /// </summary>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
-
-    /// <summary>
-    /// Attempts to format the <see cref="NanoId"/> into the provided UTF-8 byte span using the specified format.
-    /// </summary>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
-
-    /// <summary>
-    /// Attempts to format the <see cref="NanoId"/> into the provided UTF-8 byte span using the specified format and provider.
-    /// </summary>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
         if(string.IsNullOrEmpty(this._value)) { bytesWritten = 0; return true; }
         if(utf8Destination.Length < this._value.Length) { bytesWritten = 0; return false; }
         bytesWritten = System.Text.Encoding.UTF8.GetBytes(this._value.AsSpan(), utf8Destination);
@@ -380,38 +397,58 @@ public readonly partial record struct NanoId :
     // -------------------------------------------------------------------------
 
     /// <inheritdoc/>
-    public bool Equals(NanoId other) => string.Equals(this._value, other._value, StringComparison.Ordinal);
+    public bool Equals(NanoId other) {
+        return string.Equals(this._value, other._value, StringComparison.Ordinal);
+    }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => this._value?.GetHashCode() ?? 0;
+    public override int GetHashCode() {
+        return this._value?.GetHashCode() ?? 0;
+    }
 
     /// <inheritdoc/>
-    public int CompareTo(NanoId other) => string.CompareOrdinal(this._value, other._value);
+    public int CompareTo(NanoId other) {
+        return string.CompareOrdinal(this._value, other._value);
+    }
 
     /// <inheritdoc/>
-    public int CompareTo(object? obj) => obj is NanoId other ? CompareTo(other) : 1;
+    public int CompareTo(object? obj) {
+        return obj is NanoId other ? CompareTo(other) : 1;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />
-    public static bool operator >(NanoId left, NanoId right) => left.CompareTo(right) > 0;
+    public static bool operator >(NanoId left, NanoId right) {
+        return left.CompareTo(right) > 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThan(TSelf, TOther)" />
-    public static bool operator <(NanoId left, NanoId right) => left.CompareTo(right) < 0;
+    public static bool operator <(NanoId left, NanoId right) {
+        return left.CompareTo(right) < 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThanOrEqual(TSelf, TOther)" />
-    public static bool operator >=(NanoId left, NanoId right) => left.CompareTo(right) >= 0;
+    public static bool operator >=(NanoId left, NanoId right) {
+        return left.CompareTo(right) >= 0;
+    }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_LessThanOrEqual(TSelf, TOther)" />
-    public static bool operator <=(NanoId left, NanoId right) => left.CompareTo(right) <= 0;
+    public static bool operator <=(NanoId left, NanoId right) {
+        return left.CompareTo(right) <= 0;
+    }
 
     /// <summary>
     /// Implicitly converts a <see cref="NanoId"/> to its string value.
     /// </summary>
-    public static implicit operator string(NanoId id) => id.Value;
+    public static implicit operator string(NanoId id) {
+        return id.Value;
+    }
 
     /// <summary>
     /// Explicitly converts a string to a <see cref="NanoId"/> by parsing it.
     /// </summary>
-    public static explicit operator NanoId(string s) => Parse(s);
+    public static explicit operator NanoId(string s) {
+        return Parse(s);
+    }
 
     #region Alternate Comparers (.NET 10 Alternate Lookup)
 
@@ -430,29 +467,49 @@ public readonly partial record struct NanoId :
     private sealed class NanoIdOrdinalComparer : IEqualityComparer<NanoId>, IAlternateEqualityComparer<ReadOnlySpan<char>, NanoId> {
         public static NanoIdOrdinalComparer Instance { get; } = new();
 
-        public bool Equals(NanoId x, NanoId y) => string.Equals(x.Value, y.Value, StringComparison.Ordinal);
+        public bool Equals(NanoId x, NanoId y) {
+            return string.Equals(x.Value, y.Value, StringComparison.Ordinal);
+        }
 
-        public int GetHashCode(NanoId obj) => obj.Value.GetHashCode(StringComparison.Ordinal);
+        public int GetHashCode(NanoId obj) {
+            return obj.Value.GetHashCode(StringComparison.Ordinal);
+        }
 
-        public bool Equals(ReadOnlySpan<char> alternate, NanoId other) => alternate.SequenceEqual(other.Value.AsSpan());
+        public bool Equals(ReadOnlySpan<char> alternate, NanoId other) {
+            return alternate.SequenceEqual(other.Value.AsSpan());
+        }
 
-        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.Ordinal);
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            return string.GetHashCode(alternate, StringComparison.Ordinal);
+        }
 
-        public NanoId Create(ReadOnlySpan<char> alternate) => NanoId.Parse(alternate);
+        public NanoId Create(ReadOnlySpan<char> alternate) {
+            return NanoId.Parse(alternate);
+        }
     }
 
     private sealed class NanoIdOrdinalIgnoreCaseComparer : IEqualityComparer<NanoId>, IAlternateEqualityComparer<ReadOnlySpan<char>, NanoId> {
         public static NanoIdOrdinalIgnoreCaseComparer Instance { get; } = new();
 
-        public bool Equals(NanoId x, NanoId y) => string.Equals(x.Value, y.Value, StringComparison.OrdinalIgnoreCase);
+        public bool Equals(NanoId x, NanoId y) {
+            return string.Equals(x.Value, y.Value, StringComparison.OrdinalIgnoreCase);
+        }
 
-        public int GetHashCode(NanoId obj) => string.GetHashCode(obj.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode(NanoId obj) {
+            return string.GetHashCode(obj.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+        }
 
-        public bool Equals(ReadOnlySpan<char> alternate, NanoId other) => alternate.Equals(other.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+        public bool Equals(ReadOnlySpan<char> alternate, NanoId other) {
+            return alternate.Equals(other.Value.AsSpan(), StringComparison.OrdinalIgnoreCase);
+        }
 
-        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate, StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode(ReadOnlySpan<char> alternate) {
+            return string.GetHashCode(alternate, StringComparison.OrdinalIgnoreCase);
+        }
 
-        public NanoId Create(ReadOnlySpan<char> alternate) => NanoId.Parse(alternate);
+        public NanoId Create(ReadOnlySpan<char> alternate) {
+            return NanoId.Parse(alternate);
+        }
     }
 
     #endregion
