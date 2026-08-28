@@ -68,8 +68,8 @@ public readonly record struct PageMetadata :
     /// Gets the total number of pages calculated from <see cref="TotalCount"/> and <see cref="PageSize"/>.
     /// Returns 0 if <see cref="PageSize"/> is 0.
     /// </summary>
-    public int TotalPages => this.PageSize > 0
-        ? (int)Math.Ceiling(this.TotalCount / (double)this.PageSize)
+    public long TotalPages => this.PageSize > 0
+        ? (long)Math.Ceiling(this.TotalCount / (double)this.PageSize)
         : 0;
 
     /// <summary>
@@ -93,7 +93,7 @@ public readonly record struct PageMetadata :
     /// <param name="pageNumber">The 1-based page number. Values less than 1 are clamped to 1.</param>
     /// <param name="pageSize">The page size limit. Values less than 1 are clamped to 1.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PageMetadata(int totalCount, int pageNumber, int pageSize) {
+    public PageMetadata(long totalCount, int pageNumber, int pageSize) {
         this.TotalCount = totalCount < 0 ? 0 : totalCount;
         this.PageNumber = pageNumber < 1 ? 1 : pageNumber;
         this.PageSize = pageSize < 1 ? 1 : pageSize;
@@ -107,7 +107,7 @@ public readonly record struct PageMetadata :
     /// <param name="pageSize">The page size capacity.</param>
     /// <param name="totalPages">The calculated total page count.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Deconstruct(out long totalCount, out int pageNumber, out int pageSize, out int totalPages) {
+    public void Deconstruct(out long totalCount, out int pageNumber, out int pageSize, out long totalPages) {
         totalCount = this.TotalCount;
         pageNumber = this.PageNumber;
         pageSize = this.PageSize;

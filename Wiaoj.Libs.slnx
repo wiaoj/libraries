@@ -90,6 +90,8 @@
     <Project Path="src/ObjectPool/Wiaoj.ObjectPool/Wiaoj.ObjectPool.csproj" Id="f2d23627-085e-4e62-944f-899a3ded775c" />
   </Folder>
   <Folder Name="/src/Pagination/">
+    <Project Path="src/Pagination/Wiaoj.Pagination.AspNetCore/Wiaoj.Pagination.AspNetCore.csproj" Id="b8d74104-ba78-4714-8e61-157b463f4df0" />
+    <Project Path="src/Pagination/Wiaoj.Pagination.EntityFrameworkCore/Wiaoj.Pagination.EntityFrameworkCore.csproj" Id="83a406d7-b838-4da3-9723-3fde8d8f7423" />
     <Project Path="src/Pagination/Wiaoj.Pagination/Wiaoj.Pagination.csproj" Id="d48d9dec-5903-4af9-a3c7-9e4804d40d96" />
   </Folder>
   <Folder Name="/src/Preconditions/">
@@ -160,6 +162,8 @@
     <Project Path="tests/DistributedCounter/Wiaoj.DistributedCounter.Tests.Unit/Wiaoj.DistributedCounter.Tests.Unit.csproj" Id="3b49f798-09fc-4e18-899b-5011603b215f" />
   </Folder>
   <Folder Name="/tests/Pagination/">
+    <Project Path="tests/Pagination/Wiaoj.Pagination.AspNetCore.Tests.Unit/Wiaoj.Pagination.AspNetCore.Tests.Unit.csproj" Id="ef9b1df9-7f0d-462c-9aba-20828ad594aa" />
+    <Project Path="tests/Pagination/Wiaoj.Pagination.EntityFrameworkCore.Tests.Integration/Wiaoj.Pagination.EntityFrameworkCore.Tests.Integration.csproj" Id="206a98a6-a728-43a8-8108-e6758bc91af3" />
     <Project Path="tests/Pagination/Wiaoj.Pagination.Tests.Unit/Wiaoj.Pagination.Tests.Unit.csproj" Id="63446244-a358-4a02-9cf8-e8d3dc69150d" />
   </Folder>
   <Folder Name="/tests/Resilience/">

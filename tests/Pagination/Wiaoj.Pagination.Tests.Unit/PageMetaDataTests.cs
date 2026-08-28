@@ -52,7 +52,7 @@ public sealed class PageMetadataTests {
             PageMetadata sut = new(totalCount: 95, pageNumber: 2, pageSize: 10);
 
             // Act
-            (long totalCount, int pageNumber, int pageSize, int totalPages) = sut;
+            (long totalCount, int pageNumber, int pageSize, long totalPages) = sut;
 
             // Assert
             Assert.Equal(95, totalCount);

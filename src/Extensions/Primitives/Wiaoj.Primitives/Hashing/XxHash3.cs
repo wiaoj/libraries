@@ -45,6 +45,9 @@ public readonly struct XxHash3
     /// <summary>The size of the XXHash3-64 hash in bytes (8 bytes / 64 bits).</summary>
     internal const int HashSizeInBytes = 8;
 
+    /// <summary>The size of the XXHash3-64 hash in bytes (8 bytes / 64 bits).</summary>
+    public const int SizeInBytes = HashSizeInBytes;
+
     private readonly ulong _value;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

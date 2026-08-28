@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.Pagination.EntityFrameworkCore</RootNamespace>
+	  <AssemblyName>Wiaoj.Pagination.EntityFrameworkCore</AssemblyName>
+	  <PackageId>Wiaoj.Pagination.EntityFrameworkCore</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+ 
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+	</ItemGroup>
+
+
+	<ItemGroup>
+    <ProjectReference Include="..\Wiaoj.Pagination\Wiaoj.Pagination.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -2,7 +2,7 @@
 
 [![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An ultra-high-throughput, zero-allocation, distributed resilience and fault-tolerance engine built for modern **.NET 10** cloud architectures.
+An ultra-high-throughput, distributed resilience and fault-tolerance engine built for modern **.NET 10** cloud architectures.
 
 Engineered with state-machine-backed circuit breakers, concurrency bulkheads, speculative hedging, timeout cancellation, and adaptive traffic shaping powered by `Wiaoj.DistributedCounter` for transparent in-memory and Redis cluster synchronization.
 
