@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 using Wiaoj.Pagination.JsonConverters;
 using Wiaoj.Preconditions;
+using Wiaoj.Preconditions.Exceptions;
 using Wiaoj.Primitives;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
@@ -67,13 +68,25 @@ public readonly record struct SignedCursorToken :
     #region Cryptographic Signing & Verification
 
     /// <summary>
+    /// The minimum acceptable length, in bytes, for a secret key used with HMAC-SHA256 signing.
+    /// </summary>
+    private const int MinimumSecretKeyLengthInBytes = 32;
+
+    /// <summary>
     /// Signs a <see cref="CursorToken"/> using HMAC-SHA256 with zero heap allocations.
     /// </summary>
     /// <param name="token">The cursor token to sign.</param>
-    /// <param name="secretKey">The secret key used for HMAC signing.</param>
+    /// <param name="secretKey">The secret key used for HMAC signing. Must be at least <see cref="MinimumSecretKeyLengthInBytes"/> bytes long.</param>
     /// <returns>A new <see cref="SignedCursorToken"/> instance.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="secretKey"/> is <see langword="null"/> or empty or shorter than <see cref="MinimumSecretKeyLengthInBytes"/> bytes.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static SignedCursorToken Sign(CursorToken token, ReadOnlySpan<byte> secretKey) {
+        Preca.ThrowIfEmpty(secretKey);
+        Preca.ThrowIfLessThan(
+            secretKey.Length, 
+            MinimumSecretKeyLengthInBytes, 
+            static () => new ArgumentException($"Secret key must be at least {MinimumSecretKeyLengthInBytes} bytes long."));
+
         if(token.IsEmpty) {
             return Empty;
         }

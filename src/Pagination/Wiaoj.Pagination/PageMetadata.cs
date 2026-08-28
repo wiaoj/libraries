@@ -68,8 +68,12 @@ public readonly record struct PageMetadata :
     /// Gets the total number of pages calculated from <see cref="TotalCount"/> and <see cref="PageSize"/>.
     /// Returns 0 if <see cref="PageSize"/> is 0.
     /// </summary>
+    /// <remarks>
+    /// Uses a division/remainder based ceiling calculation rather than <c>(TotalCount + PageSize - 1) / PageSize</c>
+    /// to avoid <see cref="long"/> overflow when <see cref="TotalCount"/> is near <see cref="long.MaxValue"/>.
+    /// </remarks>
     public long TotalPages => this.PageSize > 0
-        ? (long)Math.Ceiling(this.TotalCount / (double)this.PageSize)
+        ? (this.TotalCount / this.PageSize) + (this.TotalCount % this.PageSize == 0 ? 0 : 1)
         : 0;
 
     /// <summary>

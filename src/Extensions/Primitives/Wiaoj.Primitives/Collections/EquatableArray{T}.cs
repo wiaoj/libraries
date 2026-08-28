@@ -36,6 +36,7 @@ public readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IReadO
     /// Provides optimization over the generic IEnumerable constructor.
     /// </summary>
     /// <param name="items">The array containing the elements. If <see langword="null"/>, an empty collection is created.</param>
+    [OverloadResolutionPriority(2)]
     public EquatableArray(T[]? items) {
         this._items = items is null ? [] : ImmutableArray.Create(items);
     }
@@ -44,14 +45,31 @@ public readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IReadO
     /// Initializes a new <see cref="EquatableArray{T}"/> from the specified <see cref="ImmutableArray{T}"/> instance.
     /// </summary>
     /// <param name="items">The immutable array to wrap. If default/uninitialized, it is initialized as empty.</param>
+    [OverloadResolutionPriority(1)]
     public EquatableArray(ImmutableArray<T> items) {
         this._items = items.IsDefault ? [] : items;
     }
 
     /// <summary>
+    /// Initializes a new <see cref="EquatableArray{T}"/> from the specified inline elements, or from a
+    /// standard array/span passed directly via an implicit array-to-span conversion.
+    /// </summary>
+    /// <remarks>
+    /// Enables natural call sites such as <c>new EquatableArray&lt;int&gt;(1, 2, 3)</c> without allocating
+    /// an intermediate <see cref="T:T[]"/> for the params arguments, since <see cref="ReadOnlySpan{T}"/>
+    /// parameters are stack-allocated by the compiler rather than heap-allocated like a params array.
+    /// </remarks>
+    /// <param name="items">The elements to wrap. An empty span produces an empty collection.</param>
+    [OverloadResolutionPriority(3)]
+    public EquatableArray(params ReadOnlySpan<T> items) {
+        this._items = items.IsEmpty ? [] : ImmutableArray.Create(items);
+    }
+     
+    /// <summary>
     /// Initializes a new <see cref="EquatableArray{T}"/> from the specified <see cref="IEnumerable{T}"/> collection (Fallback constructor).
     /// </summary>
     /// <param name="items">The collection of elements. If <see langword="null"/>, an empty collection is created.</param>
+    [OverloadResolutionPriority(0)]
     public EquatableArray(IEnumerable<T>? items) {
         this._items = items switch {
             null => [],
@@ -111,6 +129,13 @@ public readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IReadO
     /// </summary>
     /// <param name="index">The zero-based index of the element to access.</param>
     /// <returns>The element at the specified index.</returns>
+    /// <exception cref="IndexOutOfRangeException">
+    /// <paramref name="index"/> is negative or greater than or equal to <see cref="Count"/>.
+    /// Delegates directly to the underlying <see cref="EquatableArray{T}"/> (backed by
+    /// <see cref="System.Collections.Immutable.ImmutableArray{T}"/>), which does not perform its
+    /// own bounds check and therefore surfaces the array's native <see cref="IndexOutOfRangeException"/>
+    /// rather than <see cref="ArgumentOutOfRangeException"/>.
+    /// </exception>
     public T this[int index] {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => this._items[index];

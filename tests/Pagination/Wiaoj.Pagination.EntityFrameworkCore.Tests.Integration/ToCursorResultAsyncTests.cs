@@ -25,7 +25,7 @@ public sealed class ToCursorResultAsyncTests : IAsyncLifetime {
 
         await this._context.Items.AddRangeAsync(items, TestContext.Current.CancellationToken);
 
-        var snowflakeItems = Enumerable.Range(1, 20).Select(i => new SnowflakeItem {
+        IEnumerable<SnowflakeItem> snowflakeItems = Enumerable.Range(1, 20).Select(i => new SnowflakeItem {
             Id = new SnowflakeId(1000L + i),
             Title = $"Snowflake_{i:D2}"
         });
@@ -126,6 +126,45 @@ public sealed class ToCursorResultAsyncTests : IAsyncLifetime {
             Assert.Equal(30, result.Items[^1].Id);
             Assert.True(result.Metadata.HasPrevious);
             Assert.False(result.Metadata.HasNext);
+        }
+
+        [Fact]
+        public async Task Should_Detect_HasPrevious_False_When_Reaching_Beginning_On_Backward() {
+            // Arrange: 30 items in database, seek backward from ID 4 with limit 5
+            // Items before 4 are only 1, 2, 3 (fewer than limit 5)
+            CursorToken cursor = EncodeLong(4);
+            var request = new CursorRequest(cursor, limit: 5, CursorDirection.Backward);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert: Must return items [1, 2, 3]
+            Assert.Equal(3, result.Count);
+            Assert.Equal(1, result.Items[0].Id);
+            Assert.Equal(3, result.Items[^1].Id);
+            Assert.False(result.Metadata.HasPrevious); // Hit the beginning of the table!
+            Assert.True(result.Metadata.HasNext);      // Forward records exist (>= 4)
+        }
+
+        [Fact]
+        public async Task Should_Set_Both_Navigation_Flags_True_On_Middle_Backward_Window() {
+            // Arrange: Seek backward from ID 15 with limit 5 (items 10..14)
+            CursorToken cursor = EncodeLong(15);
+            var request = new CursorRequest(cursor, limit: 5, CursorDirection.Backward);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert: Items [10..14]
+            Assert.Equal(5, result.Count);
+            Assert.Equal(10, result.Items[0].Id);
+            Assert.Equal(14, result.Items[^1].Id);
+            Assert.True(result.Metadata.HasPrevious); // Items 1..9 exist behind
+            Assert.True(result.Metadata.HasNext);     // Items 15..30 exist ahead
         }
 
         [Fact]
@@ -319,6 +358,165 @@ public sealed class ToCursorResultAsyncTests : IAsyncLifetime {
                 this._fixture._context.SnowflakeItems
                     .OrderBy(x => x.Id)
                     .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken));
+        }
+
+        // ---------------------------------------------------------------
+        // Additional edge-case coverage
+        // ---------------------------------------------------------------
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(-50)]
+        [InlineData(int.MinValue)]
+        public async Task Should_Clamp_Limit_To_Default_When_Zero_Or_Negative(int invalidLimit) {
+            // Arrange: CursorRequest's constructor clamps limit < 1 up to CursorRequest.DefaultLimit
+            // (no exception), mirroring PageRequest's clamping behavior.
+            var request = new CursorRequest(CursorToken.Empty, invalidLimit, CursorDirection.Forward);
+            Assert.Equal(CursorRequest.DefaultLimit, request.Limit);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert: Item count must match the clamped default limit, capped by the 30 seeded records
+            int expectedCount = Math.Min(CursorRequest.DefaultLimit, 30);
+            Assert.Equal(expectedCount, result.Count);
+        }
+
+        [Fact]
+        public async Task Should_Clamp_Limit_To_Maximum_When_Exceeding_MaxLimit() {
+            // Arrange: limit far exceeding CursorRequest.MaxLimit must clamp down, not throw.
+            var request = new CursorRequest(CursorToken.Empty, CursorRequest.MaxLimit + 1_000, CursorDirection.Forward);
+            Assert.Equal(CursorRequest.MaxLimit, request.Limit);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert: Only 30 records exist, all fit within the clamped limit
+            Assert.Equal(30, result.Count);
+            Assert.False(result.Metadata.HasNext);
+        }
+
+        [Fact]
+        public async Task Should_Throw_FormatException_When_Long_Key_Cursor_Is_Invalid() {
+            // Arrange: 3 bytes instead of 8 bytes, using the plain `long` key selector (not SnowflakeId)
+            var corruptedCursor = CursorToken.FromBytes([9, 9, 9]);
+            var request = new CursorRequest(corruptedCursor, limit: 5, CursorDirection.Forward);
+
+            // Act & Assert
+            await Assert.ThrowsAsync<FormatException>(() =>
+                this._fixture._context.Items
+                    .OrderBy(x => x.Id)
+                    .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task Should_Return_Empty_Window_When_Cursor_Points_Beyond_Existing_Range_Forward() {
+            // Arrange: Seek forward from a cursor value (999) that is beyond every existing ID (max is 30)
+            CursorToken cursor = EncodeLong(999);
+            var request = new CursorRequest(cursor, limit: 10, CursorDirection.Forward);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert: No records exist beyond the cursor
+            Assert.True(result.IsEmpty);
+            Assert.False(result.Metadata.HasNext);
+        }
+
+        [Fact]
+        public async Task Should_Return_Empty_Window_When_Cursor_Points_Before_Existing_Range_Backward() {
+            // Arrange: Seek backward from a cursor value (-999) that is before every existing ID (min is 1)
+            CursorToken cursor = EncodeLong(-999);
+            var request = new CursorRequest(cursor, limit: 10, CursorDirection.Backward);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert: No records exist before the cursor
+            Assert.True(result.IsEmpty);
+            Assert.False(result.Metadata.HasPrevious);
+        }
+
+        [Fact]
+        public async Task Should_Return_Empty_Window_When_Forward_Cursor_Equals_Last_Item() {
+            // Arrange: Seeking forward from the very last ID (30) must yield nothing further
+            CursorToken cursor = EncodeLong(30);
+            var request = new CursorRequest(cursor, limit: 10, CursorDirection.Forward);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.True(result.IsEmpty);
+            Assert.False(result.Metadata.HasNext);
+        }
+
+        [Fact]
+        public async Task Should_Return_Empty_Window_When_Backward_Cursor_Equals_First_Item() {
+            // Arrange: Seeking backward from the very first ID (1) must yield nothing prior
+            CursorToken cursor = EncodeLong(1);
+            var request = new CursorRequest(cursor, limit: 10, CursorDirection.Backward);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.True(result.IsEmpty);
+            Assert.False(result.Metadata.HasPrevious);
+        }
+
+        [Fact]
+        public async Task Should_Combine_Existing_Where_Filter_With_Backward_Direction() {
+            // Arrange: Filter Price > 50 (Id > 10) and seek backward from ID 25 with limit 5
+            CursorToken cursor = EncodeLong(25);
+            var request = new CursorRequest(cursor, limit: 5, CursorDirection.Backward);
+
+            // Act
+            CursorResult<TestItem> result = await this._fixture._context.Items
+                .Where(x => x.Price > 50.0m)
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert: All items must satisfy Price > 50 AND Id < 25
+            Assert.Equal(5, result.Count);
+            Assert.True(result.Items.AsSpan().ToArray().All(x => x.Price > 50.0m && x.Id < 25));
+            Assert.Equal(20, result.Items[0].Id);
+            Assert.Equal(24, result.Items[^1].Id);
+        }
+
+        [Fact]
+        public async Task Should_Support_Backward_Direction_With_SnowflakeId_Key_Selector() {
+            // Arrange: Seek backward from Snowflake ID 1015 with limit 5 (expect IDs 1010..1014)
+            var pivotId = new SnowflakeId(1015L);
+            Span<byte> idBuffer = stackalloc byte[sizeof(long)];
+            BinaryPrimitives.WriteInt64BigEndian(idBuffer, pivotId.Value);
+            CursorToken cursor = CursorToken.FromBytes(idBuffer);
+
+            var request = new CursorRequest(cursor, limit: 5, CursorDirection.Backward);
+
+            // Act
+            CursorResult<SnowflakeItem> result = await this._fixture._context.SnowflakeItems
+                .OrderBy(x => x.Id)
+                .ToCursorResultAsync(request, x => x.Id, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(5, result.Count);
+            Assert.Equal(new SnowflakeId(1010L), result.Items[0].Id);
+            Assert.Equal(new SnowflakeId(1014L), result.Items[^1].Id);
+            Assert.True(result.Metadata.HasPrevious);
         }
     }
 }

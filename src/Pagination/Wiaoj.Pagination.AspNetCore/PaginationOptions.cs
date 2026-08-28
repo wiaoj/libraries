@@ -14,11 +14,5 @@ public sealed class PaginationOptions {
     /// Gets or sets a value indicating whether <c>ETag</c> evaluation and 304 Not Modified handling are enabled.
     /// Default is <see langword="true"/>.
     /// </summary>
-    public bool EnableETag { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the custom header name used to expose raw pagination metadata in the HTTP response.
-    /// Follows RFC 6648 (no 'X-' prefix). Set to <see langword="null"/> to disable. Default is <c>"Pagination"</c>.
-    /// </summary>
-    public string? MetadataHeaderName { get; set; } = "Pagination";
+    public bool EnableETag { get; set; } = true; 
 }

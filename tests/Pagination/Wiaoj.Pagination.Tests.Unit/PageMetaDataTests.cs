@@ -119,6 +119,19 @@ public sealed class PageMetadataTests {
             // Assert
             Assert.Equal(expectedTotalPages, sut.TotalPages);
         }
+
+        [Fact]
+        public void Should_Not_Overflow_When_TotalCount_Is_Near_MaxValue() {
+            // Arrange
+            PageMetadata sut = new(totalCount: long.MaxValue, pageNumber: 1, pageSize: 10);
+
+            // Act
+            long totalPages = sut.TotalPages;
+
+            // Assert
+            Assert.True(totalPages > 0);
+            Assert.Equal((long.MaxValue / 10) + 1, totalPages);
+        }
     }
 
     public sealed class NavigationFlagsProperties {
@@ -201,6 +214,20 @@ public sealed class PageMetadataTests {
             // Assert
             Assert.False(success);
             Assert.Equal(0, charsWritten);
+        }
+
+        [Fact]
+        public void Should_Return_False_When_Utf8_Buffer_Is_Too_Small() {
+            // Arrange
+            PageMetadata sut = new(totalCount: 200, pageNumber: 3, pageSize: 20);
+            Span<byte> smallDestination = stackalloc byte[4];
+
+            // Act
+            bool success = sut.TryFormat(smallDestination, out int bytesWritten);
+
+            // Assert
+            Assert.False(success);
+            Assert.Equal(0, bytesWritten);
         }
     }
 

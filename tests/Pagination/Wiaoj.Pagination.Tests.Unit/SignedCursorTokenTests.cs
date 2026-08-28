@@ -1,4 +1,6 @@
 ﻿using System.Text.Json;
+using Wiaoj.Preconditions.Exceptions;
+using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Pagination.Tests.Unit;
 
@@ -32,6 +34,64 @@ public sealed class SignedCursorTokenTests {
             Assert.True(signed.IsEmpty);
             Assert.Equal(SignedCursorToken.Empty, signed);
         }
+
+        [Fact]
+        public void Should_Throw_When_SecretKey_Is_Null() {
+            // Arrange
+            CursorToken rawToken = CursorToken.FromUtf8("order_id_1");
+
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentException>(() => SignedCursorToken.Sign(rawToken, null!));
+        }
+
+        [Fact]
+        public void Should_Throw_When_SecretKey_Is_Too_Short() {
+            // Arrange: kasıtlı olarak varsayılan minimum uzunluğun (ör. HMAC-SHA256 için 32 byte) altında
+            byte[] tooShortKey = "short_key"u8.ToArray();
+            CursorToken rawToken = CursorToken.FromUtf8("order_id_1");
+
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentException>(() => SignedCursorToken.Sign(rawToken, tooShortKey));
+        }
+    }
+
+    public sealed class Determinism {
+        [Fact]
+        public void Should_Produce_Same_Signature_For_Same_Token_And_Key() {
+            // Arrange
+            CursorToken token = CursorToken.FromUtf8("deterministic_payload");
+
+            // Act
+            SignedCursorToken first = SignedCursorToken.Sign(token, ValidSecretKey);
+            SignedCursorToken second = SignedCursorToken.Sign(token, ValidSecretKey);
+
+            // Assert
+            Assert.Equal(first.Signature, second.Signature);
+            Assert.Equal(first, second);
+        }
+
+        [Fact]
+        public void Should_Produce_Different_Signatures_For_Different_Tokens() {
+            // Arrange & Act
+            SignedCursorToken signedA = SignedCursorToken.Sign(CursorToken.FromUtf8("payload_a"), ValidSecretKey);
+            SignedCursorToken signedB = SignedCursorToken.Sign(CursorToken.FromUtf8("payload_b"), ValidSecretKey);
+
+            // Assert
+            Assert.NotEqual(signedA.Signature, signedB.Signature);
+        }
+
+        [Fact]
+        public void Should_Produce_Different_Signatures_For_Same_Token_With_Different_Keys() {
+            // Arrange
+            CursorToken token = CursorToken.FromUtf8("shared_payload");
+
+            // Act
+            SignedCursorToken signedWithFirstKey = SignedCursorToken.Sign(token, ValidSecretKey);
+            SignedCursorToken signedWithSecondKey = SignedCursorToken.Sign(token, WrongSecretKey);
+
+            // Assert
+            Assert.NotEqual(signedWithFirstKey.Signature, signedWithSecondKey.Signature);
+        }
     }
 
     public sealed class VerifyMethod {
@@ -58,6 +118,20 @@ public sealed class SignedCursorTokenTests {
 
             // Act & Assert
             Assert.False(tamperedToken.Verify(ValidSecretKey));
+        }
+
+        [Fact]
+        public void Should_Fail_When_Signature_Itself_Is_Tampered() {
+            // Arrange
+            CursorToken token = CursorToken.FromUtf8("intact_payload");
+            SignedCursorToken signedToken = SignedCursorToken.Sign(token, ValidSecretKey);
+
+            byte[] corruptedSignature = signedToken.Signature.AsSpan().ToArray();
+            corruptedSignature[0] ^= 0xFF;
+            SignedCursorToken tampered = new(token, Sha256Hash.FromBytes(corruptedSignature));
+
+            // Act & Assert
+            Assert.False(tampered.Verify(ValidSecretKey));
         }
     }
 

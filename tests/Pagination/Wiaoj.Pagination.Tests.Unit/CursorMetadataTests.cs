@@ -68,6 +68,42 @@ public sealed class CursorMetadataTests {
             Assert.False(sut.HasPrevious);
             Assert.False(sut.HasNext);
         }
+
+        [Fact]
+        public void Should_Format_Without_Throwing() {
+            // Arrange
+            CursorMetadata sut = CursorMetadata.Empty;
+            Span<char> destination = stackalloc char[128];
+
+            // Act
+            bool success = sut.TryFormat(destination, out int charsWritten);
+            string formatted = destination[..charsWritten].ToString();
+
+            // Assert
+            Assert.True(success);
+            Assert.Equal(sut.ToString(), formatted);
+            Assert.NotNull(sut.ToString());
+        }
+    }
+
+    public sealed class IsEmptyProperty {
+        [Fact]
+        public void Should_Not_Be_Empty_When_Only_StartCursor_Is_Empty() {
+            // Arrange & Act
+            CursorMetadata sut = new(CursorToken.Empty, CursorToken.FromUtf8("end"), hasPrevious: false, hasNext: true);
+
+            // Assert
+            Assert.False(sut.IsEmpty);
+        }
+
+        [Fact]
+        public void Should_Not_Be_Empty_When_Only_EndCursor_Is_Empty() {
+            // Arrange & Act
+            CursorMetadata sut = new(CursorToken.FromUtf8("start"), CursorToken.Empty, hasPrevious: true, hasNext: false);
+
+            // Assert
+            Assert.False(sut.IsEmpty);
+        }
     }
 
     public sealed class TryFormatMethod {
@@ -100,6 +136,21 @@ public sealed class CursorMetadataTests {
         }
     }
 
+    public sealed class ToStringMethod {
+        [Fact]
+        public void Should_Include_Both_Cursor_Values_And_Navigation_Flags() {
+            // Arrange
+            CursorMetadata sut = new(CursorToken.FromUtf8("start_val"), CursorToken.FromUtf8("end_val"), true, false);
+
+            // Act
+            string result = sut.ToString();
+
+            // Assert
+            Assert.Contains(sut.StartCursor.Value, result);
+            Assert.Contains(sut.EndCursor.Value, result);
+        }
+    }
+
     public sealed class EqualityOperators {
         [Fact]
         public void Should_Be_Equal_When_All_Boundaries_Match() {
@@ -118,6 +169,17 @@ public sealed class CursorMetadataTests {
             // Arrange
             CursorMetadata meta1 = new(CursorToken.FromUtf8("c1"), CursorToken.FromUtf8("c2"), true, false);
             CursorMetadata meta2 = new(CursorToken.FromUtf8("c1"), CursorToken.FromUtf8("c2"), true, true);
+
+            // Act & Assert
+            Assert.True(meta1 != meta2);
+            Assert.False(meta1.Equals(meta2));
+        }
+
+        [Fact]
+        public void Should_Not_Be_Equal_When_Cursors_Differ() {
+            // Arrange
+            CursorMetadata meta1 = new(CursorToken.FromUtf8("c1"), CursorToken.FromUtf8("c2"), true, false);
+            CursorMetadata meta2 = new(CursorToken.FromUtf8("c1"), CursorToken.FromUtf8("c3"), true, false);
 
             // Act & Assert
             Assert.True(meta1 != meta2);

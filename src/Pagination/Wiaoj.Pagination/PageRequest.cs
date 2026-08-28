@@ -100,6 +100,16 @@ public readonly record struct PageRequest :
     #region Parsing (ISpanParsable, IUtf8SpanParsable)
 
     /// <summary>
+    /// The primary separator character accepted between page number and page size (e.g. <c>4:20</c>).
+    /// </summary>
+    private const char PrimarySeparator = ':';
+
+    /// <summary>
+    /// The alternate separator character accepted between page number and page size (e.g. <c>4,20</c>).
+    /// </summary>
+    private const char AlternateSeparator = ',';
+
+    /// <summary>
     /// Parses a string formatted as <c>PageNumber:PageSize</c> or <c>PageNumber,PageSize</c>.
     /// </summary>
     public static PageRequest Parse(string s) {
@@ -114,7 +124,7 @@ public readonly record struct PageRequest :
         if(TryParse(s, out PageRequest result)) {
             return result;
         }
-        throw new FormatException("Invalid PageRequest format. Expected 'PageNumber:PageSize' or 'PageNumber,PageSize'.");
+        throw new FormatException($"Invalid PageRequest format. Expected 'PageNumber{PrimarySeparator}PageSize' or 'PageNumber{AlternateSeparator}PageSize'.");
     }
 
     /// <summary>
@@ -147,7 +157,7 @@ public readonly record struct PageRequest :
             return true;
         }
 
-        int separatorIndex = s.IndexOfAny(':', ',');
+        int separatorIndex = s.IndexOfAny(PrimarySeparator, AlternateSeparator);
         if(separatorIndex < 0) {
             if(int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int pageOnly)) {
                 result = new PageRequest(pageOnly, DefaultPageSize);
@@ -194,8 +204,8 @@ public readonly record struct PageRequest :
 
     /// <inheritdoc/>
     public override string ToString() {
-        if(this.IsEmpty) return "PageNumber: 0, PageSize: 0";
-        return $"{this.PageNumber}:{this.PageSize}";
+        if(this.IsEmpty) return $"0{PrimarySeparator}0";
+        return $"{this.PageNumber}{PrimarySeparator}{this.PageSize}";
     }
 
     /// <summary>
@@ -204,9 +214,9 @@ public readonly record struct PageRequest :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryFormat(Span<char> destination, out int charsWritten) {
         if(this.IsEmpty) {
-            return destination.TryWrite(CultureInfo.InvariantCulture, $"PageNumber: 0, PageSize: 0", out charsWritten);
+            return destination.TryWrite(CultureInfo.InvariantCulture, $"0{PrimarySeparator}0", out charsWritten);
         }
-        return destination.TryWrite(CultureInfo.InvariantCulture, $"{this.PageNumber}:{this.PageSize}", out charsWritten);
+        return destination.TryWrite(CultureInfo.InvariantCulture, $"{this.PageNumber}{PrimarySeparator}{this.PageSize}", out charsWritten);
     }
 
     /// <summary>
@@ -215,9 +225,9 @@ public readonly record struct PageRequest :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
         if(this.IsEmpty) {
-            return System.Text.Unicode.Utf8.TryWrite(utf8Destination, CultureInfo.InvariantCulture, $"PageNumber: 0, PageSize: 0", out bytesWritten);
+            return System.Text.Unicode.Utf8.TryWrite(utf8Destination, CultureInfo.InvariantCulture, $"0{PrimarySeparator}0", out bytesWritten);
         }
-        return System.Text.Unicode.Utf8.TryWrite(utf8Destination, CultureInfo.InvariantCulture, $"{this.PageNumber}:{this.PageSize}", out bytesWritten);
+        return System.Text.Unicode.Utf8.TryWrite(utf8Destination, CultureInfo.InvariantCulture, $"{this.PageNumber}{PrimarySeparator}{this.PageSize}", out bytesWritten);
     }
 
     // --- Explicit Interface Implementations ---

@@ -133,6 +133,20 @@ public sealed class CursorTokenTests {
             Assert.False(success);
             Assert.Equal(0, bytesWritten);
         }
+
+        [Fact]
+        public void Should_Decode_Empty_Token_As_Zero_Bytes_Without_Failing() {
+            // Arrange
+            CursorToken token = CursorToken.Empty;
+            Span<byte> destination = stackalloc byte[16];
+
+            // Act
+            bool success = token.TryDecode(destination, out int bytesWritten);
+
+            // Assert
+            Assert.True(success);
+            Assert.Equal(0, bytesWritten);
+        }
     }
 
     public sealed class TryFormatMethod {
@@ -178,6 +192,20 @@ public sealed class CursorTokenTests {
             Assert.False(success);
             Assert.Equal(0, charsWritten);
         }
+
+        [Fact]
+        public void Should_Return_False_When_Utf8_Destination_Buffer_Is_Too_Small() {
+            // Arrange
+            var token = CursorToken.FromUtf8("very_long_cursor_token_value_12345");
+            Span<byte> smallBuffer = stackalloc byte[5];
+
+            // Act
+            bool success = token.TryFormat(smallBuffer, out int bytesWritten);
+
+            // Assert
+            Assert.False(success);
+            Assert.Equal(0, bytesWritten);
+        }
     }
 
     public sealed class CompareToMethod {
@@ -203,6 +231,17 @@ public sealed class CursorTokenTests {
             // Act & Assert
             Assert.Equal(1, comparable.CompareTo(null));
             Assert.Throws<ArgumentException>(() => comparable.CompareTo(12345));
+        }
+
+        [Fact]
+        public void Should_Return_Zero_When_Compared_To_Itself() {
+            // Arrange
+            CursorToken token = CursorToken.FromUtf8("same_value");
+
+            // Act & Assert
+            Assert.Equal(0, token.CompareTo(token));
+            Assert.True(token <= token);
+            Assert.True(token >= token);
         }
     }
 
@@ -242,6 +281,23 @@ public sealed class CursorTokenTests {
             // Assert
             Assert.True(found);
             Assert.Equal("CachedUtf8Payload", value);
+        }
+
+        [Fact]
+        public void Should_Report_Miss_When_Key_Is_Not_Present() {
+            // Arrange
+            CursorToken existingToken = CursorToken.FromUtf8("entity_id_1111");
+            Dictionary<CursorToken, string> cache = new(CursorToken.OrdinalComparer) {
+                [existingToken] = "CachedPayload"
+            };
+            var lookup = cache.GetAlternateLookup<ReadOnlySpan<char>>();
+
+            // Act
+            bool found = lookup.TryGetValue("non_existent_key".AsSpan(), out string? value);
+
+            // Assert
+            Assert.False(found);
+            Assert.Null(value);
         }
     }
 

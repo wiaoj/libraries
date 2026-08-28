@@ -8,10 +8,10 @@ using Wiaoj.Preconditions;
 namespace Wiaoj.Pagination.AspNetCore.Filters;
 
 /// <summary>
-/// An endpoint filter that automatically appends RFC 8288 <c>Link</c> headers, <c>Pagination</c> metadata, 
+/// An endpoint filter that automatically appends RFC 8288 <c>Link</c> headers,
 /// <c>ETag</c> headers, and evaluates conditional <c>304 Not Modified</c> requests for paginated results.
 /// </summary>
-public sealed class PaginationEndpointFilter : IEndpointFilter {
+internal sealed class PaginationEndpointFilter : IEndpointFilter {
 
     /// <summary>
     /// A shared, pre-allocated default instance of <see cref="PaginationEndpointFilter"/> with default options.
@@ -85,11 +85,6 @@ public sealed class PaginationEndpointFilter : IEndpointFilter {
 
     private void ApplyOffsetHeaders(HttpContext httpContext, PageMetadata metadata) {
         if(metadata.IsEmpty) return;
-
-        // Raw Metadata Header (e.g. X-Pagination)
-        if(!string.IsNullOrEmpty(this._options.MetadataHeaderName)) {
-            httpContext.Response.Headers[this._options.MetadataHeaderName] = metadata.ToString();
-        }
 
         // RFC 8288 Link Header
         if(this._options.EnableLinkHeaders) {

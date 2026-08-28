@@ -16,7 +16,7 @@ namespace Microsoft.EntityFrameworkCore;
 /// <summary>
 /// Provides asynchronous Entity Framework Core extensions for paginating <see cref="IQueryable{T}"/> sources.
 /// </summary>
-public static partial class QueryablePaginationExtensions { 
+public static partial class QueryablePaginationExtensions {
     private static readonly ConcurrentDictionary<Expression, Delegate> CompiledKeySelectorCache = new();
 
 
@@ -377,7 +377,7 @@ public static partial class QueryablePaginationExtensions {
                 ? Expression.GreaterThan(keySelector.Body, Expression.Constant(pivotKey, typeof(TKey)))
                 : Expression.LessThan(keySelector.Body, Expression.Constant(pivotKey, typeof(TKey)));
 
-            var predicate = Expression.Lambda<Func<TSource, bool>>(comparison, keySelector.Parameters);
+            Expression<Func<TSource, bool>> predicate = Expression.Lambda<Func<TSource, bool>>(comparison, keySelector.Parameters);
             query = query.Where(predicate);
 
             if(request.Direction == CursorDirection.Backward) {
@@ -388,7 +388,7 @@ public static partial class QueryablePaginationExtensions {
             }
         }
 
-        // 3. N + 1 Technique: Fetch Limit + 1 items
+        // 3. N + 1 Technique: Fetch Limit + 1 items to eliminate COUNT(*) queries
         int fetchLimit = request.Limit + 1;
         List<TSource> rawItems = await query
             .Take(fetchLimit)
@@ -399,26 +399,37 @@ public static partial class QueryablePaginationExtensions {
             return CursorResult<TSource>.Empty;
         }
 
-        // 4. Detect HasNext and drop the (+1) extra item
-        bool hasNext = rawItems.Count > request.Limit;
-        if(hasNext) {
+        // 4. Detect if more records exist in the current seek direction, and drop the (+1) extra item
+        bool hasMore = rawItems.Count > request.Limit;
+        if(hasMore) {
             rawItems.RemoveAt(rawItems.Count - 1);
         }
 
-        // 5. If backward navigation occurred, reverse in-memory to restore original sequence
+        // 5. If backward navigation occurred, reverse in-memory to restore original ascending sequence
         if(request.Direction == CursorDirection.Backward && !request.Cursor.IsEmpty) {
             rawItems.Reverse();
         }
 
-        // 6. Generate Start and End boundary cursors using cached delegate
-        var compiledKeySelector = (Func<TSource, TKey>)CompiledKeySelectorCache.GetOrAdd(
+        // 6. Evaluate directional navigation flags (Relay/Cursor Specification)
+        // Forward:  hasMore indicates HasNext,      existing cursor indicates HasPrevious
+        // Backward: hasMore indicates HasPrevious,  existing cursor indicates HasNext
+        bool hasNext = request.Direction == CursorDirection.Forward
+            ? hasMore
+            : !request.Cursor.IsEmpty;
+
+        hasPrevious = request.Direction == CursorDirection.Forward
+          ? !request.Cursor.IsEmpty
+          : hasMore;
+
+        // 7. Generate Start and End boundary cursors using cached delegate
+        Func<TSource, TKey> compiledKeySelector = (Func<TSource, TKey>)CompiledKeySelectorCache.GetOrAdd(
             keySelector,
             static expr => ((Expression<Func<TSource, TKey>>)expr).Compile());
 
         CursorToken startCursor = cursorEncoder(compiledKeySelector(rawItems[0]));
         CursorToken endCursor = cursorEncoder(compiledKeySelector(rawItems[^1]));
 
-        var metadata = new CursorMetadata(startCursor, endCursor, hasPrevious, hasNext);
+        CursorMetadata metadata = new(startCursor, endCursor, hasPrevious, hasNext);
         return new CursorResult<TSource>(new EquatableArray<TSource>(rawItems), metadata);
     }
 
@@ -427,10 +438,10 @@ public static partial class QueryablePaginationExtensions {
         while(current is MethodCallExpression methodCall) {
             if(methodCall.Method.DeclaringType == typeof(Queryable)) {
                 string name = methodCall.Method.Name;
-                if(name == nameof(Queryable.OrderByDescending) || name == nameof(Queryable.ThenByDescending)) {
+                if(name is (nameof(Queryable.OrderByDescending)) or (nameof(Queryable.ThenByDescending))) {
                     return true;
                 }
-                if(name == nameof(Queryable.OrderBy) || name == nameof(Queryable.ThenBy)) {
+                if(name is (nameof(Queryable.OrderBy)) or (nameof(Queryable.ThenBy))) {
                     return false;
                 }
             }

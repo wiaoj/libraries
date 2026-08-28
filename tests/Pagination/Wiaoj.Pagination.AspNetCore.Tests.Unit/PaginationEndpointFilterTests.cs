@@ -18,7 +18,7 @@ public sealed class PaginationEndpointFilterTests {
             var httpContext = new DefaultHttpContext();
             httpContext.Request.Path = "/api/items";
 
-            var items = new EquatableArray<string>(new[] { "Item1", "Item2" });
+            var items = new EquatableArray<string>("Item1", "Item2");
             var metadata = new PageMetadata(totalCount: 20, pageNumber: 1, pageSize: 2);
             var pagedResult = new PagedResult<string>(items, metadata);
 
@@ -29,8 +29,7 @@ public sealed class PaginationEndpointFilterTests {
 
             // Assert: RFC 6648 header "Pagination"
             Assert.True(httpContext.Response.Headers.ContainsKey(HeaderNames.Link));
-            Assert.True(httpContext.Response.Headers.ContainsKey(HeaderNames.ETag));
-            Assert.True(httpContext.Response.Headers.ContainsKey("Pagination"));
+            Assert.True(httpContext.Response.Headers.ContainsKey(HeaderNames.ETag)); 
             Assert.IsType<Ok<PagedResult<string>>>(result);
         }
 
@@ -41,7 +40,7 @@ public sealed class PaginationEndpointFilterTests {
             var httpContext = new DefaultHttpContext();
             httpContext.Request.Path = "/api/orders";
 
-            var items = new EquatableArray<string>(new[] { "Order1" });
+            var items = new EquatableArray<string>("Order1");
             var startCursor = CursorToken.FromUtf8("start_01");
             var endCursor = CursorToken.FromUtf8("end_01");
             var metadata = new CursorMetadata(startCursor, endCursor, hasPrevious: true, hasNext: true);
@@ -65,7 +64,7 @@ public sealed class PaginationEndpointFilterTests {
             var httpContext = new DefaultHttpContext();
             httpContext.Request.Path = "/api/items";
 
-            var items = new EquatableArray<string>(new[] { "Data" });
+            var items = new EquatableArray<string>("Data");
             var metadata = new PageMetadata(totalCount: 1, pageNumber: 1, pageSize: 1);
             var pagedResult = new PagedResult<string>(items, metadata);
 
@@ -99,8 +98,7 @@ public sealed class PaginationEndpointFilterTests {
             object? result = await filter.InvokeAsync(context, _ => ValueTask.FromResult<object?>(TypedResults.NotFound()));
 
             // Assert: Must not crash and should not append pagination headers
-            Assert.False(httpContext.Response.Headers.ContainsKey(HeaderNames.Link));
-            Assert.False(httpContext.Response.Headers.ContainsKey("Pagination"));
+            Assert.False(httpContext.Response.Headers.ContainsKey(HeaderNames.Link)); 
             Assert.IsType<NotFound>(result);
         }
     }

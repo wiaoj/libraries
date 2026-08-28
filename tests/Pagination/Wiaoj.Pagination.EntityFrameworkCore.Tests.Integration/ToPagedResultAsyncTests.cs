@@ -224,5 +224,129 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
             Assert.False(result.Metadata.HasPrevious);
             Assert.False(result.Metadata.HasNext);
         }
+
+        // ---------------------------------------------------------------
+        // Additional edge-case coverage
+        // ---------------------------------------------------------------
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(-100)]
+        public async Task Should_Clamp_PageNumber_To_One_When_Zero_Or_Negative(int invalidPageNumber) {
+            // Arrange: PageRequest's constructor clamps pageNumber < 1 up to 1 (no exception).
+            PageRequest request = new(pageNumber: invalidPageNumber, pageSize: 10);
+            Assert.Equal(1, request.PageNumber);
+
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert: Behaves identically to an explicit first-page request
+            Assert.Equal(1, result.Metadata.PageNumber);
+            Assert.False(result.Metadata.HasPrevious);
+            Assert.Equal(1, result.Items[0].Id);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        public async Task Should_Clamp_PageSize_To_Default_When_Zero_Or_Negative(int invalidPageSize) {
+            // Arrange: PageRequest's constructor clamps pageSize < 1 up to DefaultPageSize (20).
+            PageRequest request = new(pageNumber: 1, pageSize: invalidPageSize);
+            Assert.Equal(PageRequest.DefaultPageSize, request.PageSize);
+
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(PageRequest.DefaultPageSize, result.Count);
+            Assert.Equal(50, result.Metadata.TotalCount);
+        }
+
+        [Fact]
+        public async Task Should_Clamp_PageSize_To_MaxPageSize_When_Exceeding_Limit() {
+            // Arrange: PageRequest's constructor clamps pageSize > MaxPageSize (100) down to 100.
+            PageRequest request = new(pageNumber: 1, pageSize: 1_000_000);
+            Assert.Equal(PageRequest.MaxPageSize, request.PageSize);
+
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert: Only 50 records exist, all fit within the clamped page size of 100
+            Assert.Equal(50, result.Count);
+            Assert.Equal(1, result.Metadata.TotalPages);
+            Assert.False(result.Metadata.HasNext);
+        }
+
+        [Fact]
+        public async Task Should_Return_Empty_Page_When_Large_PageNumber_Exceeds_TotalPages() {
+            // Arrange: A large pageNumber combined with the clamped max pageSize (100) is still
+            // far beyond the 50 seeded records, so the offset (skip) calculation must not throw
+            // or misbehave, and the result must simply be an empty page.
+            PageRequest request = new(pageNumber: 100_000, pageSize: 100_000);
+            Assert.Equal(PageRequest.MaxPageSize, request.PageSize);
+
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.True(result.IsEmpty);
+            Assert.Equal(50, result.Metadata.TotalCount);
+        }
+
+        [Fact]
+        public async Task Should_Calculate_TotalCount_Correctly_When_Where_And_Select_Are_Combined() {
+            // Arrange: Filter + projection combined (Price > 300 => 22 items)
+            PageRequest request = new(pageNumber: 1, pageSize: 5);
+
+            // Act
+            var result = await this._fixture._context.Items
+                .Where(x => x.Price > 300m)
+                .OrderBy(x => x.Id)
+                .Select(x => new { x.Id, x.Name })
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(5, result.Count);
+            Assert.Equal(22, result.Metadata.TotalCount);
+            Assert.Equal(5, result.Metadata.TotalPages);
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Consistently_Using_Default_PageRequest() {
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToPagedResultAsync(PageRequest.Default, TestContext.Current.CancellationToken);
+
+            // Assert: Default request must resolve to the first page
+            Assert.Equal(1, result.Metadata.PageNumber);
+            Assert.False(result.Metadata.HasPrevious);
+            Assert.Equal(1, result.Items[0].Id);
+        }
+
+        [Fact]
+        public async Task Should_Not_Throw_When_Query_Has_No_Explicit_OrderBy() {
+            // Arrange: Deliberately omit OrderBy to verify the method does not hard-require it.
+            // Item ordering is not guaranteed by the provider in this case, but the call itself
+            // must not throw and Count/TotalCount must still be correct.
+            PageRequest request = new(pageNumber: 1, pageSize: 10);
+
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(10, result.Count);
+            Assert.Equal(50, result.Metadata.TotalCount);
+        }
     }
 }

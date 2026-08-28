@@ -1,6 +1,6 @@
 # Wiaoj.Pagination.AspNetCore
 
-ASP.NET Core integration for the Wiaoj Pagination ecosystem, providing RFC 8288 Web Linking, RFC 6648 compliant metadata headers, and SIMD-accelerated XxHash3 ETag evaluation with HTTP 304 Not Modified handling.
+ASP.NET Core integration for the Wiaoj Pagination ecosystem, providing RFC 8288 Web Linking and SIMD-accelerated XxHash3 ETag evaluation with HTTP 304 Not Modified handling.
 
 Extension methods are exposed directly under the `Microsoft.AspNetCore.Builder` namespace for fluent Minimal API routing.
 
@@ -9,10 +9,11 @@ Extension methods are exposed directly under the `Microsoft.AspNetCore.Builder` 
 ## Features
 
 - **RFC 8288 Web Linking:** Automatically formats and appends standard HTTP `Link` headers (`rel="first"`, `rel="prev"`, `rel="next"`, `rel="last"`) for both offset and keyset pagination.
-- **RFC 6648 Compliant Metadata:** Exposes pagination state via the clean `Pagination` header, eliminating legacy `X-` header anti-patterns.
 - **SIMD-Accelerated ETag Caching:** Generates high-throughput weak ETags (`W/"..."`) using `XxHash3` (30+ GB/s) and cryptographic strong ETags using `Sha256Hash`.
 - **Automatic 304 Not Modified Handling:** Evaluates client `If-None-Match` headers and short-circuits responses to `304 Not Modified` without transferring payload bodies.
 - **Zero-Allocation Endpoint Filter:** Provides a pre-allocated singleton instance for default `.WithPagination()` routes.
+
+> **Note:** Pagination state (`totalCount`, `pageNumber`, `pageSize`, `totalPages`, `hasPrevious`, `hasNext`) is exposed exclusively via the response body's `metadata` object, not via a separate header. This avoids duplicating the same data across two channels — see [`PagedResult<T>`](#) and [`PageMetadata`](#).
 
 ---
 
@@ -65,7 +66,7 @@ app.Run();
 
 ### 2. Custom Configuration
 
-You can configure headers, disable ETags, or rename metadata headers per endpoint:
+You can configure headers, disable ETags per endpoint:
 
 ```csharp
 app.MapGet("/api/logs", async (AppDbContext db, CursorRequest request, CancellationToken ct) =>
@@ -78,7 +79,6 @@ app.MapGet("/api/logs", async (AppDbContext db, CursorRequest request, Cancellat
 {
     options.EnableETag = false;                  // Disable ETag calculation
     options.EnableLinkHeaders = true;            // Enable RFC 8288 Link header
-    options.MetadataHeaderName = "Pagination";   // Custom header name (or null to disable)
 });
 ```
 
@@ -136,7 +136,6 @@ When calling an endpoint configured with `.WithPagination()`, the response inclu
 HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 ETag: W/"5f8a92cb14e03d7a"
-Pagination: Page 2 of 5 (Total: 100)
 Link: <https://api.example.com/items?pageNumber=1&pageSize=20>; rel="first", <https://api.example.com/items?pageNumber=1&pageSize=20>; rel="prev", <https://api.example.com/items?pageNumber=3&pageSize=20>; rel="next", <https://api.example.com/items?pageNumber=5&pageSize=20>; rel="last"
 
 {

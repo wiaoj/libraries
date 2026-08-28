@@ -1,4 +1,6 @@
-﻿namespace Wiaoj.Pagination.Tests.Unit;
+﻿using System.Runtime.CompilerServices;
+
+namespace Wiaoj.Pagination.Tests.Unit;
 
 [Trait("Category", "Unit")]
 [Trait("Subsystem", "KeysetPagination")]
@@ -25,6 +27,47 @@ public sealed class CursorRequestTests {
 
             // Assert
             Assert.Equal(expectedLimit, sut.Limit);
+        }
+
+        [Fact]
+        public void Should_Produce_Zero_Heap_Allocations() {
+            // Arrange
+            CursorToken token = CursorToken.Parse(ValidTokenString);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            long beforeAllocated = GC.GetAllocatedBytesForCurrentThread();
+
+            // Act
+            ExecuteInstantiation(token);
+
+            long afterAllocated = GC.GetAllocatedBytesForCurrentThread();
+
+            // Assert
+            Assert.Equal(0, afterAllocated - beforeAllocated);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
+        private static CursorRequest ExecuteInstantiation(CursorToken token) {
+            return new CursorRequest(token, CursorRequest.MaxLimit, CursorDirection.Forward);
+        }
+    }
+
+    public sealed class DeconstructMethod {
+        [Fact]
+        public void Should_Deconstruct_Accurately() {
+            // Arrange
+            CursorToken token = CursorToken.Parse(ValidTokenString);
+            CursorRequest sut = new(token, 25, CursorDirection.Backward);
+
+            // Act
+            (CursorToken cursor, int limit, CursorDirection direction) = sut;
+
+            // Assert
+            Assert.Equal(token, cursor);
+            Assert.Equal(25, limit);
+            Assert.Equal(CursorDirection.Backward, direction);
         }
     }
 
@@ -126,6 +169,103 @@ public sealed class CursorRequestTests {
             // Assert
             Assert.False(success);
             Assert.Equal(0, charsWritten);
+        }
+
+        [Fact]
+        public void Should_Format_Populated_Instance() {
+            // Arrange
+            CursorRequest sut = new(CursorToken.Parse(ValidTokenString), 25, CursorDirection.Backward);
+            Span<char> destination = stackalloc char[128];
+
+            // Act
+            bool success = sut.TryFormat(destination, out int charsWritten);
+            string formatted = destination[..charsWritten].ToString();
+
+            // Assert
+            Assert.True(success);
+            Assert.Contains(ValidTokenString, formatted);
+            Assert.Contains("25", formatted);
+            Assert.Contains("Backward", formatted);
+        }
+    }
+
+    public sealed class EqualityOperators {
+        [Fact]
+        public void Should_Be_Equal_When_All_Properties_Match() {
+            // Arrange
+            CursorToken token = CursorToken.Parse(ValidTokenString);
+            CursorRequest a = new(token, 25, CursorDirection.Forward);
+            CursorRequest b = new(token, 25, CursorDirection.Forward);
+
+            // Act & Assert
+            Assert.True(a == b);
+            Assert.True(a.Equals(b));
+            Assert.Equal(a.GetHashCode(), b.GetHashCode());
+        }
+
+        [Fact]
+        public void Should_Not_Be_Equal_When_Direction_Differs() {
+            // Arrange
+            CursorToken token = CursorToken.Parse(ValidTokenString);
+            CursorRequest a = new(token, 25, CursorDirection.Forward);
+            CursorRequest b = new(token, 25, CursorDirection.Backward);
+
+            // Act & Assert
+            Assert.True(a != b);
+            Assert.False(a.Equals(b));
+        }
+
+        [Fact]
+        public void Should_Not_Be_Equal_When_Limit_Differs() {
+            // Arrange
+            CursorToken token = CursorToken.Parse(ValidTokenString);
+            CursorRequest a = new(token, 25, CursorDirection.Forward);
+            CursorRequest b = new(token, 50, CursorDirection.Forward);
+
+            // Act & Assert
+            Assert.True(a != b);
+            Assert.False(a.Equals(b));
+        }
+
+        [Fact]
+        public void Should_Not_Be_Equal_When_Cursor_Differs() {
+            // Arrange
+            CursorRequest a = new(CursorToken.FromUtf8("token_a"), 25, CursorDirection.Forward);
+            CursorRequest b = new(CursorToken.FromUtf8("token_b"), 25, CursorDirection.Forward);
+
+            // Act & Assert
+            Assert.True(a != b);
+            Assert.False(a.Equals(b));
+        }
+    }
+
+
+    public sealed class Utf8SpanSupport {
+        [Fact]
+        public void Should_Parse_From_Utf8_Span() {
+            // Arrange
+            byte[] utf8 = System.Text.Encoding.UTF8.GetBytes($"{ValidTokenString}:25:Forward");
+
+            // Act
+            CursorRequest result = CursorRequest.Parse(utf8);
+
+            // Assert
+            Assert.Equal(ValidTokenString, result.Cursor.Value);
+            Assert.Equal(25, result.Limit);
+            Assert.Equal(CursorDirection.Forward, result.Direction);
+        }
+
+        [Fact]
+        public void Should_Format_To_Utf8_Span() {
+            // Arrange
+            CursorRequest sut = new(CursorToken.Parse(ValidTokenString), 25, CursorDirection.Forward);
+            Span<byte> destination = stackalloc byte[128];
+
+            // Act
+            bool success = sut.TryFormat(destination, out int bytesWritten);
+
+            // Assert
+            Assert.True(success);
         }
     }
 }

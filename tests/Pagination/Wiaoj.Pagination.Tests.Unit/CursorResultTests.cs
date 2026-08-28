@@ -84,6 +84,61 @@ public sealed class CursorResultTests {
         }
     }
 
+    public sealed class IndexerAndEnumeration {
+        [Fact]
+        public void Should_Access_Items_By_Index() {
+            // Arrange
+            EquatableArray<string> items = new[] { "A", "B", "C" };
+            CursorResult<string> sut = new(items, CursorMetadata.Empty);
+
+            // Act & Assert
+            Assert.Equal("A", sut[0]);
+            Assert.Equal("B", sut[1]);
+            Assert.Equal("C", sut[2]);
+        }
+
+        [Fact]
+        public void Should_Throw_When_Index_Is_Out_Of_Range() {
+            // Arrange
+            EquatableArray<int> items = new[] { 1, 2 };
+            CursorResult<int> sut = new(items, CursorMetadata.Empty);
+
+            // Act & Assert
+            Assert.Throws<IndexOutOfRangeException>(() => sut[10]);
+        }
+
+        [Fact]
+        public void Should_Enumerate_All_Items_In_Order() {
+            // Arrange
+            EquatableArray<int> items = new[] { 5, 6, 7 };
+            CursorResult<int> sut = new(items, CursorMetadata.Empty);
+
+            // Act
+            List<int> collected = [];
+            foreach(int item in sut) {
+                collected.Add(item);
+            }
+
+            // Assert
+            Assert.Equal([5, 6, 7], collected);
+        }
+
+        [Fact]
+        public void Should_Enumerate_Nothing_When_Empty() {
+            // Arrange
+            CursorResult<int> sut = CursorResult<int>.Empty;
+
+            // Act
+            List<int> collected = [];
+            foreach(int item in sut) {
+                collected.Add(item);
+            }
+
+            // Assert
+            Assert.Empty(collected);
+        }
+    }
+
     public sealed class SelectMethod {
         [Fact]
         public void Should_Project_Items_While_Preserving_Metadata() {
@@ -141,6 +196,51 @@ public sealed class CursorResultTests {
             Assert.True(res1 == res2);
             Assert.True(res1.Equals(res2));
             Assert.Equal(res1.GetHashCode(), res2.GetHashCode());
+        }
+
+        [Fact]
+        public void Should_Not_Be_Equal_When_Items_Differ() {
+            // Arrange
+            EquatableArray<int> items1 = new[] { 1, 2 };
+            EquatableArray<int> items2 = new[] { 1, 3 };
+            CursorMetadata metadata = new(CursorToken.FromUtf8("c1"), CursorToken.FromUtf8("c2"), false, false);
+
+            CursorResult<int> res1 = new(items1, metadata);
+            CursorResult<int> res2 = new(items2, metadata);
+
+            // Act & Assert
+            Assert.True(res1 != res2);
+            Assert.False(res1.Equals(res2));
+        }
+
+        [Fact]
+        public void Should_Not_Be_Equal_When_Metadata_Differs() {
+            // Arrange
+            EquatableArray<int> items = new[] { 1, 2 };
+            CursorMetadata metadata1 = new(CursorToken.FromUtf8("c1"), CursorToken.FromUtf8("c2"), false, false);
+            CursorMetadata metadata2 = new(CursorToken.FromUtf8("c1"), CursorToken.FromUtf8("c2"), true, false);
+
+            CursorResult<int> res1 = new(items, metadata1);
+            CursorResult<int> res2 = new(items, metadata2);
+
+            // Act & Assert
+            Assert.True(res1 != res2);
+            Assert.False(res1.Equals(res2));
+        }
+
+        [Fact]
+        public void Should_Not_Be_Equal_When_Item_Count_Differs() {
+            // Arrange
+            EquatableArray<int> items1 = new[] { 1, 2 };
+            EquatableArray<int> items2 = new[] { 1, 2, 3 };
+            CursorMetadata metadata = new(CursorToken.FromUtf8("c1"), CursorToken.FromUtf8("c2"), false, false);
+
+            CursorResult<int> res1 = new(items1, metadata);
+            CursorResult<int> res2 = new(items2, metadata);
+
+            // Act & Assert
+            Assert.True(res1 != res2);
+            Assert.False(res1.Equals(res2));
         }
     }
 

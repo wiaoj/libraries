@@ -14,7 +14,7 @@ namespace Microsoft.AspNetCore.Builder;
 public static class EndpointRouteBuilderExtensions {
 
     /// <summary>
-    /// Adds automatic RFC 8288 <c>Link</c> headers, <c>Pagination</c> metadata, 
+    /// Adds automatic RFC 8288 <c>Link</c> headers
     /// and <c>ETag</c> / <c>304 Not Modified</c> evaluation to the endpoint using default options.
     /// </summary>
     /// <remarks>
@@ -39,7 +39,7 @@ public static class EndpointRouteBuilderExtensions {
     }
 
     /// <summary>
-    /// Adds automatic RFC 8288 <c>Link</c> headers, <c>Pagination</c> metadata, 
+    /// Adds automatic RFC 8288 <c>Link</c> headers
     /// and <c>ETag</c> / <c>304 Not Modified</c> evaluation to the endpoint using custom configured options.
     /// </summary>
     /// <typeparam name="TBuilder">The endpoint convention builder type.</typeparam>
@@ -53,7 +53,6 @@ public static class EndpointRouteBuilderExtensions {
     ///     return await db.Orders.ToCursorResultAsync(request, o => o.Id);
     /// }).WithPagination(options => {
     ///     options.EnableETag = false;
-    ///     options.MetadataHeaderName = "Pagination-Metadata";
     /// });
     /// </code>
     /// </example>

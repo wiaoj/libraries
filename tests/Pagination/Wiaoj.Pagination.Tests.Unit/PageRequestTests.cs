@@ -1,4 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Wiaoj.Pagination.Tests.Unit;
 
@@ -143,6 +144,42 @@ public sealed class PageRequestTests {
             Assert.False(PageRequest.TryParse(malformed, out _));
             Assert.Throws<FormatException>(() => PageRequest.Parse(malformed));
         }
+
+        [Fact]
+        public void Should_Parse_From_Utf8_Span() {
+            // Arrange
+            ReadOnlySpan<byte> utf8Input = "4:30"u8;
+
+            // Act
+            PageRequest result = PageRequest.Parse(utf8Input);
+
+            // Assert
+            Assert.Equal(4, result.PageNumber);
+            Assert.Equal(30, result.PageSize);
+        }
+
+        [Fact]
+        public void Should_TryParse_From_Utf8_Span() {
+            // Arrange
+            ReadOnlySpan<byte> utf8Input = "2:15"u8;
+
+            // Act
+            bool success = PageRequest.TryParse(utf8Input, out PageRequest result);
+
+            // Assert
+            Assert.True(success);
+            Assert.Equal(2, result.PageNumber);
+            Assert.Equal(15, result.PageSize);
+        }
+
+        [Fact]
+        public void Should_Fail_To_Parse_Malformed_Utf8_Span() {
+            // Arrange
+            ReadOnlySpan<byte> malformedInput = "abc:def"u8;
+
+            // Act & Assert
+            Assert.False(PageRequest.TryParse(malformedInput, out _));
+        }
     }
 
     public sealed class TryFormatMethod {
@@ -157,7 +194,7 @@ public sealed class PageRequestTests {
 
             // Assert
             Assert.True(success);
-            Assert.Equal("PageNumber: 0, PageSize: 0", destination[..charsWritten].ToString());
+            Assert.Equal("0:0", destination[..charsWritten].ToString());
         }
 
         [Fact]
@@ -172,6 +209,139 @@ public sealed class PageRequestTests {
             // Assert
             Assert.False(success);
             Assert.Equal(0, charsWritten);
+        }
+
+        [Fact]
+        public void Should_Format_To_Utf8_Span() {
+            // Arrange
+            PageRequest sut = new(4, 30);
+            Span<byte> destination = stackalloc byte[64];
+
+            // Act
+            bool success = sut.TryFormat(destination, out int bytesWritten);
+
+            // Assert
+            Assert.True(success);
+            Assert.Equal("4:30", Encoding.UTF8.GetString(destination[..bytesWritten]));
+        }
+
+        [Fact]
+        public void Should_Return_False_When_Utf8_Buffer_Is_Too_Small() {
+            // Arrange
+            PageRequest sut = new(100, 50);
+            Span<byte> smallBuffer = stackalloc byte[2];
+
+            // Act
+            bool success = sut.TryFormat(smallBuffer, out int bytesWritten);
+
+            // Assert
+            Assert.False(success);
+            Assert.Equal(0, bytesWritten);
+        }
+    }
+
+    public sealed class ToStringMethod {
+        [Fact]
+        public void Should_Format_Non_Default_Instance() {
+            // Arrange
+            PageRequest sut = new(4, 30);
+
+            // Act & Assert
+            Assert.Equal("4:30", sut.ToString());
+        }
+
+        [Fact]
+        public void Should_Round_Trip_Through_Parse() {
+            // Arrange
+            PageRequest original = new(7, 45);
+
+            // Act
+            string formatted = original.ToString();
+            PageRequest reparsed = PageRequest.Parse(formatted);
+
+            // Assert
+            Assert.Equal(original, reparsed);
+            Assert.Contains(original.PageNumber.ToString(), formatted);
+            Assert.Contains(original.PageSize.ToString(), formatted);
+        }
+    }
+
+    public sealed class IsEmptyProperty {
+
+        [Fact]
+        public void Should_Be_True_For_Empty_Static_Instance() {
+            // PageRequest.Empty bypasses the constructor (raw default), so PageNumber/PageSize stay 0
+            Assert.True(PageRequest.Empty.IsEmpty);
+        }
+
+        [Fact]
+        public void Should_Be_True_For_Default_Struct_Value() {
+            Assert.True(default(PageRequest).IsEmpty);
+        }
+
+        [Fact]
+        public void Should_Be_False_For_Default_Static_Instance() {
+            // PageRequest.Default is (1, 20) via the constructor - not the uninitialized (0, 0) state
+            Assert.False(PageRequest.Default.IsEmpty);
+        }
+
+        [Fact]
+        public void Should_Be_False_For_Any_Normally_Constructed_Request() {
+            PageRequest request = new(1, 10);
+            Assert.False(request.IsEmpty);
+        }
+    }
+
+    public sealed class DeconstructMethod {
+
+        [Fact]
+        public void Should_Deconstruct_Into_PageNumber_And_PageSize() {
+            // Arrange
+            PageRequest request = new(3, 25);
+
+            // Act
+            (int pageNumber, int pageSize) = request;
+
+            // Assert
+            Assert.Equal(3, pageNumber);
+            Assert.Equal(25, pageSize);
+        }
+    }
+
+    public sealed class EqualityOperators {
+
+        [Fact]
+        public void Should_Consider_Two_Requests_With_Same_Values_Equal() {
+            PageRequest a = new(2, 10);
+            PageRequest b = new(2, 10);
+
+            Assert.Equal(a, b);
+            Assert.True(a == b);
+        }
+
+        [Fact]
+        public void Should_Consider_Requests_With_Different_Values_Not_Equal() {
+            PageRequest a = new(2, 10);
+            PageRequest b = new(3, 10);
+
+            Assert.NotEqual(a, b);
+            Assert.True(a != b);
+        }
+
+        [Fact]
+        public void Should_Consider_Equivalent_Post_Clamping_Requests_Equal() {
+            // Arrange: Both clamp to (1, 20) despite different raw inputs
+            PageRequest a = new(-5, -5);
+            PageRequest b = new(0, 0);
+
+            // Assert
+            Assert.Equal(a, b);
+        }
+
+        [Fact]
+        public void Should_Not_Consider_Empty_Equal_To_Default() {
+            // Empty = (0,0) via raw default; Default = (1,20) via constructor - these must differ
+            Assert.NotEqual(PageRequest.Empty, PageRequest.Default);
         }
     }
 }
