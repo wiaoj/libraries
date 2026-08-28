@@ -1,4 +1,7 @@
-﻿namespace Wiaoj.Results; 
+﻿using System.Text.Json.Serialization;
+
+namespace Wiaoj.Results;
+
 /// <summary>
 /// Categorizes an <see cref="Error"/> to facilitate appropriate handling
 /// (e.g., mapping to HTTP status codes, logging severity).
@@ -15,6 +18,7 @@
 /// </code>
 /// Predefined types match the original enum values for easy migration.
 /// </summary>
+[JsonConverter(typeof(ErrorTypeJsonConverter))]
 public readonly record struct ErrorType {
 
     /// <summary>The unique name of this error type.</summary>

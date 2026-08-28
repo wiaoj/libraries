@@ -1,33 +1,22 @@
 ﻿using System.Diagnostics.Contracts;
+using System.Runtime.CompilerServices;
 
 namespace Wiaoj.Results;
 
 public static partial class ResultsExtensions {
 
-    // ── Ensure (sync) ─────────────────────────────────────────────────────────
+    // ── Ensure (Synchronous) ──────────────────────────────────────────────────
 
     /// <summary>
-    /// Validates a condition against the value.
-    /// Returns <paramref name="error"/> when <paramref name="predicate"/> is <c>false</c>.
-    /// Has no effect when the result is already a failure.
+    /// Validates a condition against the value. Returns <paramref name="error"/> when false.
     /// </summary>
-    /// <typeparam name="T">The value type.</typeparam>
-    /// <param name="result">The result to validate.</param>
-    /// <param name="predicate">
-    /// The condition to check. Receives the unwrapped value.
-    /// Not called when <paramref name="result"/> is already a failure.
-    /// </param>
-    /// <param name="error">The error to return when <paramref name="predicate"/> is <c>false</c>.</param>
-    /// <returns>
-    /// The original <paramref name="result"/> when successful and the predicate holds;
-    /// <paramref name="error"/> when the predicate fails;
-    /// the original errors when the result was already a failure.
-    /// </returns>
     [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Result<T> Ensure<T>(
         this Result<T> result,
         Func<T, bool> predicate,
         Error error) {
+        ArgumentNullException.ThrowIfNull(predicate);
 
         if(result.IsFailure) return result;
         if(!predicate(result.Value)) return error;
@@ -35,55 +24,67 @@ public static partial class ResultsExtensions {
     }
 
     /// <summary>
-    /// Validates a value-independent condition.
-    /// Returns <paramref name="error"/> when <paramref name="predicate"/> is <c>false</c>.
-    /// Has no effect when the result is already a failure.
+    /// Validates a condition against the value, constructing the error lazily on failure.
     /// </summary>
-    /// <typeparam name="T">The value type.</typeparam>
-    /// <param name="result">The result to validate.</param>
-    /// <param name="predicate">
-    /// A parameterless condition. Use when the check does not depend on the value,
-    /// e.g., a feature-flag check or a time-window constraint.
-    /// </param>
-    /// <param name="error">The error to return when <paramref name="predicate"/> is <c>false</c>.</param>
-    /// <returns>
-    /// The original <paramref name="result"/> when successful and the predicate holds;
-    /// <paramref name="error"/> when the predicate fails;
-    /// the original errors when the result was already a failure.
-    /// </returns>
     [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<T> Ensure<T>(
+        this Result<T> result,
+        Func<T, bool> predicate,
+        Func<T, Error> errorFactory) {
+        ArgumentNullException.ThrowIfNull(predicate);
+        ArgumentNullException.ThrowIfNull(errorFactory);
+
+        if(result.IsFailure) return result;
+        if(!predicate(result.Value)) return errorFactory(result.Value);
+        return result;
+    }
+
+    /// <summary>
+    /// Validates a value-independent condition. Returns <paramref name="error"/> when false.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Result<T> Ensure<T>(
         this Result<T> result,
         Func<bool> predicate,
         Error error) {
+        ArgumentNullException.ThrowIfNull(predicate);
 
         if(result.IsFailure) return result;
         if(!predicate()) return error;
         return result;
     }
 
+    /// <summary>
+    /// Validates a value-independent condition, constructing the error lazily on failure.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<T> Ensure<T>(
+        this Result<T> result,
+        Func<bool> predicate,
+        Func<Error> errorFactory) {
+        ArgumentNullException.ThrowIfNull(predicate);
+        ArgumentNullException.ThrowIfNull(errorFactory);
+
+        if(result.IsFailure) return result;
+        if(!predicate()) return errorFactory();
+        return result;
+    }
+
     // ── EnsureAsync ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Awaits <paramref name="task"/> and validates the value with a synchronous
-    /// <paramref name="predicate"/>.
+    /// Awaits <paramref name="task"/> and validates the value with a synchronous predicate.
     /// </summary>
-    /// <typeparam name="T">The value type.</typeparam>
-    /// <param name="task">The task to await.</param>
-    /// <param name="predicate">
-    /// The condition to check. Not called when the result is already a failure.
-    /// </param>
-    /// <param name="error">The error to return when <paramref name="predicate"/> is <c>false</c>.</param>
-    /// <returns>
-    /// The original result when successful and the predicate holds;
-    /// <paramref name="error"/> when the predicate fails;
-    /// the original errors when the result was already a failure.
-    /// </returns>
     [Pure]
     public static async Task<Result<T>> EnsureAsync<T>(
         this Task<Result<T>> task,
         Func<T, bool> predicate,
         Error error) {
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(predicate);
 
         Result<T> result = await task.ConfigureAwait(false);
         if(result.IsFailure) return result;
@@ -92,26 +93,15 @@ public static partial class ResultsExtensions {
     }
 
     /// <summary>
-    /// Awaits <paramref name="task"/> and validates the value with an asynchronous
-    /// <paramref name="predicate"/>.
+    /// Awaits <paramref name="task"/> and validates the value with an asynchronous predicate.
     /// </summary>
-    /// <typeparam name="T">The value type.</typeparam>
-    /// <param name="task">The task to await.</param>
-    /// <param name="predicate">
-    /// An async condition, e.g., a uniqueness check against the database.
-    /// Not called when the result is already a failure.
-    /// </param>
-    /// <param name="error">The error to return when <paramref name="predicate"/> is <c>false</c>.</param>
-    /// <returns>
-    /// The original result when successful and the predicate holds;
-    /// <paramref name="error"/> when the predicate fails;
-    /// the original errors when the result was already a failure.
-    /// </returns>
     [Pure]
     public static async Task<Result<T>> EnsureAsync<T>(
         this Task<Result<T>> task,
         Func<T, Task<bool>> predicate,
         Error error) {
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(predicate);
 
         Result<T> result = await task.ConfigureAwait(false);
         if(result.IsFailure) return result;
@@ -120,23 +110,14 @@ public static partial class ResultsExtensions {
     }
 
     /// <summary>
-    /// From a synchronous <see cref="Result{TValue}"/>, validates the value with an
-    /// asynchronous <paramref name="predicate"/>.
+    /// From a synchronous result, validates the value with an asynchronous predicate.
     /// </summary>
-    /// <typeparam name="T">The value type.</typeparam>
-    /// <param name="result">The synchronous result to validate.</param>
-    /// <param name="predicate">An async condition. Not called when the result is already a failure.</param>
-    /// <param name="error">The error to return when <paramref name="predicate"/> is <c>false</c>.</param>
-    /// <returns>
-    /// The original result when the predicate holds;
-    /// <paramref name="error"/> when it fails;
-    /// the original errors when the result was already a failure.
-    /// </returns>
     [Pure]
     public static async Task<Result<T>> EnsureAsync<T>(
         this Result<T> result,
         Func<T, Task<bool>> predicate,
         Error error) {
+        ArgumentNullException.ThrowIfNull(predicate);
 
         if(result.IsFailure) return result;
         if(!await predicate(result.Value).ConfigureAwait(false)) return error;
@@ -144,29 +125,37 @@ public static partial class ResultsExtensions {
     }
 
     /// <summary>
-    /// Awaits <paramref name="task"/> and validates the value using an async
-    /// <paramref name="predicate"/>. When the predicate fails, produces the error
-    /// dynamically via <paramref name="errorFactory"/>.
+    /// Awaits <paramref name="task"/> and validates the value using an asynchronous predicate and lazy error factory.
     /// </summary>
-    /// <typeparam name="T">The value type.</typeparam>
-    /// <param name="task">The task to await.</param>
-    /// <param name="predicate">An async condition. Not called when the result is already a failure.</param>
-    /// <param name="errorFactory">
-    /// An async function that receives the value and produces a contextual error.
-    /// Only called when <paramref name="predicate"/> returns <c>false</c>.
-    /// </param>
-    /// <returns>
-    /// The original result when the predicate holds;
-    /// the error produced by <paramref name="errorFactory"/> when it fails;
-    /// the original errors when the result was already a failure.
-    /// </returns>
     [Pure]
     public static async Task<Result<T>> EnsureAsync<T>(
         this Task<Result<T>> task,
         Func<T, Task<bool>> predicate,
         Func<T, Task<Error>> errorFactory) {
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(predicate);
+        ArgumentNullException.ThrowIfNull(errorFactory);
 
         Result<T> result = await task.ConfigureAwait(false);
+        if(result.IsFailure) return result;
+
+        if(!await predicate(result.Value).ConfigureAwait(false))
+            return await errorFactory(result.Value).ConfigureAwait(false);
+
+        return result;
+    }
+
+    /// <summary>
+    /// From a synchronous result, validates the value using an asynchronous predicate and lazy error factory.
+    /// </summary>
+    [Pure]
+    public static async Task<Result<T>> EnsureAsync<T>(
+        this Result<T> result,
+        Func<T, Task<bool>> predicate,
+        Func<T, Task<Error>> errorFactory) {
+        ArgumentNullException.ThrowIfNull(predicate);
+        ArgumentNullException.ThrowIfNull(errorFactory);
+
         if(result.IsFailure) return result;
 
         if(!await predicate(result.Value).ConfigureAwait(false))

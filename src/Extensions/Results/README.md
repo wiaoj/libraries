@@ -3,24 +3,22 @@
 [![NuGet](https://img.shields.io/nuget/v/Wiaoj.Results.svg)](https://www.nuget.org/packages/Wiaoj.Results)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Wiaoj.Results** is a high-performance, zero-dependency library that implements the **Result Pattern** for .NET. It allows you to write robust, expressive, and type-safe code by replacing exception-based control flow with a functional approach known as **Railway Oriented Programming (ROP)**.
+**Wiaoj.Results** is a high-performance, zero-dependency library that implements the Result Pattern for .NET. It allows you to write robust, expressive, and type-safe code by replacing exception-based control flow with a functional approach known as Railway Oriented Programming (ROP).
 
 Designed with Domain-Driven Design (DDD) and Clean Architecture in mind, it helps you manage application flow elegantly while minimizing performance overhead.
 
-## 🚀 Features
+## Features
 
-*   **Zero Dependencies:** Built with pure C#, no external packages required.
-*   **High Performance:** Uses lightweight `readonly record struct` types to minimize heap allocations and garbage collection pressure.
-*   **Rich Error Model:** Structured, immutable errors featuring `Code`, `Description`, `Type`, and extensible `Metadata`.
-*   **Advanced Async Support:** First-class extension methods for both `Task` and `ValueTask` to ensure maximum performance in asynchronous pipelines.
-*   **Elegant Control Flow:** Eliminate "Nested If Hell" using fluent combinators like `.Then()`, `.Map()`, `.Ensure()`, `.Do()`, and `.Match()`.
-*   **Collection Power:** Easily combine, filter, or aggregate `IEnumerable<Result<T>>` collections.
-*   **Safe Resource Management:** Safely handle `IDisposable` and `IAsyncDisposable` payloads using `.Consume()` and `.ConsumeAsync()`.
-*   **Exception Safety:** Safely wrap throwing code and 3rd-party libraries using `Result.Try` and `Result.TryAsync`.
+- **Zero Dependencies.** Built with pure C#, no external packages required.
+- **High Performance.** Uses lightweight `readonly record struct` types (`Error`, `ErrorType`) to minimize heap allocations and garbage collection pressure.
+- **Rich Error Model.** Structured, immutable errors featuring `Code`, `Description`, `Type`, and extensible `Metadata`.
+- **Advanced Async Support.** First-class extension methods for both `Task` and `ValueTask` to keep asynchronous pipelines allocation-conscious.
+- **Elegant Control Flow.** Eliminate nested `if` checks using fluent combinators like `.Then()`, `.Map()`, `.Ensure()`, `.Do()`, and `.Match()`.
+- **Collection Power.** Combine, partition, or filter `IEnumerable<Result<T>>` and `IAsyncEnumerable<Result<T>>` collections in a single pass.
+- **Safe Resource Management.** Handle `IDisposable` and `IAsyncDisposable` payloads using `.Consume()` and `.ConsumeAsync()`.
+- **Exception Safety.** Wrap throwing code and third-party libraries using `Result.Try` and `Result.TryAsync`, with automatic mapping of common exception types to `ErrorType`.
 
----
-
-## 📦 Installation
+## Installation
 
 Install via the .NET CLI:
 
@@ -34,38 +32,36 @@ Or via the Package Manager Console:
 Install-Package Wiaoj.Results
 ```
 
----
-
-## ⚡ Core Concepts & Quick Start
+## Core Concepts
 
 ### 1. Returning Results (Success or Failure)
 
-Instead of throwing exceptions or returning `null`, return a `Result<T>`. The library supports **implicit conversions** from both raw values and `Error` objects, keeping your code clean.
+Instead of throwing exceptions or returning `null`, return a `Result<T>`. The library supports implicit conversions from both raw values and `Error` objects, keeping your code clean.
 
 ```csharp
 using Wiaoj.Results;
 
-public class UserService 
+public class UserService
 {
-    public Result<User> GetUser(int id) 
+    public Result<User> GetUser(int id)
     {
-        if (id <= 0) 
+        if (id <= 0)
             return Error.Validation("User.InvalidId", "ID must be positive.");
 
         var user = _repository.Find(id);
-        
-        if (user is null) 
+
+        if (user is null)
             return Error.NotFound("User.NotFound", $"User with id {id} was not found.");
 
         // Implicitly converts the User object to a successful Result<User>
-        return user; 
+        return user;
     }
 }
 ```
 
 ### 2. Void Operations (`Result<Success>`)
 
-For operations that do not return a specific value, use `Result<Success>` (or simply return `Result.Success()`). `Success` is a zero-allocation, 1-byte struct optimized for high performance.
+For operations that do not return a specific value, use `Result<Success>` (or simply return `Result.Success()`). `Success` is a zero-allocation, 1-byte struct optimized for this case.
 
 ```csharp
 public Result<Success> DeleteUser(int id)
@@ -80,29 +76,27 @@ public Result<Success> DeleteUser(int id)
 
 ### 3. Handling Results (Pattern Matching)
 
-Extract values or handle errors gracefully at the edges of your application (e.g., UI or API controllers) using `.Match()` or `.Switch()`.
+Extract values or handle errors gracefully at the edges of your application (UI, API controllers) using `.Match()` or `.Switch()`.
 
 ```csharp
 var result = service.GetUser(1);
 
-// Match: Returns a value based on the outcome
+// Match: returns a value based on the outcome
 string response = result.Match(
     user => $"Welcome back, {user.Name}!",
     errors => $"Failed: {errors[0].Description}"
 );
 
-// Switch: Executes an action based on the outcome (returns void)
+// Switch: executes an action based on the outcome (returns void)
 result.Switch(
     user => Console.WriteLine($"Success: {user.Email}"),
     errors => Console.WriteLine($"Error Code: {errors[0].Code}")
 );
 ```
 
----
+## Railway Oriented Programming (Chaining)
 
-## 🚂 Railway Oriented Programming (Chaining)
-
-Instead of writing nested `if(!result.IsSuccess)` checks, chain your operations. If any step fails, the pipeline short-circuits and bypasses subsequent steps, propagating the error down the chain.
+Instead of writing nested `if (!result.IsSuccess)` checks, chain your operations. If any step fails, the pipeline short-circuits and bypasses subsequent steps, propagating the error down the chain.
 
 ```csharp
 public async Task<Result<Guid>> RegisterUserAsync(UserDto dto)
@@ -115,30 +109,30 @@ public async Task<Result<Guid>> RegisterUserAsync(UserDto dto)
 }
 ```
 
----
+## Rich Error Model
 
-## 🛡️ Rich Error Model
-
-The library uses a "Smart Enum" approach (`ErrorType`) to categorize errors, making it trivial to map them to HTTP status codes or log severity levels.
+The library uses an extensible value-type approach (`ErrorType`) instead of a plain `enum` to categorize errors, making it straightforward to map them to HTTP status codes or log severity levels. You can declare your own domain-specific `ErrorType` values alongside the built-in ones — see [Custom Errors & Metadata](#custom-errors--metadata) below.
 
 ### Built-in Error Types
 
 | Factory Method | Suggested HTTP Code | Use Case |
 | :--- | :--- | :--- |
 | `Error.Failure()` | 500 | General failures or default unhandled states. |
+| `Error.Unexpected()` | 500 | Unexpected system errors. |
 | `Error.Validation()` | 400 | Invalid input formats or schema violations. |
 | `Error.NotFound()` | 404 | The requested resource does not exist. |
 | `Error.Conflict()` | 409 | Duplicate resource or business logic conflict. |
-| `Error.Unauthorized()` | 401 | Authentication is required but missing/invalid. |
+| `Error.Unauthorized()` | 401 | Authentication is required but missing or invalid. |
 | `Error.Forbidden()` | 403 | Authenticated, but lacks required permissions. |
-| `Error.UnprocessableEntity()` | 422 | Syntactically valid request, but semantic rule violation. |
+| `Error.UnprocessableEntity()` | 422 | Syntactically valid request, but a semantic rule was violated. |
 | `Error.RateLimitExceeded()` | 429 | Caller has sent too many requests. |
-| `Error.ServiceUnavailable()`| 503 | Downstream dependency is temporarily unreachable. |
-| `Error.Timeout()` | 408 / 504 | Operation did not complete within the allowed time. |
+| `Error.ServiceUnavailable()` | 503 | A downstream dependency is temporarily unreachable. |
+| `Error.Timeout()` | 408 / 504 | The operation did not complete within the allowed time. |
+| `Error.Gone()` | 410 | The resource has been permanently removed. |
 
 ### Custom Errors & Metadata
 
-You can define domain-specific error types and attach contextual metadata to your errors.
+Define domain-specific error types and attach contextual metadata to your errors.
 
 ```csharp
 public static class AppErrorTypes
@@ -154,26 +148,25 @@ return Error.Custom(AppErrorTypes.Maintenance, "System.Offline", "System is unde
 
 ### Multiple Errors
 
-Useful for returning aggregated validation errors instead of failing at the very first bad input.
+Useful for returning aggregated validation errors instead of failing at the first bad input. A `List<Error>` implicitly converts to a failed `Result<T>` carrying every error in the list.
 
 ```csharp
-List<Error> errors =[
+List<Error> errors = [
     Error.Validation("Name.Required", "Name cannot be empty."),
     Error.Validation("Age.Min", "Age must be at least 18.")
 ];
 
-return Error.Multiple(errors); // Returns Result<Success> containing all errors
+return errors; // Implicitly converts to a failed Result<Success> containing all errors
 ```
 
----
-
-## 🛠️ Advanced Features
+## Advanced Features
 
 ### Safely Wrapping Exceptions (`Try` / `TryAsync`)
-Easily convert exceptions from 3rd-party libraries (or the BCL) into `Result` objects.
+
+Convert exceptions from third-party libraries (or the BCL) into `Result` objects. `Error.FromException` maps common exception types (`TimeoutException`, `UnauthorizedAccessException`, `ArgumentException`) to the matching `ErrorType` automatically; anything else becomes `ErrorType.Unexpected`.
 
 ```csharp
-// Automatically maps TimeoutException, UnauthorizedAccessException, etc. to correct ErrorTypes
+// Automatically maps TimeoutException, UnauthorizedAccessException, etc. to the correct ErrorTypes
 Result<string> content = await Result.TryAsync(ct => File.ReadAllTextAsync("data.txt", ct));
 
 // Or provide a custom exception mapper:
@@ -184,6 +177,7 @@ Result<int> parsed = Result.Try(
 ```
 
 ### Nullability Bridges (`ToResult` / `EnsureNotNull`)
+
 Convert `null` reference returns from existing APIs (like Entity Framework) into strict `Result` types.
 
 ```csharp
@@ -196,23 +190,30 @@ return user.ToResult(Error.NotFound("User.NotFound", "User not found."));
 Result<User> strictResult = nullableResult.EnsureNotNull(Error.NotFound());
 ```
 
-### Collection Combinators (`Combine`)
-Process a batch of results. If all succeed, you get a list of values. If any fail, you get an aggregated list of *all* errors.
+### Collection Combinators (`Combine`, `Partition`)
+
+Process a batch of results in a single pass.
 
 ```csharp
 IEnumerable<Result<User>> userResults = userIds.Select(id => GetUser(id));
 
-// Returns Result<IReadOnlyList<User>>. 
-// If *any* GetUser call failed, `combined` becomes a failure holding all collected errors.
+// Returns Result<IReadOnlyList<User>>.
+// If any GetUser call failed, `combined` becomes a failure holding all collected errors.
 Result<IReadOnlyList<User>> combined = userResults.Combine();
+
+// Or split successes and failures without short-circuiting:
+var (users, errors) = userResults.Partition();
 ```
 
+The same operations are available for `Task<Result<T>>` collections (`CombineAsync`, `PartitionAsync`, evaluated in parallel via `Task.WhenAll`) and for `IAsyncEnumerable<Result<T>>` streams.
+
 ### Resource Management (`Consume` / `DisposeValue`)
-When your `Result<T>` holds an `IDisposable` or `IAsyncDisposable` resource (e.g., a `Stream` or `HttpResponseMessage`), you can ensure it gets disposed right after execution.
+
+When your `Result<T>` holds an `IDisposable` or `IAsyncDisposable` resource (e.g., a `Stream` or `HttpResponseMessage`), `.Consume()` / `.ConsumeAsync()` ensure it gets disposed right after execution.
 
 ```csharp
 await Result.TryAsync(ct => httpClient.GetAsync(url, ct))
-    .ConsumeAsync(async (response, ct) => 
+    .ConsumeAsync(async (response, ct) =>
     {
         var data = await response.Content.ReadAsStringAsync(ct);
         Console.WriteLine(data);
@@ -221,15 +222,15 @@ await Result.TryAsync(ct => httpClient.GetAsync(url, ct))
 ```
 
 ### ValueTask Optimization
-For high-performance scenarios (like cache lookups that are usually synchronous), the library provides specialized `.ThenAsync`, `.MapAsync`, and `.MatchAsync` overloads for `ValueTask<Result<T>>` to prevent unnecessary heap allocations.
 
----
+For high-performance scenarios (like cache lookups that are usually synchronous), the library provides dedicated `.ThenAsync`, `.MapAsync`, `.EnsureAsync`, `.DoAsync`/`.TapAsync`, and `.MatchAsync` overloads for `ValueTask<Result<T>>` to avoid the heap allocation a `Task`-based pipeline would otherwise incur on the synchronous-completion path.
 
-## 🌐 Web API / Minimal APIs Integration
+## Web API / Minimal API Integration
 
-Mapping a `Result<T>` to an HTTP Response is straightforward using `.Match()`. Here is a common pattern for ASP.NET Core Minimal APIs or Controllers:
+Mapping a `Result<T>` to an HTTP response is straightforward using `.Match()`. Here is a common pattern for ASP.NET Core Minimal APIs or controllers:
 
-```csharp[HttpGet("{id}")]
+```csharp
+[HttpGet("{id}")]
 public async Task<IResult> GetUser(int id)
 {
     var result = await _userService.GetUserAsync(id);
@@ -237,14 +238,14 @@ public async Task<IResult> GetUser(int id)
     return result.Match(
         user => Results.Ok(user),
         errors => Results.Problem(
-            statusCode: GetStatusCode(errors[0].Type), 
+            statusCode: GetStatusCode(errors[0].Type),
             title: errors[0].Description,
             extensions: errors[0].Metadata?.ToDictionary(k => k.Key, v => v.Value)
         )
     );
 }
 
-// Helper to map your ErrorTypes to standard HTTP Status Codes
+// Helper to map your ErrorTypes to standard HTTP status codes
 private static int GetStatusCode(ErrorType type) => type.Name switch
 {
     nameof(ErrorType.Validation)   => StatusCodes.Status400BadRequest,
@@ -254,16 +255,14 @@ private static int GetStatusCode(ErrorType type) => type.Name switch
     nameof(ErrorType.Forbidden)    => StatusCodes.Status403Forbidden,
     nameof(ErrorType.RateLimit)    => StatusCodes.Status429TooManyRequests,
     nameof(ErrorType.Unavailable)  => StatusCodes.Status503ServiceUnavailable,
-    _                              => StatusCodes.Status500InternalServerError
+    _                               => StatusCodes.Status500InternalServerError
 };
 ```
 
----
+## Contributing
 
-## 🤝 Contributing
+Contributions, bug reports, and feature requests are welcome. Feel free to open an issue or submit a pull request on the GitHub repository.
 
-Contributions, bug reports, and feature requests are welcome! Feel free to open an issue or submit a Pull Request on the GitHub repository.
+## License
 
-## 📄 License
-
-This project is licensed under the **MIT License**.
+This project is licensed under the MIT License.
