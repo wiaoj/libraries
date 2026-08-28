@@ -1,301 +1,394 @@
-﻿using Wiaoj.Results;
-using Xunit;
-
-namespace Wiaoj.Results.Tests.Unit;
+﻿namespace Wiaoj.Results.Tests.Unit;
 
 [Trait("Category", Category.Error)]
 public sealed class ErrorTests {
 
-    // ── Factory methods ───────────────────────────────────────────────────────
+    public sealed class TheBuiltInFactoryMethods {
+        [Fact]
+        public void Failure_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.Failure();
 
-    [Fact]
-    public void Failure_DefaultParameters_UsesDefaultCodeAndDescription() {
-        Error error = Error.Failure();
-        Assert.Equal("General.Failure", error.Code);
-        Assert.Equal(ErrorType.Failure, error.Type);
-        Assert.False(string.IsNullOrEmpty(error.Description));
+            // Assert
+            Assert.Equal("General.Failure", error.Code);
+            Assert.Equal(ErrorType.Failure, error.Type);
+            Assert.False(string.IsNullOrEmpty(error.Description));
+            Assert.Null(error.Metadata);
+        }
+
+        [Fact]
+        public void Failure_CustomParameters_StoresValuesCorrectly() {
+            // Arrange & Act
+            Error error = Error.Failure("Order.Failed", "Order processing failed.");
+
+            // Assert
+            Assert.Equal("Order.Failed", error.Code);
+            Assert.Equal("Order processing failed.", error.Description);
+            Assert.Equal(ErrorType.Failure, error.Type);
+        }
+
+        [Fact]
+        public void Unexpected_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.Unexpected();
+
+            // Assert
+            Assert.Equal("General.Unexpected", error.Code);
+            Assert.Equal(ErrorType.Unexpected, error.Type);
+        }
+
+        [Fact]
+        public void Validation_StoresCodeAndDescription() {
+            // Arrange & Act
+            Error error = Error.Validation("User.Email.Invalid", "Email format is invalid.");
+
+            // Assert
+            Assert.Equal("User.Email.Invalid", error.Code);
+            Assert.Equal("Email format is invalid.", error.Description);
+            Assert.Equal(ErrorType.Validation, error.Type);
+        }
+
+        [Fact]
+        public void NotFound_WithResourceAndId_FormatsDescriptionCorrectly() {
+            // Arrange & Act
+            Error error = Error.NotFound("User", 42);
+
+            // Assert
+            Assert.Equal("User.NotFound", error.Code);
+            Assert.Contains("User", error.Description);
+            Assert.Contains("42", error.Description);
+            Assert.Equal(ErrorType.NotFound, error.Type);
+        }
+
+        [Fact]
+        public void Conflict_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.Conflict();
+
+            // Assert
+            Assert.Equal("Resource.Conflict", error.Code);
+            Assert.Equal(ErrorType.Conflict, error.Type);
+        }
+
+        [Fact]
+        public void Unauthorized_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.Unauthorized();
+
+            // Assert
+            Assert.Equal("Auth.Unauthorized", error.Code);
+            Assert.Equal(ErrorType.Unauthorized, error.Type);
+        }
+
+        [Fact]
+        public void Forbidden_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.Forbidden();
+
+            // Assert
+            Assert.Equal("Auth.Forbidden", error.Code);
+            Assert.Equal(ErrorType.Forbidden, error.Type);
+        }
+
+        [Fact]
+        public void RateLimitExceeded_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.RateLimitExceeded();
+
+            // Assert
+            Assert.Equal("RateLimit.Exceeded", error.Code);
+            Assert.Equal(ErrorType.RateLimit, error.Type);
+        }
+
+        [Fact]
+        public void Timeout_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.Timeout();
+
+            // Assert
+            Assert.Equal("Request.Timeout", error.Code);
+            Assert.Equal(ErrorType.Timeout, error.Type);
+        }
+
+        [Fact]
+        public void ServiceUnavailable_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.ServiceUnavailable();
+
+            // Assert
+            Assert.Equal("Service.Unavailable", error.Code);
+            Assert.Equal(ErrorType.Unavailable, error.Type);
+        }
+
+        [Fact]
+        public void Gone_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.Gone();
+
+            // Assert
+            Assert.Equal("Resource.Gone", error.Code);
+            Assert.Equal(ErrorType.Gone, error.Type);
+        }
+
+        [Fact]
+        public void UnprocessableEntity_SetsValuesCorrectly() {
+            // Arrange & Act
+            Error error = Error.UnprocessableEntity("Rule.Violated", "Business rule violation.");
+
+            // Assert
+            Assert.Equal("Rule.Violated", error.Code);
+            Assert.Equal("Business rule violation.", error.Description);
+            Assert.Equal(ErrorType.UnprocessableEntity, error.Type);
+        }
     }
 
-    [Fact]
-    public void Failure_CustomParameters_StoresCorrectly() {
-        Error error = Error.Failure("Order.Failed", "Order processing failed.");
-        Assert.Equal("Order.Failed", error.Code);
-        Assert.Equal("Order processing failed.", error.Description);
-        Assert.Equal(ErrorType.Failure, error.Type);
+    public sealed class TheFromExceptionMethod {
+        [Fact]
+        public void FromException_TimeoutException_MapsToTimeoutErrorType() {
+            // Arrange
+            TimeoutException exception = new("Operation timed out");
+
+            // Act
+            Error error = Error.FromException(exception);
+
+            // Assert
+            Assert.Equal(ErrorType.Timeout, error.Type);
+            Assert.Equal("Exception.Timeout", error.Code);
+            Assert.Equal(exception.Message, error.Description);
+        }
+
+        [Fact]
+        public void FromException_UnauthorizedAccessException_MapsToUnauthorizedErrorType() {
+            // Arrange
+            UnauthorizedAccessException exception = new("Access is denied");
+
+            // Act
+            Error error = Error.FromException(exception);
+
+            // Assert
+            Assert.Equal(ErrorType.Unauthorized, error.Type);
+            Assert.Equal("Exception.Unauthorized", error.Code);
+            Assert.Equal(exception.Message, error.Description);
+        }
+
+        [Fact]
+        public void FromException_ArgumentException_MapsToValidationErrorType() {
+            // Arrange
+            ArgumentException exception = new("Invalid argument");
+
+            // Act
+            Error error = Error.FromException(exception);
+
+            // Assert
+            Assert.Equal(ErrorType.Validation, error.Type);
+            Assert.Equal("Exception.Argument", error.Code);
+        }
+
+        [Fact]
+        public void FromException_UnknownException_MapsToUnexpectedErrorType() {
+            // Arrange
+            InvalidOperationException exception = new("Invalid operation");
+
+            // Act
+            Error error = Error.FromException(exception);
+
+            // Assert
+            Assert.Equal(ErrorType.Unexpected, error.Type);
+            Assert.Contains(nameof(InvalidOperationException), error.Code);
+        }
+
+        [Fact]
+        public void FromException_WithIncludeTypeTrue_AttachesExceptionTypeMetadata() {
+            // Arrange
+            Exception exception = new("General error");
+
+            // Act
+            Error error = Error.FromException(exception, includeType: true);
+
+            // Assert
+            Assert.NotNull(error.Metadata);
+            Assert.True(error.Metadata.ContainsKey("ExceptionType"));
+            Assert.Equal(typeof(Exception).FullName, error.Metadata["ExceptionType"]);
+        }
+
+        [Fact]
+        public void FromException_WithNull_ThrowsArgumentNullException() {
+            // Arrange & Act & Assert
+            Assert.Throws<ArgumentNullException>(() => Error.FromException(null!));
+        }
     }
 
-    [Fact]
-    public void Unexpected_DefaultParameters_UsesDefaultCode() {
-        Error error = Error.Unexpected();
-        Assert.Equal("General.Unexpected", error.Code);
-        Assert.Equal(ErrorType.Unexpected, error.Type);
+    public sealed class TheWithMetadataMethod {
+        [Fact]
+        public void WithMetadata_AddsNewEntryWithoutMutatingOriginal() {
+            // Arrange
+            Error original = Error.Failure();
+
+            // Act
+            Error updated = original.WithMetadata("TraceId", "tx-999");
+
+            // Assert
+            Assert.Null(original.Metadata);
+            Assert.NotNull(updated.Metadata);
+            Assert.Equal("tx-999", updated.Metadata["TraceId"]);
+        }
+
+        [Fact]
+        public void WithMetadata_ChainedCalls_AccumulatesEntries() {
+            // Arrange
+            Error error = Error.Failure()
+                .WithMetadata("Key1", "Value1")
+                .WithMetadata("Key2", 42);
+
+            // Act & Assert
+            Assert.NotNull(error.Metadata);
+            Assert.Equal(2, error.Metadata.Count);
+            Assert.Equal("Value1", error.Metadata["Key1"]);
+            Assert.Equal(42, error.Metadata["Key2"]);
+        }
+
+        [Fact]
+        public void WithMetadata_WhenKeyIsNullOrWhiteSpace_ThrowsArgumentException() {
+            // Arrange
+            Error error = Error.Failure();
+
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() => error.WithMetadata(null!, "value"));
+            Assert.Throws<ArgumentException>(() => error.WithMetadata("", "value"));
+            Assert.Throws<ArgumentException>(() => error.WithMetadata("   ", "value"));
+        }
+
+        [Fact]
+        public void WithMetadata_WhenValueIsNull_StoresNullSuccessfully() {
+            // Arrange
+            Error error = Error.Failure().WithMetadata("OptionalData", null);
+
+            // Act & Assert
+            Assert.NotNull(error.Metadata);
+            Assert.True(error.Metadata.ContainsKey("OptionalData"));
+            Assert.Null(error.Metadata["OptionalData"]);
+        }
+
+        [Fact]
+        public void WithMetadata_WhenOverwritingExistingKey_ReplacesValueAndPreservesCount() {
+            // Arrange
+            Error initial = Error.Failure().WithMetadata("Attempt", 1);
+
+            // Act
+            Error updated = initial.WithMetadata("Attempt", 2);
+
+            // Assert
+            Assert.Single(updated.Metadata!);
+            Assert.Equal(2, updated.Metadata!["Attempt"]);
+            Assert.Equal(1, initial.Metadata!["Attempt"]);
+        }
     }
 
-    [Fact]
-    public void Validation_StoresCodeAndDescription() {
-        Error error = Error.Validation("User.Email.Invalid", "Email format is invalid.");
-        Assert.Equal("User.Email.Invalid", error.Code);
-        Assert.Equal("Email format is invalid.", error.Description);
-        Assert.Equal(ErrorType.Validation, error.Type);
+    public sealed class TheCustomErrorTypeAndNoneSentinel {
+        [Fact]
+        public void Custom_CreatesErrorWithSpecifiedType() {
+            // Arrange
+            ErrorType rateLimit = new("CustomLimit");
+
+            // Act
+            Error error = Error.Custom(rateLimit, "Rate.Exceeded", "Limit reached");
+
+            // Assert
+            Assert.Equal(rateLimit, error.Type);
+            Assert.Equal("Rate.Exceeded", error.Code);
+        }
+
+        [Fact]
+        public void None_RepresentsSentinelWithErrorType() {
+            // Arrange & Act & Assert
+            Assert.Equal("None", Error.None.Code);
+            Assert.NotEqual(Error.None, Error.Failure());
+        }
     }
 
-    [Fact]
-    public void NotFound_DefaultParameters_UsesDefaultCode() {
-        Error error = Error.NotFound();
-        Assert.Equal("Resource.NotFound", error.Code);
-        Assert.Equal(ErrorType.NotFound, error.Type);
-    }
+    public sealed class TheEqualityAndComparison {
+        [Fact]
+        public void Equals_WhenBothErrorsHaveSameValuesWithoutMetadata_ReturnsTrue() {
+            // Arrange
+            Error first = Error.Failure("Code", "Desc");
+            Error second = Error.Failure("Code", "Desc");
 
-    [Fact]
-    public void NotFound_WithResourceAndId_FormatsCodeAndDescription() {
-        Error error = Error.NotFound("User", 42);
-        Assert.Equal("User.NotFound", error.Code);
-        Assert.Contains("User", error.Description);
-        Assert.Contains("42", error.Description);
-        Assert.Equal(ErrorType.NotFound, error.Type);
-    }
+            // Act & Assert
+            Assert.Equal(first, second);
+            Assert.True(first == second);
+            Assert.Equal(first.GetHashCode(), second.GetHashCode());
+        }
 
-    [Fact]
-    public void NotFound_WithResourceAndGuid_FormatsCodeAndDescription() {
-        Guid id = Guid.NewGuid();
-        Error error = Error.NotFound("Order", id);
-        Assert.Contains(id.ToString(), error.Description);
-    }
+        [Fact]
+        public void Equals_WhenBothErrorsHaveDifferentCodes_ReturnsFalse() {
+            // Arrange
+            Error first = Error.Failure("Code.A", "Desc");
+            Error second = Error.Failure("Code.B", "Desc");
 
-    [Fact]
-    public void Conflict_DefaultParameters_UsesDefaultCode() {
-        Error error = Error.Conflict();
-        Assert.Equal("Resource.Conflict", error.Code);
-        Assert.Equal(ErrorType.Conflict, error.Type);
-    }
+            // Act & Assert
+            Assert.NotEqual(first, second);
+            Assert.False(first == second);
+        }
 
-    [Fact]
-    public void Unauthorized_DefaultParameters_UsesDefaultCode() {
-        Error error = Error.Unauthorized();
-        Assert.Equal("Auth.Unauthorized", error.Code);
-        Assert.Equal(ErrorType.Unauthorized, error.Type);
-    }
+        [Fact]
+        public void Equals_WhenBothErrorsHaveIdenticalMetadataContent_ReturnsTrue() {
+            // Arrange
+            Error first = Error.Failure("User.NotFound", "User not found.")
+                .WithMetadata("UserId", 42)
+                .WithMetadata("TenantId", "tenant-alpha");
 
-    [Fact]
-    public void Forbidden_DefaultParameters_UsesDefaultCode() {
-        Error error = Error.Forbidden();
-        Assert.Equal("Auth.Forbidden", error.Code);
-        Assert.Equal(ErrorType.Forbidden, error.Type);
-    }
+            Error second = Error.Failure("User.NotFound", "User not found.")
+                .WithMetadata("UserId", 42)
+                .WithMetadata("TenantId", "tenant-alpha");
 
-    // ── WithMetadata ──────────────────────────────────────────────────────────
+            // Act & Assert
+            Assert.Equal(first, second);
+            Assert.True(first == second);
+            Assert.Equal(first.GetHashCode(), second.GetHashCode());
+        }
 
-    [Fact]
-    public void WithMetadata_AddsKeyValuePair() {
-        Error error = Error.Failure().WithMetadata("RequestId", "abc-123");
-        Assert.NotNull(error.Metadata);
-        Assert.True(error.Metadata.ContainsKey("RequestId"));
-        Assert.Equal("abc-123", error.Metadata["RequestId"]);
-    }
+        [Fact]
+        public void Equals_WhenBothErrorsHaveDifferentMetadataValues_ReturnsFalse() {
+            // Arrange
+            Error first = Error.Failure("User.NotFound", "User not found.")
+                .WithMetadata("UserId", 42);
 
-    [Fact]
-    public void WithMetadata_DoesNotMutateOriginal() {
-        Error original = Error.Failure();
-        Error withMeta = original.WithMetadata("Key", "Value");
-        Assert.Null(original.Metadata);
-        Assert.NotNull(withMeta.Metadata);
-    }
+            Error second = Error.Failure("User.NotFound", "User not found.")
+                .WithMetadata("UserId", 99);
 
-    [Fact]
-    public void WithMetadata_ChainedCalls_AccumulatesAllKeys() {
-        Error error = Error.Failure()
-            .WithMetadata("Key1", "Val1")
-            .WithMetadata("Key2", 42)
-            .WithMetadata("Key3", true);
+            // Act & Assert
+            Assert.NotEqual(first, second);
+            Assert.False(first == second);
+        }
 
-        Assert.Equal(3, error.Metadata!.Count);
-        Assert.Equal("Val1", error.Metadata["Key1"]);
-        Assert.Equal(42, error.Metadata["Key2"]);
-        Assert.Equal(true, error.Metadata["Key3"]);
-    }
+        [Fact]
+        public void Equals_WhenOneHasMetadataAndOtherIsNull_ReturnsFalse() {
+            // Arrange
+            Error first = Error.Failure("User.NotFound", "User not found.")
+                .WithMetadata("UserId", 42);
 
-    [Fact]
-    public void WithMetadata_OverwritesExistingKey() {
-        Error error = Error.Failure()
-            .WithMetadata("Key", "first")
-            .WithMetadata("Key", "second");
+            Error second = Error.Failure("User.NotFound", "User not found.");
 
-        Assert.Equal("second", error.Metadata!["Key"]);
-    }
+            // Act & Assert
+            Assert.NotEqual(first, second);
+            Assert.False(first == second);
+        }
 
-    [Fact]
-    public void WithMetadata_PreservesCodeDescriptionType() {
-        Error original = Error.Validation("V.Code", "V.Desc");
-        Error withMeta = original.WithMetadata("K", "V");
+        [Fact]
+        public void EqualsAndGetHashCode_WhenMetadataKeysAddedInDifferentOrder_AreEqualAndProduceSameHashCode() {
+            // Arrange
+            Error first = Error.Failure("Order.Failed", "Description")
+                .WithMetadata("KeyA", "ValA")
+                .WithMetadata("KeyB", 100);
 
-        Assert.Equal(original.Code, withMeta.Code);
-        Assert.Equal(original.Description, withMeta.Description);
-        Assert.Equal(original.Type, withMeta.Type);
-    }
+            Error second = Error.Failure("Order.Failed", "Description")
+                .WithMetadata("KeyB", 100)
+                .WithMetadata("KeyA", "ValA");
 
-    // ── Value semantics ───────────────────────────────────────────────────────
-
-    [Fact]
-    public void TwoErrors_SameValues_AreEqual() {
-        Error a = Error.Failure("Code", "Desc");
-        Error b = Error.Failure("Code", "Desc");
-        Assert.Equal(a, b);
-    }
-
-    [Fact]
-    public void TwoErrors_DifferentCodes_AreNotEqual() {
-        Error a = Error.Failure("Code.A", "Desc");
-        Error b = Error.Failure("Code.B", "Desc");
-        Assert.NotEqual(a, b);
-    }
-
-    // ── Metadata is null by default ───────────────────────────────────────────
-
-    [Fact]
-    public void Metadata_ByDefault_IsNull() {
-        Error error = Error.Failure();
-        Assert.Null(error.Metadata);
-    }
-
-    // ── Error.None ────────────────────────────────────────────────────────────
-
-    [Fact]
-    public void None_HasNoneCode() {
-        Assert.Equal("None", Error.None.Code);
-    }
-
-    [Fact]
-    public void None_IsNotEqualToAnyRealError() {
-        Assert.NotEqual(Error.None, Error.Failure());
-        Assert.NotEqual(Error.None, Error.NotFound());
-    }
-
-    [Fact]
-    public void None_TwoReferences_AreEqual() {
-        Assert.Equal(Error.None, Error.None);
-    }
-
-    // ── Error.Custom ──────────────────────────────────────────────────────────
-
-    [Fact]
-    public void Custom_StoresTypeCodeDescription() {
-        ErrorType rateLimit = new("RateLimit");
-        Error error = Error.Custom(rateLimit, "RateLimit.Exceeded", "Too many requests.");
-
-        Assert.Equal(rateLimit, error.Type);
-        Assert.Equal("RateLimit.Exceeded", error.Code);
-        Assert.Equal("Too many requests.", error.Description);
-    }
-
-    [Fact]
-    public void Custom_TypeIsRetainedOnWithMetadata() {
-        ErrorType custom = new("Custom");
-        Error error = Error.Custom(custom, "C.Code", "desc").WithMetadata("k", "v");
-        Assert.Equal(custom, error.Type);
-    }
-
-    // ── ErrorType via factory methods ─────────────────────────────────────────
-
-    [Fact]
-    public void Failure_HasFailureType() {
-        Assert.Equal(ErrorType.Failure, Error.Failure().Type);
-    }
-
-    [Fact]
-    public void Validation_HasValidationType() {
-        Assert.Equal(ErrorType.Validation, Error.Validation("c", "d").Type);
-    }
-
-    [Fact]
-    public void NotFound_HasNotFoundType() {
-        Assert.Equal(ErrorType.NotFound, Error.NotFound().Type);
-    }
-
-    [Fact]
-    public void Conflict_HasConflictType() {
-        Assert.Equal(ErrorType.Conflict, Error.Conflict().Type);
-    }
-
-    [Fact]
-    public void Unauthorized_HasUnauthorizedType() {
-        Assert.Equal(ErrorType.Unauthorized, Error.Unauthorized().Type);
-    }
-
-    [Fact]
-    public void Forbidden_HasForbiddenType() {
-        Assert.Equal(ErrorType.Forbidden, Error.Forbidden().Type);
-    }
-
-    [Fact]
-    public void Unexpected_HasUnexpectedType() {
-        Assert.Equal(ErrorType.Unexpected, Error.Unexpected().Type);
-    }
-
-    [Fact]
-    public void ErrorType_BuiltIn_Failure_HasExpectedName() {
-        Assert.Equal("Failure", ErrorType.Failure.Name);
-    }
-
-    [Fact]
-    public void ErrorType_BuiltIn_Validation_HasExpectedName() {
-        Assert.Equal("Validation", ErrorType.Validation.Name);
-    }
-
-    [Fact]
-    public void ErrorType_BuiltIn_NotFound_HasExpectedName() {
-        Assert.Equal("NotFound", ErrorType.NotFound.Name);
-    }
-
-    [Fact]
-    public void ErrorType_BuiltIn_Conflict_HasExpectedName() {
-        Assert.Equal("Conflict", ErrorType.Conflict.Name);
-    }
-
-    [Fact]
-    public void ErrorType_BuiltIn_Unauthorized_HasExpectedName() {
-        Assert.Equal("Unauthorized", ErrorType.Unauthorized.Name);
-    }
-
-    [Fact]
-    public void ErrorType_BuiltIn_Forbidden_HasExpectedName() {
-        Assert.Equal("Forbidden", ErrorType.Forbidden.Name);
-    }
-
-    [Fact]
-    public void ErrorType_BuiltIn_Unexpected_HasExpectedName() {
-        Assert.Equal("Unexpected", ErrorType.Unexpected.Name);
-    }
-
-    [Fact]
-    public void ErrorType_Custom_StoresProvidedName() {
-        ErrorType rateLimit = new("RateLimit");
-        Assert.Equal("RateLimit", rateLimit.Name);
-    }
-
-    [Fact]
-    public void ErrorType_Custom_WithNullName_Throws() {
-        Assert.ThrowsAny<ArgumentException>(() => new ErrorType(null!));
-    }
-
-    [Fact]
-    public void ErrorType_Custom_WithWhitespaceName_Throws() {
-        Assert.ThrowsAny<ArgumentException>(() => new ErrorType("   "));
-    }
-
-    [Fact]
-    public void ErrorType_TwoInstancesWithSameName_AreEqual() {
-        ErrorType a = new("MyType");
-        ErrorType b = new("MyType");
-        Assert.Equal(a, b);
-    }
-
-    [Fact]
-    public void ErrorType_TwoInstancesWithDifferentNames_AreNotEqual() {
-        Assert.NotEqual(new ErrorType("A"), new ErrorType("B"));
-    }
-
-    [Fact]
-    public void ErrorType_ToString_ReturnsName() {
-        Assert.Equal("RateLimit", new ErrorType("RateLimit").ToString());
+            // Act & Assert
+            Assert.Equal(first, second);
+            Assert.True(first == second);
+            Assert.Equal(first.GetHashCode(), second.GetHashCode());
+        }
     }
 }

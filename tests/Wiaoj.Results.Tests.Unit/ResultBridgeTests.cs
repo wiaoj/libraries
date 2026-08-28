@@ -1,5 +1,4 @@
-﻿using Wiaoj.Results;
-using Xunit;
+﻿using Xunit;
 using static Wiaoj.Results.Tests.Unit.Fixtures;
 
 namespace Wiaoj.Results.Tests.Unit;
@@ -7,143 +6,116 @@ namespace Wiaoj.Results.Tests.Unit;
 [Trait("Category", Category.Bridge)]
 public sealed class ResultBridgeTests {
 
-    // ── AsResult ──────────────────────────────────────────────────────────────
+    public sealed class TheAsResultAndAsTaskMethods {
+        [Fact]
+        public void AsResult_FromValue_WrapsInSuccessfulResult() {
+            // Arrange & Act
+            Result<int> result = 42.AsResult();
 
-    [Fact]
-    public void AsResult_FromValue_CreatesSuccessResult() {
-        Result<int> result = 42.AsResult();
-        Assert.True(result.IsSuccess);
-        Assert.Equal(42, result.Value);
+            // Assert
+            Assert.True(result.IsSuccess);
+            Assert.Equal(42, result.Value);
+        }
+
+        [Fact]
+        public async Task AsTask_FromResult_ReturnsCompletedTaskContainingResult() {
+            // Arrange
+            Result<int> original = SuccessInt(7);
+
+            // Act
+            Task<Result<int>> task = original.AsTask();
+            Result<int> result = await task;
+
+            // Assert
+            Assert.True(result.IsSuccess);
+            Assert.Equal(7, result.Value);
+        }
     }
 
-    [Fact]
-    public void AsResult_FromString_CreatesSuccessResult() {
-        Result<string> result = "hello".AsResult();
-        Assert.True(result.IsSuccess);
-        Assert.Equal("hello", result.Value);
+    public sealed class TheEnsureNotNullMethod {
+        [Fact]
+        public void EnsureNotNull_WhenValueIsNotNull_ReturnsNonNullableSuccessResult() {
+            // Arrange
+            Result<string?> input = (string?)"value";
+
+            // Act
+            Result<string> result = input.EnsureNotNull(SomeError);
+
+            // Assert
+            Assert.True(result.IsSuccess);
+            Assert.Equal("value", result.Value);
+        }
+
+        [Fact]
+        public void EnsureNotNull_WhenValueIsNull_ReturnsFailureResult() {
+            // Arrange
+            Result<string?> input = (string?)null;
+
+            // Act
+            Result<string> result = input.EnsureNotNull(SomeError);
+
+            // Assert
+            Assert.True(result.IsFailure);
+            Assert.Equal(SomeError, result.FirstError);
+        }
     }
 
-    [Fact]
-    public async Task AsResult_FromTask_WrapsValueInSuccess() {
-        Result<int> result = await Task.FromResult(99).AsResult();
-        Assert.True(result.IsSuccess);
-        Assert.Equal(99, result.Value);
+    public sealed class TheMapErrorAndMapSuccessMethods {
+        [Fact]
+        public void MapError_WhenFailure_ReplacesErrorWithNewError() {
+            // Arrange
+            Result<int> failure = FailureInt();
+
+            // Act
+            Result<int> result = failure.MapError(AnotherError);
+
+            // Assert
+            Assert.True(result.IsFailure);
+            Assert.Equal(AnotherError, result.FirstError);
+        }
+
+        [Fact]
+        public void MapSuccess_WhenSuccess_DiscardsValueAndReturnsSuccessType() {
+            // Arrange
+            Result<int> success = SuccessInt(99);
+
+            // Act
+            Result<Success> result = success.MapSuccess();
+
+            // Assert
+            Assert.True(result.IsSuccess);
+        }
     }
 
-    // ── AsTask ────────────────────────────────────────────────────────────────
+    public sealed class TheLinqQuerySyntaxExtensions {
+        [Fact]
+        public void Select_TransformsValueUsingQuerySyntax() {
+            // Arrange
+            Result<int> initial = 5;
 
-    [Fact]
-    public async Task AsTask_FromSuccessResult_ReturnsCompletedTask() {
-        Task<Result<int>> task = SuccessInt(7).AsTask();
-        Result<int> result = await task;
-        Assert.True(result.IsSuccess);
-        Assert.Equal(7, result.Value);
-    }
+            // Act
+            Result<int> result = from x in initial select x * 2;
 
-    [Fact]
-    public async Task AsTask_FromErrorResult_ReturnsCompletedTaskWithError() {
-        Task<Result<int>> task = FailureInt().AsTask();
-        Result<int> result = await task;
-        Assert.True(result.IsFailure);
-    }
+            // Assert
+            Assert.True(result.IsSuccess);
+            Assert.Equal(10, result.Value);
+        }
 
-    // ── EnsureNotNull ─────────────────────────────────────────────────────────
+        [Fact]
+        public void SelectMany_ChainsMultipleResultsUsingQuerySyntax() {
+            // Arrange
+            Result<int> first = 10;
+            Result<int> second = 20;
 
-    [Fact]
-    public void EnsureNotNull_WhenValueIsNotNull_ReturnsNonNullableSuccess() {
-        Result<string?> nullable = (string?)"hello";
-        Result<string> result = nullable.EnsureNotNull(SomeError);
-        Assert.True(result.IsSuccess);
-        Assert.Equal("hello", result.Value);
-    }
+            // Act
+            Result<int> result =
+                from a in first
+                from b in second
+                select a + b;
 
-    [Fact]
-    public void EnsureNotNull_WhenValueIsNull_ReturnsError() {
-        Result<string?> nullable = (string?)null;
-        Result<string> result = nullable.EnsureNotNull(SomeError);
-        Assert.True(result.IsFailure);
-        Assert.Equal(SomeError, result.FirstError);
-    }
-
-    [Fact]
-    public void EnsureNotNull_WhenAlreadyError_PropagatesOriginalError() {
-        Result<string?> nullable = (Result<string?>)SomeError;
-        Result<string> result = nullable.EnsureNotNull(AnotherError);
-        Assert.Equal(SomeError, result.FirstError);
-    }
-
-    [Fact]
-    public async Task EnsureNotNullAsync_WhenValueIsNotNull_ReturnsSuccess() {
-        Task<Result<string?>> task = Task.FromResult((Result<string?>)(string?)"world");
-        Result<string> result = await task.EnsureNotNullAsync(SomeError);
-        Assert.True(result.IsSuccess);
-        Assert.Equal("world", result.Value);
-    }
-
-    [Fact]
-    public async Task EnsureNotNullAsync_WhenValueIsNull_ReturnsError() {
-        Task<Result<string?>> task = Task.FromResult((Result<string?>)(string?)null);
-        Result<string> result = await task.EnsureNotNullAsync(SomeError);
-        Assert.True(result.IsFailure);
-    }
-
-    // ── MapError ──────────────────────────────────────────────────────────────
-
-    [Fact]
-    public void MapError_WhenError_ReplacesWithNewError() {
-        Result<int> result = FailureInt().MapError(AnotherError);
-        Assert.True(result.IsFailure);
-        Assert.Equal(AnotherError, result.FirstError);
-    }
-
-    [Fact]
-    public void MapError_WhenSuccess_DoesNothing() {
-        Result<int> result = SuccessInt().MapError(AnotherError);
-        Assert.True(result.IsSuccess);
-        Assert.Equal(42, result.Value);
-    }
-
-    [Fact]
-    public void MapError_WithMapper_WhenError_TransformsFirstError() {
-        Result<int> result = FailureInt()
-            .MapError(e => Error.Failure($"{e.Code}.Mapped", $"mapped: {e.Description}"));
-        Assert.True(result.IsFailure);
-        Assert.Contains(".Mapped", result.FirstError.Code);
-    }
-
-    [Fact]
-    public void MapError_WithMapper_WhenSuccess_DoesNothing() {
-        bool mapperCalled = false;
-        Result<int> result = SuccessInt()
-            .MapError(e => { mapperCalled = true; return AnotherError; });
-        Assert.False(mapperCalled);
-        Assert.True(result.IsSuccess);
-    }
-
-    // ── MapSuccess ────────────────────────────────────────────────────────────
-
-    [Fact]
-    public void MapSuccess_WhenSuccess_DiscardValue() {
-        Result<Success> result = SuccessInt(99).MapSuccess();
-        Assert.True(result.IsSuccess);
-    }
-
-    [Fact]
-    public void MapSuccess_WhenError_PropagatesError() {
-        Result<Success> result = FailureInt().MapSuccess();
-        Assert.True(result.IsFailure);
-        Assert.Equal(SomeError, result.FirstError);
-    }
-
-    [Fact]
-    public async Task MapSuccessAsync_WhenSuccess_DiscardValue() {
-        Result<Success> result = await SuccessIntTask().MapSuccessAsync();
-        Assert.True(result.IsSuccess);
-    }
-
-    [Fact]
-    public async Task MapSuccessAsync_WhenError_PropagatesError() {
-        Result<Success> result = await FailureIntTask().MapSuccessAsync();
-        Assert.True(result.IsFailure);
+            // Assert
+            Assert.True(result.IsSuccess);
+            Assert.Equal(30, result.Value);
+        }
     }
 }

@@ -1,36 +1,192 @@
-﻿namespace Wiaoj.Results; 
-public static partial class Result { 
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Contracts;
+using System.Runtime.CompilerServices;
+
+namespace Wiaoj.Results;
+
+/// <summary>
+/// Represents a function that attempts an operation on an input and produces an output via an out parameter.
+/// </summary>
+/// <typeparam name="TIn">The type of the input argument.</typeparam>
+/// <typeparam name="TOut">The type of the output value produced.</typeparam>
+/// <param name="input">The input value to process.</param>
+/// <param name="result">When this method returns, contains the produced value if the operation succeeded, or the default value if it failed.</param>
+/// <returns><see langword="true"/> if the operation succeeded; otherwise, <see langword="false"/>.</returns>
+public delegate bool TryFunc<TIn, TOut>(TIn input, [MaybeNullWhen(false)] out TOut result);
+
+/// <summary>
+/// Represents a parameterless function that attempts an operation and produces an output via an out parameter.
+/// </summary>
+/// <typeparam name="TOut">The type of the output value produced.</typeparam>
+/// <param name="result">When this method returns, contains the produced value if the operation succeeded, or the default value if it failed.</param>
+/// <returns><see langword="true"/> if the operation succeeded; otherwise, <see langword="false"/>.</returns>
+public delegate bool TryFunc<TOut>([MaybeNullWhen(false)] out TOut result);
+
+public static partial class Result {
+
+    // ── Parse (IParsable<T>) ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Parses a string into <typeparamref name="T"/> using its <see cref="IParsable{TSelf}"/> implementation.
+    /// </summary>
+    /// <typeparam name="T">The target type that implements <see cref="IParsable{TSelf}"/>.</typeparam>
+    /// <param name="input">The string representation to parse.</param>
+    /// <param name="error">The error returned when parsing fails.</param>
+    /// <param name="formatProvider">An optional format provider.</param>
+    /// <returns>A successful <see cref="Result{TValue}"/> containing the parsed value, or <paramref name="error"/> on failure.</returns>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<T> Parse<T>(
+        string? input,
+        Error error,
+        IFormatProvider? formatProvider = null) where T : IParsable<T> {
+        return T.TryParse(input, formatProvider, out T? result)
+            ? result!
+            : error;
+    }
+
+    /// <summary>
+    /// Parses a string into <typeparamref name="T"/> using its <see cref="IParsable{TSelf}"/> implementation,
+    /// constructing the error lazily via <paramref name="errorFactory"/> on failure.
+    /// </summary>
+    /// <typeparam name="T">The target type that implements <see cref="IParsable{TSelf}"/>.</typeparam>
+    /// <param name="input">The string representation to parse.</param>
+    /// <param name="errorFactory">A factory invoked only on failure to create a contextual error.</param>
+    /// <param name="formatProvider">An optional format provider.</param>
+    /// <returns>A successful <see cref="Result{TValue}"/> containing the parsed value, or the lazily created error.</returns>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<T> Parse<T>(
+        string? input,
+        Func<string?, Error> errorFactory,
+        IFormatProvider? formatProvider = null) where T : IParsable<T> {
+        ArgumentNullException.ThrowIfNull(errorFactory);
+
+        return T.TryParse(input, formatProvider, out T? result)
+            ? result!
+            : errorFactory(input);
+    }
+
+    /// <summary>
+    /// Parses a character span into <typeparamref name="T"/> using its <see cref="ISpanParsable{TSelf}"/> implementation.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<T> Parse<T>(
+        ReadOnlySpan<char> input,
+        Error error,
+        IFormatProvider? formatProvider = null) where T : ISpanParsable<T> {
+        return T.TryParse(input, formatProvider, out T? result)
+            ? result!
+            : error;
+    }
+
+    // ── FromTry ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Executes a try-pattern function that takes an input and produces an output via an out parameter,
+    /// returning a successful <see cref="Result{TValue}"/> on success or <paramref name="error"/> on failure.
+    /// </summary>
+    /// <typeparam name="TIn">The type of the input argument.</typeparam>
+    /// <typeparam name="TOut">The type of the output value.</typeparam>
+    /// <param name="input">The input value to evaluate.</param>
+    /// <param name="tryOperation">The try-pattern delegate (e.g., custom TryDecode or TryGetValue methods).</param>
+    /// <param name="error">The error returned when the operation fails.</param>
+    /// <returns>A successful <see cref="Result{TValue}"/> or <paramref name="error"/>.</returns>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<TOut> FromTry<TIn, TOut>(
+        TIn input,
+        TryFunc<TIn, TOut> tryOperation,
+        Error error) {
+        ArgumentNullException.ThrowIfNull(tryOperation);
+
+        return tryOperation(input, out TOut? value)
+            ? value!
+            : error;
+    }
+
+    /// <summary>
+    /// Executes a try-pattern function that takes an input and produces an output via an out parameter,
+    /// generating the error lazily via <paramref name="errorFactory"/> only when the operation fails.
+    /// </summary>
+    /// <typeparam name="TIn">The type of the input argument.</typeparam>
+    /// <typeparam name="TOut">The type of the output value.</typeparam>
+    /// <param name="input">The input value to evaluate.</param>
+    /// <param name="tryOperation">The try-pattern delegate.</param>
+    /// <param name="errorFactory">A factory invoked only on failure.</param>
+    /// <returns>A successful <see cref="Result{TValue}"/> or the lazily constructed error.</returns>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<TOut> FromTry<TIn, TOut>(
+        TIn input,
+        TryFunc<TIn, TOut> tryOperation,
+        Func<TIn, Error> errorFactory) {
+        ArgumentNullException.ThrowIfNull(tryOperation);
+        ArgumentNullException.ThrowIfNull(errorFactory);
+
+        return tryOperation(input, out TOut? value)
+            ? value!
+            : errorFactory(input);
+    }
+
+    /// <summary>
+    /// Executes a parameterless try-pattern function, returning a successful <see cref="Result{TValue}"/>
+    /// on success or <paramref name="error"/> on failure.
+    /// </summary>
+    /// <typeparam name="TOut">The type of the output value.</typeparam>
+    /// <param name="tryOperation">The parameterless try-pattern delegate.</param>
+    /// <param name="error">The error returned when the operation fails.</param>
+    /// <returns>A successful <see cref="Result{TValue}"/> or <paramref name="error"/>.</returns>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<TOut> FromTry<TOut>(
+        TryFunc<TOut> tryOperation,
+        Error error) {
+        ArgumentNullException.ThrowIfNull(tryOperation);
+
+        return tryOperation(out TOut? value)
+            ? value!
+            : error;
+    }
+
+    /// <summary>
+    /// Executes a parameterless try-pattern function, generating the error lazily via
+    /// <paramref name="errorFactory"/> only when the operation fails.
+    /// </summary>
+    /// <typeparam name="TOut">The type of the output value.</typeparam>
+    /// <param name="tryOperation">The parameterless try-pattern delegate.</param>
+    /// <param name="errorFactory">A factory invoked only on failure.</param>
+    /// <returns>A successful <see cref="Result{TValue}"/> or the lazily constructed error.</returns>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Result<TOut> FromTry<TOut>(
+        TryFunc<TOut> tryOperation,
+        Func<Error> errorFactory) {
+        ArgumentNullException.ThrowIfNull(tryOperation);
+        ArgumentNullException.ThrowIfNull(errorFactory);
+
+        return tryOperation(out TOut? value)
+            ? value!
+            : errorFactory();
+    }
+
     // ── Try ───────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Executes <paramref name="operation"/> and returns a successful
-    /// <see cref="Result{TValue}"/> containing its return value.
-    /// If the operation throws, the exception is caught and converted to an
-    /// <see cref="Error"/> via <paramref name="exceptionHandler"/> (or
-    /// <see cref="Error.FromException"/> by default).
+    /// Executes <paramref name="operation"/> and returns a successful <see cref="Result{TValue}"/> containing its return value.
+    /// If the operation throws, the exception is caught and converted to an <see cref="Error"/> via <paramref name="exceptionHandler"/>.
     /// </summary>
     /// <typeparam name="T">The value type produced by <paramref name="operation"/>.</typeparam>
     /// <param name="operation">A synchronous, potentially throwing function.</param>
-    /// <param name="exceptionHandler">
-    /// Optional. Converts the caught exception to an <see cref="Error"/>.
-    /// Defaults to <see cref="Error.FromException"/>.
-    /// </param>
-    /// <returns>
-    /// A successful <see cref="Result{TValue}"/> on success, or a failed one
-    /// containing the mapped error.
-    /// </returns>
-    /// <example>
-    /// <code>
-    /// Result&lt;int&gt; result = Result.Try(() => int.Parse(input));
-    ///
-    /// Result&lt;Guid&gt; id = Result.Try(
-    ///     () => Guid.Parse(raw),
-    ///     ex  => Error.Validation("Id.Invalid", $"'{raw}' is not a valid GUID."));
-    /// </code>
-    /// </example>
+    /// <param name="exceptionHandler">Optional handler to convert the caught exception to an <see cref="Error"/>.</param>
+    /// <returns>A successful <see cref="Result{TValue}"/> on success, or a failed result containing the mapped error.</returns>
+    [Pure]
     public static Result<T> Try<T>(
         Func<T> operation,
         Func<Exception, Error>? exceptionHandler = null) {
+        ArgumentNullException.ThrowIfNull(operation);
+
         try {
             return operation();
         }
@@ -40,22 +196,17 @@ public static partial class Result {
     }
 
     /// <summary>
-    /// Executes a void <paramref name="operation"/> and returns
-    /// <see cref="Result{TValue}"/> of <see cref="Success"/>.
+    /// Executes a void <paramref name="operation"/> and returns a <see cref="Result{TValue}"/> of <see cref="Success"/>.
     /// If the operation throws, the exception is converted to an <see cref="Error"/>.
     /// </summary>
     /// <param name="operation">A synchronous, potentially throwing action.</param>
-    /// <param name="exceptionHandler">
-    /// Optional. Converts the caught exception to an <see cref="Error"/>.
-    /// Defaults to <see cref="Error.FromException"/>.
-    /// </param>
-    /// <returns>
-    /// A successful <see cref="Result{TValue}"/> of <see cref="Success"/> on success,
-    /// or a failed one containing the mapped error.
-    /// </returns>
+    /// <param name="exceptionHandler">Optional handler to convert the caught exception to an <see cref="Error"/>.</param>
+    /// <returns>A successful <see cref="Result{TValue}"/> of <see cref="Success"/> on success, or a failed result containing the mapped error.</returns>
     public static Result<Success> Try(
         Action operation,
         Func<Exception, Error>? exceptionHandler = null) {
+        ArgumentNullException.ThrowIfNull(operation);
+
         try {
             operation();
             return Wiaoj.Results.Success.Default;
@@ -68,36 +219,14 @@ public static partial class Result {
     // ── TryAsync ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Executes an async <paramref name="operation"/> and returns a successful
-    /// <see cref="Result{TValue}"/> containing its return value.
-    /// If the operation throws, the exception is caught and converted to an
-    /// <see cref="Error"/>.
+    /// Executes an async <paramref name="operation"/> and returns a successful <see cref="Result{TValue}"/> containing its return value.
     /// </summary>
-    /// <typeparam name="T">The value type produced by <paramref name="operation"/>.</typeparam>
-    /// <param name="operation">An async, potentially throwing function.</param>
-    /// <param name="exceptionHandler">
-    /// Optional. Converts the caught exception to an <see cref="Error"/>.
-    /// Defaults to <see cref="Error.FromException"/>.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// Forwarded to <paramref name="operation"/>.
-    /// <see cref="OperationCanceledException"/> is re-thrown regardless of
-    /// <paramref name="exceptionHandler"/> when this token is cancelled.
-    /// </param>
-    /// <returns>
-    /// A successful <see cref="Result{TValue}"/> on success, or a failed one
-    /// containing the mapped error.
-    /// </returns>
-    /// <example>
-    /// <code>
-    /// Result&lt;string&gt; result = await Result.TryAsync(
-    ///     ct => httpClient.GetStringAsync(url, ct));
-    /// </code>
-    /// </example>
     public static async Task<Result<T>> TryAsync<T>(
         Func<CancellationToken, Task<T>> operation,
         Func<Exception, Error>? exceptionHandler = null,
         CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(operation);
+
         try {
             return await operation(cancellationToken).ConfigureAwait(false);
         }
@@ -110,26 +239,14 @@ public static partial class Result {
     }
 
     /// <summary>
-    /// Executes an async <paramref name="operation"/> that returns no value and
-    /// returns <see cref="Result{TValue}"/> of <see cref="Success"/>.
+    /// Executes an async <paramref name="operation"/> that returns no value and returns a <see cref="Result{TValue}"/> of <see cref="Success"/>.
     /// </summary>
-    /// <param name="operation">An async, potentially throwing action.</param>
-    /// <param name="exceptionHandler">
-    /// Optional. Converts the caught exception to an <see cref="Error"/>.
-    /// Defaults to <see cref="Error.FromException"/>.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// Forwarded to <paramref name="operation"/>.
-    /// <see cref="OperationCanceledException"/> is re-thrown when this token is cancelled.
-    /// </param>
-    /// <returns>
-    /// A successful <see cref="Result{TValue}"/> of <see cref="Success"/> on success,
-    /// or a failed one containing the mapped error.
-    /// </returns>
     public static async Task<Result<Success>> TryAsync(
         Func<CancellationToken, Task> operation,
         Func<Exception, Error>? exceptionHandler = null,
         CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(operation);
+
         try {
             await operation(cancellationToken).ConfigureAwait(false);
             return Wiaoj.Results.Success.Default;
@@ -143,13 +260,13 @@ public static partial class Result {
     }
 
     /// <summary>
-    /// Executes an async <paramref name="operation"/> (no cancellation token)
-    /// and returns a successful <see cref="Result{TValue}"/>.
-    /// Prefer the overload with <see cref="CancellationToken"/> for new code.
+    /// Executes an async <paramref name="operation"/> without a cancellation token and returns a successful <see cref="Result{TValue}"/>.
     /// </summary>
     public static async Task<Result<T>> TryAsync<T>(
         Func<Task<T>> operation,
         Func<Exception, Error>? exceptionHandler = null) {
+        ArgumentNullException.ThrowIfNull(operation);
+
         try {
             return await operation().ConfigureAwait(false);
         }

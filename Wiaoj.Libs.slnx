@@ -90,6 +90,7 @@
     <Project Path="src/ObjectPool/Wiaoj.ObjectPool/Wiaoj.ObjectPool.csproj" Id="f2d23627-085e-4e62-944f-899a3ded775c" />
   </Folder>
   <Folder Name="/src/Pagination/">
+    <File Path="src/Pagination/README.md" />
     <Project Path="src/Pagination/Wiaoj.Pagination.AspNetCore/Wiaoj.Pagination.AspNetCore.csproj" Id="b8d74104-ba78-4714-8e61-157b463f4df0" />
     <Project Path="src/Pagination/Wiaoj.Pagination.EntityFrameworkCore/Wiaoj.Pagination.EntityFrameworkCore.csproj" Id="83a406d7-b838-4da3-9723-3fde8d8f7423" />
     <Project Path="src/Pagination/Wiaoj.Pagination/Wiaoj.Pagination.csproj" Id="d48d9dec-5903-4af9-a3c7-9e4804d40d96" />
