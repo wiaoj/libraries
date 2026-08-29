@@ -165,11 +165,14 @@ public sealed class ResultHttpMappingTests {
             Result<int> result = Result.Success(10);
 
             // Act
-            Microsoft.AspNetCore.Http.IResult httpResult = result.ToHttpResult(v => new { Total = v * 2 });
+            Microsoft.AspNetCore.Http.IResult httpResult = result.ToHttpResult(v => new TotalDto(v * 2));
 
             // Assert
-            Ok<object> okResult = Assert.IsType<Ok<object>>(httpResult);
-            Assert.NotNull(okResult.Value);
+            Ok<TotalDto> okResult = Assert.IsType<Ok<TotalDto>>(httpResult);
+            Assert.Equal(20, okResult.Value!.Total);
+            Assert.Equal(StatusCodes.Status200OK, okResult.StatusCode);
         }
+
+        private sealed record TotalDto(int Total);
     }
 }

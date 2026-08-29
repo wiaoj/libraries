@@ -1,9 +1,8 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Wiaoj.Results.AspNetCore.Internal;
-using Xunit;
 
-namespace Wiaoj.Results.AspNetCore.Tests;
+namespace Wiaoj.Results.AspNetCore.Tests.Unit;
 
 [Trait("Category", "EndpointFilter")]
 public sealed class ResultEndpointFilterTests {
@@ -20,8 +19,9 @@ public sealed class ResultEndpointFilterTests {
             object? result = await filter.InvokeAsync(context, next);
 
             // Assert
-            Ok<int> okResult = Assert.IsType<Ok<int>>(result);
+            IValueHttpResult okResult = Assert.IsAssignableFrom<IValueHttpResult>(result);
             Assert.Equal(100, okResult.Value);
+            Assert.Equal(StatusCodes.Status200OK, (result as IStatusCodeHttpResult)?.StatusCode);
         }
 
         [Fact]
