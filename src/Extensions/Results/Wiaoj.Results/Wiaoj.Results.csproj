@@ -6,6 +6,8 @@
 		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.Results</RootNamespace> 
 		<AssemblyName>Wiaoj.Results</AssemblyName>
+ 
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors> 
 		
 		<!-- Package Info -->
 		<PackageId>Wiaoj.Results</PackageId>

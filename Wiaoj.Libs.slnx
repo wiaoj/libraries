@@ -4,6 +4,7 @@
     <Project Path="benchmarks/Wiaoj.Benchmarks.DistributedCounter/Wiaoj.Benchmarks.DistributedCounter.csproj" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.Mediator/Wiaoj.Benchmarks.Mediator.csproj" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.Primitives/Wiaoj.Benchmarks.Primitives.csproj" Id="47a9018c-29c4-4747-8ef4-ffc2eacdaca2" />
+    <Project Path="benchmarks/Wiaoj.Benchmarks.Results/Wiaoj.Benchmarks.Results.csproj" Id="a5cbb59e-b752-4de1-b3b7-77c70d4d6c57" />
     <Project Path="benchmarks/Wiaoj.Benchmarks.Webhooks/Wiaoj.Benchmarks.Webhooks.csproj" />
   </Folder>
   <Folder Name="/samples/">
@@ -152,7 +153,6 @@
     <Project Path="tests/Wiaoj.Modulith.Tests.Unit/Wiaoj.Modulith.Tests.Unit.csproj" Id="9f4c2996-1708-4765-950a-b19ff6a0f078" />
     <Project Path="tests/Wiaoj.Primitives.Tests.Unit/Wiaoj.Primitives.Tests.Unit.csproj" Id="cef5fdb1-e581-46b4-964c-d5f75f7db1ff" />
     <Project Path="tests/Wiaoj.RateLimiting.Tests.Unit/Wiaoj.RateLimiting.Tests.Unit.csproj" Id="a0e5a3bd-5e5a-4a9d-91bb-313fbd1af895" />
-    <Project Path="tests/Wiaoj.Results.Tests.Unit/Wiaoj.Results.Tests.Unit.csproj" Id="57cc275f-70ef-4c5e-a3bc-d4c305628b04" />
     <Project Path="tests/Wiaoj.Security.Tests.Unit/Wiaoj.Security.Tests.Unit.csproj" Id="9514b855-ab9c-4310-9c23-6438d123b24d" />
   </Folder>
   <Folder Name="/tests/Ddd/">
@@ -169,6 +169,10 @@
   </Folder>
   <Folder Name="/tests/Resilience/">
     <Project Path="tests/Resilience/Wiaoj.Resilience.Tests.Unit/Wiaoj.Resilience.Tests.Unit.csproj" Id="415fcbe2-6fa6-4343-98bc-bea12a543110" />
+  </Folder>
+  <Folder Name="/tests/Results/">
+    <Project Path="tests/Results/Wiaoj.Results.AspNetCore.Tests.Unit/Wiaoj.Results.AspNetCore.Tests.Unit.csproj" />
+    <Project Path="tests/Results/Wiaoj.Results.Tests.Unit/Wiaoj.Results.Tests.Unit.csproj" />
   </Folder>
   <Folder Name="/tests/Serialization/">
     <Project Path="tests/Serialization/Wiaoj.Serialization.Memory.Tests.Unit/Wiaoj.Serialization.Memory.Tests.Unit.csproj" Id="063bdb25-945b-4204-8f44-66e063fc31b8" />
