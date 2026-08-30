@@ -105,6 +105,9 @@
     <File Path="src/Preconditions/README.md" />
     <Project Path="src/Preconditions/Wiaoj.Preconditions/Wiaoj.Preconditions.csproj" />
   </Folder>
+  <Folder Name="/src/Querying/">
+    <Project Path="src/Querying/Wiaoj.Querying/Wiaoj.Querying.csproj" Id="e6109869-8592-4b25-aa38-1e394e98392f" />
+  </Folder>
   <Folder Name="/src/RateLimiting/">
     <File Path="src/RateLimiting/README.md" />
     <File Path="src/RateLimiting/_build.md" />
@@ -172,6 +175,10 @@
     <Project Path="tests/Pagination/Wiaoj.Pagination.AspNetCore.Tests.Unit/Wiaoj.Pagination.AspNetCore.Tests.Unit.csproj" Id="ef9b1df9-7f0d-462c-9aba-20828ad594aa" />
     <Project Path="tests/Pagination/Wiaoj.Pagination.EntityFrameworkCore.Tests.Integration/Wiaoj.Pagination.EntityFrameworkCore.Tests.Integration.csproj" Id="206a98a6-a728-43a8-8108-e6758bc91af3" />
     <Project Path="tests/Pagination/Wiaoj.Pagination.Tests.Unit/Wiaoj.Pagination.Tests.Unit.csproj" Id="63446244-a358-4a02-9cf8-e8d3dc69150d" />
+  </Folder>
+  <Folder Name="/tests/Querying/">
+    <Project Path="tests/Querying/Wiaoj.Querying.Tests.Integration/Wiaoj.Querying.Tests.Integration.csproj" Id="114e3316-eebd-41ce-987b-e528d4b7136b" />
+    <Project Path="tests/Querying/Wiaoj.Querying.Tests.Unit/Wiaoj.Querying.Tests.Unit.csproj" Id="28500331-19a0-440a-9400-2f19e2a2c489" />
   </Folder>
   <Folder Name="/tests/Resilience/">
     <Project Path="tests/Resilience/Wiaoj.Resilience.Tests.Unit/Wiaoj.Resilience.Tests.Unit.csproj" Id="415fcbe2-6fa6-4343-98bc-bea12a543110" />
