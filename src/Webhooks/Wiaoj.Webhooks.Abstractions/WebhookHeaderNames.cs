@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Webhooks;
+namespace Wiaoj.Webhooks;
 
 /// <summary>
 /// Defines canonical HTTP header name constants used across the webhook engine and delivery pipeline.
@@ -27,4 +27,13 @@ public static class WebhookHeaderNames {
 
     /// <summary>Standard RFC 9110 retry backoff instruction header (<c>"Retry-After"</c>).</summary>
     public const string RetryAfter = "Retry-After";
+
+    /// <summary>Canonical header for outbound loop detection hop counter (<c>"Webhook-Hop-Count"</c>).</summary>
+    public const string WebhookHopCount = "Webhook-Hop-Count";
+
+    /// <summary>Canonical header for causal execution node trace graph (<c>"Webhook-Causal-Chain"</c>).</summary>
+    public const string WebhookCausalChain = "Webhook-Causal-Chain";
+
+    /// <summary>Canonical header for originating system/instance identity (<c>"Webhook-Origin-Id"</c>).</summary>
+    public const string WebhookOriginId = "Webhook-Origin-Id";
 }

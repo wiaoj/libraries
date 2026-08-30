@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Webhooks.Idempotency;
 
@@ -33,6 +33,22 @@ public static partial class WebhookBuilderIdempotencyExtensions {
     }
 
     /// <summary>
+    /// Configures deterministic idempotency enforcement using a configuration delegate.
+    /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="configure">The delegate used to configure <see cref="IdempotencyOptions"/>.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
+    public static IWebhookBuilder UseIdempotency(this IWebhookBuilder builder, Action<IdempotencyOptions> configure) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+
+        IdempotencyOptions options = new();
+        configure(options);
+        return UseIdempotency(builder, options);
+    }
+
+    /// <summary>
     /// Configures deterministic idempotency enforcement with custom options.
     /// </summary>
     /// <param name="builder">The webhook builder being configured.</param>
@@ -53,24 +69,59 @@ public static partial class WebhookBuilderIdempotencyExtensions {
     }
 
     /// <summary>
-    /// Configures deterministic idempotency using custom store and key generator generic types.
+    /// Configures deterministic idempotency using custom store and key generator generic types with default options.
     /// </summary>
     /// <typeparam name="TStore">The type implementing <see cref="IIdempotencyStore"/>.</typeparam>
     /// <typeparam name="TKeyGenerator">The type implementing <see cref="IIdempotencyKeyGenerator"/>.</typeparam>
     /// <param name="builder">The webhook builder being configured.</param>
-    /// <param name="configure">An optional delegate to configure <see cref="IdempotencyOptions"/>.</param>
     /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
+    public static IWebhookBuilder UseIdempotency<TStore, TKeyGenerator>(this IWebhookBuilder builder)
+        where TStore : class, IIdempotencyStore
+        where TKeyGenerator : class, IIdempotencyKeyGenerator {
+        return UseIdempotency<TStore, TKeyGenerator>(builder, new IdempotencyOptions());
+    }
+
+    /// <summary>
+    /// Configures deterministic idempotency using custom store and key generator generic types with options delegate.
+    /// </summary>
+    /// <typeparam name="TStore">The type implementing <see cref="IIdempotencyStore"/>.</typeparam>
+    /// <typeparam name="TKeyGenerator">The type implementing <see cref="IIdempotencyKeyGenerator"/>.</typeparam>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="configure">The delegate to configure <see cref="IdempotencyOptions"/>.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
     public static IWebhookBuilder UseIdempotency<TStore, TKeyGenerator>(
         this IWebhookBuilder builder,
-        Action<IdempotencyOptions>? configure = null)
+        Action<IdempotencyOptions> configure)
         where TStore : class, IIdempotencyStore
         where TKeyGenerator : class, IIdempotencyKeyGenerator {
 
         Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
 
         IdempotencyOptions options = new();
-        configure?.Invoke(options);
+        configure(options);
+        return UseIdempotency<TStore, TKeyGenerator>(builder, options);
+    }
+
+    /// <summary>
+    /// Configures deterministic idempotency using custom store and key generator generic types with explicit options.
+    /// </summary>
+    /// <typeparam name="TStore">The type implementing <see cref="IIdempotencyStore"/>.</typeparam>
+    /// <typeparam name="TKeyGenerator">The type implementing <see cref="IIdempotencyKeyGenerator"/>.</typeparam>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="options">The idempotency configuration options.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    public static IWebhookBuilder UseIdempotency<TStore, TKeyGenerator>(
+        this IWebhookBuilder builder,
+        IdempotencyOptions options)
+        where TStore : class, IIdempotencyStore
+        where TKeyGenerator : class, IIdempotencyKeyGenerator {
+
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(options);
         options.Validate();
 
         builder.Services.AddSingleton(options);
@@ -84,25 +135,51 @@ public static partial class WebhookBuilderIdempotencyExtensions {
     }
 
     /// <summary>
-    /// Configures deterministic idempotency using custom store and key generator instances.
+    /// Configures deterministic idempotency using custom store instance and default key generator.
     /// </summary>
     /// <param name="builder">The webhook builder being configured.</param>
     /// <param name="store">The idempotency store instance.</param>
-    /// <param name="keyGenerator">The idempotency key generator instance (optional, defaults to standard SIMD generator).</param>
-    /// <param name="configureOptions">An optional delegate to configure options.</param>
     /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="store"/> is <see langword="null"/>.</exception>
     public static IWebhookBuilder UseIdempotency(
         this IWebhookBuilder builder,
+        IIdempotencyStore store) {
+        return UseIdempotency(builder, store, new IdempotencyOptions());
+    }
+
+    /// <summary>
+    /// Configures deterministic idempotency using custom store instance and explicit options.
+    /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="store">The idempotency store instance.</param>
+    /// <param name="options">The idempotency options.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/>, <paramref name="store"/>, or <paramref name="options"/> is <see langword="null"/>.</exception>
+    public static IWebhookBuilder UseIdempotency(
+        this IWebhookBuilder builder,
         IIdempotencyStore store,
-        IIdempotencyKeyGenerator? keyGenerator = null,
-        Action<IdempotencyOptions>? configureOptions = null) {
+        IdempotencyOptions options) {
+        return UseIdempotency(builder, store, (IIdempotencyKeyGenerator?)null, options);
+    }
+
+    /// <summary>
+    /// Configures deterministic idempotency using custom store and key generator instances with explicit options.
+    /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="store">The idempotency store instance.</param>
+    /// <param name="keyGenerator">The optional idempotency key generator instance.</param>
+    /// <param name="options">The idempotency options.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/>, <paramref name="store"/>, or <paramref name="options"/> is <see langword="null"/>.</exception>
+    public static IWebhookBuilder UseIdempotency(
+        this IWebhookBuilder builder,
+        IIdempotencyStore store,
+        IIdempotencyKeyGenerator? keyGenerator,
+        IdempotencyOptions options) {
 
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(store);
-
-        IdempotencyOptions options = new();
-        configureOptions?.Invoke(options);
+        Preca.ThrowIfNull(options);
         options.Validate();
 
         builder.Services.AddSingleton(options);
@@ -112,44 +189,6 @@ public static partial class WebhookBuilderIdempotencyExtensions {
         if(keyGenerator is not null) {
             builder.Services.RemoveAll<IIdempotencyKeyGenerator>();
             builder.Services.AddSingleton(keyGenerator);
-        }
-        else {
-            builder.Services.TryAddSingleton<IIdempotencyKeyGenerator, DefaultIdempotencyKeyGenerator>();
-        }
-
-        builder.AddMiddleware<IdempotencyMiddleware>();
-        return builder;
-    }
-
-    /// <summary>
-    /// Configures deterministic idempotency using custom store and key generator factory delegates.
-    /// </summary>
-    /// <param name="builder">The webhook builder being configured.</param>
-    /// <param name="storeFactory">The factory delegate used to resolve the idempotency store.</param>
-    /// <param name="keyGeneratorFactory">The factory delegate used to resolve the key generator.</param>
-    /// <param name="configureOptions">An optional delegate to configure options.</param>
-    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="storeFactory"/> is <see langword="null"/>.</exception>
-    public static IWebhookBuilder UseIdempotency(
-        this IWebhookBuilder builder,
-        Func<IServiceProvider, IIdempotencyStore> storeFactory,
-        Func<IServiceProvider, IIdempotencyKeyGenerator>? keyGeneratorFactory = null,
-        Action<IdempotencyOptions>? configureOptions = null) {
-
-        Preca.ThrowIfNull(builder);
-        Preca.ThrowIfNull(storeFactory);
-
-        IdempotencyOptions options = new();
-        configureOptions?.Invoke(options);
-        options.Validate();
-
-        builder.Services.AddSingleton(options);
-        builder.Services.RemoveAll<IIdempotencyStore>();
-        builder.Services.AddSingleton(storeFactory);
-
-        if(keyGeneratorFactory is not null) {
-            builder.Services.RemoveAll<IIdempotencyKeyGenerator>();
-            builder.Services.AddSingleton(keyGeneratorFactory);
         }
         else {
             builder.Services.TryAddSingleton<IIdempotencyKeyGenerator, DefaultIdempotencyKeyGenerator>();

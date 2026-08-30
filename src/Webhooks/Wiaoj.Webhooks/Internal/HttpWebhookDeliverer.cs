@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text;
@@ -81,6 +82,21 @@ internal sealed class HttpWebhookDeliverer : IWebhookDeliverer {
             return WebhookDeliveryResult.Timeout($"Request to '{context.TargetUrl}' timed out.");
         }
         catch(Exception ex) when(ex.TryGetSsrfException(out WebhookSsrfBlockedException? ssrfEx)) {
+            Activity? activity = Activity.Current;
+            if(activity is not null) {
+                activity.SetTag("webhook.ssrf_blocked", true);
+                activity.AddEvent(new ActivityEvent("webhook.ssrf_blocked", tags: new ActivityTagsCollection {
+                    { "webhook.target_url", context.TargetUrl.ToString() },
+                    { "webhook.endpoint_id", context.Endpoint.Id.Value },
+                    { "error.message", ssrfEx.Message }
+                }));
+            }
+
+            TagList ssrfTags = new() {
+                { "webhook.endpoint_id", context.Endpoint.Id.Value }
+            };
+            WebhookMeter.SsrfBlockedCount.Add(1, ssrfTags);
+
             return WebhookDeliveryResult.Permanent(
                 $"SSRF protection blocked destination: {ssrfEx.Message}",
                 PermanentFailureReason.InvalidDestination);

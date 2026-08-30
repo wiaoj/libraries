@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Webhooks.Retries;
 
@@ -18,6 +18,22 @@ public static partial class WebhookBuilderRetryExtensions {
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
     public static IWebhookBuilder UseExponentialBackoffRetry(this IWebhookBuilder builder) {
         return UseExponentialBackoffRetry(builder, new ExponentialBackoffOptions());
+    }
+
+    /// <summary>
+    /// Configures exponential backoff retry strategy using a configuration delegate and registers <see cref="RetryMiddleware"/>.
+    /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="configure">The delegate used to configure <see cref="ExponentialBackoffOptions"/>.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
+    public static IWebhookBuilder UseExponentialBackoffRetry(this IWebhookBuilder builder, Action<ExponentialBackoffOptions> configure) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+
+        ExponentialBackoffOptions options = new();
+        configure(options);
+        return UseExponentialBackoffRetry(builder, options);
     }
 
     /// <summary>

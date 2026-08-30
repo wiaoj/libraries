@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wiaoj.Serialization;
@@ -78,6 +78,7 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The total number of stale jobs successfully recovered.</returns>
     public async Task<int> SweepAndRecoverAsync(CancellationToken cancellationToken = default) {
+        long startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset queuedThreshold = now.Subtract(this._options.QueuedJobStaleThreshold);
 
@@ -90,6 +91,8 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
             cancellationToken).ConfigureAwait(false);
 
         if(staleJobs.Count == 0) {
+            double elapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+            WebhookMeter.RecoverySweepDuration.Record(elapsedMs);
             return 0;
         }
 
@@ -141,7 +144,11 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
             }
         }
 
+        double durationMs = System.Diagnostics.Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+        WebhookMeter.RecoverySweepDuration.Record(durationMs);
+
         if(recoveredCount > 0) {
+            WebhookMeter.RecoveredJobsCount.Add(recoveredCount);
             this._logger.LogRecoverySweepCompleted(recoveredCount);
         }
 

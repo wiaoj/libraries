@@ -102,4 +102,48 @@ internal static class WebhookMeter {
             "wiaoj.webhooks.dead_letter.count",
             unit: "{dead_letters}",
             description: "Total number of webhook events that exceeded maximum retry attempts.");
+
+    /// <summary>Total number of webhook delivery infinite loops or hop limit breaches detected.</summary>
+    public static readonly Counter<long> LoopDetectedCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.webhooks.loop_detected.count",
+            unit: "{loops}",
+            description: "Total number of infinite webhook delivery loops or hop limit breaches detected.");
+
+    /// <summary>Total number of duplicate webhook deliveries intercepted and suppressed.</summary>
+    public static readonly Counter<long> DeduplicatedCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.webhooks.idempotency.deduplicated.count",
+            unit: "{deliveries}",
+            description: "Total number of duplicate webhook deliveries intercepted and suppressed.");
+
+    /// <summary>Duration spent waiting to acquire partition delivery lock in milliseconds.</summary>
+    public static readonly Histogram<double> LockWaitDuration =
+        _meter.CreateHistogram<double>(
+            "wiaoj.webhooks.lock.wait_duration",
+            unit: "ms",
+            description: "Duration spent waiting to acquire partition delivery lock in milliseconds.");
+
+    /// <summary>Total number of SSRF attempts intercepted and blocked.</summary>
+    public static readonly Counter<long> SsrfBlockedCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.webhooks.ssrf.blocked.count",
+            unit: "{blocks}",
+            description: "Total number of SSRF attempts intercepted and blocked.");
+
+    // ── Recovery Metrics ──────────────────────────────────────────────────────
+
+    /// <summary>Duration of background stale in-flight job recovery sweep in milliseconds.</summary>
+    public static readonly Histogram<double> RecoverySweepDuration =
+        _meter.CreateHistogram<double>(
+            "wiaoj.webhooks.recovery.sweep.duration",
+            unit: "ms",
+            description: "Duration of background stale in-flight job recovery sweep in milliseconds.");
+
+    /// <summary>Total number of stale in-flight jobs recovered and re-enqueued.</summary>
+    public static readonly Counter<long> RecoveredJobsCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.webhooks.recovery.jobs_recovered.count",
+            unit: "{jobs}",
+            description: "Total number of stale in-flight jobs recovered and re-enqueued.");
 }

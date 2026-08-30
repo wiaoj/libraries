@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Wiaoj.Resilience;
@@ -11,12 +11,27 @@ public sealed class FixedTimeoutStrategy : ITimeoutStrategy {
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<FixedTimeoutStrategy> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FixedTimeoutStrategy"/> class with a fixed timeout duration.
+    /// </summary>
+    /// <param name="timeout">The timeout duration.</param>
     public FixedTimeoutStrategy(TimeSpan timeout)
         : this(timeout, TimeProvider.System, NullLogger<FixedTimeoutStrategy>.Instance) { }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FixedTimeoutStrategy"/> class with a fixed timeout and time provider.
+    /// </summary>
+    /// <param name="timeout">The timeout duration.</param>
+    /// <param name="timeProvider">The time provider for deadline calculations.</param>
     public FixedTimeoutStrategy(TimeSpan timeout, TimeProvider timeProvider)
         : this(timeout, timeProvider, NullLogger<FixedTimeoutStrategy>.Instance) { }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FixedTimeoutStrategy"/> class with all parameters.
+    /// </summary>
+    /// <param name="timeout">The timeout duration.</param>
+    /// <param name="timeProvider">The time provider for deadline calculations.</param>
+    /// <param name="logger">The logger instance.</param>
     public FixedTimeoutStrategy(
         TimeSpan timeout,
         TimeProvider timeProvider,

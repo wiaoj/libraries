@@ -55,14 +55,46 @@ public static partial class InMemoryWebhookBuilderExtensions {
     }
 
     /// <summary>
-    /// Configures high-performance partition-sharded in-memory transports ensuring lock-free FIFO message ordering per partition.
+    /// Configures high-performance partition-sharded in-memory transports using default 8 shards and unbounded capacity.
     /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
+    public static IWebhookBuilder UseShardedInMemoryTransport(this IWebhookBuilder builder) {
+        return UseShardedInMemoryTransport(builder, shardCount: 8, capacityPerShard: null);
+    }
+
+    /// <summary>
+    /// Configures high-performance partition-sharded in-memory transports with a specified shard count and unbounded capacity.
+    /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="shardCount">The number of concurrent parallel in-memory transport shards.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="shardCount"/> is less than 1.</exception>
+    public static IWebhookBuilder UseShardedInMemoryTransport(this IWebhookBuilder builder, int shardCount) {
+        return UseShardedInMemoryTransport(builder, shardCount, capacityPerShard: null);
+    }
+
+    /// <summary>
+    /// Configures high-performance partition-sharded in-memory transports with a specified shard count and bounded shard capacity.
+    /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="shardCount">The number of concurrent parallel in-memory transport shards.</param>
+    /// <param name="capacityPerShard">The maximum bounded queue capacity per shard.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="shardCount"/> is less than 1 or <paramref name="capacityPerShard"/> is non-positive.</exception>
     public static IWebhookBuilder UseShardedInMemoryTransport(
         this IWebhookBuilder builder,
-        int shardCount = 8,
-        int? capacityPerShard = null) {
+        int shardCount,
+        int? capacityPerShard) {
+
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfLessThan(shardCount, 1);
+        if(capacityPerShard.HasValue) {
+            Preca.ThrowIfLessThan(capacityPerShard.Value, 1);
+        }
 
         builder.Services.RemoveAll<IWebhookTransport>();
         builder.Services.AddSingleton<IWebhookTransport>(sp => {

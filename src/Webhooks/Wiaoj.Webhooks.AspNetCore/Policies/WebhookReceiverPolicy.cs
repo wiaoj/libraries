@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Wiaoj.Primitives.Hashing;
 using Wiaoj.Webhooks.AspNetCore.Authentication;
@@ -89,6 +89,71 @@ public sealed class WebhookReceiverPolicy {
     /// Default is <see langword="true"/>.
     /// </summary>
     public bool IgnoreUnhandledEvents { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether inbound loop detection and hop count threshold enforcement is active.
+    /// Default is <see langword="false"/>.
+    /// </summary>
+    public bool EnableLoopDetection { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum allowable hop count before inbound requests are rejected. Default is 5.
+    /// </summary>
+    public int MaxHops { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the HTTP header name carrying the integer hop counter. Default is <see cref="WebhookHeaderNames.WebhookHopCount"/>.
+    /// </summary>
+    public string HopCountHeaderName { get; set; } = WebhookHeaderNames.WebhookHopCount;
+
+    /// <summary>
+    /// Gets or sets the HTTP header name carrying the causal execution chain. Default is <see cref="WebhookHeaderNames.WebhookCausalChain"/>.
+    /// </summary>
+    public string CausalChainHeaderName { get; set; } = WebhookHeaderNames.WebhookCausalChain;
+
+    /// <summary>
+    /// Gets or sets the engine instance ID used for inbound causal cycle detection.
+    /// </summary>
+    public string? InstanceId { get; set; }
+
+    /// <summary>
+    /// Enables inbound loop detection and hop count limit enforcement using the default limit of 5 hops.
+    /// </summary>
+    /// <returns>This policy instance for fluent chaining.</returns>
+    public WebhookReceiverPolicy WithLoopDetection() {
+        return this.WithLoopDetection(5);
+    }
+
+    /// <summary>
+    /// Enables inbound loop detection and hop count limit enforcement with a custom hop threshold.
+    /// </summary>
+    /// <param name="maxHops">The maximum allowable hop count.</param>
+    /// <returns>This policy instance for fluent chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxHops"/> is non-positive.</exception>
+    public WebhookReceiverPolicy WithLoopDetection(int maxHops) {
+        Preca.ThrowIfLessThanOrEqualTo(maxHops, 0);
+        this.EnableLoopDetection = true;
+        this.MaxHops = maxHops;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables inbound loop detection and hop count limit enforcement with a custom hop threshold and custom header name.
+    /// </summary>
+    /// <param name="maxHops">The maximum allowable hop count.</param>
+    /// <param name="headerName">The custom hop count HTTP header name.</param>
+    /// <returns>This policy instance for fluent chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxHops"/> is non-positive.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="headerName"/> is null, empty, or whitespace.</exception>
+    public WebhookReceiverPolicy WithLoopDetection(int maxHops, string headerName) {
+        Preca.ThrowIfLessThanOrEqualTo(maxHops, 0);
+        Preca.ThrowIfNullOrWhiteSpace(headerName);
+
+        this.EnableLoopDetection = true;
+        this.MaxHops = maxHops;
+        this.HopCountHeaderName = headerName;
+        return this;
+    }
 
     /// <summary>
     /// Configures event discriminator extraction from a specific HTTP header.

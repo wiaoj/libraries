@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Wiaoj.Serialization;
 
 namespace Wiaoj.Webhooks.Publishing.Internal;
@@ -75,6 +75,8 @@ internal sealed class WebhookPublisher : IWebhookPublisher {
         cancellationToken.ThrowIfCancellationRequested();
 
         string eventName = this._eventRegistry.GetEventName<TEvent>();
+        using System.Diagnostics.Activity? activity = Diagnostics.WebhookPublishingActivitySource.StartPublishActivity(eventName, @namespace.Value);
+
         IReadOnlyList<WebhookSubscription> activeSubscriptions = await this._store
             .GetActiveSubscriptionsAsync(@namespace, cancellationToken)
             .ConfigureAwait(false);
@@ -90,6 +92,14 @@ internal sealed class WebhookPublisher : IWebhookPublisher {
                 matchedSubscriptions.Add(sub);
             }
         }
+
+        System.Diagnostics.TagList publishTags = new() {
+            { "webhook.event_name", eventName },
+            { "webhook.namespace", @namespace.Value }
+        };
+        Diagnostics.WebhookPublishingMeter.PublishedEventsCount.Add(1, publishTags);
+        Diagnostics.WebhookPublishingMeter.FanOutEndpointsHistogram.Record(matchedSubscriptions.Count, publishTags);
+        activity?.SetTag("webhook.subscriber_count", matchedSubscriptions.Count);
 
         if(matchedSubscriptions.Count == 0) {
             this._logger.LogDebug("No matching subscriptions found for event '{EventName}' in namespace '{Namespace}'. Skipping fan-out.", eventName, @namespace.Value);

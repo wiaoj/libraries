@@ -42,7 +42,21 @@ internal sealed class BloomFilterDeduplicationMiddleware : IWebhookMiddleware {
          
         if(this._bloomFilter.Contains(key.AsSpan())) {
             this._logger.LogDuplicateEventSkipped(context.Endpoint.Id, key);
-             
+
+            System.Diagnostics.Activity? activity = System.Diagnostics.Activity.Current;
+            if(activity is not null) {
+                activity.SetTag("webhook.deduplicated", true);
+                activity.AddEvent(new System.Diagnostics.ActivityEvent("webhook.bloom_filter.hit", tags: new System.Diagnostics.ActivityTagsCollection {
+                    { "webhook.idempotency_key", key },
+                    { "webhook.endpoint_id", context.Endpoint.Id.Value }
+                }));
+            }
+
+            System.Diagnostics.TagList tags = new() {
+                { "webhook.endpoint_id", context.Endpoint.Id.Value }
+            };
+            BloomFilterMeter.BloomFilterHitsCount.Add(1, tags);
+
             context.SetResult(WebhookDeliveryResult.Duplicate(key));
             return;
         }

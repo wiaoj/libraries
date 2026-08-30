@@ -191,6 +191,13 @@ internal static partial class WebhookLoggerExtensions {
         Message = "High lock contention detected for endpoint '{EndpointId}'. Waited {LockWaitDurationMs:F2}ms to acquire delivery lock.")]
     public static partial void LogLockContention(this ILogger logger, WebhookEndpointId endpointId, double lockWaitDurationMs);
 
+    /// <summary>Logs that a webhook delivery execution loop or hop limit breach was detected.</summary>
+    [LoggerMessage(
+        EventId = 4008,
+        Level = LogLevel.Warning,
+        Message = "Webhook delivery loop detected for job '{JobId}' (endpoint: '{EndpointId}'). Reason: {Reason}")]
+    public static partial void LogWebhookLoopDetected(this ILogger logger, WebhookJobId jobId, WebhookEndpointId endpointId, string reason);
+
     // ── Error (5000 - 5999) ───────────────────────────────────────────────────
 
     /// <summary>Logs that an unexpected error occurred during webhook job handling.</summary>

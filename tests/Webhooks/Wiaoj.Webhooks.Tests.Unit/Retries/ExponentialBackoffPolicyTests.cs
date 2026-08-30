@@ -126,11 +126,11 @@ public sealed class ExponentialBackoffPolicyTests {
 
     [Fact]
     public void ShouldRetry_WithoutJitter_ReturnsExactDeterministicDelay() {
-        // Arrange: Jitter tamamen kapatıldığında
+        // Arrange: When jitter is disabled
         ExponentialBackoffOptions options = new() {
             MaxAttempts = 4,
             InitialDelay = TimeSpan.FromSeconds(5),
-            Jitter = null // Jitter kapalı
+            Jitter = null // Jitter disabled
         };
         ExponentialBackoffPolicy policy = new(options);
         WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
@@ -139,7 +139,7 @@ public sealed class ExponentialBackoffPolicyTests {
         // Act
         bool shouldRetry = policy.ShouldRetry(context, failure, out TimeSpan delay);
 
-        // Assert: Tam olarak 5 saniye dönmeli
+        // Assert: Must return exactly 5 seconds
         Assert.True(shouldRetry);
         Assert.Equal(TimeSpan.FromSeconds(5), delay);
     }

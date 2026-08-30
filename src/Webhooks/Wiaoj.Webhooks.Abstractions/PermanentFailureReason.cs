@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Webhooks;
+namespace Wiaoj.Webhooks;
 
 /// <summary>
 /// Categorizes non-transient, permanent delivery failures in a transport-agnostic manner
@@ -38,5 +38,10 @@ public enum PermanentFailureReason {
     /// <summary>
     /// Cryptographic signing, TLS handshake, or outbound authorization failed.
     /// </summary>
-    SecurityValidationFailed = 6
+    SecurityValidationFailed = 6,
+
+    /// <summary>
+    /// An execution cycle, infinite loopback, or maximum hop limit threshold was detected.
+    /// </summary>
+    LoopDetected = 7
 }

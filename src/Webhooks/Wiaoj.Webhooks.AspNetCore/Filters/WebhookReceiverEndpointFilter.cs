@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -53,12 +53,43 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
         // 1. Resolve Effective Policy
         WebhookReceiverPolicy policy = ResolveEffectivePolicy(inboundOptions.Value, eventName);
 
+        using Activity? activity = WebhookInboundActivitySource.StartInboundActivity(policy.Name, httpContext.Request.Path);
+        activity?.SetTag("webhook.event_name", eventName);
+
+        TagList telemetryTags = new() {
+            { "webhook.policy", policy.Name },
+            { "webhook.event_name", eventName }
+        };
+
         // 2. DoS Protection: Content-Length Check
         if(httpContext.Request.ContentLength.HasValue && httpContext.Request.ContentLength.Value > policy.MaxRequestBodyBytes) {
+            activity?.SetStatus(ActivityStatusCode.Error, "Payload too large");
             return WebhookReceiverResponses.PayloadTooLarge(policy.MaxRequestBodyBytes, httpContext.Request.Path);
         }
 
-        // 3. DoS Protection: Bounded Stream Reading with zero intermediate string allocation
+        // 3. Loop Detection: Fast Inbound Hop Limit & Causal Cycle Check
+        if(policy.EnableLoopDetection) {
+            string hopHeader = httpContext.Request.Headers[policy.HopCountHeaderName].ToString();
+            if(!string.IsNullOrWhiteSpace(hopHeader)) {
+                int hops = ParseMaxHopCount(hopHeader);
+                if(hops >= policy.MaxHops) {
+                    WebhookInboundMeter.LoopDetectedCount.Add(1, telemetryTags);
+                    activity?.SetStatus(ActivityStatusCode.Error, "Inbound hop limit exceeded");
+                    return WebhookReceiverResponses.LoopDetected(policy.MaxHops, hops, httpContext.Request.Path);
+                }
+            }
+
+            if(!string.IsNullOrWhiteSpace(policy.InstanceId)) {
+                string chainHeader = httpContext.Request.Headers[policy.CausalChainHeaderName].ToString();
+                if(!string.IsNullOrWhiteSpace(chainHeader) && ContainsCausalNode(chainHeader, policy.InstanceId)) {
+                    WebhookInboundMeter.LoopDetectedCount.Add(1, telemetryTags);
+                    activity?.SetStatus(ActivityStatusCode.Error, "Inbound causal cycle detected");
+                    return WebhookReceiverResponses.LoopDetected(policy.MaxHops, policy.MaxHops, httpContext.Request.Path);
+                }
+            }
+        }
+
+        // 4. DoS Protection: Bounded Stream Reading with zero intermediate string allocation
         httpContext.Request.EnableBuffering();
         await using AsyncValueBuffer<byte> buffer = new(policy.MaxRequestBodyBytes + 1);
 
@@ -68,11 +99,13 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
         while((read = await stream.ReadAsync(buffer.Memory[totalRead..], httpContext.RequestAborted).ConfigureAwait(false)) > 0) {
             totalRead += read;
             if(totalRead > policy.MaxRequestBodyBytes) {
+                activity?.SetStatus(ActivityStatusCode.Error, "Payload stream too large");
                 return WebhookReceiverResponses.PayloadTooLarge(policy.MaxRequestBodyBytes, httpContext.Request.Path);
             }
         }
 
         if(totalRead == 0) {
+            activity?.SetStatus(ActivityStatusCode.Error, "Empty body");
             return WebhookReceiverResponses.InvalidBody(httpContext.Request.Path);
         }
 
@@ -85,6 +118,8 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             string signatureHeader = httpContext.Request.Headers[policy.HeaderName].ToString();
             if(string.IsNullOrWhiteSpace(signatureHeader)) {
                 logger.LogInboundSignatureVerificationFailed(httpContext.Request.Path);
+                WebhookInboundMeter.SignatureFailedCount.Add(1, telemetryTags);
+                activity?.SetStatus(ActivityStatusCode.Error, "Missing signature header");
                 return WebhookReceiverResponses.UnauthorizedSignature(httpContext.Request.Path);
             }
 
@@ -106,6 +141,8 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
 
             if(!isValid) {
                 logger.LogInboundSignatureVerificationFailed(httpContext.Request.Path);
+                WebhookInboundMeter.SignatureFailedCount.Add(1, telemetryTags);
+                activity?.SetStatus(ActivityStatusCode.Error, "Invalid cryptographic signature");
                 return WebhookReceiverResponses.UnauthorizedSignature(httpContext.Request.Path);
             }
 
@@ -118,9 +155,11 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
         if(policy.EnforceIdempotency && idempotencyStore is not null) {
             idempotencyKey = policy.IdempotencyKeyExtractor(httpContext, rawPayload);
             if(idempotencyKey.HasValue) {
+                activity?.SetTag("webhook.idempotency_key", idempotencyKey.Value.Value);
                 bool isClaimed = await idempotencyStore.TryMarkProcessedAsync(idempotencyKey.Value, policy.IdempotencyWindow, httpContext.RequestAborted).ConfigureAwait(false);
                 if(!isClaimed) {
                     logger.LogInboundDuplicateSkipped(idempotencyKey.Value.Value);
+                    activity?.SetTag("webhook.deduplicated", true);
                     return WebhookReceiverResponses.Ok;
                 }
             }
@@ -133,6 +172,7 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
                 if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
                     await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
                 }
+                activity?.SetStatus(ActivityStatusCode.Error, "Subtree extraction failed");
                 return WebhookReceiverResponses.DeserializationFailed(eventName, httpContext.Request.Path);
             }
         }
@@ -142,6 +182,7 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
                 await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
             }
+            activity?.SetStatus(ActivityStatusCode.Error, "Deserialization failed");
             return WebhookReceiverResponses.DeserializationFailed(eventName, httpContext.Request.Path);
         }
 
@@ -170,7 +211,8 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
                 await handler.HandleAsync(receiverContext, httpContext.RequestAborted).ConfigureAwait(false);
             }
         }
-        catch {
+        catch(Exception ex) {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             // Rollback idempotency claim on handler failure so upstream retries can be processed
             if(policy.EnforceIdempotency && idempotencyStore is not null && idempotencyKey.HasValue) {
                 await idempotencyStore.RemoveAsync(idempotencyKey.Value, CancellationToken.None).ConfigureAwait(false);
@@ -185,6 +227,12 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
 
         double durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
         logger.LogInboundWebhookProcessed(eventName, durationMs);
+
+        WebhookInboundMeter.InboundRequestCount.Add(1, telemetryTags);
+        WebhookInboundMeter.InboundDuration.Record(durationMs, telemetryTags);
+
+        activity?.SetStatus(ActivityStatusCode.Ok);
+        activity?.SetTag("webhook.duration_ms", durationMs);
 
         return WebhookReceiverResponses.Ok;
     }
@@ -212,7 +260,12 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             IdempotencyWindow = this._metadata.IdempotencyWindow ?? basePolicy.IdempotencyWindow,
             SecretResolver = this._metadata.SecretResolver ?? basePolicy.SecretResolver,
             IdempotencyKeyExtractor = this._metadata.IdempotencyKeyExtractor ?? basePolicy.IdempotencyKeyExtractor,
-            PayloadPath = this._metadata.PayloadPath ?? basePolicy.PayloadPath
+            PayloadPath = this._metadata.PayloadPath ?? basePolicy.PayloadPath,
+            EnableLoopDetection = basePolicy.EnableLoopDetection,
+            MaxHops = basePolicy.MaxHops,
+            HopCountHeaderName = basePolicy.HopCountHeaderName,
+            CausalChainHeaderName = basePolicy.CausalChainHeaderName,
+            InstanceId = basePolicy.InstanceId
         };
     }
 
@@ -269,5 +322,47 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             default:
                 return result;
         }
+    }
+
+    private static int ParseMaxHopCount(string rawHeader) {
+        ReadOnlySpan<char> span = rawHeader.AsSpan();
+        int maxParsed = 0;
+        while(!span.IsEmpty) {
+            int commaIndex = span.IndexOf(',');
+            ReadOnlySpan<char> token = commaIndex >= 0 ? span[..commaIndex] : span;
+            token = token.Trim();
+
+            if(!token.IsEmpty && int.TryParse(token, out int parsed) && parsed > maxParsed) {
+                maxParsed = parsed;
+            }
+
+            if(commaIndex < 0) {
+                break;
+            }
+
+            span = span[(commaIndex + 1)..];
+        }
+        return maxParsed;
+    }
+
+    private static bool ContainsCausalNode(string chain, string instanceId) {
+        ReadOnlySpan<char> chainSpan = chain.AsSpan();
+        while(!chainSpan.IsEmpty) {
+            int commaIndex = chainSpan.IndexOf(',');
+            ReadOnlySpan<char> token = commaIndex >= 0 ? chainSpan[..commaIndex] : chainSpan;
+            token = token.Trim().Trim('"');
+
+            if(token.Equals(instanceId.AsSpan(), StringComparison.OrdinalIgnoreCase)) {
+                return true;
+            }
+
+            if(commaIndex < 0) {
+                break;
+            }
+
+            chainSpan = chainSpan[(commaIndex + 1)..];
+        }
+
+        return false;
     }
 }

@@ -1,5 +1,4 @@
 ﻿using System.Text.Json;
-using Wiaoj.Preconditions.Exceptions;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Pagination.Tests.Unit;
@@ -46,7 +45,7 @@ public sealed class SignedCursorTokenTests {
 
         [Fact]
         public void Should_Throw_When_SecretKey_Is_Too_Short() {
-            // Arrange: kasıtlı olarak varsayılan minimum uzunluğun (ör. HMAC-SHA256 için 32 byte) altında
+            // Arrange
             byte[] tooShortKey = "short_key"u8.ToArray();
             CursorToken rawToken = CursorToken.FromUtf8("order_id_1");
 
@@ -128,7 +127,7 @@ public sealed class SignedCursorTokenTests {
 
             byte[] corruptedSignature = signedToken.Signature.AsSpan().ToArray();
             corruptedSignature[0] ^= 0xFF;
-            SignedCursorToken tampered = new(token, Sha256Hash.FromBytes(corruptedSignature));
+            SignedCursorToken tampered = new(token, HmacSha256Hash.FromBytes(corruptedSignature));
 
             // Act & Assert
             Assert.False(tampered.Verify(ValidSecretKey));

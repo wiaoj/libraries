@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 
 namespace Wiaoj.Resilience;
 
@@ -37,4 +37,8 @@ public interface ITimeoutStrategy {
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Defines a typed execution strategy that bounds asynchronous operations within a temporal deadline for a specific policy.
+/// </summary>
+/// <typeparam name="TPolicy">The policy type.</typeparam>
 public interface ITimeoutStrategy<TPolicy> : ITimeoutStrategy where TPolicy : notnull;

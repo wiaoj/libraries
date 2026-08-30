@@ -10,7 +10,7 @@ using Wiaoj.Primitives.Collections;
 namespace Wiaoj.Pagination;
 
 /// <summary>
-/// Represents an immutable, zero-allocation container combining paginated items with their corresponding metadata.
+/// Represents an immutable container combining paginated items with their corresponding metadata.
 /// </summary>
 /// <typeparam name="T">The type of elements in the paginated collection.</typeparam>
 /// <remarks>

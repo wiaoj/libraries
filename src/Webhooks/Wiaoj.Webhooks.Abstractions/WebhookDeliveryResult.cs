@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace Wiaoj.Webhooks;
 
@@ -254,5 +254,10 @@ public abstract record WebhookDeliveryResult {
     /// <summary>Creates a <see cref="PermanentFailure"/> result with a status code and classification reason.</summary>
     public static WebhookDeliveryResult Permanent(string errorMessage, int? statusCode, PermanentFailureReason reason) {
         return new PermanentFailure(errorMessage, statusCode, reason);
+    }
+
+    /// <summary>Creates a <see cref="PermanentFailure"/> result specifically caused by an intercepted webhook execution loop.</summary>
+    public static WebhookDeliveryResult LoopDetected(string errorMessage) {
+        return new PermanentFailure(errorMessage, PermanentFailureReason.LoopDetected);
     }
 }

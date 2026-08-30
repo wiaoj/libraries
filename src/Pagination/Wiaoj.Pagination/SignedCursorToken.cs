@@ -3,23 +3,21 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 using Wiaoj.Pagination.JsonConverters;
 using Wiaoj.Preconditions;
-using Wiaoj.Preconditions.Exceptions;
 using Wiaoj.Primitives;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
 namespace Wiaoj.Pagination;
 
 /// <summary>
-/// Represents a tamper-proof, cryptographically signed pagination cursor token using HMAC-SHA256.
+/// Represents a cryptographically signed, tamper-evident keyset cursor token using HMAC-SHA256.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Formatted as <c>Payload.Signature</c> where both segments are valid Base64Url strings (RFC 4648, Section 5).
-/// Prevents parameter tampering, ID enumeration, and cursor spoofing attacks.
+/// Prevents parameter tampering, identifier enumeration, and cursor spoofing attacks.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{ToString(),nq}")]
@@ -47,12 +45,12 @@ public readonly record struct SignedCursorToken :
     /// <summary>
     /// Gets the HMAC-SHA256 cryptographic signature.
     /// </summary>
-    public Sha256Hash Signature { get; }
+    public HmacSha256Hash Signature { get; }
 
     /// <summary>
     /// Gets a value indicating whether this instance is empty or uninitialized.
     /// </summary>
-    public bool IsEmpty => this.Token.IsEmpty && this.Signature == Sha256Hash.Empty;
+    public bool IsEmpty => this.Token.IsEmpty && this.Signature == HmacSha256Hash.Empty;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SignedCursorToken"/> struct.
@@ -60,7 +58,7 @@ public readonly record struct SignedCursorToken :
     /// <param name="token">The cursor token payload.</param>
     /// <param name="signature">The HMAC-SHA256 signature.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SignedCursorToken(CursorToken token, Sha256Hash signature) {
+    public SignedCursorToken(CursorToken token, HmacSha256Hash signature) {
         this.Token = token;
         this.Signature = signature;
     }
@@ -73,31 +71,29 @@ public readonly record struct SignedCursorToken :
     private const int MinimumSecretKeyLengthInBytes = 32;
 
     /// <summary>
-    /// Signs a <see cref="CursorToken"/> using HMAC-SHA256 with zero heap allocations.
+    /// Signs a <see cref="CursorToken"/> using HMAC-SHA256.
     /// </summary>
     /// <param name="token">The cursor token to sign.</param>
     /// <param name="secretKey">The secret key used for HMAC signing. Must be at least <see cref="MinimumSecretKeyLengthInBytes"/> bytes long.</param>
     /// <returns>A new <see cref="SignedCursorToken"/> instance.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="secretKey"/> is <see langword="null"/> or empty or shorter than <see cref="MinimumSecretKeyLengthInBytes"/> bytes.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="secretKey"/> is empty or shorter than <see cref="MinimumSecretKeyLengthInBytes"/> bytes.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static SignedCursorToken Sign(CursorToken token, ReadOnlySpan<byte> secretKey) {
         Preca.ThrowIfEmpty(secretKey);
         Preca.ThrowIfLessThan(
-            secretKey.Length, 
-            MinimumSecretKeyLengthInBytes, 
+            secretKey.Length,
+            MinimumSecretKeyLengthInBytes,
             static () => new ArgumentException($"Secret key must be at least {MinimumSecretKeyLengthInBytes} bytes long."));
 
         if(token.IsEmpty) {
             return Empty;
         }
 
-        Span<byte> signatureBuffer = stackalloc byte[Sha256Hash.SizeInBytes];
         Span<byte> payloadBuffer = stackalloc byte[token.Length];
-
         System.Text.Ascii.FromUtf16(token.Value.AsSpan(), payloadBuffer, out _);
-        HMACSHA256.HashData(secretKey, payloadBuffer, signatureBuffer);
 
-        return new SignedCursorToken(token, Sha256Hash.FromBytes(signatureBuffer));
+        HmacSha256Hash signature = HmacSha256Hash.Compute(secretKey, payloadBuffer);
+        return new SignedCursorToken(token, signature);
     }
 
     /// <summary>
@@ -107,17 +103,15 @@ public readonly record struct SignedCursorToken :
     /// <returns><see langword="true"/> if the signature is authentic; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Verify(ReadOnlySpan<byte> secretKey) {
-        if(IsEmpty) {
+        if(this.IsEmpty || secretKey.Length < MinimumSecretKeyLengthInBytes) {
             return false;
         }
 
-        Span<byte> expectedSignature = stackalloc byte[Sha256Hash.SizeInBytes];
         Span<byte> payloadBuffer = stackalloc byte[this.Token.Length];
-
         System.Text.Ascii.FromUtf16(this.Token.Value.AsSpan(), payloadBuffer, out _);
-        HMACSHA256.HashData(secretKey, payloadBuffer, expectedSignature);
 
-        return CryptographicOperations.FixedTimeEquals(expectedSignature, this.Signature.AsSpan());
+        HmacSha256Hash expectedSignature = HmacSha256Hash.Compute(secretKey, payloadBuffer);
+        return expectedSignature == this.Signature;
     }
 
     /// <summary>
@@ -203,13 +197,13 @@ public readonly record struct SignedCursorToken :
             return false;
         }
 
-        Span<byte> sigBytes = stackalloc byte[Sha256Hash.SizeInBytes];
-        if(!Base64UrlString.TryDecode(sigSpan, sigBytes, out int written) || written != Sha256Hash.SizeInBytes) {
+        Span<byte> sigBytes = stackalloc byte[HmacSha256Hash.SizeInBytes];
+        if(!Base64UrlString.TryDecode(sigSpan, sigBytes, out int written) || written != HmacSha256Hash.SizeInBytes) {
             result = default;
             return false;
         }
 
-        result = new SignedCursorToken(token, Sha256Hash.FromBytes(sigBytes));
+        result = new SignedCursorToken(token, HmacSha256Hash.FromBytes(sigBytes));
         return true;
     }
 
@@ -237,16 +231,16 @@ public readonly record struct SignedCursorToken :
 
     /// <inheritdoc/>
     public override string ToString() {
-        if(IsEmpty) return string.Empty;
+        if(this.IsEmpty) return string.Empty;
         return $"{this.Token.Value}.{this.Signature.ToBase64UrlString().Value}";
     }
 
     /// <summary>
-    /// Tries to format the signed cursor into the destination character span with zero allocations.
+    /// Tries to format the signed cursor into the destination character span.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryFormat(Span<char> destination, out int charsWritten) {
-        if(IsEmpty) {
+        if(this.IsEmpty) {
             charsWritten = 0;
             return true;
         }
@@ -268,11 +262,11 @@ public readonly record struct SignedCursorToken :
     }
 
     /// <summary>
-    /// Tries to format the signed cursor into the destination UTF-8 byte span with zero allocations.
+    /// Tries to format the signed cursor into the destination UTF-8 byte span.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
-        if(IsEmpty) {
+        if(this.IsEmpty) {
             bytesWritten = 0;
             return true;
         }
@@ -294,26 +288,49 @@ public readonly record struct SignedCursorToken :
 
     // --- Explicit Interface Implementations ---
 
-    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) => ToString();
+    string IFormattable.ToString(string? format, IFormatProvider? formatProvider) {
+        return ToString();
+    }
 
     bool ISpanFormattable.TryFormat(
         Span<char> destination,
         out int charsWritten,
         ReadOnlySpan<char> format,
-        IFormatProvider? provider) => TryFormat(destination, out charsWritten);
+        IFormatProvider? provider) {
+        return TryFormat(destination, out charsWritten);
+    }
 
     bool IUtf8SpanFormattable.TryFormat(
         Span<byte> utf8Destination,
         out int bytesWritten,
         ReadOnlySpan<char> format,
-        IFormatProvider? provider) => TryFormat(utf8Destination, out bytesWritten);
+        IFormatProvider? provider) {
+        return TryFormat(utf8Destination, out bytesWritten);
+    }
 
-    static SignedCursorToken IParsable<SignedCursorToken>.Parse(string s, IFormatProvider? provider) => Parse(s);
-    static bool IParsable<SignedCursorToken>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SignedCursorToken result) => TryParse(s, out result);
-    static SignedCursorToken ISpanParsable<SignedCursorToken>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
-    static bool ISpanParsable<SignedCursorToken>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SignedCursorToken result) => TryParse(s, out result);
-    static SignedCursorToken IUtf8SpanParsable<SignedCursorToken>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
-    static bool IUtf8SpanParsable<SignedCursorToken>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out SignedCursorToken result) => TryParse(utf8Text, out result);
+    static SignedCursorToken IParsable<SignedCursorToken>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<SignedCursorToken>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SignedCursorToken result) {
+        return TryParse(s, out result);
+    }
+
+    static SignedCursorToken ISpanParsable<SignedCursorToken>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<SignedCursorToken>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SignedCursorToken result) {
+        return TryParse(s, out result);
+    }
+
+    static SignedCursorToken IUtf8SpanParsable<SignedCursorToken>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<SignedCursorToken>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out SignedCursorToken result) {
+        return TryParse(utf8Text, out result);
+    }
 
     #endregion
 
@@ -324,7 +341,9 @@ public readonly record struct SignedCursorToken :
     /// </summary>
     /// <param name="token">The signed cursor token.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator string(SignedCursorToken token) => token.ToString();
+    public static implicit operator string(SignedCursorToken token) {
+        return token.ToString();
+    }
 
     /// <summary>
     /// Explicitly converts a string to a <see cref="SignedCursorToken"/>.
@@ -332,7 +351,9 @@ public readonly record struct SignedCursorToken :
     /// <param name="s">The string to parse.</param>
     /// <exception cref="FormatException">Thrown if the string is not valid.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static explicit operator SignedCursorToken(string s) => Parse(s);
+    public static explicit operator SignedCursorToken(string s) {
+        return Parse(s);
+    }
 
     #endregion
 }

@@ -11,7 +11,7 @@ Extension methods are exposed directly under the `Microsoft.AspNetCore.Builder` 
 - **RFC 8288 Web Linking:** Automatically formats and appends standard HTTP `Link` headers (`rel="first"`, `rel="prev"`, `rel="next"`, `rel="last"`) for both offset and keyset pagination.
 - **SIMD-Accelerated ETag Caching:** Generates high-throughput weak ETags (`W/"..."`) using `XxHash3` (30+ GB/s) and cryptographic strong ETags using `Sha256Hash`.
 - **Automatic 304 Not Modified Handling:** Evaluates client `If-None-Match` headers and short-circuits responses to `304 Not Modified` without transferring payload bodies.
-- **Zero-Allocation Endpoint Filter:** Provides a pre-allocated singleton instance for default `.WithPagination()` routes.
+- **Endpoint Filter:** Provides a pre-allocated singleton instance for default `.WithPagination()` routes.
 
 > **Note:** Pagination state (`totalCount`, `pageNumber`, `pageSize`, `totalPages`, `hasPrevious`, `hasNext`) is exposed exclusively via the response body's `metadata` object, not via a separate header. This avoids duplicating the same data across two channels — see [`PagedResult<T>`](#) and [`PageMetadata`](#).
 

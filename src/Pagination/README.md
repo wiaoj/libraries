@@ -1,4 +1,4 @@
-# Wiaoj.Pagination Ecosystem
+# Wiaoj.Pagination
 
 A modular, high-performance pagination toolkit for .NET applications supporting offset-based and keyset (cursor-based) pagination, cryptographic cursor signing, and database extensions.
 

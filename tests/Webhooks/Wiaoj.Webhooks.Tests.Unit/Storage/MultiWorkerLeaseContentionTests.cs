@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Tests.Unit.TestData;
 
@@ -10,13 +10,13 @@ namespace Wiaoj.Webhooks.Tests.Unit.Storage;
 public sealed class MultiWorkerLeaseContentionTests {
 
     // ────────────────────────────────────────────────────────────────────────
-    // 1. TEKİL İŞ ÜZERİNDE ÇOKLU POD YARIŞI & ATOMİKLİK
+    // 1. SINGLE JOB CONCURRENCY AND ATOMICITY
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheSingleJobContention {
         [Fact]
         public async Task TryClaimLeaseAsync_UnderMassive50PodContention_AllowsExactlyOnePodToWin() {
-            // Arrange: 50 pod aynı anda tek bir stale işi kapmaya çalışır
+            // Arrange: 50 pods compete simultaneously to claim a single stale job
             InMemoryWebhookStore store = new();
             WebhookJobId jobId = WebhookJobId.NewJobId();
             WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-alpha");
@@ -29,7 +29,7 @@ public sealed class MultiWorkerLeaseContentionTests {
                 DateTimeOffset.UtcNow.AddMinutes(-10)) {
                 Status = WebhookJobStatus.InFlight,
                 LockedBy = "crashed-worker-pod",
-                LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-3) // Süresi dolmuş
+                LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-3) // Expired lock
             };
             await store.SaveAsync(staleRecord, TestContext.Current.CancellationToken);
 
@@ -37,7 +37,7 @@ public sealed class MultiWorkerLeaseContentionTests {
             int successfulClaimCount = 0;
             ConcurrentBag<string> winningPods = [];
 
-            // Act: 50 Task aynı anda yarışır (Thread-pool flood)
+            // Act: 50 Tasks compete concurrently (Thread-pool flood)
             Task[] tasks = [.. Enumerable.Range(0, podCount).Select(async i => {
                 string podId = $"worker-pod-{i:D2}";
                 bool claimed = await store.TryClaimLeaseAsync(jobId, podId, TimeSpan.FromMinutes(2));
@@ -62,13 +62,13 @@ public sealed class MultiWorkerLeaseContentionTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 2. ÇOKLU İŞ & ÇOKLU POD DAĞITIK MATRİS YARIŞI
+    // 2. MULTI-JOB AND MULTI-POD DISTRIBUTED MATRIX CONTENTION
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheMultiJobContentionMatrix {
         [Fact]
         public async Task TryClaimLeaseAsync_With20PodsAnd50StaleJobs_DistributesAllJobsWithZeroOverlap() {
-            // Arrange: 50 tane stale iş oluşturulur
+            // Arrange: 50 stale jobs created
             InMemoryWebhookStore store = new();
             WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("cluster-node");
             List<WebhookJobId> jobIds = [];
@@ -86,7 +86,7 @@ public sealed class MultiWorkerLeaseContentionTests {
             const int podCount = 20;
             ConcurrentDictionary<WebhookJobId, string> claimedMap = new();
 
-            // Act: 20 pod 50 işin tamamını eşzamanlı olarak kapmaya çalışır
+            // Act: 20 pods attempt to claim all 50 jobs concurrently
             Task[] tasks = [.. Enumerable.Range(0, podCount).Select(podIndex => {
                 string podId = $"pod-{podIndex}";
                 return Task.Run(async () => {
@@ -102,7 +102,7 @@ public sealed class MultiWorkerLeaseContentionTests {
 
             await Task.WhenAll(tasks);
 
-            // Assert: 50 işin tamamı tam olarak 1 pod tarafından kazanılmış olmalı
+            // Assert: All 50 jobs must be won by exactly 1 pod
             Assert.Equal(50, claimedMap.Count);
             foreach(WebhookJobId id in jobIds) {
                 Assert.True(claimedMap.ContainsKey(id));
@@ -111,7 +111,7 @@ public sealed class MultiWorkerLeaseContentionTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 3. LEASE YENİLEME & EXPIRE DEVİR MEKANİZMASI
+    // 3. LEASE RENEWAL AND EXPIRATION TRANSITION MECHANISMS
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheLeaseLifecycleAndTransitions {
@@ -122,13 +122,13 @@ public sealed class MultiWorkerLeaseContentionTests {
             WebhookJobRecord record = new(jobId, WebhookTestFactory.CreateEndpointId(), "order.paid", "{}", DateTimeOffset.UtcNow);
             await store.SaveAsync(record, TestContext.Current.CancellationToken);
 
-            // 1. Pod-1 işi 10 dakikalığına kilitler
+            // 1. Pod-1 locks job for 10 minutes
             Assert.True(await store.TryClaimLeaseAsync(jobId, "pod-1", TimeSpan.FromMinutes(10), TestContext.Current.CancellationToken));
 
-            // 2. Pod-2 araya girmeye çalışır -> Başarısız olmalı
+            // 2. Pod-2 attempts to interfere -> Must fail
             Assert.False(await store.TryClaimLeaseAsync(jobId, "pod-2", TimeSpan.FromMinutes(10), TestContext.Current.CancellationToken));
 
-            // 3. Pod-1 kendi lease'ini uzatır (Heartbeat / Renew) -> Başarılı olmalı
+            // 3. Pod-1 extends own lease (Heartbeat / Renew) -> Must succeed
             Assert.True(await store.TryClaimLeaseAsync(jobId, "pod-1", TimeSpan.FromMinutes(30), TestContext.Current.CancellationToken));
 
             WebhookJobRecord? updated = await store.GetJobAsync(jobId, TestContext.Current.CancellationToken);
@@ -144,13 +144,13 @@ public sealed class MultiWorkerLeaseContentionTests {
             WebhookJobRecord record = new(jobId, WebhookTestFactory.CreateEndpointId(), "order.paid", "{}", DateTimeOffset.UtcNow);
             await store.SaveAsync(record, TestContext.Current.CancellationToken);
 
-            // 1. Pod-1 anında dolan (0ms) lease alır
+            // 1. Pod-1 takes an immediately expiring lease (0ms)
             Assert.True(await store.TryClaimLeaseAsync(jobId, "pod-1", TimeSpan.Zero, TestContext.Current.CancellationToken));
 
-            // 2. Pod-2 süresi dolmuş lease'i devralır -> Başarılı olmalı
+            // 2. Pod-2 claims expired lease -> Must succeed
             Assert.True(await store.TryClaimLeaseAsync(jobId, "pod-2", TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken));
 
-            // 3. Eski sahibi Pod-1 artık işlem yapamaz -> Reddedilmeli
+            // 3. Previous owner Pod-1 can no longer mutate -> Must be rejected
             Assert.False(await store.TryClaimLeaseAsync(jobId, "pod-1", TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken));
 
             WebhookJobRecord? finalRecord = await store.GetJobAsync(jobId, TestContext.Current.CancellationToken);
@@ -160,7 +160,7 @@ public sealed class MultiWorkerLeaseContentionTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 4. NEGATİF GİRİŞLER & BOUNDARY KONTROLLERİ
+    // 4. NEGATIVE AND BOUNDARY GUARDS
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class NegativeAndBoundaryGuards {
@@ -197,7 +197,7 @@ public sealed class MultiWorkerLeaseContentionTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 5. STALE İŞ FİLTRELEME DOĞRULUĞU
+    // 5. STALE JOB FILTRATION ACCURACY
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class StaleFiltrationAccuracy {
@@ -208,25 +208,25 @@ public sealed class MultiWorkerLeaseContentionTests {
             WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-1");
             DateTimeOffset now = DateTimeOffset.UtcNow;
 
-            // 1. Gerçekten Stale olan (InFlight + süresi 5 dk önce dolmuş)
+            // 1. Truly stale job (InFlight + expired 5 minutes ago)
             WebhookJobRecord stale = new(WebhookJobId.NewJobId(), endpointId, "e.stale", "{}", now) {
                 Status = WebhookJobStatus.InFlight,
                 LockExpiresAt = now.AddMinutes(-5)
             };
 
-            // 2. Aktif çalışan (InFlight + süresi 5 dk sonra dolacak) -> ALINMAMALI
+            // 2. Active in-flight job (InFlight + expires in 5 minutes) -> EXCLUDED
             WebhookJobRecord activeInFlight = new(WebhookJobId.NewJobId(), endpointId, "e.active", "{}", now) {
                 Status = WebhookJobStatus.InFlight,
                 LockExpiresAt = now.AddMinutes(5)
             };
 
-            // 3. Teslim edilmiş olan (Delivered + süresi geçmiş olsa bile) -> ALINMAMALI
+            // 3. Delivered job -> EXCLUDED
             WebhookJobRecord delivered = new(WebhookJobId.NewJobId(), endpointId, "e.delivered", "{}", now) {
                 Status = WebhookJobStatus.Delivered,
                 LockExpiresAt = now.AddMinutes(-5)
             };
 
-            // 4. Kuyrukta bekleyen (Queued) -> ALINMAMALI
+            // 4. Queued job -> EXCLUDED
             WebhookJobRecord queued = new(WebhookJobId.NewJobId(), endpointId, "e.queued", "{}", now) {
                 Status = WebhookJobStatus.Queued,
                 LockExpiresAt = now.AddMinutes(-5)
@@ -240,7 +240,7 @@ public sealed class MultiWorkerLeaseContentionTests {
             // Act
             IReadOnlyList<WebhookJobRecord> staleList = await store.GetExpiredInFlightJobsAsync(now, maxCount: 10, TestContext.Current.CancellationToken);
 
-            // Assert: Listede sadece ve sadece 1 numaralı stale iş bulunmalıdır
+            // Assert: List must contain only the single truly stale job
             WebhookJobRecord item = Assert.Single(staleList);
             Assert.Equal(stale.Id, item.Id);
         }

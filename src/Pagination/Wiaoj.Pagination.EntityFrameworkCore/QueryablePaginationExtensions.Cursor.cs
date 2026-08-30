@@ -1,34 +1,39 @@
 ﻿using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Wiaoj.Pagination;
 using Wiaoj.Preconditions;
 using Wiaoj.Preconditions.Exceptions;
+using Wiaoj.Primitives.Buffers;
 using Wiaoj.Primitives.Collections;
 using Wiaoj.Primitives.Snowflake;
+using static System.Net.WebRequestMethods;
 
 #pragma warning disable IDE0130
 namespace Microsoft.EntityFrameworkCore;
 #pragma warning restore IDE0130
-
 
 /// <summary>
 /// Provides asynchronous Entity Framework Core extensions for paginating <see cref="IQueryable{T}"/> sources.
 /// </summary>
 public static partial class QueryablePaginationExtensions {
     private static readonly ConcurrentDictionary<Expression, Delegate> CompiledKeySelectorCache = new();
+    private static readonly ConcurrentDictionary<Type, PropertyInfo?> PrimaryKeyPropertyCache = new();
+    private static readonly ConcurrentDictionary<PropertyInfo, LambdaExpression> GetterExpressionCache = new();
 
-
-    #region Keyset (Cursor) Pagination - Built-in Types
+    #region Keyset (Cursor) Pagination - Integer Types
 
     /// <summary>
-    /// Asynchronously executes high-performance keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
     /// ordered by a 64-bit integer (<see cref="long"/>) key, utilizing the N+1 count elimination technique.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Performance:</b> This method completely eliminates the need for expensive <c>COUNT(*)</c> and large <c>OFFSET</c> 
+    /// <b>Performance:</b> Eliminates the need for expensive <c>COUNT(*)</c> and large <c>OFFSET</c> 
     /// database queries by requesting <c>Limit + 1</c> items. The presence of the extra record determines whether a next page exists,
     /// after which it is discarded before returning the result.
     /// </para>
@@ -87,7 +92,60 @@ public static partial class QueryablePaginationExtensions {
     }
 
     /// <summary>
-    /// Asynchronously executes high-performance keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by an unsigned 64-bit integer (<see cref="ulong"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 8-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the unsigned 64-bit integer key property (e.g. <c>x => x.Id</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid unsigned 64-bit integer payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, ulong>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static id => {
+                Span<byte> buffer = stackalloc byte[sizeof(ulong)];
+                BinaryPrimitives.WriteUInt64BigEndian(buffer, id);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(ulong)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(ulong)) {
+                    throw new FormatException("Invalid unsigned 64-bit integer cursor payload.");
+                }
+                return BinaryPrimitives.ReadUInt64BigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
     /// ordered by a 32-bit integer (<see cref="int"/>) key, utilizing the N+1 count elimination technique.
     /// </summary>
     /// <remarks>
@@ -120,6 +178,24 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(int) + sizeof(long)];
+                    BinaryPrimitives.WriteInt32BigEndian(buffer[..sizeof(int)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(int)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(int) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(int) + sizeof(long))) {
+                        throw new FormatException("Invalid composite int + long cursor payload.");
+                    }
+                    return (BinaryPrimitives.ReadInt32BigEndian(buffer[..sizeof(int)]), BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(int)..]));
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -140,7 +216,883 @@ public static partial class QueryablePaginationExtensions {
     }
 
     /// <summary>
-    /// Asynchronously executes high-performance keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by an unsigned 32-bit integer (<see cref="uint"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 4-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the unsigned 32-bit integer key property (e.g. <c>x => x.Id</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid unsigned 32-bit integer payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, uint>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static id => {
+                Span<byte> buffer = stackalloc byte[sizeof(uint)];
+                BinaryPrimitives.WriteUInt32BigEndian(buffer, id);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(uint)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(uint)) {
+                    throw new FormatException("Invalid unsigned 32-bit integer cursor payload.");
+                }
+                return BinaryPrimitives.ReadUInt32BigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a 16-bit integer (<see cref="short"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 2-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 16-bit integer key property (e.g. <c>x => x.Id</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 16-bit integer payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, short>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static id => {
+                Span<byte> buffer = stackalloc byte[sizeof(short)];
+                BinaryPrimitives.WriteInt16BigEndian(buffer, id);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(short)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(short)) {
+                    throw new FormatException("Invalid 16-bit integer cursor payload.");
+                }
+                return BinaryPrimitives.ReadInt16BigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by an unsigned 16-bit integer (<see cref="ushort"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 2-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the unsigned 16-bit integer key property (e.g. <c>x => x.Id</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid unsigned 16-bit integer payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, ushort>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static id => {
+                Span<byte> buffer = stackalloc byte[sizeof(ushort)];
+                BinaryPrimitives.WriteUInt16BigEndian(buffer, id);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(ushort)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(ushort)) {
+                    throw new FormatException("Invalid unsigned 16-bit integer cursor payload.");
+                }
+                return BinaryPrimitives.ReadUInt16BigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by an 8-bit unsigned integer (<see cref="byte"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque single-byte binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 8-bit unsigned integer key property (e.g. <c>x => x.Id</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 8-bit byte payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, byte>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static id => {
+                Span<byte> buffer = [id];
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[1];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != 1) {
+                    throw new FormatException("Invalid 8-bit byte cursor payload.");
+                }
+                return buffer[0];
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by an 8-bit signed integer (<see cref="sbyte"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque single-byte binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 8-bit signed integer key property (e.g. <c>x => x.Id</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 8-bit signed integer payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, sbyte>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static id => {
+                Span<byte> buffer = [(byte)id];
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[1];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != 1) {
+                    throw new FormatException("Invalid 8-bit signed integer cursor payload.");
+                }
+                return (sbyte)buffer[0];
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a 128-bit signed integer (<see cref="Int128"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 16-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 128-bit signed integer key property (e.g. <c>x => x.Id</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 128-bit signed integer payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, Int128>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static id => {
+                Span<byte> buffer = stackalloc byte[16];
+                BinaryPrimitives.WriteInt128BigEndian(buffer, id);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[16];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != 16) {
+                    throw new FormatException("Invalid 128-bit signed integer cursor payload.");
+                }
+                return BinaryPrimitives.ReadInt128BigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a 128-bit unsigned integer (<see cref="UInt128"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 16-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 128-bit unsigned integer key property (e.g. <c>x => x.Id</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 128-bit unsigned integer payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, UInt128>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static id => {
+                Span<byte> buffer = stackalloc byte[16];
+                BinaryPrimitives.WriteUInt128BigEndian(buffer, id);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[16];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != 16) {
+                    throw new FormatException("Invalid 128-bit unsigned integer cursor payload.");
+                }
+                return BinaryPrimitives.ReadUInt128BigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    #endregion
+
+    #region Keyset (Cursor) Pagination - Floating-Point & Decimal Types
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a 64-bit double-precision floating point (<see cref="double"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 8-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 64-bit floating-point key property (e.g. <c>x => x.Score</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 64-bit double payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, double>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static val => {
+                Span<byte> buffer = stackalloc byte[sizeof(double)];
+                BinaryPrimitives.WriteDoubleBigEndian(buffer, val);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(double)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(double)) {
+                    throw new FormatException("Invalid 64-bit double cursor payload.");
+                }
+                return BinaryPrimitives.ReadDoubleBigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a 32-bit single-precision floating point (<see cref="float"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 4-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 32-bit floating-point key property (e.g. <c>x => x.Score</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 32-bit float payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, float>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static val => {
+                Span<byte> buffer = stackalloc byte[sizeof(float)];
+                BinaryPrimitives.WriteSingleBigEndian(buffer, val);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(float)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(float)) {
+                    throw new FormatException("Invalid 32-bit float cursor payload.");
+                }
+                return BinaryPrimitives.ReadSingleBigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a 16-bit half-precision floating point (<see cref="Half"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Performance:</b> Requests <c>Limit + 1</c> items from the database to evaluate page boundaries without executing an additional count query.
+    /// </para>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 2-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 16-bit half-precision floating-point key property.</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 16-bit half payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, Half>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static val => {
+                Span<byte> buffer = stackalloc byte[2];
+                BinaryPrimitives.WriteHalfBigEndian(buffer, val);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[2];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != 2) {
+                    throw new FormatException("Invalid 16-bit half cursor payload.");
+                }
+                return BinaryPrimitives.ReadHalfBigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a 128-bit decimal (<see cref="decimal"/>) monetary or numeric key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Binary Precision:</b> Deconstructs the 128-bit decimal into four 32-bit integer constituent bits, 
+    /// encoding them as big-endian binary integers to preserve exact decimal precision without floating-point rounding errors.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the 128-bit decimal key property (e.g. <c>x => x.Price</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 16-byte decimal payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, decimal>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker, cancellationToken);
+        }
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static dec => {
+                Span<byte> buffer = stackalloc byte[16];
+                Span<int> bits = stackalloc int[4];
+                decimal.TryGetBits(dec, bits, out _);
+                for(int i = 0; i < 4; i++) {
+                    BinaryPrimitives.WriteInt32BigEndian(buffer.Slice(i * 4, 4), bits[i]);
+                }
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[16];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != 16) {
+                    throw new FormatException("Invalid 128-bit decimal cursor payload.");
+                }
+                Span<int> bits = stackalloc int[4];
+                for(int i = 0; i < 4; i++) {
+                    bits[i] = BinaryPrimitives.ReadInt32BigEndian(buffer.Slice(i * 4, 4));
+                }
+                return new decimal(bits);
+            },
+            cancellationToken);
+    }
+
+    #endregion
+
+    #region Keyset (Cursor) Pagination - Date & Time Types
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a <see cref="DateTime"/> timestamp key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Chronological Precision:</b> Encodes the 64-bit integer tick count (<see cref="DateTime.Ticks"/>) in big-endian format, 
+    /// preserving 100-nanosecond resolution without string formatting overhead.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the <see cref="DateTime"/> timestamp property (e.g. <c>x => x.CreatedAt</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 64-bit tick payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, DateTime>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[..sizeof(long)], primary.Ticks);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(long)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(long) + sizeof(long))) {
+                        throw new FormatException("Invalid composite DateTime + long cursor payload.");
+                    }
+                    long ticks = BinaryPrimitives.ReadInt64BigEndian(buffer[..sizeof(long)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(long)..]);
+                    return (new DateTime(ticks, DateTimeKind.Utc), tie);
+                },
+                cancellationToken);
+        }
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static dt => {
+                Span<byte> buffer = stackalloc byte[sizeof(long)];
+                BinaryPrimitives.WriteInt64BigEndian(buffer, dt.Ticks);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(long)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(long)) {
+                    throw new FormatException("Invalid DateTime cursor payload.");
+                }
+                long ticks = BinaryPrimitives.ReadInt64BigEndian(buffer);
+                return new DateTime(ticks, DateTimeKind.Utc);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a <see cref="DateOnly"/> calendar date key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Binary Encoding:</b> Encodes the 32-bit day number integer (<see cref="DateOnly.DayNumber"/>) in big-endian format.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the <see cref="DateOnly"/> calendar date property (e.g. <c>x => x.BirthDate</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 32-bit day number payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, DateOnly>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static d => {
+                Span<byte> buffer = stackalloc byte[sizeof(int)];
+                BinaryPrimitives.WriteInt32BigEndian(buffer, d.DayNumber);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(int)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(int)) {
+                    throw new FormatException("Invalid DateOnly cursor payload.");
+                }
+                return DateOnly.FromDayNumber(BinaryPrimitives.ReadInt32BigEndian(buffer));
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a <see cref="TimeOnly"/> clock time key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Binary Encoding:</b> Encodes the 64-bit integer tick count (<see cref="TimeOnly.Ticks"/>) in big-endian format.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the <see cref="TimeOnly"/> time-of-day property.</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 64-bit tick payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, TimeOnly>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static t => {
+                Span<byte> buffer = stackalloc byte[sizeof(long)];
+                BinaryPrimitives.WriteInt64BigEndian(buffer, t.Ticks);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(long)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(long)) {
+                    throw new FormatException("Invalid TimeOnly cursor payload.");
+                }
+                return new TimeOnly(BinaryPrimitives.ReadInt64BigEndian(buffer));
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a <see cref="TimeSpan"/> duration or interval key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Binary Encoding:</b> Encodes the 64-bit integer tick count (<see cref="TimeSpan.Ticks"/>) in big-endian format.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the <see cref="TimeSpan"/> interval property.</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 64-bit tick payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, TimeSpan>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static ts => {
+                Span<byte> buffer = stackalloc byte[sizeof(long)];
+                BinaryPrimitives.WriteInt64BigEndian(buffer, ts.Ticks);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(long)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(long)) {
+                    throw new FormatException("Invalid TimeSpan cursor payload.");
+                }
+                return new TimeSpan(BinaryPrimitives.ReadInt64BigEndian(buffer));
+            },
+            cancellationToken);
+    }
+
+    #endregion
+
+    #region Keyset (Cursor) Pagination - Specialized, Text & Identifier Types
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a <see cref="DateTimeOffset"/> timestamp key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Timestamp Precision:</b> The timestamp is stored as a 64-bit Unix millisecond integer in big-endian format, 
+    /// ensuring exact chronology across distributed systems and time zones without timezone skew issues.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the <see cref="DateTimeOffset"/> timestamp property (e.g. <c>x => x.CreatedAt</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid timestamp payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, DateTimeOffset>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker, cancellationToken);
+        }
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static dto => {
+                Span<byte> buffer = stackalloc byte[sizeof(long)];
+                BinaryPrimitives.WriteInt64BigEndian(buffer, dto.ToUnixTimeMilliseconds());
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(long)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(long)) {
+                    throw new FormatException("Invalid DateTimeOffset cursor payload.");
+                }
+                long unixMs = BinaryPrimitives.ReadInt64BigEndian(buffer);
+                return DateTimeOffset.FromUnixTimeMilliseconds(unixMs);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
     /// ordered by a <see cref="Guid"/> key, utilizing the N+1 count elimination technique.
     /// </summary>
     /// <remarks>
@@ -189,58 +1141,7 @@ public static partial class QueryablePaginationExtensions {
     }
 
     /// <summary>
-    /// Asynchronously executes high-performance keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
-    /// ordered by a <see cref="DateTimeOffset"/> timestamp key, utilizing the N+1 count elimination technique.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Timestamp Precision:</b> The timestamp is stored as a 64-bit Unix millisecond integer in big-endian format, 
-    /// ensuring exact chronology across distributed systems and time zones without timezone skew issues.
-    /// </para>
-    /// </remarks>
-    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
-    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
-    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
-    /// <param name="keySelector">A lambda expression identifying the <see cref="DateTimeOffset"/> timestamp property (e.g. <c>x => x.CreatedAt</c>).</param>
-    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
-    /// <returns>
-    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
-    /// </returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
-    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid timestamp payload.</exception>
-    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
-        this IQueryable<TSource> source,
-        CursorRequest request,
-        Expression<Func<TSource, DateTimeOffset>> keySelector,
-        CancellationToken cancellationToken = default) {
-
-        Preca.ThrowIfNull(source);
-        Preca.ThrowIfNull(keySelector);
-
-        return ToCursorResultAsync(
-            source,
-            request,
-            keySelector,
-            cursorEncoder: static dto => {
-                Span<byte> buffer = stackalloc byte[sizeof(long)];
-                BinaryPrimitives.WriteInt64BigEndian(buffer, dto.ToUnixTimeMilliseconds());
-                return CursorToken.FromBytes(buffer);
-            },
-            cursorDecoder: static token => {
-                Span<byte> buffer = stackalloc byte[sizeof(long)];
-                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(long)) {
-                    throw new FormatException("Invalid DateTimeOffset cursor payload.");
-                }
-                long unixMs = BinaryPrimitives.ReadInt64BigEndian(buffer);
-                return DateTimeOffset.FromUnixTimeMilliseconds(unixMs);
-            },
-            cancellationToken);
-    }
-
-    /// <summary>
-    /// Asynchronously executes high-performance keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
     /// ordered by a distributed <see cref="SnowflakeId"/> key, utilizing the N+1 count elimination technique.
     /// </summary>
     /// <remarks>
@@ -301,9 +1202,203 @@ public static partial class QueryablePaginationExtensions {
             cancellationToken);
     }
 
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a UTF-16 character (<see cref="char"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Binary Encoding:</b> Cursors are encoded into an opaque 2-byte big-endian binary payload wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the character key property (e.g. <c>x => x.Code</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token does not contain a valid 2-byte char payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, char>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static ch => {
+                Span<byte> buffer = stackalloc byte[sizeof(ushort)];
+                BinaryPrimitives.WriteUInt16BigEndian(buffer, (ushort)ch);
+                return CursorToken.FromBytes(buffer);
+            },
+            cursorDecoder: static token => {
+                Span<byte> buffer = stackalloc byte[sizeof(ushort)];
+                if(!token.TryDecode(buffer, out int bytesWritten) || bytesWritten != sizeof(ushort)) {
+                    throw new FormatException("Invalid char cursor payload.");
+                }
+                return (char)BinaryPrimitives.ReadUInt16BigEndian(buffer);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by a text or string (<see cref="string"/>) key, utilizing the N+1 count elimination technique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Encoding:</b> Cursors are encoded into an opaque UTF-8 byte sequence wrapped in a Base64Url string.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the string key property (e.g. <c>x => x.Slug</c>).</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token is not valid UTF-8 text.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, string>> keySelector,
+        CancellationToken cancellationToken = default) {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    string s = primary ?? string.Empty;
+                    int strByteCount = Encoding.UTF8.GetByteCount(s);
+                    using ValueBuffer<byte> buffer = new(strByteCount + sizeof(long), stackalloc byte[256]);
+                    Encoding.UTF8.GetBytes(s, buffer.Span[..strByteCount]);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer.Span[strByteCount..], tie);
+                    return CursorToken.FromBytes(buffer.Span);
+                },
+                static token => {
+                    if(token.Length < sizeof(long)) {
+                        throw new FormatException("Invalid composite string + long cursor payload.");
+                    }
+                    using ValueBuffer<byte> buffer = new(token.Length, stackalloc byte[256]);
+                    if(!token.TryDecode(buffer.Span, out int written) || written < sizeof(long)) {
+                        throw new FormatException("Invalid composite string + long cursor payload.");
+                    }
+                    int strLen = written - sizeof(long);
+                    string primary = Encoding.UTF8.GetString(buffer.Span[..strLen]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer.Span[strLen..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static str => CursorToken.FromUtf8(str ?? string.Empty),
+            cursorDecoder: static token => {
+                if(token.IsEmpty) {
+                    return string.Empty;
+                }
+
+                using ValueBuffer<byte> utf8Buffer = new(token.Length, stackalloc byte[512]);
+                if(!token.TryDecode(utf8Buffer.Span, out int bytesWritten)) {
+                    throw new FormatException("Invalid string cursor payload.");
+                }
+                return Encoding.UTF8.GetString(utf8Buffer.Span[..bytesWritten]);
+            },
+            cancellationToken);
+    }
+
     #endregion
 
     #region Keyset (Cursor) Pagination - Custom Codecs
+
+    /// <summary>
+    /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
+    /// ordered by any custom value type or strongly-typed identifier implementing <see cref="IUtf8SpanFormattable"/> and <see cref="IUtf8SpanParsable{TSelf}"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Codecs:</b> Automatically formats and parses cursor payloads directly in UTF-8 binary format
+    /// using standard .NET span interfaces, eliminating intermediate string and byte array allocations.
+    /// </para>
+    /// <para>
+    /// <b>Domain Value Objects:</b> Ideal for strongly-typed domain identifiers (e.g. <c>Ulid</c>, custom order IDs, or composite value records)
+    /// without requiring caller-provided manual encoder and decoder delegates.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
+    /// <typeparam name="TKey">The comparable key type implementing <see cref="IUtf8SpanFormattable"/> and <see cref="IUtf8SpanParsable{TSelf}"/>.</typeparam>
+    /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
+    /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
+    /// <param name="keySelector">A lambda expression identifying the custom key property.</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
+    /// <returns>
+    /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/> 
+    /// with the items window and boundary metadata.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="keySelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">Thrown when an incoming cursor token cannot be parsed into <typeparamref name="TKey"/>.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
+    /// <example>
+    /// <code>
+    /// var result = await dbContext.Invoices
+    ///     .AsNoTracking()
+    ///     .OrderBy(i => i.CustomInvoiceId)
+    ///     .ToCursorResultAsync(request, i => i.CustomInvoiceId, cancellationToken);
+    /// </code>
+    /// </example>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<CursorResult<TSource>> ToCursorResultAsync<TSource, TKey>(
+        this IQueryable<TSource> source,
+        CursorRequest request,
+        Expression<Func<TSource, TKey>> keySelector,
+        CancellationToken cancellationToken = default)
+        where TKey : struct, IUtf8SpanFormattable, IUtf8SpanParsable<TKey>, IComparable<TKey> {
+
+        Preca.ThrowIfNull(source);
+        Preca.ThrowIfNull(keySelector);
+
+        return ToCursorResultAsync(
+            source,
+            request,
+            keySelector,
+            cursorEncoder: static key => {
+                using ValueBuffer<byte> buffer = new(64, stackalloc byte[64]);
+                if(key.TryFormat(buffer.Span, out int written, default, null)) {
+                    return CursorToken.FromBytes(buffer.Span[..written]);
+                }
+                throw new InvalidOperationException($"Failed to format key of type '{typeof(TKey).Name}' into UTF-8 cursor payload.");
+            },
+            cursorDecoder: static token => {
+                if(token.IsEmpty) {
+                    throw new FormatException($"Cursor token payload is empty for key type '{typeof(TKey).Name}'.");
+                }
+                using ValueBuffer<byte> buffer = new(token.Length, stackalloc byte[64]);
+                if(!token.TryDecode(buffer.Span, out int written) || !TKey.TryParse(buffer.Span[..written], null, out TKey result)) {
+                    throw new FormatException($"Invalid UTF-8 cursor payload for key type '{typeof(TKey).Name}'.");
+                }
+                return result;
+            },
+            cancellationToken);
+    }
 
     /// <summary>
     /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> source 
@@ -396,7 +1491,7 @@ public static partial class QueryablePaginationExtensions {
             .ConfigureAwait(false);
 
         if(rawItems.Count == 0) {
-            return CursorResult<TSource>.Empty;
+            return [];
         }
 
         // 4. Detect if more records exist in the current seek direction, and drop the (+1) extra item
@@ -431,6 +1526,44 @@ public static partial class QueryablePaginationExtensions {
 
         CursorMetadata metadata = new(startCursor, endCursor, hasPrevious, hasNext);
         return new CursorResult<TSource>(new EquatableArray<TSource>(rawItems), metadata);
+    }
+
+    private static bool TryGetTieBreaker<TSource, TTieBreaker>(
+      LambdaExpression keySelector,
+      [NotNullWhen(true)] out Expression<Func<TSource, TTieBreaker>>? tieBreaker) {
+
+        PropertyInfo? pkProperty = PrimaryKeyPropertyCache.GetOrAdd(typeof(TSource), static type => {
+            PropertyInfo? prop = type.GetProperty("Id", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if(prop != null) return prop;
+
+            prop = type.GetProperty($"{type.Name}Id", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if(prop != null) return prop;
+
+            foreach(PropertyInfo p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance)) {
+                if(p.GetCustomAttribute<System.ComponentModel.DataAnnotations.KeyAttribute>() != null) {
+                    return p;
+                }
+            }
+
+            return null;
+        });
+
+        if(pkProperty != null && pkProperty.PropertyType == typeof(TTieBreaker)) {
+            if(keySelector.Body is MemberExpression memberExpr && memberExpr.Member.Name == pkProperty.Name) {
+                tieBreaker = null;
+                return false;
+            }
+
+            tieBreaker = (Expression<Func<TSource, TTieBreaker>>)GetterExpressionCache.GetOrAdd(pkProperty, static prop => {
+                ParameterExpression param = Expression.Parameter(typeof(TSource), "x");
+                MemberExpression propAccess = Expression.Property(param, prop);
+                return Expression.Lambda<Func<TSource, TTieBreaker>>(propAccess, param);
+            });
+            return true;
+        }
+
+        tieBreaker = null;
+        return false;
     }
 
     private static bool IsQueryOrderedDescending(Expression expression) {

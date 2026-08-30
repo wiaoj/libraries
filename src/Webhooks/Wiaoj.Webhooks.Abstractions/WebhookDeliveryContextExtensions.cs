@@ -1,5 +1,6 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -296,6 +297,166 @@ public static class WebhookDeliveryContextExtensions {
         foreach(KeyValuePair<string, string> kvp in headers) {
             target[kvp.Key] = kvp.Value;
         }
+    }
+
+    /// <summary>
+    /// Adds an outbound HTTP header if it does not exist, or updates it using the specified factory delegate if present.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name.</param>
+    /// <param name="addValue">The initial value to set if the header is not present.</param>
+    /// <param name="updateFactory">The factory function to compute the new value based on the existing value.</param>
+    public static void AddOrUpdateHeader(
+        this WebhookDeliveryContext context,
+        string name,
+        string addValue,
+        Func<string, string> updateFactory) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNull(addValue);
+        Preca.ThrowIfNull(updateFactory);
+
+        IDictionary<string, string> headers = context.GetOrCreateHeaders();
+        if(headers.TryGetValue(name, out string? existing)) {
+            headers[name] = updateFactory(existing);
+        }
+        else {
+            headers[name] = addValue;
+        }
+    }
+
+    /// <summary>
+    /// Appends a string value to an existing outbound HTTP header with a separator, or sets it directly if missing.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name.</param>
+    /// <param name="value">The value to append.</param>
+    /// <param name="separator">The separator used between values. Defaults to <c>", "</c>.</param>
+    public static void AppendHeader(
+        this WebhookDeliveryContext context,
+        string name,
+        string value,
+        string separator = ", ") {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNull(value);
+        Preca.ThrowIfNull(separator);
+
+        IDictionary<string, string> headers = context.GetOrCreateHeaders();
+        if(headers.TryGetValue(name, out string? existing) && !string.IsNullOrEmpty(existing)) {
+            headers[name] = $"{existing}{separator}{value}";
+        }
+        else {
+            headers[name] = value;
+        }
+    }
+
+    /// <summary>
+    /// Adds an outbound HTTP header if not already present in the delivery context.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name.</param>
+    /// <param name="value">The HTTP header value.</param>
+    /// <returns><see langword="true"/> if the header was added; <see langword="false"/> if it was already present.</returns>
+    public static bool TryAddHeader(this WebhookDeliveryContext context, string name, string value) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNull(value);
+
+        IDictionary<string, string> headers = context.GetOrCreateHeaders();
+        if(headers.ContainsKey(name)) {
+            return false;
+        }
+
+        headers[name] = value;
+        return true;
+    }
+
+    /// <summary>
+    /// Retrieves an outbound HTTP header parsed as a strongly-typed value <typeparamref name="T"/>,
+    /// or returns the specified fallback default on missing or malformed values.
+    /// </summary>
+    /// <typeparam name="T">The primitive or struct type implementing <see cref="ISpanParsable{TSelf}"/>.</typeparam>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name.</param>
+    /// <param name="defaultValue">The fallback value to return if header is missing, empty, or unparseable.</param>
+    /// <returns>The parsed typed value, or <paramref name="defaultValue"/>.</returns>
+    public static T GetHeader<T>(this WebhookDeliveryContext context, string name, T defaultValue = default)
+        where T : struct, ISpanParsable<T> {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+
+        string? rawValue = context.GetHeader(name);
+        if(string.IsNullOrWhiteSpace(rawValue)) {
+            return defaultValue;
+        }
+
+        ReadOnlySpan<char> span = rawValue.AsSpan();
+        T lastParsed = defaultValue;
+        bool foundValid = false;
+
+        while(!span.IsEmpty) {
+            int commaIndex = span.IndexOf(',');
+            ReadOnlySpan<char> token = commaIndex >= 0 ? span[..commaIndex] : span;
+            token = token.Trim().Trim('"');
+
+            if(!token.IsEmpty && T.TryParse(token, CultureInfo.InvariantCulture, out T parsed)) {
+                lastParsed = parsed;
+                foundValid = true;
+            }
+
+            if(commaIndex < 0) {
+                break;
+            }
+
+            span = span[(commaIndex + 1)..];
+        }
+
+        return foundValid ? lastParsed : defaultValue;
+    }
+
+    /// <summary>
+    /// Tries to retrieve an outbound HTTP header parsed as a strongly-typed value <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The primitive or struct type implementing <see cref="ISpanParsable{TSelf}"/>.</typeparam>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="name">The HTTP header name.</param>
+    /// <param name="value">When this method returns, contains the parsed typed value if successful; otherwise, <see langword="default"/>.</param>
+    /// <returns><see langword="true"/> if the header was found and successfully parsed; otherwise, <see langword="false"/>.</returns>
+    public static bool TryGetHeader<T>(this WebhookDeliveryContext context, string name, out T value)
+        where T : struct, ISpanParsable<T> {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+
+        string? rawValue = context.GetHeader(name);
+        if(string.IsNullOrWhiteSpace(rawValue)) {
+            value = default;
+            return false;
+        }
+
+        ReadOnlySpan<char> span = rawValue.AsSpan();
+        T lastParsed = default;
+        bool foundValid = false;
+
+        while(!span.IsEmpty) {
+            int commaIndex = span.IndexOf(',');
+            ReadOnlySpan<char> token = commaIndex >= 0 ? span[..commaIndex] : span;
+            token = token.Trim().Trim('"');
+
+            if(!token.IsEmpty && T.TryParse(token, CultureInfo.InvariantCulture, out T parsed)) {
+                lastParsed = parsed;
+                foundValid = true;
+            }
+
+            if(commaIndex < 0) {
+                break;
+            }
+
+            span = span[(commaIndex + 1)..];
+        }
+
+        value = lastParsed;
+        return foundValid;
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -649,6 +810,52 @@ public static class WebhookDeliveryContextExtensions {
         T created = factory();
         context.Items[key] = created;
         return created;
+    }
+
+    /// <summary>
+    /// Retrieves an item from <see cref="WebhookDeliveryContext.Items"/>, or computes and stores it using a factory function if missing.
+    /// </summary>
+    /// <typeparam name="T">The type of the item.</typeparam>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="key">The dictionary key.</param>
+    /// <param name="valueFactory">The factory delegate taking the key and returning the item value.</param>
+    /// <returns>The existing or newly generated item instance.</returns>
+    public static T GetOrAdd<T>(this WebhookDeliveryContext context, string key, Func<string, T> valueFactory) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(key);
+        Preca.ThrowIfNull(valueFactory);
+
+        if(context.Items.TryGetValue(key, out object? raw) && raw is T existing) {
+            return existing;
+        }
+
+        T created = valueFactory(key);
+        context.Items[key] = created;
+        return created;
+    }
+
+    /// <summary>
+    /// Adds an item to <see cref="WebhookDeliveryContext.Items"/> if missing, or updates it using the specified factory delegate if present.
+    /// </summary>
+    /// <typeparam name="T">The type of the item.</typeparam>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="key">The dictionary key.</param>
+    /// <param name="addValue">The initial value to store if the key is not present.</param>
+    /// <param name="updateValueFactory">The factory delegate to compute the updated value.</param>
+    /// <returns>The new or updated item value.</returns>
+    public static T AddOrUpdate<T>(this WebhookDeliveryContext context, string key, T addValue, Func<string, T, T> updateValueFactory) {
+        Preca.ThrowIfNull(context);
+        Preca.ThrowIfNullOrWhiteSpace(key);
+        Preca.ThrowIfNull(updateValueFactory);
+
+        if(context.Items.TryGetValue(key, out object? raw) && raw is T existing) {
+            T updated = updateValueFactory(key, existing);
+            context.Items[key] = updated;
+            return updated;
+        }
+
+        context.Items[key] = addValue;
+        return addValue;
     }
 
     private static class EmptyHeadersDictionary {

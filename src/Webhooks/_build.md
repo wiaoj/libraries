@@ -1,420 +1,277 @@
 # Wiaoj.Webhooks
 
-> Distributed, uçtan uca, %100 genişletilebilir webhook gönderim ve alım altyapısı — .NET için.
-
-Wiaoj ekosistemindeki `DistributedCounter`, `Tyto.Transports`, `Tyto.DeadLettering` ve `Wiaoj.Security` üzerine kurulu; hiçbir varsayılanı zorunlu kılmayan, her katmanı ayrı ayrı değiştirilebilir bir webhook motoru.
+Bu belge, `Wiaoj.Webhooks` motorunda tespit edilen 7 kritik mimari eksiklik ve üretim ortamı açığı için detaylandırılmış teknik geliştirme spesifikasyonudur. Her madde bağımsız bir GitHub Issue / Task olarak parçalanabilecek formatta hazırlanmıştır.
 
 ---
 
-## Felsefe
+## Issue 1: Fix Orphaned `Retrying` Jobs on Node Crash / Restart in Stale Recovery
 
-Bu kütüphane üç ilkeye sıkı sıkıya bağlı kalınarak tasarlanmıştır:
+### 1.1. Problem Tanımı
+Bir webhook teslimatı geçici bir hata aldığında (`WebhookDeliveryResult.TransientFailure`), `WebhookJobHandler` ve `RetryMiddleware` işin durumunu veritabanında `WebhookJobStatus.Retrying` olarak günceller ve gecikme süresi ile `IWebhookTransport.EnqueueAsync(job, delay)` çağrılır. 
 
-1. **Her şey bir interface arkasında yaşar.** Signing, retry, rate limit, transport, idempotency, delivery log — hiçbiri somut bir sınıfa hardcode edilmez. Varsayılan implementasyonlar sunulur, ama hiçbiri zorunlu değildir.
-2. **Konfigürasyon `IOptions<T>` ile tamamen uyumludur.** `appsettings.json`'dan, `IConfiguration`'dan, `IOptionsMonitor<T>` ile runtime'da değişen değerlerden — hepsi desteklenir. Kod içi builder ile konfigüre edilen her şey, aynı zamanda dışarıdan da override edilebilir olmalıdır.
-3. **Builder pattern, mevcut Tyto/Wiaoj sözleşmesini kırmaz.** `tyto.AddRpc(rpc => ...)` nasıl çalışıyorsa, `services.AddWiajWebhooks(webhooks => ...)` da aynı zihniyetle çalışır. Yeni bir öğrenme eğrisi yaratmak yerine, var olanı genişletir.
+Ancak, `InMemoryDelayedScheduler` içindeki gecikme süresi (örn. 5-30 dakika) işlerken sunucu pod'u yeniden başlarsa (OOM kill, deployment, crash) RAM'deki zamanlayıcı uçar. Sunucu tekrar ayağa kalktığında `StaleJobRecoveryService` ve `IWebhookStore.GetStaleJobsAsync` **yalnızca** `InFlight` ve `Queued` durumlarına bakar. `Retrying` durumundaki işler sorgulanmadığı için bu işler veritabanında sonsuza kadar `Retrying` durumunda yetim (orphan) kalır.
 
----
+### 1.2. Etkilenen Dosyalar
+- `Wiaoj.Webhooks.Abstractions/IWebhookStore.cs`
+- `Wiaoj.Webhooks/Internal/InMemoryWebhookStore.cs`
+- `Wiaoj.Webhooks/Internal/StaleJobRecoveryService.cs`
+- `Wiaoj.Webhooks/Recovery/WebhookRecoveryOptions.cs`
 
-## İçindekiler
-
-- [Paket Mimarisi](#paket-mimarisi)
-- [Hızlı Başlangıç](#hızlı-başlangıç)
-- [Çekirdek Soyutlamalar](#çekirdek-soyutlamalar)
-- [Options Pattern Uyumu](#options-pattern-uyumu)
-- [Pipeline Mimarisi](#pipeline-mimarisi)
-- [Genişletme Noktaları](#genişletme-noktaları)
-- [TDD Roadmap: A'dan Z'ye](#tdd-roadmap-adan-zye)
-- [Bu Kütüphane Neyin Kapısını Açıyor?](#bu-kütüphane-neyin-kapısını-açıyor)
-
----
-
-## Paket Mimarisi
-
-```
-Wiaoj.Webhooks.Abstractions
-    └─ Sıfır bağımlılık. Sadece interface + record + enum.
-
-Wiaoj.Webhooks
-    └─ Core engine: pipeline runner, default implementasyonlar, in-memory fallback'ler.
-
-Wiaoj.Webhooks.Signing.Hmac
-Wiaoj.Webhooks.Signing.Ed25519
-    └─ IWebhookSigner implementasyonları (opsiyonel, takılabilir).
-
-Wiaoj.Webhooks.RateLimiting
-    └─ Wiaoj.DistributedCounter üzerine kurulu IWebhookRateLimiter.
-
-Wiaoj.Webhooks.Transports.Postgres
-Wiaoj.Webhooks.Transports.RabbitMq
-Wiaoj.Webhooks.Transports.Kafka
-Wiaoj.Webhooks.Transports.InMemory
-    └─ Tyto.Transports.* üzerine kurulu IWebhookTransport implementasyonları.
-
-Wiaoj.Webhooks.DeadLettering
-    └─ Tyto.DeadLettering entegrasyonu.
-
-Wiaoj.Webhooks.Persistence.EntityFrameworkCore
-    └─ Delivery log, endpoint kaydı, attempt history için EF Core store.
-
-Wiaoj.Webhooks.Inbound.AspNetCore
-    └─ Gelen webhook'ları karşılama, signature doğrulama middleware'i.
-
-Wiaoj.Webhooks.Inbound.Providers.Stripe => Dropped
-Wiaoj.Webhooks.Inbound.Providers.GitHub => Dropped
-    └─ Sağlayıcıya özel signature/format adaptörleri.
-
-Wiaoj.Webhooks.DependencyInjection => Wiaoj.Webhooks paketi içine alındı
-    └─ AddWiajWebhooks(...) builder giriş noktası, tüm alt paketleri birbirine bağlar.
-
-Wiaoj.Webhooks.Testing
-    └─ TDD için: InMemoryWebhookTransport, FakeClock, deterministic retry test yardımcıları.
-```
-
-**Kural:** `Wiaoj.Webhooks` çekirdek paketi hiçbir zaman Redis, Postgres, RabbitMq gibi somut bir teknolojiye referans vermez. Bunlar hep satellite paketlerdedir. Çekirdek sadece interface'leri bilir.
-
----
-
-## Hızlı Başlangıç
+### 1.3. Teknik Gereksinimler & Değişiklikler
+1. `WebhookJobRecord.NextAttemptAt` alanı `RetryMiddleware` veya `WebhookJobHandler` tarafından hesaplanan gecikme ile set edilmelidir (`now.Add(nextDelay)`).
+2. `IWebhookStore.GetStaleJobsAsync` imzası veya implementasyonu, `Status == WebhookJobStatus.Retrying && NextAttemptAt <= now` olan işleri de kapsayacak şekilde güncellenmelidir.
+3. `StaleJobRecoveryService`, vadesi geçmiş `Retrying` işlerini `Queued` durumuna çekip `IWebhookTransport`'a tekrar sokmalıdır.
 
 ```csharp
-builder.Services.AddWiajWebhooks(webhooks =>
-{
-    webhooks.UseSigning(s => s.UseHmacSha256());
-    webhooks.UseTransport("postgres");
-    webhooks.UseRateLimiting(rl => rl.PerEndpoint(limit: 50, window: TimeSpan.FromSeconds(1)));
-    webhooks.UseDeadLettering();
+// IWebhookStore.cs sözleşme güncellemesi:
+Task<IReadOnlyList<WebhookJobRecord>> GetStaleJobsAsync(
+    DateTimeOffset? inFlightThreshold,
+    DateTimeOffset? queuedThreshold,
+    DateTimeOffset? retryingDueThreshold, // YENİ
+    int maxCount,
+    CancellationToken cancellationToken = default);
+```
+
+```csharp
+// InMemoryWebhookStore.cs filtre güncellemesi:
+bool isDueRetrying = retryingDueThreshold.HasValue
+    && job.Status == WebhookJobStatus.Retrying
+    && job.NextAttemptAt.HasValue
+    && job.NextAttemptAt.Value <= retryingDueThreshold.Value
+    && (!job.LockExpiresAt.HasValue || (inFlightThreshold.HasValue && job.LockExpiresAt.Value < inFlightThreshold.Value));
+```
+
+### 1.4. Kabul Kriterleri (Acceptance Criteria)
+- [ ] Bir iş `Retrying` durumuna geçerken `NextAttemptAt` alanı zorunlu olarak doldurulmalıdır.
+- [ ] Gecikmeli kuyrukta beklerken transport çökerse, `StaleJobRecoveryService` süresi dolan `Retrying` işlerini başarıyla toplayıp kuyruğa tekrar basmalıdır.
+- [ ] Süresi henüz dolmamış (`NextAttemptAt > now`) `Retrying` işleri recovery tarafından erken süpürülmemelidir.
+- [ ] Unit & integration testleri: `FakeTimeProvider` ile zamanda ileri gidildiğinde `Retrying` işlerin transport'a yeniden ulaştığı doğrulanmalıdır.
+
+---
+
+## Issue 2: Bounded Capacity & Overflow Protection for `InMemoryDelayedScheduler`
+
+### 2.1. Problem Tanımı
+`Wiaoj.Webhooks.Transports.InMemory` altındaki `InMemoryDelayedScheduler`, arka planda bir `PriorityQueue<ScheduledJobItem, MonotonicTimestamp>` kullanır. Normal kanal için `Capacity` sınırlaması varken, gecikmeli zamanlayıcı için herhangi bir sınır yoktur (unbounded). Yüksek transient hata anlarında yüz binlerce retry işi RAM'de birikerek OOM (Out Of Memory) çökmesine yol açabilir.
+
+### 2.2. Etkilenen Dosyalar
+- `Wiaoj.Webhooks.Transports.InMemory/InMemoryWebhookTransportOptions.cs`
+- `Wiaoj.Webhooks.Transports.InMemory/Internal/InMemoryDelayedScheduler.cs`
+
+### 2.3. Teknik Gereksinimler & Değişiklikler
+1. `InMemoryWebhookTransportOptions` sınıfına `MaxDelayedCapacity` (varsayılan: 50.000) ve `DelayedOverflowPolicy` eklenmelidir.
+2. Kapasite aşıldığında:
+   - `DropOldest`: En ileri tarihteki işi düşürür.
+   - `Reject`: İstisna fırlatır veya transport reddeder.
+   - `PersistOnly`: RAM'e almaz, işi sadece DB'de `Retrying` olarak bırakır (Issue 1'deki recovery servisi zamanı gelince DB'den okur).
+
+```csharp
+public enum DelayedQueueOverflowPolicy {
+    Reject = 0,
+    DropOldest = 1,
+    PersistOnlyFallback = 2
+}
+
+public sealed class InMemoryWebhookTransportOptions {
+    // ...
+    /// <summary>Gecikmeli kuyrukta tutulabilecek maksimum iş sayısı.</summary>
+    public int MaxDelayedCapacity { get; set; } = 50_000;
+
+    /// <summary>Gecikmeli kuyruk dolduğunda izlenecek strateji.</summary>
+    public DelayedQueueOverflowPolicy DelayedOverflowPolicy { get; set; } = DelayedQueueOverflowPolicy.PersistOnlyFallback;
+}
+```
+
+### 2.4. Kabul Kriterleri (Acceptance Criteria)
+- [ ] Gecikmeli kuyruk eleman sayısı `MaxDelayedCapacity` değerini aşamaz.
+- [ ] `PersistOnlyFallback` modunda bellek dolduğunda sistem çökmez, iş bellekten atılsa bile DB'deki `NextAttemptAt` sayesinde kaybolmaz.
+- [ ] Bellek baskısı durumunda diagnostic log üretilmelidir.
+
+---
+
+## Issue 3: Fair-Share Scheduling & Tenant Starvation Protection (Noisy Neighbor Defense)
+
+### 3.1. Problem Tanımı
+Mevcut `InMemoryWebhookTransport` ve `ShardedWebhookTransport`, FIFO sırasını korur ancak tenant/endpoint bazlı adil dağıtım (fair queueing) yapmaz. Eğer Tenant A tek seferde 1.000.000 webhook dispatch ederse, tüm kanallar ve worker havuzu Tenant A ile dolar. Tenant B'nin attığı tek bir acil `order.paid` eventi, Tenant A'nın yığınının arkasında saatlerce açlık (starvation) çeker.
+
+### 3.2. Etkilenen Dosyalar
+- `Wiaoj.Webhooks.Transports.InMemory/ShardedWebhookTransport.cs`
+- `Wiaoj.Webhooks.Transports.InMemory/InMemoryWebhookConsumer.cs`
+- `Wiaoj.Webhooks.Transports.InMemory/InMemoryWebhookTransportOptions.cs`
+
+### 3.3. Teknik Gereksinimler & Değişiklikler
+1. Endpoint/Tenant bazlı akış kontrolü için **Deficit Round Robin (DRR)** veya **Weighted Fair Queueing (WFQ)** mantığı eklenmelidir.
+2. `ShardedWebhookTransport`, hash partition yaparken aynı zamanda tek bir partition key'in shard kapasitesini domine etmesini sınırlandırmalıdır.
+3. Worker havuzunun aynı partition key'i işlerken araya diğer partition key'lerden iş alabilmesi sağlanmalıdır (Fair Interleaving).
+
+```csharp
+public sealed class FairQueueingOptions {
+    /// <summary>Tek bir endpoint/partition'ın aynı anda işlenebilecek maksimum concurrent worker kotası.</summary>
+    public int MaxConcurrentExecutionsPerPartition { get; set; } = 2;
+
+    /// <summary>Partition başına anlık tampon limiti.</summary>
+    public int MaxBufferedJobsPerPartition { get; set; } = 1_000;
+}
+```
+
+### 3.4. Kabul Kriterleri (Acceptance Criteria)
+- [ ] Tenant A 10.000 iş kuyrukladıktan sonra Tenant B 1 iş kuyrukladığında, Tenant B'nin işi Tenant A'nın tüm işleri bitmeden önce (en geç X ms içinde) işlenmelidir.
+- [ ] Partition içi FIFO bozulmadan, partition'lar arası adil dağıtım sağlanmalıdır.
+
+---
+
+## Issue 4: Historical Data Retention, Pruning & Storage Management
+
+### 4.1. Problem Tanımı
+`IWebhookStore` üzerinde `SaveAsync` ve `RecordAttemptAsync` ile sürekli veri yazılır ancak eski/tamamlanmış işleri ve attempt loglarını temizleyen hiçbir sözleşme veya mekanizma yoktur. Yüksek throughput'lu ortamlarda `WebhookJobRecord` ve `Attempts` tabloları diski doldurur, index'leri yavaşlatır ve `GetStaleJobsAsync` sorgularının performansını düşürür.
+
+### 4.2. Etkilenen Dosyalar
+- `Wiaoj.Webhooks.Abstractions/IWebhookStore.cs`
+- `Wiaoj.Webhooks/Internal/InMemoryWebhookStore.cs`
+- `Wiaoj.Webhooks/Internal/NullWebhookStore.cs`
+- `Wiaoj.Webhooks/Retention/*` *(YENİ Dizin)*
+
+### 4.3. Teknik Gereksinimler & Değişiklikler
+1. `IWebhookStore` arabirimine temizleme metodu eklenmelidir:
+   ```csharp
+   Task<int> PruneJobsAsync(
+       DateTimeOffset deliveredBefore,
+       DateTimeOffset deadLetteredBefore,
+       int batchSize,
+       CancellationToken cancellationToken = default);
+   ```
+2. Arka planda periyodik olarak çalışan bir `WebhookRetentionCleanerService : BackgroundService` eklenmelidir.
+3. Builder API'sine `UseRetentionPruning(...)` extension metodu eklenmelidir.
+
+```csharp
+public sealed class WebhookRetentionOptions {
+    public TimeSpan PollingInterval { get; set; } = TimeSpan.FromHours(1);
+    public TimeSpan DeliveredRetention { get; set; } = TimeSpan.FromDays(7);
+    public TimeSpan DeadLetterRetention { get; set; } = TimeSpan.FromDays(30);
+    public int BatchSize { get; set; } = 1000;
+}
+```
+
+```csharp
+// Builder API Kullanımı:
+webhooks.UseRetentionPruning(options => {
+    options.DeliveredRetention = TimeSpan.FromDays(3);
+    options.DeadLetterRetention = TimeSpan.FromDays(14);
 });
 ```
 
-```csharp
-public sealed record OrderCreatedWebhookEvent(string OrderId, decimal Amount) : IWebhookEvent
-{
-    public static string EventName => "order.created";
-}
-
-// Gönderim
-await dispatcher.DispatchAsync(endpointId, new OrderCreatedWebhookEvent("ORD-1", 42.50m), ct);
-```
-
-Bu iki blok dışında hiçbir şey yazmadan; imzalama, retry, rate limit, dead letter, delivery log otomatik çalışır. İstenirse her biri tek tek override edilebilir.
+### 4.4. Kabul Kriterleri (Acceptance Criteria)
+- [ ] `Delivered` olup saklama süresi dolan kayıtlar ve alt attempt history listeleri DB'den silinmelidir.
+- [ ] `DeadLettered` kayıtlar kendi bağımsız saklama süresine göre temizlenmelidir.
+- [ ] `Queued`, `InFlight`, `Retrying` durumundaki aktif işler ASLA silinmemelidir.
+- [ ] Silme işlemi tek transaction'da DB'yi kilitlememek için `batchSize` parçalarıyla yürütülmelidir.
 
 ---
 
-## Çekirdek Soyutlamalar
+## Issue 5: Dual-Secret Signing for Zero-Downtime Outbound Secret Rotation
 
-### Olay tanımı — tip güvenli, magic string yok
+### 5.1. Problem Tanımı
+Alıcı tarafında (`HmacWebhookSignerBase`), HTTP header'ındaki birden fazla `v1=` imzasını kontrol etme desteği mevcuttur (Rotation desteği). Ancak gönderici (sender) tarafında `WebhookEndpoint` yalnızca tek bir `Secret` tutar. Bir müşterinin anahtarı sızdığında veya periyodik değiştirildiğinde, anlık anahtar değişimi müşterinin alıcı tarafında `401 Unauthorized` hatalarına yol açar. Sıfır kesinti için göndericinin geçiş süresince hem eski hem yeni anahtarla imza basabilmesi gerekir.
 
-```csharp
-public interface IWebhookEvent
-{
-    static abstract string EventName { get; }
-}
-```
+### 5.2. Etkilenen Dosyalar
+- `Wiaoj.Webhooks.Abstractions/WebhookEndpoint.cs`
+- `Wiaoj.Webhooks/WebhookEndpointBuilder.cs`
+- `Wiaoj.Webhooks/Signing/SigningMiddleware.cs`
+- `Wiaoj.Webhooks.Abstractions/IWebhookSigner.cs`
 
-`Prism.AspNetCore`'daki `IPrismRateLimitPolicy` (`static abstract string PolicyName`) pattern'inin birebir devamı — aynı disiplin, aynı imza stili.
+### 5.3. Teknik Gereksinimler & Değişiklikler
+1. `WebhookEndpoint` modeline opsiyonel `SecondarySecret` eklenmelidir:
+   ```csharp
+   public sealed record WebhookEndpoint(
+       WebhookEndpointId Id,
+       Uri TargetUrl,
+       EncryptedSecret<WebhookSigningContext> Secret,
+       EncryptedSecret<WebhookSigningContext>? SecondarySecret = null, // YENİ
+       IWebhookSigner? CustomSigner = null,
+       IReadOnlyDictionary<string, string>? CustomHeaders = null);
+   ```
+2. `WebhookEndpointBuilder` sınıfına `.WithSecondarySecret(...)` desteği eklenmelidir.
+3. `SigningMiddleware`, eğer endpoint üzerinde `SecondarySecret` tanımlıysa her iki anahtarla da imza üretmeli ve header değerini birleştirmelidir:
+   ```http
+   Webhook-Signature: t=1724190000,v1=primary_hash,v1=secondary_hash
+   ```
 
-### Dispatcher — tek giriş noktası
-
-```csharp
-public interface IWebhookDispatcher
-{
-    Task<WebhookDeliveryHandle> DispatchAsync<TEvent>(
-        WebhookEndpointId endpointId,
-        TEvent payload,
-        WebhookDispatchOptions? overrides = null,
-        CancellationToken cancellationToken = default)
-        where TEvent : IWebhookEvent;
-}
-```
-
-### Signer — algoritma tamamen değiştirilebilir
-
-```csharp
-public interface IWebhookSigner
-{
-    WebhookSignature Sign(ReadOnlySpan<byte> payload, string secret, DateTimeOffset timestamp);
-    bool Verify(ReadOnlySpan<byte> payload, string signatureHeader, string secret);
-}
-```
-
-### Retry stratejisi — pluggable
-
-```csharp
-public interface IRetryPolicy
-{
-    bool ShouldRetry(WebhookDeliveryAttempt attempt);
-    TimeSpan GetNextDelay(WebhookDeliveryAttempt attempt);
-}
-```
-
-### Rate limiter — DistributedCounter'ı sarmalar, ama zorunlu değil
-
-```csharp
-public interface IWebhookRateLimiter
-{
-    ValueTask<RateLimitDecision> TryAcquireAsync(
-        WebhookEndpointId endpointId,
-        CancellationToken cancellationToken = default);
-}
-```
-
-### Transport — nereye kuyruklanacağı
-
-```csharp
-public interface IWebhookTransport
-{
-    Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay = null, CancellationToken cancellationToken = default);
-}
-```
-
-### Idempotency
-
-```csharp
-public interface IIdempotencyKeyGenerator
-{
-    string GenerateKey(WebhookEndpointId endpointId, IWebhookEvent @event);
-}
-
-public interface IIdempotencyStore
-{
-    ValueTask<bool> TryMarkProcessedAsync(string key, TimeSpan window, CancellationToken cancellationToken = default);
-}
-```
-
-### Delivery log — gözlemlenebilirlik
-
-```csharp
-public interface IWebhookDeliveryStore
-{
-    Task RecordAttemptAsync(WebhookDeliveryAttempt attempt, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<WebhookDeliveryAttempt>> GetHistoryAsync(WebhookDeliveryHandle handle, CancellationToken cancellationToken = default);
-}
-```
-
-Her interface **tek sorumluluk** taşır. Hiçbiri diğerinin varlığını bilmez — pipeline onları birbirine bağlar.
+### 5.4. Kabul Kriterleri (Acceptance Criteria)
+- [ ] `SecondarySecret` tanımlandığında, giden istekte aynı timestamp ile üretilmiş 2 adet `v1` (veya ilgili scheme) imzası yer almalıdır.
+- [ ] Alıcı tarafı bu imzalardan herhangi biriyle doğrulamayı geçerse istek kabul edilmelidir.
+- [ ] `SecondarySecret` null olduğunda performans kaybı veya fazladan imzalama maliyeti oluşmamalıdır.
 
 ---
 
-## Options Pattern Uyumu
+## Issue 6: Endpoint Health Lifecycle & Persistent Auto-Quarantining
 
-Builder API'si sadece `IOptions<T>` üzerine ince bir syntactic sugar katmanıdır. Her `Use...` çağrısı aslında arkada bir options sınıfını dolduruyor:
+### 6.1. Problem Tanımı
+`Wiaoj.Resilience` devre kesicisi (`CircuitBreakerMiddleware`) sadece **o anki process'in RAM'inde** yaşar. Bir hedef endpoint kalıcı olarak çökmüşse (404 Not Found, 410 Gone, DNS Unresolved), uygulama restart olduğunda devre kesici sıfırlanır ve sistem aynı ölü URL'e binlerce gereksiz HTTP isteği, DB kaydı ve retry yükü bindirmeye devam eder.
 
-```csharp
-public sealed class WebhookRetryOptions
-{
-    public TimeSpan InitialDelay { get; set; } = TimeSpan.FromSeconds(30);
-    public TimeSpan MaxDelay { get; set; } = TimeSpan.FromHours(2);
-    public int MaxAttempts { get; set; } = 8;
-    public JitterStrategy Jitter { get; set; } = JitterStrategy.Full;
-}
-```
+### 6.2. Etkilenen Dosyalar
+- `Wiaoj.Webhooks.Abstractions/WebhookEndpoint.cs`
+- `Wiaoj.Webhooks.Abstractions/PermanentFailureReason.cs`
+- `Wiaoj.Webhooks/Internal/WebhookDispatcher.cs`
+- `Wiaoj.Webhooks/Health/*` *(YENİ Dizin)*
 
-Bu sayede aynı ayar üç farklı yoldan yapılabilir, hepsi eşdeğerdir:
+### 6.3. Teknik Gereksinimler & Değişiklikler
+1. Endpoint için bir sağlık durumu enum'ı tanımlanmalıdır:
+   ```csharp
+   public enum WebhookEndpointStatus {
+       Active = 0,
+       Degraded = 1,
+       Suspended = 2 // Karantinaya alınmış (Ölü)
+   }
+   ```
+2. Arka arkaya N kez kalıcı hata (`PermanentFailure`) alan veya X gün boyunca hiç başarılı teslimat yapamayan endpoint'ler `Suspended` durumuna geçirilmelidir.
+3. `WebhookDispatcher.DispatchAsync`, hedef endpoint `Suspended` ise ağa çıkmadan veya DB'ye job yazmadan isteği fast-reject etmeli (`WebhookEndpointSuspendedException`) veya doğrudan Dead-Letter'a kaydetmelidir.
+4. `dispatcher.PingAsync(endpointId)` başarılı olursa endpoint tekrar `Active` durumuna dönebilmelidir.
 
-```csharp
-// 1. Builder ile (kod içi, derleme zamanı güvenli)
-webhooks.UseRetry(r => r.UseExponentialBackoff(o => o.MaxAttempts = 10));
-
-// 2. appsettings.json ile
-services.Configure<WebhookRetryOptions>(configuration.GetSection("Webhooks:Retry"));
-
-// 3. Runtime'da IOptionsMonitor ile canlı değişim
-services.Configure<WebhookRetryOptions>(o => o.MaxAttempts = 10);
-```
-
-```json
-{
-  "Webhooks": {
-    "Retry": {
-      "InitialDelay": "00:00:30",
-      "MaxAttempts": 10,
-      "Jitter": "Full"
-    }
-  }
-}
-```
-
-`IWebhookRateLimiter`, `IRetryPolicy` gibi servisler `IOptionsMonitor<T>` inject ederek çalışır, böylece **restart gerekmeden** limit/backoff değerleri production'da güncellenebilir.
+### 6.4. Kabul Kriterleri (Acceptance Criteria)
+- [ ] Kalıcı olarak çöken endpoint'ler belirli eşik aşıldığında kalıcı olarak `Suspended` durumuna geçmelidir.
+- [ ] `Suspended` endpoint'lere dispatch edilen işler gereksiz socket/transport trafiği yaratmamalıdır.
+- [ ] Diagnostic log ve metrik üretilmelidir (`wiaoj.webhooks.endpoint.suspended.count`).
 
 ---
 
-## Pipeline Mimarisi
+## Issue 7: Outbound HTTP Delivery Coalescing & Target Batch POST
 
-Gönderim akışı, ASP.NET Core middleware'ine benzer şekilde **outbound pipeline** olarak kurulur. Sıra değiştirilebilir, adım eklenip çıkarılabilir:
+### 7.1. Problem Tanımı
+`IWebhookDispatcher.DispatchBatchAsync` ile 500 domain eventi tek bir veritabanı kaydı ve transport enqueue işlemiyle sisteme alınabilir. Ancak consumer katmanında bu 500 iş, hedef endpoint'e **500 ayrı tekil HTTP POST isteği** olarak gönderilir. Yüksek hacimli B2B entegrasyonlarında aynı hedefe saniyede yüzlerce tekil HTTP bağlantısı açmak socket tükenmesine ve hedef sunucuda rate-limit aşımına neden olur.
 
-```csharp
-webhooks.UsePipeline(pipeline =>
-{
-    pipeline.Use<IdempotencyMiddleware>();
-    pipeline.Use<RateLimitMiddleware>();
-    pipeline.Use<SigningMiddleware>();
-    pipeline.Use<CustomAuditMiddleware>();   // kullanıcı kendi middleware'ini ekleyebilir
-    pipeline.Use<HttpDeliveryMiddleware>();
-    pipeline.Use<RetrySchedulingMiddleware>();
-});
-```
+### 7.2. Etkilenen Dosyalar
+- `Wiaoj.Webhooks.Abstractions/IWebhookDeliverer.cs`
+- `Wiaoj.Webhooks/Internal/HttpWebhookDeliverer.cs`
+- `Wiaoj.Webhooks/Internal/BatchHttpWebhookDeliverer.cs` *(YENİ Sınıf)*
+- `Wiaoj.Webhooks/DependencyInjection/WebhookBuilderExtensions.cs`
 
-Her middleware aynı sözleşmeye uyar:
+### 7.3. Teknik Gereksinimler & Değişiklikler
+1. Birden fazla payload'ı tek bir JSON array gövdesinde (`[ {event1}, {event2} ]`) toplayıp tek HTTP POST ile ileten `BatchHttpWebhookDeliverer` eklenmelidir.
+2. N adet payload'ın tek istekte gitmesi durumunda imzalama algoritması toplu gövde üzerinden tek imza üretmelidir.
+3. Yanıt HTTP 200 dönerse gruptaki tüm işler `Delivered` olarak işaretlenmeli, HTTP 5xx dönerse tüm grup retry'a alınmalıdır.
+4. Builder üzerinden konfigüre edilebilmelidir:
+   ```csharp
+   webhooks.UseBatchHttpDelivery(options => {
+       options.MaxBatchSize = 50;
+       options.LingerTimeout = TimeSpan.FromMilliseconds(100);
+   });
+   ```
 
-```csharp
-public interface IWebhookMiddleware
-{
-    Task InvokeAsync(WebhookDeliveryContext context, WebhookDelegate next);
-}
-```
-
-`WebhookDeliveryContext` içinde payload, endpoint, attempt geçmişi, cancellation token ve middleware'lerin birbirine veri taşıyabileceği bir `Items` dictionary'si bulunur — tıpkı `HttpContext.Items` gibi.
-
-**Neden bu şekilde:** Her middleware izole test edilebilir (`IdempotencyMiddleware`'i tek başına, sahte `next` delegesiyle test edebilirsiniz), sıralama açıkça görülebilir, ve yeni bir gereksinim geldiğinde (mesela "gönderim öncesi payload'ı zenginleştir") mevcut hiçbir şeyi bozmadan araya yeni middleware eklenebilir.
-
----
-
-## Genişletme Noktaları
-
-| Ne değiştirmek istiyorsun? | Hangi interface'i implemente et |
-|---|---|
-| İmzalama algoritmasını | `IWebhookSigner` |
-| Retry/backoff stratejisini | `IRetryPolicy` |
-| Rate limit algoritmasını | `IWebhookRateLimiter` |
-| Kuyruklama backend'ini | `IWebhookTransport` |
-| Idempotency key üretimini | `IIdempotencyKeyGenerator` |
-| Idempotency depolamayı | `IIdempotencyStore` |
-| Delivery log depolamayı | `IWebhookDeliveryStore` |
-| Pipeline'a yeni adım eklemeyi | `IWebhookMiddleware` |
-| Gelen webhook doğrulamasını | `IInboundSignatureVerifier` |
-| Payload serileştirmeyi | `IWebhookPayloadSerializer` |
-
-Her satırdaki interface, `Wiaoj.Webhooks.Abstractions`'da tanımlıdır ve DI konteynerine `services.Replace<TInterface, TImplementation>()` ile veya builder üzerinden (`webhooks.UseSigner<TCustomSigner>()`) enjekte edilir. Kütüphanenin hiçbir yerinde `new HmacSigner()` gibi somut bir tip hardcode edilmez.
+### 7.4. Kabul Kriterleri (Acceptance Criteria)
+- [ ] Aynı hedefe yönelik kuyrukta bekleyen işler belirlenen `MaxBatchSize` ve `LingerTimeout` limitlerine göre tek HTTP POST altında birleştirilmelidir.
+- [ ] Bireysel endpoint bazında toplu gönderim desteği açılıp kapatılabilmelidir (Geriye dönük uyumluluk).
+- [ ] Tekil batch gönderiminde oluşan ağ hatası, batch içerisindeki tüm job attempt kayıtlarına doğru şekilde yansıtılmalıdır.
 
 ---
 
-## TDD Roadmap: A'dan Z'ye
+## Öncelik ve Yol Haritası Önerisi
 
-Her faz, önce testlerle başlar (`Wiaoj.Webhooks.Testing` paketindeki sahte implementasyonlarla), sonra gerçek implementasyon yazılır. Hiçbir faz bir öncekini bozmadan tamamlanmalıdır.
-
-### Faz 0 — Abstractions İskeleti
-- [ ] Tüm interface'leri, record'ları, enum'ları `Wiaoj.Webhooks.Abstractions`'a yaz.
-- [ ] Sıfır implementasyon, sadece sözleşme.
-- [ ] `Wiaoj.Webhooks.Testing`: `InMemoryWebhookTransport`, `FakeTimeProvider`, `NullSigner` gibi test double'ları hazırla.
-- **Çıktı:** Derlenen ama çalışmayan bir iskelet. Testler henüz kırmızı.
-
-### Faz 1 — Çekirdek Dispatch (Signing + Transport olmadan)
-- [ ] `WebhookDispatcher.DispatchAsync` — sadece `IWebhookTransport.EnqueueAsync` çağırsın.
-- [ ] Test: "Dispatch edilen event, transport'a doğru payload ile ulaşıyor mu?"
-- [ ] `InMemoryWebhookTransport` ile tamamen izole, gerçek ağ/DB olmadan test edilir.
-- **Çıktı:** `dispatcher.DispatchAsync(...)` çalışıyor, ama henüz HTTP göndermiyor.
-
-### Faz 2 — HTTP Delivery Middleware
-- [ ] `HttpDeliveryMiddleware` — `HttpClient` ile gerçek POST atar.
-- [ ] Test: `HttpMessageHandler` mock'lanarak 200/4xx/5xx senaryoları.
-- [ ] Timeout, cancellation, response body limit testleri.
-- **Çıktı:** Uçtan uca gerçek bir HTTP isteği gönderilebiliyor (henüz retry/signing yok).
-
-### Faz 3 — Signing
-- [ ] `IWebhookSigner` + `HmacSha256Signer` implementasyonu.
-- [ ] Timestamp + body imzaya dahil edilir (replay koruması).
-- [ ] Test: Aynı payload, farklı secret → farklı imza. Timestamp değişince imza değişir. `Verify` doğru/yanlış secret ile doğru sonuç döner.
-- [ ] **Kritik test:** Clock skew toleransı — imza üretilirken kullanılan timestamp ile doğrulama arasında X dakikadan fazla fark varsa reddedilmeli.
-- **Çıktı:** Gönderilen her istek `Wiaoj-Signature` header'ı taşıyor, doğrulanabiliyor.
-
-### Faz 4 — Retry Orchestration
-- [ ] `IRetryPolicy` + `ExponentialBackoffRetryPolicy`.
-- [ ] `RetrySchedulingMiddleware` — hata durumunda `IWebhookTransport.EnqueueAsync(job, delay)` ile yeniden kuyruklama.
-- [ ] Test: `FakeTimeProvider` ile "N. deneme sonrası doğru gecikme hesaplanıyor mu?", "MaxAttempts aşılınca retry durmalı mı?"
-- [ ] Jitter testleri: aynı input'la art arda çağrılan `GetNextDelay` deterministik olmayan ama sınırlar içinde sonuç vermeli.
-- **Çıktı:** Başarısız teslimatlar otomatik olarak, backoff ile tekrar deneniyor.
-
-### Faz 5 — Dead Lettering
-- [ ] `Tyto.DeadLettering` entegrasyonu — `MaxAttempts` aşılınca job'ın dead letter'a düşmesi.
-- [ ] Test: "Son deneme de başarısız olursa, dead letter store'a doğru sebep/açıklama ile kayıt düşüyor mu?"
-- **Çıktı:** Kalıcı başarısızlıklar kaybolmuyor, izlenebilir hale geliyor.
-
-### Faz 6 — Idempotency
-- [ ] `IIdempotencyKeyGenerator` (varsayılan: event ID sabit, attempt numarası dahil değil).
-- [ ] `IdempotencyMiddleware` — aynı key ile ikinci kez dispatch edilirse pipeline'ın erken kesilmesi (veya aynı handle'ın döndürülmesi).
-- [ ] Test: Aynı event iki kez dispatch edilirse transport'a sadece bir kez ulaşmalı (concurrency-safe: iki paralel dispatch aynı anda gelirse race condition testi).
-- **Çıktı:** Duplicate event'ler güvenle engelleniyor.
-
-### Faz 7 — Distributed Rate Limiting
-- [ ] `IWebhookRateLimiter` + `DistributedCounter` tabanlı implementasyon.
-- [ ] `RateLimitMiddleware` — limit dolduğunda pipeline'ı durdurup job'ı gecikmeli olarak yeniden kuyruklama.
-- [ ] Test: `IDistributedCounter` sahte implementasyonuyla "limit dolunca dispatch reddediliyor mu, doğru `RetryAfter` dönüyor mu?"
-- [ ] Entegrasyon testi (gerçek Redis ile, `Testcontainers` kullanılarak): Çoklu instance simülasyonu, gerçekten distributed çalıştığının kanıtı.
-- **Çıktı:** Hedef URL bazlı, instance sayısından bağımsız gerçek rate limit.
-
-### Faz 8 — Delivery Log & Persistence
-- [ ] `IWebhookDeliveryStore` + EF Core implementasyonu.
-- [ ] Her attempt'in (status code, latency, response body özeti, hata mesajı) kaydı.
-- [ ] Test: "N başarısız + 1 başarılı denemeden sonra history doğru sırada, doğru veriyle dönüyor mu?"
-- **Çıktı:** Her webhook'un tam denem geçmişi sorgulanabilir.
-
-### Faz 9 — Options & Runtime Konfigürasyon
-- [ ] Tüm middleware'lerin `IOptionsMonitor<T>` kullanacak şekilde refactor edilmesi.
-- [ ] Test: appsettings.json'dan okunan değerlerin doğru bind edildiği, runtime'da `IOptionsMonitor.OnChange` tetiklendiğinde davranışın güncellendiği.
-- **Çıktı:** Restart gerektirmeden production ayarları değiştirilebiliyor.
-
-### Faz 10 — Pipeline Genişletilebilirliği
-- [ ] `IWebhookMiddleware` sözleşmesinin son hali, sıralamanın builder üzerinden tam kontrolü.
-- [ ] Test: Özel bir middleware eklenip pipeline'a enjekte edildiğinde, doğru sırada çalıştığının doğrulanması.
-- [ ] Negatif test: Bir middleware `next()` çağırmazsa pipeline'ın orada durması (short-circuit senaryosu).
-- **Çıktı:** Kullanıcılar kendi cross-cutting concern'lerini (audit, custom header enjeksiyonu, PII masking) kütüphaneyi fork etmeden ekleyebiliyor.
-
-### Faz 11 — Inbound (Gelen Webhook) Desteği
-- [ ] `Wiaoj.Webhooks.Inbound.AspNetCore`: `MapWebhookReceiver<TVerifier>(path)`.
-- [ ] `IInboundSignatureVerifier` sözleşmesi + generic HMAC doğrulayıcı.
-- [ ] Test: Geçerli/geçersiz imza, eksik header, body tamperlanmış senaryoları.
-- [ ] Raw body'nin middleware pipeline'ında bozulmadan (buffering) okunduğunun testi.
-- **Çıktı:** Kendi API'nize gelen 3. parti webhook'ları güvenle karşılayabiliyorsunuz.
-
-### Faz 12 — Sağlayıcı Adaptörleri
-- [ ] `Wiaoj.Webhooks.Inbound.Providers.Stripe`, `.GitHub` — her biri kendi imza formatını `IInboundSignatureVerifier` üzerinden implemente eder.
-- [ ] Test: Her sağlayıcının gerçek dokümantasyonundaki örnek payload + imza çiftleriyle doğrulama (fixture-based test).
-- **Çıktı:** Yaygın sağlayıcılardan gelen webhook'lar sıfır ekstra kod ile doğrulanabiliyor.
-
-### Faz 13 — Uçtan Uca Entegrasyon Testleri
-- [ ] `Testcontainers` ile gerçek Postgres/RabbitMq/Redis üzerinde tam senaryo: dispatch → sign → rate limit → HTTP → retry → dead letter → delivery log.
-- [ ] Chaos testleri: transport bağlantısı kesilirse, hedef sunucu yavaşsa/timeout atarsa davranış.
-- **Çıktı:** Kütüphane "gerçek dünya" koşullarında kanıtlanmış oluyor.
-
-### Faz 14 — Dokümantasyon & Örnek Projeler
-- [ ] Her paket için ayrı README, `samples/` klasöründe minimal + gelişmiş örnek projeler.
-- [ ] Migration rehberi: Polly'den, ham `HttpClient`'tan, elle yazılmış retry kodundan geçiş.
-- **Çıktı:** Kütüphane dışarıdan da kolayca benimsenebilir hale geliyor.
-
----
-
-## Bu Kütüphane Neyin Kapısını Açıyor?
-
-Bu, `Wiaoj.Webhooks` bittiğinde elde edeceğiniz gerçek stratejik kazanımlar:
-
-**1. `Wiaoj.RateLimit` kütüphanesi kendiliğinden doğar.**
-Faz 7'de yazılan `IWebhookRateLimiter` + `DistributedCounter` entegrasyonu, webhook'tan bağımsız hale getirilip genelleştirilirse doğrudan bağımsız bir pakete dönüşür. Yani webhook'u bitirdiğinizde rate limit kütüphanesinin %80'i zaten elinizde olur — sıfırdan başlamak yerine extract etmiş olursunuz.
-
-**2. `Wiaoj.Outbox` / Transactional Outbox pattern'i için temel atılmış olur.**
-Faz 8'deki delivery log + Faz 4'teki retry scheduling, genel amaçlı bir "reliable message delivery" altyapısına genişletilebilir — sadece webhook'lar için değil, herhangi bir "en az bir kez, garanti teslim" gereken senaryo için (email gönderimi, 3. parti API senkronizasyonu vs.).
-
-**3. `Prism.Delivery`'deki kanal dispatcher'ı (Discord, Email, WebPush) webhook motoru üzerine taşınabilir hale gelir.**
-`DispatchToChannelAsync` şu an her kanal için elle yazılmış switch-case. Webhook motoru olgunlaştığında, "Discord'a gönderim" de aslında "imzalı, retry'li, rate-limitli bir outbound HTTP çağrısı" olarak modellenebilir — kod tekrarı azalır, tüm kanallar aynı gözlemlenebilirlik ve dayanıklılık garantilerine kavuşur.
-
-**4. Müşterilere/3. partilere açık bir "Developer Platform" kapısı açılır.**
-`Wiaoj.Webhooks.Inbound` + delivery log + retry UI (ileride) bir araya geldiğinde, Prism'in kendi müşterilerine "kendi event'lerinizi webhook olarak dinleyin" özelliği sunması mümkün hale gelir — Stripe, GitHub, Shopify gibi platformların sunduğu webhook deneyiminin aynısı, kendi ürününüzde.
-
-**5. Test altyapısı (`Wiaoj.Webhooks.Testing`) diğer Tyto/Wiaoj paketlerine şablon olur.**
-`InMemoryWebhookTransport`, `FakeTimeProvider` tabanlı deterministic retry testleri gibi pattern'ler, ileride yazılacak her yeni Wiaoj paketi için (RateLimit, Outbox, ne gelirse) "böyle test edilir" referansı haline gelir.
-
-**6. Polly'ye bağımlılık tamamen ortadan kalkar.**
-Retry, backoff, circuit-breaker mantığının hepsi kendi `IRetryPolicy` sözleşmenizde, kendi Tyto transport'unuza entegre, distributed-first olarak yaşar. Üçüncü parti bir resilience kütüphanesine muhtaç kalmazsınız — ve gelecekte "circuit breaker" gibi ek stratejiler de aynı sözleşme altında (`ICircuitBreakerPolicy`) doğal olarak eklenebilir.
-
-**7. Açık kaynağa çıkarılabilir, ekosistemi tanıtan bir "flagship" paket olur.**
-Tyto'nun ne kadar olgun olduğunu (transports, dead lettering, distributed counter, security) tek bir gerçek dünya use-case üzerinden gösteren en iyi referans implementasyon webhook kütüphanesi olur — potansiyel kullanıcılar/katkıcılar için en ikna edici giriş noktası.
-
----
-
-## Lisans
-
-MIT (öneri — netleştirilecek)
-
-## Katkı
-
-Her yeni middleware, signer, transport implementasyonu `Wiaoj.Webhooks.Testing` altındaki test double'ları kullanılarak TDD ile geliştirilmelidir. PR açmadan önce ilgili faz için yazılan testlerin (yukarıdaki roadmap) kırmızıdan yeşile geçtiğinin gösterilmesi beklenir.
+| Öncelik | Issue | Karmaşıklık | Gerekçe |
+|:---:|---|:---:|---|
+| 🚨 **P0** | **Issue 1: Retrying Stale Recovery** | Düşük | Veri kaybı / yetim kayıt yaratan doğrudan bir tutarlılık bug'ıdır. |
+| 🚨 **P0** | **Issue 2: Delayed Scheduler Memory Limit** | Orta | Yüksek retry anında OOM crash riskini ortadan kaldırır. |
+| ⚠️ **P1** | **Issue 4: Data Retention & Pruner** | Orta | Veritabanının kontrolsüz büyümesini engeller. |
+| ⚠️ **P1** | **Issue 5: Dual-Secret Rotation (Sender)** | Düşük | Güvenlik operasyonlarında sıfır kesinti sağlar. |
+| 💡 **P2** | **Issue 6: Endpoint Auto-Quarantine** | Orta | Ölü endpoint'lerin sistemi meşgul etmesini önler. |
+| 💡 **P2** | **Issue 3: Fair-Share Scheduling** | Yüksek | Multi-tenant mimaride tenant açlığını önler. |
+| 💡 **P3** | **Issue 7: HTTP Batch Delivery** | Yüksek | Yüksek throughput'lu uç senaryolarda ağ verimliliği sağlar. |

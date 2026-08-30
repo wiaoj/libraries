@@ -46,10 +46,10 @@ public sealed class CursorResultTests {
         [Fact]
         public void Should_Represent_Empty_State() {
             // Arrange & Act
-            CursorResult<string> sut = CursorResult<string>.Empty;
+            CursorResult<string> sut = [];
 
             // Assert
-            Assert.Equal(0, sut.Count);
+            Assert.Empty(sut);
             Assert.True(sut.IsEmpty);
             Assert.True(sut.Metadata.IsEmpty);
         }
@@ -61,7 +61,7 @@ public sealed class CursorResultTests {
 
             // Assert
             Assert.True(sut.IsEmpty);
-            Assert.Equal(0, sut.Count);
+            Assert.Empty(sut);
             Assert.True(sut.AsSpan().IsEmpty);
             Assert.True(sut.Metadata.IsEmpty);
         }
@@ -126,7 +126,7 @@ public sealed class CursorResultTests {
         [Fact]
         public void Should_Enumerate_Nothing_When_Empty() {
             // Arrange
-            CursorResult<int> sut = CursorResult<int>.Empty;
+            CursorResult<int> sut = [];
 
             // Act
             List<int> collected = [];
@@ -160,14 +160,14 @@ public sealed class CursorResultTests {
         [Fact]
         public void Should_Return_Empty_When_Source_Is_Empty() {
             // Arrange
-            CursorResult<int> sut = CursorResult<int>.Empty;
+            CursorResult<int> sut = [];
 
             // Act
             CursorResult<string> mapped = sut.Select(x => x.ToString());
 
             // Assert
             Assert.True(mapped.IsEmpty);
-            Assert.Equal(0, mapped.Count);
+            Assert.Empty(mapped);
         }
 
         [Fact]

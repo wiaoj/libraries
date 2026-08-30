@@ -9,7 +9,7 @@ using Wiaoj.Preconditions;
 namespace Wiaoj.Pagination;
 
 /// <summary>
-/// Represents an immutable, zero-allocation request for keyset (cursor-based) pagination.
+/// Represents an immutable request for keyset (cursor-based) pagination.
 /// </summary>
 [DebuggerDisplay("Cursor = {Cursor.Value}, Limit = {Limit}, Direction = {Direction}")]
 [StructLayout(LayoutKind.Auto)]

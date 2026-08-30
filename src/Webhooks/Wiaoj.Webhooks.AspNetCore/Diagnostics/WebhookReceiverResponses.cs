@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 
 namespace Wiaoj.Webhooks.AspNetCore.Diagnostics;
 
@@ -48,6 +48,16 @@ public static class WebhookReceiverResponses {
             statusCode: StatusCodes.Status401Unauthorized,
             title: "Webhook Signature Verification Failed",
             detail: "The cryptographic signature was missing, expired, or invalid for this payload.",
+            instance: path,
+            type: "https://tools.ietf.org/html/rfc9457");
+    }
+
+    /// <summary>RFC 9457 Problem Details for loop detection / hop count breach (422 Unprocessable Entity).</summary>
+    public static IResult LoopDetected(int maxHops, int currentHops, string? path = null) {
+        return Results.Problem(
+            statusCode: StatusCodes.Status422UnprocessableEntity,
+            title: "Webhook Execution Loop Detected",
+            detail: $"The request exceeded the maximum allowable hop count limit of {maxHops} (Current: {currentHops}).",
             instance: path,
             type: "https://tools.ietf.org/html/rfc9457");
     }

@@ -11,7 +11,7 @@ using Wiaoj.Primitives.Collections;
 namespace Wiaoj.Pagination;
 
 /// <summary>
-/// Represents an immutable, zero-allocation container combining keyset paginated items with their corresponding cursor metadata.
+/// Represents an immutable container combining keyset paginated items with their corresponding cursor metadata.
 /// </summary>
 /// <typeparam name="T">The type of elements in the paginated collection.</typeparam>
 /// <remarks>

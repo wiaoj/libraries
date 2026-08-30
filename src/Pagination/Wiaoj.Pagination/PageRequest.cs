@@ -9,7 +9,7 @@ using Wiaoj.Preconditions;
 namespace Wiaoj.Pagination;
 
 /// <summary>
-/// Represents an immutable, zero-allocation request for offset-based pagination.
+/// Represents an immutable request for offset-based pagination.
 /// </summary>
 /// <remarks>
 /// <para>

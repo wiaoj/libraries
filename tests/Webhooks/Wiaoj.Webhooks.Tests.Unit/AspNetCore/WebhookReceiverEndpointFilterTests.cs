@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using System.Text;
@@ -523,6 +523,189 @@ public sealed class WebhookReceiverEndpointFilterTests {
             WebhookReceiverEndpointMetadata metadata = new() {
                 PolicyName = "Stripe"
             };
+            WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, static () => Results.Ok());
+            EndpointFilterInvocationContext invocationContext = new DefaultEndpointFilterInvocationContext(httpContext);
+
+            // Act
+            object? result = await filter.InvokeAsync(invocationContext, static ctx => ValueTask.FromResult<object?>(Results.Ok()));
+
+            // Assert
+            IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+            Assert.Equal(StatusCodes.Status200OK, statusResult.StatusCode);
+        }
+
+        [Fact]
+        public async Task InboundLoopDetection_WhenHopLimitExceeded_Returns422UnprocessableEntity() {
+            // Arrange
+            string body = """{"orderId": "ord_123", "amount": 99.99}""";
+            void configureOptions(ServiceCollection sc) {
+                sc.Configure<WebhookInboundOptions>(options => {
+                    options.Policies["Stripe"] = new WebhookReceiverPolicy {
+                        Name = "Stripe",
+                        RequireSignature = false
+                    }.WithLoopDetection(maxHops: 3);
+                });
+            }
+
+            (DefaultHttpContext httpContext, _, _) = CreateContext(body, configureServices: configureOptions);
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "3";
+
+            WebhookReceiverEndpointMetadata metadata = new() {
+                PolicyName = "Stripe"
+            };
+            WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, static () => Results.Ok());
+            EndpointFilterInvocationContext invocationContext = new DefaultEndpointFilterInvocationContext(httpContext);
+
+            // Act
+            object? result = await filter.InvokeAsync(invocationContext, static ctx => ValueTask.FromResult<object?>(Results.Ok()));
+
+            // Assert
+            IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, statusResult.StatusCode);
+        }
+
+        [Fact]
+        public async Task InboundLoopDetection_WhenHopLimitNotExceeded_PassesSuccessfully() {
+            // Arrange
+            string body = """{"orderId": "ord_123", "amount": 99.99}""";
+            void configureOptions(ServiceCollection sc) {
+                sc.Configure<WebhookInboundOptions>(options => {
+                    options.Policies["Stripe"] = new WebhookReceiverPolicy {
+                        Name = "Stripe",
+                        RequireSignature = false
+                    }.WithLoopDetection(maxHops: 5);
+                });
+            }
+
+            (DefaultHttpContext httpContext, _, _) = CreateContext(body, configureServices: configureOptions);
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "2";
+
+            WebhookReceiverEndpointMetadata metadata = new() {
+                PolicyName = "Stripe"
+            };
+            WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, static () => Results.Ok());
+            EndpointFilterInvocationContext invocationContext = new DefaultEndpointFilterInvocationContext(httpContext);
+
+            // Act
+            object? result = await filter.InvokeAsync(invocationContext, static ctx => ValueTask.FromResult<object?>(Results.Ok()));
+
+            // Assert
+            IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+            Assert.Equal(StatusCodes.Status200OK, statusResult.StatusCode);
+        }
+
+        [Fact]
+        public async Task InboundLoopDetection_WhenCausalChainContainsSelfInstanceId_Returns422UnprocessableEntity() {
+            // Arrange
+            string body = """{"orderId": "ord_123", "amount": 99.99}""";
+            void configureOptions(ServiceCollection sc) {
+                sc.Configure<WebhookInboundOptions>(options => {
+                    options.Policies["Stripe"] = new WebhookReceiverPolicy {
+                        Name = "Stripe",
+                        RequireSignature = false,
+                        InstanceId = "my-cluster-node-1"
+                    }.WithLoopDetection(maxHops: 10);
+                });
+            }
+
+            (DefaultHttpContext httpContext, _, _) = CreateContext(body, configureServices: configureOptions);
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "2";
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookCausalChain] = "remote-node-A, my-cluster-node-1, remote-node-B";
+
+            WebhookReceiverEndpointMetadata metadata = new() {
+                PolicyName = "Stripe"
+            };
+            WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, static () => Results.Ok());
+            EndpointFilterInvocationContext invocationContext = new DefaultEndpointFilterInvocationContext(httpContext);
+
+            // Act
+            object? result = await filter.InvokeAsync(invocationContext, static ctx => ValueTask.FromResult<object?>(Results.Ok()));
+
+            // Assert
+            IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, statusResult.StatusCode);
+        }
+
+        [Fact]
+        public async Task InboundLoopDetection_WhenHopCountHeaderIsFoldedAndExceedsMax_Returns422UnprocessableEntity() {
+            // Arrange
+            string body = """{"orderId": "ord_123", "amount": 99.99}""";
+            void configureOptions(ServiceCollection sc) {
+                sc.Configure<WebhookInboundOptions>(options => {
+                    options.Policies["Stripe"] = new WebhookReceiverPolicy {
+                        Name = "Stripe",
+                        RequireSignature = false
+                    }.WithLoopDetection(maxHops: 3);
+                });
+            }
+
+            (DefaultHttpContext httpContext, _, _) = CreateContext(body, configureServices: configureOptions);
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "1, 3";
+
+            WebhookReceiverEndpointMetadata metadata = new() {
+                PolicyName = "Stripe"
+            };
+            WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, static () => Results.Ok());
+            EndpointFilterInvocationContext invocationContext = new DefaultEndpointFilterInvocationContext(httpContext);
+
+            // Act
+            object? result = await filter.InvokeAsync(invocationContext, static ctx => ValueTask.FromResult<object?>(Results.Ok()));
+
+            // Assert
+            IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, statusResult.StatusCode);
+        }
+
+        [Fact]
+        public async Task InboundLoopDetection_WhenInstanceIdIsSubstringOfAnotherNode_DoesNotReject() {
+            // Arrange: Self is "node1", chain contains "node10, node100"
+            string body = """{"orderId": "ord_123", "amount": 99.99}""";
+            void configureOptions(ServiceCollection sc) {
+                sc.Configure<WebhookInboundOptions>(options => {
+                    options.Policies["Stripe"] = new WebhookReceiverPolicy {
+                        Name = "Stripe",
+                        RequireSignature = false,
+                        InstanceId = "node1"
+                    }.WithLoopDetection(maxHops: 10);
+                });
+            }
+
+            (DefaultHttpContext httpContext, _, _) = CreateContext(body, configureServices: configureOptions);
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "1";
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookCausalChain] = "node10, node100";
+
+            WebhookReceiverEndpointMetadata metadata = new() { PolicyName = "Stripe" };
+            WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, static () => Results.Ok());
+            EndpointFilterInvocationContext invocationContext = new DefaultEndpointFilterInvocationContext(httpContext);
+
+            // Act
+            object? result = await filter.InvokeAsync(invocationContext, static ctx => ValueTask.FromResult<object?>(Results.Ok()));
+
+            // Assert
+            IStatusCodeHttpResult statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+            Assert.Equal(StatusCodes.Status200OK, statusResult.StatusCode);
+        }
+
+        [Theory]
+        [InlineData("-100")]
+        [InlineData("0x10")]
+        [InlineData("NaN")]
+        public async Task InboundLoopDetection_WhenHopHeaderIsMalformedOrNegative_DoesNotCrashAndAcceptsValidRequest(string invalidHeader) {
+            // Arrange
+            string body = """{"orderId": "ord_123", "amount": 99.99}""";
+            void configureOptions(ServiceCollection sc) {
+                sc.Configure<WebhookInboundOptions>(options => {
+                    options.Policies["Stripe"] = new WebhookReceiverPolicy {
+                        Name = "Stripe",
+                        RequireSignature = false
+                    }.WithLoopDetection(maxHops: 5);
+                });
+            }
+
+            (DefaultHttpContext httpContext, _, _) = CreateContext(body, configureServices: configureOptions);
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = invalidHeader;
+
+            WebhookReceiverEndpointMetadata metadata = new() { PolicyName = "Stripe" };
             WebhookReceiverEndpointFilter<OrderCreatedWebhookEvent> filter = new(metadata, static () => Results.Ok());
             EndpointFilterInvocationContext invocationContext = new DefaultEndpointFilterInvocationContext(httpContext);
 

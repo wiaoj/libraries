@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Wiaoj.Webhooks.Diagnostics;
 
 namespace Wiaoj.Webhooks.Idempotency;
@@ -46,6 +47,7 @@ public sealed class IdempotencyMiddleware : IWebhookMiddleware {
             : this._keyGenerator.GenerateKey(context);
 
         context.SetIdempotencyKey(key);
+        Activity.Current?.SetTag("webhook.idempotency_key", key.Value);
 
         bool shouldCheckDeduplication = !(this._options.BypassOnReplay && context.IsReplay());
 
@@ -59,6 +61,22 @@ public sealed class IdempotencyMiddleware : IWebhookMiddleware {
             bool reserved = await this._store.TryMarkProcessedAsync(key, this._options.Window, cancellationToken).ConfigureAwait(false);
             if(!reserved) {
                 this._logger.LogPipelineShortCircuited(context.Endpoint.Id, $"Duplicate event intercepted by IdempotencyStore with key '{key.Value}'.");
+                
+                Activity? activity = Activity.Current;
+                if(activity is not null) {
+                    activity.SetTag("webhook.deduplicated", true);
+                    activity.AddEvent(new ActivityEvent("webhook.deduplicated", tags: new ActivityTagsCollection {
+                        { "webhook.idempotency_key", key.Value },
+                        { "webhook.endpoint_id", context.Endpoint.Id.Value }
+                    }));
+                }
+
+                TagList tags = new() {
+                    { "webhook.endpoint_id", context.Endpoint.Id.Value },
+                    { "webhook.source", "IdempotencyStore" }
+                };
+                WebhookMeter.DeduplicatedCount.Add(1, tags);
+
                 context.SetResult(WebhookDeliveryResult.Duplicate(key.Value));
                 return;
             }

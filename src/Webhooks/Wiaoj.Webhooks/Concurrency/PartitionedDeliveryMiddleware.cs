@@ -63,8 +63,25 @@ public sealed class PartitionedDeliveryMiddleware : IWebhookMiddleware {
 
 
         double lockWaitDurationMs = Stopwatch.GetElapsedTime(waitStartTimestamp).TotalMilliseconds;
+        TagList lockTags = new() {
+            { "webhook.endpoint_id", context.Endpoint.Id.Value },
+            { "webhook.partition_key", partitionKey }
+        };
+        WebhookMeter.LockWaitDuration.Record(lockWaitDurationMs, lockTags);
+
         if(lockWaitDurationMs > 500) {
             this._logger.LogLockContention(context.Endpoint.Id, lockWaitDurationMs);
+        }
+
+        Activity? activity = Activity.Current;
+        if(activity is not null) {
+            activity.SetTag("webhook.lock_wait_duration_ms", lockWaitDurationMs);
+            if(lockWaitDurationMs > 500) {
+                activity.AddEvent(new ActivityEvent("webhook.lock_contention", tags: new ActivityTagsCollection {
+                    { "webhook.lock_wait_duration_ms", lockWaitDurationMs },
+                    { "webhook.partition_key", partitionKey }
+                }));
+            }
         }
 
         // 2. Execute downstream pipeline under exclusive endpoint lock

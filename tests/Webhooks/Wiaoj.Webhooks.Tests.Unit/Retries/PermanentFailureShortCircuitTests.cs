@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.Webhooks.Retries;
 using Wiaoj.Webhooks.Tests.Unit.Fakes;
 using Wiaoj.Webhooks.Tests.Unit.TestData;
@@ -11,7 +11,7 @@ namespace Wiaoj.Webhooks.Tests.Unit.Retries;
 public sealed class PermanentFailureShortCircuitTests {
 
     // ────────────────────────────────────────────────────────────────────────
-    // 1. TÜM 4XX KALICI HTTP KODLARI İLE SHORT-CIRCUIT
+    // 1. ALL 4XX PERMANENT HTTP STATUS CODE SHORT-CIRCUITING
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheAll4xxPermanentStatusCodes {
@@ -26,7 +26,7 @@ public sealed class PermanentFailureShortCircuitTests {
         [InlineData(415)] // Unsupported Media Type
         [InlineData(422)] // Unprocessable Entity
         public async Task InvokeAsync_WhenAny4xxPermanentClientErrorOccurs_ImmediatelyDeadLettersOnFirstAttempt(int statusCode) {
-            // Arrange: MaxAttempts = 100 olan aşırı cömert bir politika bile olsa
+            // Arrange: Even with generous retry settings (MaxAttempts = 100)
             FakeWebhookTransport transport = new();
             ExponentialBackoffOptions options = new() { MaxAttempts = 100 };
             ExponentialBackoffPolicy policy = new(options);
@@ -43,17 +43,17 @@ public sealed class PermanentFailureShortCircuitTests {
                 return Task.CompletedTask;
             };
 
-            // Act: İlk denemede kalıcı hata döner
+            // Act: First attempt returns permanent failure
             await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
-            // Assert: Sıfır retry işi, doğrudan Dead-Letter!
+            // Assert: Zero retries, immediately dead-lettered
             Assert.Empty(transport.EnqueuedJobs);
             Assert.True(context.IsDeadLettered());
         }
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 2. TÜM PERMANENT FAILURE REASON ENUM DEĞERLERİ
+    // 2. ALL PERMANENT FAILURE REASON ENUM VALUES
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheAllPermanentFailureReasons {
@@ -86,7 +86,7 @@ public sealed class PermanentFailureShortCircuitTests {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 3. TRANSIENT VS PERMANENT POZİTİF KONTROLLERİ
+    // 3. TRANSIENT VERSUS PERMANENT ERROR EVALUATION
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheTransientVersusPermanentDistinction {
@@ -118,7 +118,7 @@ public sealed class PermanentFailureShortCircuitTests {
             // Act
             await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
-            // Assert: Retry kuyruğuna tam 1 iş atılmalı, Dead-Letter OLMAMALIDIR!
+            // Assert: Exactly 1 retry job enqueued, must not dead-letter
             Assert.Single(transport.EnqueuedJobs);
             Assert.False(context.IsDeadLettered());
             Assert.Equal(TimeSpan.FromSeconds(2), transport.EnqueuedJobs[0].Delay);
@@ -126,7 +126,7 @@ public sealed class PermanentFailureShortCircuitTests {
 
         [Fact]
         public async Task InvokeAsync_WhenNullStatusCode_SocketOrDnsFailure_IsTreatedAsTransientRetry() {
-            // Null statusCode = Socket koptu, DNS çözülemedi veya bağlantı reddedildi
+            // Null statusCode indicates network disconnect, DNS failure or connection reset
             FakeWebhookTransport transport = new();
             ExponentialBackoffPolicy policy = new(new ExponentialBackoffOptions { MaxAttempts = 3, InitialDelay = TimeSpan.FromSeconds(1), Jitter = null });
             RetryMiddleware middleware = new(policy, transport, NullLogger<RetryMiddleware>.Instance);
@@ -141,26 +141,25 @@ public sealed class PermanentFailureShortCircuitTests {
 
             await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
-            // Ağ kopmaları kalıcı sanılmamalı, yeniden denenmelidir!
+            // Network errors must be retried
             Assert.Single(transport.EnqueuedJobs);
             Assert.False(context.IsDeadLettered());
         }
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 4. ÇELİŞKİLİ & KAOTİK SERVER YANITLARI
+    // 4. CONFLICTING AND CHAOTIC SERVER RESPONSES
     // ────────────────────────────────────────────────────────────────────────
 
     public sealed class TheChaoticEdgeCases {
         [Fact]
         public async Task InvokeAsync_WhenPermanentFailureCarriesRetryAfterHeader_StillDeadLetters() {
-            // Karşı sunucu hatalı/çelişkili şekilde 401 Unauthorized dönüp Retry-After: 60 verse bile
+            // Even if remote server errantly sends 401 with Retry-After: 60
             FakeWebhookTransport transport = new();
             ExponentialBackoffPolicy policy = new();
             RetryMiddleware middleware = new(policy, transport, NullLogger<RetryMiddleware>.Instance);
 
             WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
-            // Permanent failure with statusCode 401
             WebhookDeliveryResult permanent = WebhookDeliveryResult.Permanent("Unauthorized", 401, PermanentFailureReason.DestinationRejected);
 
             WebhookDelegate next = (ctx, ct) => {
@@ -170,7 +169,7 @@ public sealed class PermanentFailureShortCircuitTests {
 
             await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
-            // 401 olduğu için Retry-After'a kanmamalı, retry atmamalıdır!
+            // Must not retry on 401
             Assert.Empty(transport.EnqueuedJobs);
             Assert.True(context.IsDeadLettered());
         }
