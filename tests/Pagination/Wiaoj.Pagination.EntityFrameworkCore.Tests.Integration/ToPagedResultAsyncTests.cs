@@ -348,5 +348,169 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
             Assert.Equal(10, result.Count);
             Assert.Equal(50, result.Metadata.TotalCount);
         }
+
+        // --- Additional edge-case coverage -------------------------------------------------------
+
+        [Fact]
+        public async Task Should_Paginate_Correctly_When_PageSize_Is_One() {
+            // Arrange: the smallest legal page size must still produce accurate metadata
+            PageRequest request = new(pageNumber: 3, pageSize: 1);
+
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .OrderBy(x => x.Id)
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(1, result.Count);
+            Assert.Equal(3, result.Items[0].Id);
+            Assert.Equal(50, result.Metadata.TotalPages);
+            Assert.True(result.Metadata.HasPrevious);
+            Assert.True(result.Metadata.HasNext);
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Correctly_On_Descending_Order() {
+            // Arrange
+            PageRequest request = new(pageNumber: 1, pageSize: 5);
+
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .OrderByDescending(x => x.Id)
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert: the highest Ids must appear first, in descending order
+            Assert.Equal(5, result.Count);
+            Assert.Equal(50, result.Items[0].Id);
+            Assert.Equal(46, result.Items[^1].Id);
+        }
+
+        [Fact]
+        public async Task Should_Return_Single_Item_When_Database_Has_Exactly_One_Row() {
+            // Arrange: a freshly created, independently seeded single-row database
+            (TestDbContext singleItemContext, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
+            singleItemContext.Items.Add(new TestItem { Id = 1, Name = "Only_Item", Price = 9.99m, CreatedAt = DateTimeOffset.UtcNow });
+            await singleItemContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            PageRequest request = new(pageNumber: 1, pageSize: 20);
+
+            try {
+                // Act
+                PagedResult<TestItem> result = await singleItemContext.Items
+                    .OrderBy(x => x.Id)
+                    .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+                // Assert
+                Assert.Single(result.Items.AsSpan().ToArray());
+                Assert.Equal(1, result.Metadata.TotalCount);
+                Assert.Equal(1, result.Metadata.TotalPages);
+                Assert.False(result.Metadata.HasPrevious);
+                Assert.False(result.Metadata.HasNext);
+            }
+            finally {
+                await singleItemContext.DisposeAsync();
+                await connection.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Return_Empty_Page_When_Where_Filter_Excludes_Every_Row() {
+            // Arrange: a filter that matches nothing must still return a well-formed, empty page
+            PageRequest request = new(pageNumber: 1, pageSize: 10);
+
+            // Act
+            PagedResult<TestItem> result = await this._fixture._context.Items
+                .Where(x => x.Price > 999_999m)
+                .OrderBy(x => x.Id)
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.True(result.IsEmpty);
+            Assert.Equal(0, result.Metadata.TotalCount);
+            Assert.Equal(0, result.Metadata.TotalPages);
+            Assert.False(result.Metadata.HasNext);
+            Assert.False(result.Metadata.HasPrevious);
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Correctly_When_Where_Select_And_OrderByDescending_Are_Combined() {
+            // Arrange: filter + projection + descending order, exercised together in one query
+            PageRequest request = new(pageNumber: 1, pageSize: 5);
+
+            // Act
+            var result = await this._fixture._context.Items
+                .AsNoTracking()
+                .Where(x => x.Price > 300m)
+                .OrderByDescending(x => x.Price)
+                .Select(x => new { x.Id, x.Price })
+                .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert: highest-priced filtered item leads, and TotalCount still reflects the filter only
+            Assert.Equal(5, result.Count);
+            Assert.Equal(50, result.Items[0].Id);
+            Assert.Equal(22, result.Metadata.TotalCount);
+        }
+
+        [Fact]
+        public async Task Should_Visit_Every_Row_Exactly_Once_When_Traversing_All_Pages_Sequentially() {
+            // Arrange: full traversal integrity check - the union of every page's items must equal the
+            // full seeded set exactly once each, with no gaps or duplicates introduced by skip/take math.
+            const int pageSize = 7; // deliberately does not evenly divide the 50 seeded rows
+            int totalPages = (int)Math.Ceiling(50 / (double)pageSize);
+            List<long> visitedIds = [];
+
+            // Act
+            for(int pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+                PagedResult<TestItem> page = await this._fixture._context.Items
+                    .OrderBy(x => x.Id)
+                    .ToPagedResultAsync(new PageRequest(pageNumber, pageSize), TestContext.Current.CancellationToken);
+
+                visitedIds.AddRange(page.Items.AsSpan().ToArray().Select(x => x.Id));
+            }
+
+            // Assert
+            Assert.Equal(50, visitedIds.Count);
+            Assert.Equal(visitedIds.Distinct().Count(), visitedIds.Count);
+            Assert.Equal(Enumerable.Range(1, 50).Select(i => (long)i), visitedIds.Order());
+        }
+
+        [Fact]
+        public async Task Should_Not_Execute_Data_Query_When_TotalCount_Is_Zero() {
+            // Arrange: an empty database - the fast-path optimization must skip the SELECT entirely and
+            // return an empty page purely from the LongCountAsync result.
+            (TestDbContext emptyContext, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
+            PageRequest request = new(pageNumber: 1, pageSize: 10);
+
+            try {
+                // Act
+                PagedResult<TestItem> result = await emptyContext.Items
+                    .OrderBy(x => x.Id)
+                    .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
+
+                // Assert
+                Assert.True(result.IsEmpty);
+                Assert.Equal(0, result.Count);
+                Assert.Equal(0, result.Metadata.TotalCount);
+            }
+            finally {
+                await emptyContext.DisposeAsync();
+                await connection.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Respect_CancellationToken_Using_Raw_Integer_Overload() {
+            // Arrange: cancellation must be honored on the raw (pageNumber, pageSize) overload too,
+            // not only the PageRequest overload already covered elsewhere.
+            using CancellationTokenSource cts = new();
+            cts.Cancel();
+
+            // Act & Assert
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                this._fixture._context.Items
+                    .OrderBy(x => x.Id)
+                    .ToPagedResultAsync(pageNumber: 1, pageSize: 10, cts.Token));
+        }
+
     }
 }

@@ -1,4 +1,5 @@
-﻿using System.Buffers.Binary;
+﻿using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
@@ -11,7 +12,6 @@ using Wiaoj.Preconditions.Exceptions;
 using Wiaoj.Primitives.Buffers;
 using Wiaoj.Primitives.Collections;
 using Wiaoj.Primitives.Snowflake;
-using static System.Net.WebRequestMethods;
 
 #pragma warning disable IDE0130
 namespace Microsoft.EntityFrameworkCore;
@@ -827,7 +827,7 @@ public static partial class QueryablePaginationExtensions {
     /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
     /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
     /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
-    /// <param name="keySelector">A lambda expression identifying the <see cref="DateTime"/> timestamp property (e.g. <c>x => x.CreatedAt</c>).</param>
+    /// <param name="keySelector">A lambda expression identifying the <see cref="DateTime"/> timestamp property (e.g. <c>x => x.Timestamp</c>).</param>
     /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
     /// <returns>
     /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
@@ -1049,7 +1049,7 @@ public static partial class QueryablePaginationExtensions {
     /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
     /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
     /// <param name="request">The cursor request specifying the seek position, item limit, and direction.</param>
-    /// <param name="keySelector">A lambda expression identifying the <see cref="DateTimeOffset"/> timestamp property (e.g. <c>x => x.CreatedAt</c>).</param>
+    /// <param name="keySelector">A lambda expression identifying the <see cref="DateTimeOffset"/> timestamp property (e.g. <c>x => x.Timestamp</c>).</param>
     /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
     /// <returns>
     /// A task representing the asynchronous query execution, containing a <see cref="CursorResult{TSource}"/>.
@@ -1238,7 +1238,7 @@ public static partial class QueryablePaginationExtensions {
             keySelector,
             cursorEncoder: static ch => {
                 Span<byte> buffer = stackalloc byte[sizeof(ushort)];
-                BinaryPrimitives.WriteUInt16BigEndian(buffer, (ushort)ch);
+                BinaryPrimitives.WriteUInt16BigEndian(buffer, ch);
                 return CursorToken.FromBytes(buffer);
             },
             cursorDecoder: static token => {
@@ -1331,6 +1331,44 @@ public static partial class QueryablePaginationExtensions {
     #region Keyset (Cursor) Pagination - Custom Codecs
 
     /// <summary>
+    /// Formats a <typeparamref name="TKey"/> value into a UTF-8 byte buffer, growing the buffer
+    /// and retrying if the initial (stack-friendly) size is insufficient. <see cref="IUtf8SpanFormattable"/>
+    /// does not expose the required length ahead of time, so a bounded grow-and-retry loop is used
+    /// instead of guessing a single fixed size.
+    /// </summary>
+    /// <param name="key">The value to format.</param>
+    /// <param name="initialBuffer">The stack-allocated buffer to try first (no heap allocation on success).</param>
+    /// <param name="rented">
+    /// When a pooled fallback buffer was used, the rented array (caller must return it via <see cref="ArrayPool{T}.Return"/>);
+    /// otherwise <see langword="null"/> and <paramref name="initialBuffer"/> holds the formatted bytes.
+    /// </param>
+    /// <returns>The number of bytes written.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the formatted length exceeds the 8192-byte bound.</exception>
+    private static int FormatKeyUtf8<TKey>(TKey key, Span<byte> initialBuffer, out byte[]? rented)
+        where TKey : IUtf8SpanFormattable {
+
+        if(key.TryFormat(initialBuffer, out int written, default, null)) {
+            rented = null;
+            return written;
+        }
+
+        // Initial 256-byte stack buffer was insufficient (extremely rare for scalar/struct keys).
+        // Fall back to a pooled buffer, doubling until a documented bound. This avoids an unbounded
+        // retry loop while comfortably covering any realistic struct-based identifier.
+        for(int size = 1024; size <= 8192; size *= 2) {
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(size);
+            if(key.TryFormat(buffer, out written, default, null)) {
+                rented = buffer;
+                return written;
+            }
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        throw new InvalidOperationException(
+            $"Failed to format key of type '{typeof(TKey).Name}' into a UTF-8 cursor payload: formatted length exceeds the 8192-byte bound.");
+    }
+
+    /// <summary>
     /// Asynchronously executes keyset (cursor-based) pagination on an <see cref="IQueryable{TSource}"/> 
     /// ordered by any custom value type or strongly-typed identifier implementing <see cref="IUtf8SpanFormattable"/> and <see cref="IUtf8SpanParsable{TSelf}"/>.
     /// </summary>
@@ -1376,22 +1414,78 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        // Diğer tip-spesifik overload'larla (int, DateTime, decimal vb.) tutarlılık için:
+        // seçilen key zaten primary key değilse, otomatik olarak Id/PK'yı composite tie-breaker
+        // olarak enjekte et. Bu, aynı key değerine sahip birden fazla kayıt olduğunda
+        // deterministik olmayan sıralama / sessiz kayıt atlama riskini ortadan kaldırır.
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreakerLong)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreakerLong,
+                cursorEncoder: static (key, tie) => {
+                    // Layout: [4-byte BE uzunluk][TKey UTF-8 payload][8-byte BE tie-breaker]
+                    // Key, kendi buffer'ına formatlanır; frame ayrı olarak o buffer'dan doğru
+                    // offsetlerle kurulur - offset aritmetiğini tek bir buffer üzerinde
+                    // karıştırmak (format hedefiyle okuma kaynağının aynı olmaması) hataya açıktı.
+                    Span<byte> keyStackBuffer = stackalloc byte[256];
+                    int keyLength = FormatKeyUtf8(key, keyStackBuffer, out byte[]? rented);
+                    try {
+                        ReadOnlySpan<byte> keyBytes = rented is null
+                            ? keyStackBuffer[..keyLength]
+                            : rented.AsSpan(0, keyLength);
+
+                        byte[] frame = new byte[4 + keyLength + 8];
+                        BinaryPrimitives.WriteInt32BigEndian(frame.AsSpan(0, 4), keyLength);
+                        keyBytes.CopyTo(frame.AsSpan(4, keyLength));
+                        BinaryPrimitives.WriteInt64BigEndian(frame.AsSpan(4 + keyLength, 8), tie);
+                        return CursorToken.FromBytes(frame);
+                    }
+                    finally {
+                        if(rented is not null) {
+                            ArrayPool<byte>.Shared.Return(rented);
+                        }
+                    }
+                },
+                cursorDecoder: static token => {
+                    if(token.IsEmpty) {
+                        throw new FormatException($"Cursor token payload is empty for key type '{typeof(TKey).Name}'.");
+                    }
+                    using ValueBuffer<byte> buffer = new(token.Length, stackalloc byte[256]);
+                    if(!token.TryDecode(buffer.Span, out int totalWritten) || totalWritten < 12) {
+                        throw new FormatException($"Invalid composite cursor payload for key type '{typeof(TKey).Name}'.");
+                    }
+                    int keyLength = BinaryPrimitives.ReadInt32BigEndian(buffer.Span[..4]);
+                    if(keyLength < 0 || 4 + keyLength + 8 != totalWritten || !TKey.TryParse(buffer.Span.Slice(4, keyLength), null, out TKey key)) {
+                        throw new FormatException($"Invalid composite cursor payload for key type '{typeof(TKey).Name}'.");
+                    }
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer.Span.Slice(4 + keyLength, 8));
+                    return (key, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
             keySelector,
             cursorEncoder: static key => {
-                using ValueBuffer<byte> buffer = new(64, stackalloc byte[64]);
-                if(key.TryFormat(buffer.Span, out int written, default, null)) {
-                    return CursorToken.FromBytes(buffer.Span[..written]);
+                Span<byte> keyStackBuffer = stackalloc byte[256];
+                int keyLength = FormatKeyUtf8(key, keyStackBuffer, out byte[]? rented);
+                try {
+                    ReadOnlySpan<byte> keyBytes = rented is null
+                        ? keyStackBuffer[..keyLength]
+                        : rented.AsSpan(0, keyLength);
+                    return CursorToken.FromBytes(keyBytes);
                 }
-                throw new InvalidOperationException($"Failed to format key of type '{typeof(TKey).Name}' into UTF-8 cursor payload.");
+                finally {
+                    if(rented is not null) {
+                        ArrayPool<byte>.Shared.Return(rented);
+                    }
+                }
             },
             cursorDecoder: static token => {
                 if(token.IsEmpty) {
                     throw new FormatException($"Cursor token payload is empty for key type '{typeof(TKey).Name}'.");
                 }
-                using ValueBuffer<byte> buffer = new(token.Length, stackalloc byte[64]);
+                using ValueBuffer<byte> buffer = new(token.Length, stackalloc byte[256]);
                 if(!token.TryDecode(buffer.Span, out int written) || !TKey.TryParse(buffer.Span[..written], null, out TKey result)) {
                     throw new FormatException($"Invalid UTF-8 cursor payload for key type '{typeof(TKey).Name}'.");
                 }

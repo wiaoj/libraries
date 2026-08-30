@@ -8,7 +8,7 @@ namespace Wiaoj.Pagination.EntityFrameworkCore.Tests.Integration;
 
 [Trait("Category", "Integration")]
 [Trait("Subsystem", "EntityFrameworkCore")]
-public sealed class ToCursorResultAsyncTests : IAsyncLifetime {
+public sealed partial class ToCursorResultAsyncTests : IAsyncLifetime {
     private TestDbContext _context = null!;
     private SqliteConnection _connection = null!;
 
@@ -44,7 +44,7 @@ public sealed class ToCursorResultAsyncTests : IAsyncLifetime {
         return CursorToken.FromBytes(buffer);
     }
 
-    public sealed class ToCursorResultAsyncMethod : IClassFixture<ToCursorResultAsyncTests> {
+    public sealed partial class ToCursorResultAsyncMethod : IClassFixture<ToCursorResultAsyncTests> {
         private readonly ToCursorResultAsyncTests _fixture;
 
         public ToCursorResultAsyncMethod() {
@@ -238,7 +238,7 @@ public sealed class ToCursorResultAsyncTests : IAsyncLifetime {
 
             // Assert
             Assert.True(result.IsEmpty);
-            Assert.Equal(0, result.Count);
+            Assert.Empty(result);
             Assert.False(result.Metadata.HasNext);
             Assert.False(result.Metadata.HasPrevious);
 
@@ -725,8 +725,8 @@ public sealed class ToCursorResultAsyncTests : IAsyncLifetime {
                     .ToCursorResultAsync(page2Request, firstParam => firstParam.Price, secondParam => secondParam.Id, TestContext.Current.CancellationToken);
 
                 // Assert
-                Assert.Single(page2.Items);
-                Assert.Equal(3, page2.Items[0].Id);
+                var item = Assert.Single(page2.Items);
+                Assert.Equal(3, item.Id);
             }
             finally {
                 await context.DisposeAsync();
@@ -771,6 +771,368 @@ public sealed class ToCursorResultAsyncTests : IAsyncLifetime {
 
                 Assert.Single(page2.Items);
                 Assert.Equal(30, page2.Items[0].Id);
+            }
+            finally {
+                await context.DisposeAsync();
+                await connection.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Forward_And_Backward_Using_String_Key_Selector() {
+            // Arrange
+            (TestDbContext context, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
+
+            List<TestItem> items = [
+                new() { Id = 1, Name = "Alpha", Price = 10m, CreatedAt = DateTimeOffset.UtcNow },
+                new() { Id = 2, Name = "Bravo", Price = 20m, CreatedAt = DateTimeOffset.UtcNow },
+                new() { Id = 3, Name = "Charlie", Price = 30m, CreatedAt = DateTimeOffset.UtcNow },
+                new() { Id = 4, Name = "Delta", Price = 40m, CreatedAt = DateTimeOffset.UtcNow },
+            ];
+
+            await context.Items.AddRangeAsync(items, TestContext.Current.CancellationToken);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            try {
+                // Act - Page 1 (Forward: Expect Alpha, Bravo)
+                CursorRequest page1Request = new(CursorToken.Empty, limit: 2, CursorDirection.Forward);
+                CursorResult<TestItem> page1 = await context.Items
+                    .OrderBy(x => x.Name)
+                    .ToCursorResultAsync(page1Request, x => x.Name, TestContext.Current.CancellationToken);
+
+                // Act - Page 2 (Forward: Expect Charlie, Delta)
+                CursorRequest page2Request = new(page1.Metadata.EndCursor, limit: 2, CursorDirection.Forward);
+                CursorResult<TestItem> page2 = await context.Items
+                    .OrderBy(x => x.Name)
+                    .ToCursorResultAsync(page2Request, x => x.Name, TestContext.Current.CancellationToken);
+
+                // Act - Backward from Page 2 StartCursor (Expect Alpha, Bravo)
+                CursorRequest backwardRequest = new(page2.Metadata.StartCursor, limit: 2, CursorDirection.Backward);
+                CursorResult<TestItem> backwardResult = await context.Items
+                    .OrderBy(x => x.Name)
+                    .ToCursorResultAsync(backwardRequest, x => x.Name, TestContext.Current.CancellationToken);
+
+                // Assert - Forward Page 1
+                Assert.Equal(2, page1.Count);
+                Assert.Equal("Alpha", page1.Items[0].Name);
+                Assert.Equal("Bravo", page1.Items[1].Name);
+
+                // Assert - Forward Page 2
+                Assert.Equal(2, page2.Count);
+                Assert.Equal("Charlie", page2.Items[0].Name);
+                Assert.Equal("Delta", page2.Items[1].Name);
+
+                // Assert - Backward Page
+                Assert.Equal(2, backwardResult.Count);
+                Assert.Equal("Alpha", backwardResult.Items[0].Name);
+                Assert.Equal("Bravo", backwardResult.Items[1].Name);
+            }
+            finally {
+                await context.DisposeAsync();
+                await connection.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Correctly_Using_Guid_Key_Selector() {
+            // Arrange
+            (TestDbContext context, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
+
+            Guid guid1 = Guid.Parse("00000000-0000-0000-0000-000000000001");
+            Guid guid2 = Guid.Parse("00000000-0000-0000-0000-000000000002");
+            Guid guid3 = Guid.Parse("00000000-0000-0000-0000-000000000003");
+
+            List<GuidItem> items = [
+                new() { Id = guid1, Title = "Item_1" },
+                new() { Id = guid2, Title = "Item_2" },
+                new() { Id = guid3, Title = "Item_3" },
+            ];
+
+            await context.GuidItems.AddRangeAsync(items, TestContext.Current.CancellationToken);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            try {
+                // Act - Page 1 (Limit: 2)
+                CursorRequest page1Request = new(CursorToken.Empty, limit: 2, CursorDirection.Forward);
+                CursorResult<GuidItem> page1 = await context.GuidItems
+                    .OrderBy(x => x.Id)
+                    .ToCursorResultAsync(page1Request, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Page 2 using EndCursor
+                CursorRequest page2Request = new(page1.Metadata.EndCursor, limit: 2, CursorDirection.Forward);
+                CursorResult<GuidItem> page2 = await context.GuidItems
+                    .OrderBy(x => x.Id)
+                    .ToCursorResultAsync(page2Request, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Assert
+                Assert.Equal(2, page1.Count);
+                Assert.Single(page2.Items);
+                Assert.Equal(guid3, page2.Items[0].Id);
+            }
+            finally {
+                await context.DisposeAsync();
+                await connection.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Correctly_When_Primary_Is_Descending_And_TieBreaker_Is_Ascending() {
+            // Arrange
+            (TestDbContext context, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
+            DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+            // 6 items: 4 items at 100m, 2 items at 50m
+            List<TestItem> items = [
+                new() { Id = 1, Name = "Item_1", Price = 100m, CreatedAt = now },
+                new() { Id = 2, Name = "Item_2", Price = 100m, CreatedAt = now },
+                new() { Id = 3, Name = "Item_3", Price = 100m, CreatedAt = now },
+                new() { Id = 4, Name = "Item_4", Price = 100m, CreatedAt = now },
+                new() { Id = 5, Name = "Item_5", Price = 50m, CreatedAt = now },
+                new() { Id = 6, Name = "Item_6", Price = 50m, CreatedAt = now },
+            ];
+
+            await context.Items.AddRangeAsync(items, TestContext.Current.CancellationToken);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            try {
+                // Act - Page 1 (Ordered: Price DESC, Id ASC | Expected: Id 1, Id 2)
+                CursorRequest page1Request = new(CursorToken.Empty, limit: 2, CursorDirection.Forward);
+                CursorResult<TestItem> page1 = await context.Items
+                    .OrderByDescending(x => x.Price)
+                    .ThenBy(x => x.Id)
+                    .ToCursorResultAsync(page1Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Page 2 using EndCursor from Page 1 (Expected: Id 3, Id 4)
+                CursorRequest page2Request = new(page1.Metadata.EndCursor, limit: 2, CursorDirection.Forward);
+                CursorResult<TestItem> page2 = await context.Items
+                    .OrderByDescending(x => x.Price)
+                    .ThenBy(x => x.Id)
+                    .ToCursorResultAsync(page2Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Page 3 using EndCursor from Page 2 (Expected: Id 5, Id 6)
+                CursorRequest page3Request = new(page2.Metadata.EndCursor, limit: 2, CursorDirection.Forward);
+                CursorResult<TestItem> page3 = await context.Items
+                    .OrderByDescending(x => x.Price)
+                    .ThenBy(x => x.Id)
+                    .ToCursorResultAsync(page3Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Assert - Page 1
+                Assert.Equal(2, page1.Count);
+                Assert.Equal(1, page1.Items[0].Id);
+                Assert.Equal(2, page1.Items[1].Id);
+
+                // Assert - Page 2 (Must contain Id 3 and Id 4)
+                Assert.Equal(2, page2.Count);
+                Assert.Equal(3, page2.Items[0].Id);
+                Assert.Equal(4, page2.Items[1].Id);
+
+                // Assert - Page 3 (Must contain Id 5 and Id 6)
+                Assert.Equal(2, page3.Count);
+                Assert.Equal(5, page3.Items[0].Id);
+                Assert.Equal(6, page3.Items[1].Id);
+            }
+            finally {
+                await context.DisposeAsync();
+                await connection.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Forward_Correctly_When_Primary_Is_Ascending_And_TieBreaker_Is_Descending() {
+            // Arrange
+            (TestDbContext context, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
+            DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+            // 6 items: 2 items at 50m, 4 items at 100m
+            List<TestItem> items = [
+                new() { Id = 10, Name = "Item_10", Price = 50m, CreatedAt = now },
+                new() { Id = 20, Name = "Item_20", Price = 50m, CreatedAt = now },
+                new() { Id = 30, Name = "Item_30", Price = 100m, CreatedAt = now },
+                new() { Id = 40, Name = "Item_40", Price = 100m, CreatedAt = now },
+                new() { Id = 50, Name = "Item_50", Price = 100m, CreatedAt = now },
+                new() { Id = 60, Name = "Item_60", Price = 100m, CreatedAt = now },
+            ];
+
+            await context.Items.AddRangeAsync(items, TestContext.Current.CancellationToken);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            try {
+                // Act - Page 1 (Expected: 50m with IDs ordered DESC -> Id 20, Id 10)
+                CursorRequest page1Request = new(CursorToken.Empty, limit: 2, CursorDirection.Forward);
+                CursorResult<TestItem> page1 = await context.Items
+                    .OrderBy(x => x.Price)
+                    .ThenByDescending(x => x.Id)
+                    .ToCursorResultAsync(page1Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Page 2 using EndCursor from Page 1 (Expected: 100m with IDs ordered DESC -> Id 60, Id 50)
+                CursorRequest page2Request = new(page1.Metadata.EndCursor, limit: 2, CursorDirection.Forward);
+                CursorResult<TestItem> page2 = await context.Items
+                    .OrderBy(x => x.Price)
+                    .ThenByDescending(x => x.Id)
+                    .ToCursorResultAsync(page2Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Page 3 using EndCursor from Page 2 (Expected: 100m remaining -> Id 40, Id 30)
+                CursorRequest page3Request = new(page2.Metadata.EndCursor, limit: 2, CursorDirection.Forward);
+                CursorResult<TestItem> page3 = await context.Items
+                    .OrderBy(x => x.Price)
+                    .ThenByDescending(x => x.Id)
+                    .ToCursorResultAsync(page3Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Assert - Page 1
+                Assert.Equal(2, page1.Count);
+                Assert.Equal(20, page1.Items[0].Id);
+                Assert.Equal(10, page1.Items[1].Id);
+
+                // Assert - Page 2
+                Assert.Equal(2, page2.Count);
+                Assert.Equal(60, page2.Items[0].Id);
+                Assert.Equal(50, page2.Items[1].Id);
+
+                // Assert - Page 3
+                Assert.Equal(2, page3.Count);
+                Assert.Equal(40, page3.Items[0].Id);
+                Assert.Equal(30, page3.Items[1].Id);
+                Assert.False(page3.Metadata.HasNext);
+            }
+            finally {
+                await context.DisposeAsync();
+                await connection.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Backward_Correctly_When_Primary_Is_Descending_And_TieBreaker_Is_Ascending() {
+            // Arrange
+            (TestDbContext context, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
+            DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+            // 6 items: 4 items at 100m, 2 items at 50m
+            List<TestItem> items = [
+                new() { Id = 1, Name = "Item_1", Price = 100m, CreatedAt = now },
+                new() { Id = 2, Name = "Item_2", Price = 100m, CreatedAt = now },
+                new() { Id = 3, Name = "Item_3", Price = 100m, CreatedAt = now },
+                new() { Id = 4, Name = "Item_4", Price = 100m, CreatedAt = now },
+                new() { Id = 5, Name = "Item_5", Price = 50m, CreatedAt = now },
+                new() { Id = 6, Name = "Item_6", Price = 50m, CreatedAt = now },
+            ];
+
+            await context.Items.AddRangeAsync(items, TestContext.Current.CancellationToken);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            try {
+                // Forward navigation to generate boundary cursors for all pages
+                CursorResult<TestItem> page1 = await context.Items
+                    .OrderByDescending(x => x.Price)
+                    .ThenBy(x => x.Id)
+                    .ToCursorResultAsync(new CursorRequest(CursorToken.Empty, limit: 2, CursorDirection.Forward), x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                CursorResult<TestItem> page2 = await context.Items
+                    .OrderByDescending(x => x.Price)
+                    .ThenBy(x => x.Id)
+                    .ToCursorResultAsync(new CursorRequest(page1.Metadata.EndCursor, limit: 2, CursorDirection.Forward), x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                CursorResult<TestItem> page3 = await context.Items
+                    .OrderByDescending(x => x.Price)
+                    .ThenBy(x => x.Id)
+                    .ToCursorResultAsync(new CursorRequest(page2.Metadata.EndCursor, limit: 2, CursorDirection.Forward), x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Seek backward from Page 3 start (Expected: Page 2 items [Id 3, Id 4])
+                CursorRequest backwardToPage2Request = new(page3.Metadata.StartCursor, limit: 2, CursorDirection.Backward);
+                CursorResult<TestItem> backwardPage2 = await context.Items
+                    .OrderByDescending(x => x.Price)
+                    .ThenBy(x => x.Id)
+                    .ToCursorResultAsync(backwardToPage2Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Seek backward from Page 2 start (Expected: Page 1 items [Id 1, Id 2])
+                CursorRequest backwardToPage1Request = new(backwardPage2.Metadata.StartCursor, limit: 2, CursorDirection.Backward);
+                CursorResult<TestItem> backwardPage1 = await context.Items
+                    .OrderByDescending(x => x.Price)
+                    .ThenBy(x => x.Id)
+                    .ToCursorResultAsync(backwardToPage1Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Assert - Backward to Page 2
+                Assert.Equal(2, backwardPage2.Count);
+                Assert.Equal(3, backwardPage2.Items[0].Id);
+                Assert.Equal(4, backwardPage2.Items[1].Id);
+                Assert.True(backwardPage2.Metadata.HasPrevious);
+                Assert.True(backwardPage2.Metadata.HasNext);
+
+                // Assert - Backward to Page 1
+                Assert.Equal(2, backwardPage1.Count);
+                Assert.Equal(1, backwardPage1.Items[0].Id);
+                Assert.Equal(2, backwardPage1.Items[1].Id);
+                Assert.False(backwardPage1.Metadata.HasPrevious);
+                Assert.True(backwardPage1.Metadata.HasNext);
+            }
+            finally {
+                await context.DisposeAsync();
+                await connection.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Paginate_Backward_Correctly_When_Primary_Is_Ascending_And_TieBreaker_Is_Descending() {
+            // Arrange
+            (TestDbContext context, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
+            DateTimeOffset now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+            // 6 items: 2 items at 50m, 4 items at 100m
+            List<TestItem> items = [
+                new() { Id = 10, Name = "Item_10", Price = 50m, CreatedAt = now },
+                new() { Id = 20, Name = "Item_20", Price = 50m, CreatedAt = now },
+                new() { Id = 30, Name = "Item_30", Price = 100m, CreatedAt = now },
+                new() { Id = 40, Name = "Item_40", Price = 100m, CreatedAt = now },
+                new() { Id = 50, Name = "Item_50", Price = 100m, CreatedAt = now },
+                new() { Id = 60, Name = "Item_60", Price = 100m, CreatedAt = now },
+            ];
+
+            await context.Items.AddRangeAsync(items, TestContext.Current.CancellationToken);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            try {
+                // Forward navigation to obtain server-generated boundary cursors
+                CursorResult<TestItem> page1 = await context.Items
+                    .OrderBy(x => x.Price)
+                    .ThenByDescending(x => x.Id)
+                    .ToCursorResultAsync(new CursorRequest(CursorToken.Empty, limit: 2, CursorDirection.Forward), x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                CursorResult<TestItem> page2 = await context.Items
+                    .OrderBy(x => x.Price)
+                    .ThenByDescending(x => x.Id)
+                    .ToCursorResultAsync(new CursorRequest(page1.Metadata.EndCursor, limit: 2, CursorDirection.Forward), x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                CursorResult<TestItem> page3 = await context.Items
+                    .OrderBy(x => x.Price)
+                    .ThenByDescending(x => x.Id)
+                    .ToCursorResultAsync(new CursorRequest(page2.Metadata.EndCursor, limit: 2, CursorDirection.Forward), x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Seek backward from Page 3 start (Expected: Page 2 items [Id 60, Id 50])
+                CursorRequest backwardToPage2Request = new(page3.Metadata.StartCursor, limit: 2, CursorDirection.Backward);
+                CursorResult<TestItem> backwardPage2 = await context.Items
+                    .OrderBy(x => x.Price)
+                    .ThenByDescending(x => x.Id)
+                    .ToCursorResultAsync(backwardToPage2Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Act - Seek backward from Page 2 start (Expected: Page 1 items [Id 20, Id 10])
+                CursorRequest backwardToPage1Request = new(backwardPage2.Metadata.StartCursor, limit: 2, CursorDirection.Backward);
+                CursorResult<TestItem> backwardPage1 = await context.Items
+                    .OrderBy(x => x.Price)
+                    .ThenByDescending(x => x.Id)
+                    .ToCursorResultAsync(backwardToPage1Request, x => x.Price, x => x.Id, TestContext.Current.CancellationToken);
+
+                // Assert - Backward to Page 2
+                Assert.Equal(2, backwardPage2.Count);
+                Assert.Equal(60, backwardPage2.Items[0].Id);
+                Assert.Equal(50, backwardPage2.Items[1].Id);
+                Assert.True(backwardPage2.Metadata.HasPrevious);
+                Assert.True(backwardPage2.Metadata.HasNext);
+
+                // Assert - Backward to Page 1
+                Assert.Equal(2, backwardPage1.Count);
+                Assert.Equal(20, backwardPage1.Items[0].Id);
+                Assert.Equal(10, backwardPage1.Items[1].Id);
+                Assert.False(backwardPage1.Metadata.HasPrevious);
+                Assert.True(backwardPage1.Metadata.HasNext);
             }
             finally {
                 await context.DisposeAsync();
