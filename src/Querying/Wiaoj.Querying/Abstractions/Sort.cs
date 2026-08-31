@@ -5,8 +5,10 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Wiaoj.Primitives.Buffers;
+using Wiaoj.Querying.JsonConverters;
 using Wiaoj.Querying.Parsers;
 
 namespace Wiaoj.Querying;
@@ -16,6 +18,7 @@ namespace Wiaoj.Querying;
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
 [StructLayout(LayoutKind.Auto)]
+[JsonConverter(typeof(SortJsonConverter))]
 public readonly record struct Sort :
     IEquatable<Sort>,
     IReadOnlyList<SortNode>,

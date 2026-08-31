@@ -4,8 +4,10 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Wiaoj.Primitives.Buffers;
+using Wiaoj.Querying.JsonConverters;
 
 namespace Wiaoj.Querying;
 /// <summary>
@@ -19,6 +21,7 @@ namespace Wiaoj.Querying;
 /// </remarks>
 [DebuggerDisplay("{Value,nq}")]
 [StructLayout(LayoutKind.Auto)]
+[JsonConverter(typeof(QJsonConverter))]
 public readonly record struct Q :
     IEquatable<Q>,
     IComparable<Q>,

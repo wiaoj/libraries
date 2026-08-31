@@ -1,8 +1,12 @@
-﻿namespace Wiaoj.Querying;
+﻿using System.Text.Json.Serialization;
+using Wiaoj.Querying.JsonConverters;
+
+namespace Wiaoj.Querying;
 
 /// <summary>
 /// Defines supported comparison, pattern matching, and collection query operators.
 /// </summary>
+[JsonConverter(typeof(QueryOperatorJsonConverter))]
 public enum QueryOperator : byte {
     /// <summary>
     /// Equal comparison (<c>eq</c> or <c>==</c>).
