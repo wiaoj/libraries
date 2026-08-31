@@ -32,10 +32,15 @@
       "src\\Serialization\\Features\\Wiaoj.Serialization.Security\\Wiaoj.Serialization.Security.csproj",
       "src\\Serialization\\Features\\Wiaoj.Serialization.Transcoding\\Wiaoj.Serialization.Transcoding.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.Bson\\Wiaoj.Serialization.Bson.csproj",
-      "src\\Serialization\\Implementations\\Wiaoj.Serialization.MessagePack\\Wiaoj.Serialization.MessagePack.csproj",      
+      "src\\Serialization\\Implementations\\Wiaoj.Serialization.MessagePack\\Wiaoj.Serialization.MessagePack.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.Proxy\\Wiaoj.Serialization.Proxy.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.SystemTextJson\\Wiaoj.Serialization.SystemTextJson.csproj",
-      "src\\Serialization\\Implementations\\Wiaoj.Serialization.YamlDotNet\\Wiaoj.Serialization.YamlDotNet.csproj"
+      "src\\Serialization\\Implementations\\Wiaoj.Serialization.YamlDotNet\\Wiaoj.Serialization.YamlDotNet.csproj",
+      "src\\Pagination\\Wiaoj.Pagination\\Wiaoj.Pagination.csproj",
+      "src\\Pagination\\Wiaoj.Pagination.AspNetCore\\Wiaoj.Pagination.AspNetCore.csproj",
+      "src\\Pagination\\Wiaoj.Pagination.EntityFrameworkCore\\Wiaoj.Pagination.EntityFrameworkCore.csproj",
+      "src\\Querying\\Wiaoj.Querying\\Wiaoj.Querying.csproj",
+      "src\\Querying\\Wiaoj.Querying.AspNetCore\\Wiaoj.Querying.AspNetCore.csproj"
     ]
   }
 }
