@@ -72,6 +72,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[..sizeof(long)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(long)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(long) + sizeof(long))) {
+                        throw new FormatException("Invalid composite long + long cursor payload.");
+                    }
+                    long primary = BinaryPrimitives.ReadInt64BigEndian(buffer[..sizeof(long)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(long)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -124,6 +144,26 @@ public static partial class QueryablePaginationExtensions {
 
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(ulong) + sizeof(long)];
+                    BinaryPrimitives.WriteUInt64BigEndian(buffer[..sizeof(ulong)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(ulong)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(ulong) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(ulong) + sizeof(long))) {
+                        throw new FormatException("Invalid composite ulong + long cursor payload.");
+                    }
+                    ulong primary = BinaryPrimitives.ReadUInt64BigEndian(buffer[..sizeof(ulong)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(ulong)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
 
         return ToCursorResultAsync(
             source,
@@ -249,6 +289,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(uint) + sizeof(long)];
+                    BinaryPrimitives.WriteUInt32BigEndian(buffer[..sizeof(uint)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(uint)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(uint) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(uint) + sizeof(long))) {
+                        throw new FormatException("Invalid composite uint + long cursor payload.");
+                    }
+                    uint primary = BinaryPrimitives.ReadUInt32BigEndian(buffer[..sizeof(uint)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(uint)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -301,6 +361,26 @@ public static partial class QueryablePaginationExtensions {
 
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(short) + sizeof(long)];
+                    BinaryPrimitives.WriteInt16BigEndian(buffer[..sizeof(short)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(short)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(short) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(short) + sizeof(long))) {
+                        throw new FormatException("Invalid composite short + long cursor payload.");
+                    }
+                    short primary = BinaryPrimitives.ReadInt16BigEndian(buffer[..sizeof(short)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(short)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
 
         return ToCursorResultAsync(
             source,
@@ -355,6 +435,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(ushort) + sizeof(long)];
+                    BinaryPrimitives.WriteUInt16BigEndian(buffer[..sizeof(ushort)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(ushort)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(ushort) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(ushort) + sizeof(long))) {
+                        throw new FormatException("Invalid composite ushort + long cursor payload.");
+                    }
+                    ushort primary = BinaryPrimitives.ReadUInt16BigEndian(buffer[..sizeof(ushort)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(ushort)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -408,6 +508,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[1 + sizeof(long)];
+                    buffer[0] = primary;
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[1..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[1 + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (1 + sizeof(long))) {
+                        throw new FormatException("Invalid composite byte + long cursor payload.");
+                    }
+                    byte primary = buffer[0];
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[1..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -459,6 +579,26 @@ public static partial class QueryablePaginationExtensions {
 
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[1 + sizeof(long)];
+                    buffer[0] = (byte)primary;
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[1..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[1 + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (1 + sizeof(long))) {
+                        throw new FormatException("Invalid composite sbyte + long cursor payload.");
+                    }
+                    sbyte primary = (sbyte)buffer[0];
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[1..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
 
         return ToCursorResultAsync(
             source,
@@ -512,6 +652,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[16 + sizeof(long)];
+                    BinaryPrimitives.WriteInt128BigEndian(buffer[..16], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[16..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[16 + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (16 + sizeof(long))) {
+                        throw new FormatException("Invalid composite Int128 + long cursor payload.");
+                    }
+                    Int128 primary = BinaryPrimitives.ReadInt128BigEndian(buffer[..16]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[16..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -564,6 +724,26 @@ public static partial class QueryablePaginationExtensions {
 
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[16 + sizeof(long)];
+                    BinaryPrimitives.WriteUInt128BigEndian(buffer[..16], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[16..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[16 + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (16 + sizeof(long))) {
+                        throw new FormatException("Invalid composite UInt128 + long cursor payload.");
+                    }
+                    UInt128 primary = BinaryPrimitives.ReadUInt128BigEndian(buffer[..16]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[16..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
 
         return ToCursorResultAsync(
             source,
@@ -622,6 +802,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(double) + sizeof(long)];
+                    BinaryPrimitives.WriteDoubleBigEndian(buffer[..sizeof(double)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(double)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(double) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(double) + sizeof(long))) {
+                        throw new FormatException("Invalid composite double + long cursor payload.");
+                    }
+                    double primary = BinaryPrimitives.ReadDoubleBigEndian(buffer[..sizeof(double)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(double)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -675,6 +875,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(float) + sizeof(long)];
+                    BinaryPrimitives.WriteSingleBigEndian(buffer[..sizeof(float)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(float)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(float) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(float) + sizeof(long))) {
+                        throw new FormatException("Invalid composite float + long cursor payload.");
+                    }
+                    float primary = BinaryPrimitives.ReadSingleBigEndian(buffer[..sizeof(float)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(float)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -727,6 +947,26 @@ public static partial class QueryablePaginationExtensions {
 
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[2 + sizeof(long)];
+                    BinaryPrimitives.WriteHalfBigEndian(buffer[..2], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[2..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[2 + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (2 + sizeof(long))) {
+                        throw new FormatException("Invalid composite Half + long cursor payload.");
+                    }
+                    Half primary = BinaryPrimitives.ReadHalfBigEndian(buffer[..2]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[2..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
 
         return ToCursorResultAsync(
             source,
@@ -915,6 +1155,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(int) + sizeof(long)];
+                    BinaryPrimitives.WriteInt32BigEndian(buffer[..sizeof(int)], primary.DayNumber);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(int)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(int) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(int) + sizeof(long))) {
+                        throw new FormatException("Invalid composite DateOnly + long cursor payload.");
+                    }
+                    DateOnly primary = DateOnly.FromDayNumber(BinaryPrimitives.ReadInt32BigEndian(buffer[..sizeof(int)]));
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(int)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -964,6 +1224,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[..sizeof(long)], primary.Ticks);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(long)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(long) + sizeof(long))) {
+                        throw new FormatException("Invalid composite TimeOnly + long cursor payload.");
+                    }
+                    TimeOnly primary = new(BinaryPrimitives.ReadInt64BigEndian(buffer[..sizeof(long)]));
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(long)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -1012,6 +1292,26 @@ public static partial class QueryablePaginationExtensions {
 
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[..sizeof(long)], primary.Ticks);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(long)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(long) + sizeof(long))) {
+                        throw new FormatException("Invalid composite TimeSpan + long cursor payload.");
+                    }
+                    TimeSpan primary = new(BinaryPrimitives.ReadInt64BigEndian(buffer[..sizeof(long)]));
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(long)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
 
         return ToCursorResultAsync(
             source,
@@ -1121,6 +1421,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[16 + sizeof(long)];
+                    primary.TryWriteBytes(buffer[..16]);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[16..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[16 + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (16 + sizeof(long))) {
+                        throw new FormatException("Invalid composite Guid + long cursor payload.");
+                    }
+                    Guid primary = new(buffer[..16]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[16..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -1183,6 +1503,26 @@ public static partial class QueryablePaginationExtensions {
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
 
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[..sizeof(long)], primary.Value);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(long)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(long) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(long) + sizeof(long))) {
+                        throw new FormatException("Invalid composite SnowflakeId + long cursor payload.");
+                    }
+                    SnowflakeId primary = new(BinaryPrimitives.ReadInt64BigEndian(buffer[..sizeof(long)]));
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(long)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
+
         return ToCursorResultAsync(
             source,
             request,
@@ -1231,6 +1571,26 @@ public static partial class QueryablePaginationExtensions {
 
         Preca.ThrowIfNull(source);
         Preca.ThrowIfNull(keySelector);
+
+        if(TryGetTieBreaker<TSource, long>(keySelector, out Expression<Func<TSource, long>>? tieBreaker)) {
+            return ToCursorResultAsync(source, request, keySelector, tieBreaker,
+                static (primary, tie) => {
+                    Span<byte> buffer = stackalloc byte[sizeof(ushort) + sizeof(long)];
+                    BinaryPrimitives.WriteUInt16BigEndian(buffer[..sizeof(ushort)], primary);
+                    BinaryPrimitives.WriteInt64BigEndian(buffer[sizeof(ushort)..], tie);
+                    return CursorToken.FromBytes(buffer);
+                },
+                static token => {
+                    Span<byte> buffer = stackalloc byte[sizeof(ushort) + sizeof(long)];
+                    if(!token.TryDecode(buffer, out int written) || written != (sizeof(ushort) + sizeof(long))) {
+                        throw new FormatException("Invalid composite char + long cursor payload.");
+                    }
+                    char primary = (char)BinaryPrimitives.ReadUInt16BigEndian(buffer[..sizeof(ushort)]);
+                    long tie = BinaryPrimitives.ReadInt64BigEndian(buffer[sizeof(ushort)..]);
+                    return (primary, tie);
+                },
+                cancellationToken);
+        }
 
         return ToCursorResultAsync(
             source,
