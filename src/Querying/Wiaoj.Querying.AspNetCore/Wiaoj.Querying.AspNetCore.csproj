@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <RootNamespace>Wiaoj.Querying.AspNetCore</RootNamespace>
+	  <AssemblyName>Wiaoj.Querying.AspNetCore</AssemblyName>
+	  <PackageId>Wiaoj.Querying.AspNetCore</PackageId>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
+
+	  <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+	  <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup> 
+
+	<ItemGroup>
+    <ProjectReference Include="..\Wiaoj.Querying\Wiaoj.Querying.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -367,6 +367,43 @@ public readonly struct XxHash3
         return Compute(text, Encoding.UTF8);
     }
 
+    /// <summary>
+    /// Computes the XXHash3-64 hash by streaming data written to an <see cref="IBufferWriter{Byte}"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The underlying writer and its pooled buffer are cached per-thread (<see cref="ThreadStaticAttribute"/>).
+    /// After the first call on a given thread, subsequent (non-reentrant) calls on that same thread perform
+    /// <b>zero heap allocations</b> for the writer/buffer machinery itself.
+    /// </para>
+    /// <para>
+    /// Reentrant usage (calling <see cref="Compute{TState}"/> again from within <paramref name="writeAction"/>
+    /// on the same thread) remains fully correct: the nested call transparently falls back to renting a fresh
+    /// writer instead of reusing the one that is already checked out.
+    /// </para>
+    /// </remarks>
+    public static XxHash3 Compute<TState>(TState state, Action<IBufferWriter<byte>, TState> writeAction) {
+        Preca.ThrowIfNull(writeAction);
+
+        StreamingXxHash3Writer writer = StreamingXxHash3Writer.Rent();
+        try {
+            writeAction(writer, state);
+            return new(writer.GetCurrentHashAsUInt64());
+        }
+        finally {
+            StreamingXxHash3Writer.Return(writer);
+        }
+    }
+
+    /// <summary>
+    /// Convenience overload for parameterless or static write actions.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash3 Compute(Action<IBufferWriter<byte>> writeAction) {
+        Preca.ThrowIfNull(writeAction);
+        return Compute(writeAction, static (writer, act) => act(writer));
+    }
+
     #endregion
 
     #region Data Access & Conversion
@@ -709,6 +746,121 @@ public readonly struct XxHash3
     }
 
     #endregion
+
+    /// <summary>
+    /// An <see cref="IBufferWriter{Byte}"/> that feeds written bytes directly into an <see cref="XxHash3Core"/>
+    /// hasher, using a pooled backing buffer.
+    /// </summary>
+    /// <remarks>
+    /// Instances are cached per-thread via <see cref="Rent"/>/<see cref="Return"/> so that, in the common
+    /// (non-reentrant) case, repeated calls to <see cref="XxHash3.Compute{TState}"/> on the same thread perform
+    /// no heap allocations at all after the first warm-up call. The class is intentionally not <see cref="IDisposable"/>
+    /// on its own public surface — lifetime is fully owned and managed by <see cref="Rent"/>/<see cref="Return"/>.
+    /// </remarks>
+    private sealed class StreamingXxHash3Writer : IBufferWriter<byte> {
+        private const int DefaultCapacity = 4096;
+
+        // Thread-local single-slot cache: warmed-up Rent/Return pairs allocate nothing.
+        [ThreadStatic]
+        private static StreamingXxHash3Writer? _cached;
+
+        private readonly XxHash3Core _hasher;
+        private byte[] _buffer;
+        private int _bufferedBytes;
+
+        private StreamingXxHash3Writer(int capacity) {
+            this._hasher = new XxHash3Core();
+            this._buffer = ArrayPool<byte>.Shared.Rent(capacity);
+        }
+
+        /// <summary>
+        /// Rents a writer for the current thread. Returns the cached instance (reset) when available,
+        /// or allocates a new one on first use or during reentrant calls.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static StreamingXxHash3Writer Rent() {
+            StreamingXxHash3Writer? writer = _cached;
+            if(writer is not null) {
+                // Take exclusive ownership for the duration of this call so a reentrant
+                // Compute() call (invoked from within writeAction) safely rents a separate instance.
+                _cached = null;
+                writer._hasher.Reset();
+                writer._bufferedBytes = 0;
+                return writer;
+            }
+            return new(DefaultCapacity);
+        }
+
+        /// <summary>
+        /// Returns the writer to the thread-local cache. If the cache slot was already refilled
+        /// (possible after reentrant usage), the writer's buffer is returned to the shared pool instead.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Return(StreamingXxHash3Writer writer) {
+            writer.Flush();
+            if(_cached is null) {
+                _cached = writer;
+            }
+            else {
+                ArrayPool<byte>.Shared.Return(writer._buffer, clearArray: true);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Advance(int count) {
+            if((uint)count > (uint)(this._buffer.Length - this._bufferedBytes)) {
+                throw new ArgumentOutOfRangeException(nameof(count));
+            }
+
+            this._bufferedBytes += count;
+            if(this._bufferedBytes == this._buffer.Length) {
+                Flush();
+            }
+        }
+
+        public Memory<byte> GetMemory(int sizeHint = 0) {
+            EnsureCapacity(sizeHint);
+            return this._buffer.AsMemory(this._bufferedBytes);
+        }
+
+        public Span<byte> GetSpan(int sizeHint = 0) {
+            EnsureCapacity(sizeHint);
+            return this._buffer.AsSpan(this._bufferedBytes);
+        }
+
+        private void EnsureCapacity(int sizeHint) {
+            sizeHint = Math.Max(sizeHint, 1);
+            if(this._buffer.Length - this._bufferedBytes >= sizeHint) {
+                return;
+            }
+
+            // Push already-buffered bytes into the hasher to free up space first.
+            Flush();
+
+            if(sizeHint > this._buffer.Length) {
+                // Rare path: caller wants a single contiguous span bigger than our buffer.
+                byte[] old = this._buffer;
+                this._buffer = ArrayPool<byte>.Shared.Rent(Math.Max(sizeHint, old.Length * 2));
+                ArrayPool<byte>.Shared.Return(old, clearArray: true);
+            }
+        }
+
+        public void Flush() {
+            if(this._bufferedBytes > 0) {
+                this._hasher.Append(this._buffer.AsSpan(0, this._bufferedBytes));
+                this._bufferedBytes = 0;
+            }
+        }
+
+        /// <summary>
+        /// Flushes any pending buffered bytes and returns the finalized 64-bit hash.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ulong GetCurrentHashAsUInt64() {
+            Flush();
+            return this._hasher.GetCurrentHashAsUInt64();
+        }
+    }
 }
 
 /// <summary>
@@ -727,8 +879,7 @@ public static partial class XxHash3Extensions {
         /// <summary>
         /// Asynchronously computes the <see cref="XxHash3"/> hash of a stream using SIMD hardware streaming.
         /// </summary>
-        public static async ValueTask<XxHash3> ComputeAsync(
-            Stream stream, CancellationToken cancellationToken) {
+        public static async ValueTask<XxHash3> ComputeAsync(Stream stream, CancellationToken cancellationToken) {
             Preca.ThrowIfNull(stream);
             if(stream.CanSeek) stream.Position = 0;
 

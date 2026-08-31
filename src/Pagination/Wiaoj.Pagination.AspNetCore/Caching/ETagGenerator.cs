@@ -19,10 +19,18 @@ namespace Wiaoj.Pagination.AspNetCore.Caching;
 /// </para>
 /// </remarks>
 public static class ETagGenerator {
+    private const char WeakIndicatorChar = 'W';
+    private const char SlashChar = '/';
+    private const char QuoteChar = '"';
+    private const char WildcardChar = '*';
     private const string WeakPrefix = "W/\"";
-    private const char Quote = '"';
-    private const char Wildcard = '*';
+    private const string LowercaseHexFormat = "x";
+
     private const int XxHash3HexLength = XxHash3.SizeInBytes * 2; // 16 hex characters
+
+    // W/" + 16 hex chars + " = 20
+    private const int WeakETagPrefixLength = 3;
+    private const int WeakETagTotalLength = WeakETagPrefixLength + XxHash3HexLength + 1;
 
     /// <summary>
     /// Generates an RFC 9110 compliant weak <c>ETag</c> (<c>W/"{xxhash64_hex}"</c>) from a UTF-8 byte payload using <see cref="XxHash3"/>.
@@ -31,38 +39,61 @@ public static class ETagGenerator {
     /// <returns>A formatted weak ETag string (e.g. <c>W/"3fa85f64ac28d019"</c>).</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string GenerateWeakETag(ReadOnlySpan<byte> utf8Payload) {
-        XxHash3 hash = XxHash3.Compute(utf8Payload);
-        return string.Create(CultureInfo.InvariantCulture, stackalloc char[20], $"{WeakPrefix}{hash:x}{Quote}");
+        return FormatWeakETag(XxHash3.Compute(utf8Payload));
+    }
+
+    /// <summary>
+    /// Formats a precomputed <see cref="XxHash3"/> hash into an RFC 9110 compliant weak <c>ETag</c> string
+    /// (<c>W/"{xxhash64_hex}"</c>). Use this overload when the hash has already been computed elsewhere
+    /// (e.g. via streaming serialization) to avoid hashing the payload twice.
+    /// </summary>
+    /// <param name="hash">A previously computed <see cref="XxHash3"/> hash.</param>
+    /// <returns>A formatted weak ETag string (e.g. <c>W/"3fa85f64ac28d019"</c>).</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string FormatWeakETag(XxHash3 hash) {
+        return string.Create(CultureInfo.InvariantCulture, stackalloc char[WeakETagTotalLength], $"{WeakPrefix}{hash:x}{QuoteChar}");
     }
 
     /// <summary>
     /// Tries to format an RFC 9110 compliant weak <c>ETag</c> directly into a destination character span without heap allocations.
     /// </summary>
     /// <param name="utf8Payload">The UTF-8 encoded response body span.</param>
-    /// <param name="destination">The destination character buffer (minimum 20 characters required).</param>
+    /// <param name="destination">The destination character buffer (minimum <see cref="WeakETagTotalLength"/> characters required).</param>
     /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
     /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool TryGenerateWeakETag(ReadOnlySpan<byte> utf8Payload, Span<char> destination, out int charsWritten) {
-        const int requiredLength = 3 + XxHash3HexLength + 1; // W/" + 16 hex chars + " = 20
-        if(destination.Length < requiredLength) {
+        return TryFormatWeakETag(XxHash3.Compute(utf8Payload), destination, out charsWritten);
+    }
+
+    /// <summary>
+    /// Tries to format a precomputed <see cref="XxHash3"/> hash directly into a destination character span
+    /// without heap allocations. Use this overload when the hash has already been computed elsewhere
+    /// (e.g. via streaming serialization) to avoid hashing the payload twice.
+    /// </summary>
+    /// <param name="hash">A previously computed <see cref="XxHash3"/> hash.</param>
+    /// <param name="destination">The destination character buffer (minimum <see cref="WeakETagTotalLength"/> characters required).</param>
+    /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
+    /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryFormatWeakETag(XxHash3 hash, Span<char> destination, out int charsWritten) {
+        if(destination.Length < WeakETagTotalLength) {
             charsWritten = 0;
             return false;
         }
 
-        XxHash3 hash = XxHash3.Compute(utf8Payload);
+        destination[0] = WeakIndicatorChar;
+        destination[1] = SlashChar;
+        destination[2] = QuoteChar;
 
-        destination[0] = 'W';
-        destination[1] = '/';
-        destination[2] = '"';
-
-        if(!hash.TryFormat(destination.Slice(3, XxHash3HexLength), out int hexWritten, "x") || hexWritten != XxHash3HexLength) {
+        if(!hash.TryFormat(destination.Slice(WeakETagPrefixLength, XxHash3HexLength), out int hexWritten, LowercaseHexFormat)
+            || hexWritten != XxHash3HexLength) {
             charsWritten = 0;
             return false;
         }
 
-        destination[requiredLength - 1] = '"';
-        charsWritten = requiredLength;
+        destination[WeakETagTotalLength - 1] = QuoteChar;
+        charsWritten = WeakETagTotalLength;
         return true;
     }
 
@@ -74,7 +105,7 @@ public static class ETagGenerator {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string GenerateStrongETag(ReadOnlySpan<byte> utf8Payload) {
         Sha256Hash hash = Sha256Hash.Compute(utf8Payload);
-        return string.Create(CultureInfo.InvariantCulture, stackalloc char[66], $"{Quote}{hash.ToHexStringLower()}{Quote}");
+        return string.Create(CultureInfo.InvariantCulture, stackalloc char[66], $"{QuoteChar}{hash.ToHexStringLower()}{QuoteChar}");
     }
 
     /// <summary>
@@ -96,7 +127,7 @@ public static class ETagGenerator {
         ReadOnlySpan<char> targetSpan = currentETag.AsSpan().Trim();
 
         // 1. Wildcard match: '*' matches any current entity
-        if(headerSpan.Length == 1 && headerSpan[0] == Wildcard) {
+        if(headerSpan.Length == 1 && headerSpan[0] == WildcardChar) {
             return true;
         }
 

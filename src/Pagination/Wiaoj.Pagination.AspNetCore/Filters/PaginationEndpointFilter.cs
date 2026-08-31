@@ -1,9 +1,9 @@
 ﻿using Microsoft.AspNetCore.Http;
-using Microsoft.Net.Http.Headers;
 using System.Text.Json;
 using Wiaoj.Pagination.AspNetCore.Caching;
 using Wiaoj.Pagination.AspNetCore.Linking;
 using Wiaoj.Preconditions;
+using Wiaoj.Primitives.Hashing;
 
 namespace Wiaoj.Pagination.AspNetCore.Filters;
 
@@ -69,13 +69,15 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
 
         // 3. Handle ETag & 304 Not Modified
         if(this._options.EnableETag && httpContext.Response.StatusCode is 0 or 200) {
-            byte[] utf8Bytes = JsonSerializer.SerializeToUtf8Bytes(value);
-            string etag = ETagGenerator.GenerateWeakETag(utf8Bytes);
+            XxHash3 hash = XxHash3.Compute(value, static (writer, val) => {
+                using Utf8JsonWriter jsonWriter = new(writer);
+                JsonSerializer.Serialize(jsonWriter, val);
+            });
 
-            httpContext.Response.Headers[HeaderNames.ETag] = etag;
+            string etag = ETagGenerator.FormatWeakETag(hash);
+            httpContext.Response.Headers.ETag = etag;
 
-            string? ifNoneMatch = httpContext.Request.Headers[HeaderNames.IfNoneMatch];
-            if(ETagGenerator.IsNotModified(ifNoneMatch, etag)) {
+            if(ETagGenerator.IsNotModified(httpContext.Request.Headers.IfNoneMatch, etag)) {
                 return Results.StatusCode(StatusCodes.Status304NotModified);
             }
         }
@@ -95,7 +97,7 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
             });
 
             if(!string.IsNullOrEmpty(linkHeader)) {
-                httpContext.Response.Headers[HeaderNames.Link] = linkHeader;
+                httpContext.Response.Headers.Link = linkHeader;
             }
         }
     }
@@ -113,7 +115,7 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
             });
 
             if(!string.IsNullOrEmpty(linkHeader)) {
-                httpContext.Response.Headers[HeaderNames.Link] = linkHeader;
+                httpContext.Response.Headers.Link = linkHeader;
             }
         }
     }
