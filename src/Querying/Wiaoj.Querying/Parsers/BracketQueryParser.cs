@@ -44,9 +44,9 @@ public static class BracketQueryParser {
         // Case 2A: Implicit equality without brackets (e.g., "status=Active")
         if(openBracketIndex == -1 && closeBracketIndex == -1) {
             result = new FilterConditionNode(
-                Field: keySpan.ToString(),
-                Operator: QueryOperator.Equal,
-                RawValue: valueSpan.ToString());
+                field: keySpan.ToString(),
+                op: QueryOperator.Equal,
+                rawValue: valueSpan.ToString());
 
             return true;
         }
@@ -73,9 +73,9 @@ public static class BracketQueryParser {
             : valueSpan.ToString();
 
         result = new FilterConditionNode(
-            Field: fieldSpan.ToString(),
-            Operator: queryOperator,
-            RawValue: rawValue);
+            field: fieldSpan.ToString(),
+            op: queryOperator,
+            rawValue: rawValue);
 
         return true;
     }
@@ -106,9 +106,9 @@ public static class BracketQueryParser {
         }
 
         result = new FilterConditionNode(
-            Field: fieldSpan.ToString(),
-            Operator: queryOperator,
-            RawValue: null);
+            field: fieldSpan.ToString(),
+            op: queryOperator,
+            rawValue: null);
 
         return true;
     }
