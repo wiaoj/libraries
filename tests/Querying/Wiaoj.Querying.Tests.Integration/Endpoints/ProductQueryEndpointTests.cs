@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using Wiaoj.Querying.Tests.Integration.Builders;
 using Wiaoj.Querying.Tests.Integration.Fixtures;
 
@@ -317,6 +318,90 @@ public class ProductQueryEndpointTests(TestApplicationFixture fixture) : IClassF
 
             Assert.NotNull(problem);
             Assert.True(problem.Errors.ContainsKey("price"));
+        }
+    }
+
+    public sealed class HttpQueryPayloadEndpoints(TestApplicationFixture fixture) : ProductQueryEndpointTests(fixture) {
+        [Fact]
+        public async Task Should_Filter_Products_Using_Http_Query_Method_With_Json_Body() {
+            // Arrange: HTTP QUERY + application/json body (Price >= 300 AND Category == Electronics)
+            const string jsonPayload = """
+            {
+              "sort": "-price",
+              "filters": [
+                { "field": "category", "op": "eq", "value": "Electronics" },
+                { "field": "price", "op": "gte", "value": 300 }
+              ]
+            }
+            """;
+
+            using HttpRequestMessage request = new(new HttpMethod("QUERY"), "/api/v1/products") {
+                Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
+            };
+
+            // Act
+            HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            List<Product>? items = await response.Content.ReadFromJsonAsync<List<Product>>(TestContext.Current.CancellationToken);
+
+            Assert.NotNull(items);
+            Assert.Equal(2, items.Count); // Gaming Laptop X (2500) and 4K Gaming Monitor (450)
+            Assert.Equal(2500m, items[0].Price);
+            Assert.Equal(450m, items[1].Price);
+            Assert.All(items, x => Assert.Equal("Electronics", x.Category));
+        }
+
+        [Fact]
+        public async Task Should_Filter_Products_Using_Http_Query_Method_With_PlainText_Bracket_Body() {
+            // Arrange: HTTP QUERY + text/plain body
+            const string textPayload = "category=Furniture&price[gte]=300&sort=-price";
+
+            using HttpRequestMessage request = new(new HttpMethod("QUERY"), "/api/v1/products") {
+                Content = new StringContent(textPayload, Encoding.UTF8, "text/plain")
+            };
+
+            // Act
+            HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            List<Product>? items = await response.Content.ReadFromJsonAsync<List<Product>>(TestContext.Current.CancellationToken);
+
+            Assert.NotNull(items);
+            Assert.Equal(2, items.Count); // Standing Desk (600) and Office Chair (300)
+            Assert.Equal(600m, items[0].Price);
+            Assert.Equal(300m, items[1].Price);
+        }
+
+        [Fact]
+        public async Task Should_Return_415_And_AcceptQuery_Header_When_Sending_Unsupported_ContentType() {
+            // Arrange: HTTP QUERY with application/xml body
+            using HttpRequestMessage request = new(new HttpMethod("QUERY"), "/api/v1/products") {
+                Content = new StringContent("<query></query>", Encoding.UTF8, "application/xml")
+            };
+
+            // Act
+            HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+            Assert.True(response.Headers.Contains("Accept-Query"));
+        }
+
+        [Fact]
+        public async Task Should_Return_400_BadRequest_When_Json_Payload_Has_Syntax_Errors() {
+            // Arrange: Malformed JSON syntax (unclosed brace)
+            using HttpRequestMessage request = new(new HttpMethod("QUERY"), "/api/v1/products") {
+                Content = new StringContent("{\"q\": \"laptop\"", Encoding.UTF8, "application/json")
+            };
+
+            // Act
+            HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         }
     }
 }

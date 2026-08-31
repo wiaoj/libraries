@@ -128,7 +128,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Merge_Filter_And_Sort_Rules_When_Configured_Sequentially() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act
             schema.AllowFilter(x => x.Price);
@@ -175,7 +175,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Restrict_Filtering_To_Specifically_Allowed_Operators() {
             // Arrange & Act
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
             schema.Property(x => x.Price)
                   .AllowFilter(QueryOperator.Equal, QueryOperator.In);
 
@@ -189,7 +189,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Merge_Allowed_Operators_When_Configured_Multiple_Times() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act
             schema.Property(x => x.Price).AllowFilter(QueryOperator.Equal);
@@ -206,7 +206,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Have_Sensible_Default_Security_Limits() {
             // Arrange & Act
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Assert
             Assert.Equal(20, schema.MaxFilterCount);
@@ -217,7 +217,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Allow_Customizing_Security_Limits() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act
             schema.ConfigureLimits(maxFilters: 10, maxInValues: 25, maxSortFields: 2);
@@ -238,7 +238,7 @@ public class QuerySchemaTests {
             int maxInValues,
             int maxSortFields) {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
@@ -250,7 +250,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Have_IgnoreEmptyFilterValues_False_By_Default() {
             // Arrange & Act
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Assert
             Assert.False(schema.IgnoreEmptyFilterValues);
@@ -259,7 +259,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Configure_IgnoreEmptyFilters_Fluently() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act
             schema.IgnoreEmptyFilters(true);
@@ -271,7 +271,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Configure_Property_Level_AllowEmpty() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act
             schema.Property(x => x.Title, p => p.AllowFilter().AllowEmpty(true));
@@ -286,7 +286,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Replace_Previous_Alias_When_Property_Is_Renamed_Sequentially() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act
             schema.Property(x => x.Price, p => p.HasName("cost").AllowFilter());
@@ -302,7 +302,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_InvalidOperationException_When_Alias_Collides_With_Another_Property() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
             schema.Property(x => x.Price, p => p.HasName("amount"));
 
             // Act & Assert
@@ -315,7 +315,7 @@ public class QuerySchemaTests {
         [InlineData("   ")]
         public void Should_Throw_ArgumentException_When_Alias_Is_Empty_Or_Whitespace(string invalidAlias) {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentException>(() =>
@@ -339,7 +339,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentException_When_Selector_Is_Method_Call() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => schema.Property(x => x.ComputeValue()));
@@ -348,7 +348,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentException_When_Selector_Is_Binary_Expression() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => schema.Property(x => x.Price + 10m));
@@ -357,7 +357,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentException_When_Selector_Is_Constant() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => schema.Property(x => 100));
@@ -366,7 +366,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentException_When_Selector_Uses_Indexer() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => schema.Property(x => x.Tags[0]));
@@ -375,7 +375,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentException_When_Selector_Uses_Captured_Closure() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
             string externalValue = "test";
 
             // Act & Assert
@@ -385,7 +385,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentNullException_When_Property_Selector_Is_Null() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentNullException>(() => schema.Property<string>(null!));
@@ -394,7 +394,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentNullException_When_Search_Selectors_Are_Null() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentNullException>(() => schema.SearchIn(null!));
@@ -437,7 +437,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Have_Case_Insensitive_Text_Comparisons_Enabled_By_Default() {
             // Arrange & Act
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Assert
             Assert.True(schema.UseCaseInsensitiveTextComparisons);
@@ -446,7 +446,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Configure_UseCaseInsensitiveText_Fluently() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act
             schema.UseCaseInsensitiveText(false);
@@ -458,7 +458,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Have_Sensible_Default_Value_Length_Limits() {
             // Arrange & Act
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Assert
             Assert.Equal(512, schema.MaxFilterValueLength);
@@ -468,7 +468,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Allow_Customizing_Value_Length_Limits_Via_ConfigureLimits() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act
             schema.ConfigureLimits(maxFilters: 10, maxInValues: 25, maxSortFields: 2, maxFilterValueLength: 64, maxSearchTermLength: 32);
@@ -481,7 +481,7 @@ public class QuerySchemaTests {
         [Fact]
         public void ConfigureLimits_Should_Remain_Backward_Compatible_With_Three_Arguments() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act: legacy 3-argument call site should still compile and use new defaults
             schema.ConfigureLimits(maxFilters: 10, maxInValues: 25, maxSortFields: 2);
@@ -496,7 +496,7 @@ public class QuerySchemaTests {
         [InlineData(-5)]
         public void Should_Throw_ArgumentOutOfRangeException_When_MaxFilterValueLength_Is_Invalid(int invalidLength) {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
@@ -508,7 +508,7 @@ public class QuerySchemaTests {
         [InlineData(-5)]
         public void Should_Throw_ArgumentOutOfRangeException_When_MaxSearchTermLength_Is_Invalid(int invalidLength) {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
@@ -541,7 +541,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentNullException_When_RequireFilter_Predicate_Is_Null() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentNullException>(() => schema.RequireFilter(null!));
@@ -561,7 +561,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentNullException_When_DefaultFilter_Arguments_Are_Null() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentNullException>(() => schema.DefaultFilter<decimal>(null!, x => x.Price > 0));
@@ -620,7 +620,7 @@ public class QuerySchemaTests {
         [Fact]
         public void Should_Throw_ArgumentNullException_When_DefaultSort_Selector_Is_Null() {
             // Arrange
-            var schema = new QuerySchema<ComplexProduct>();
+            QuerySchema<ComplexProduct> schema = new();
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentNullException>(() => schema.DefaultSort<decimal>(null!));

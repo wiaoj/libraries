@@ -45,8 +45,10 @@ public class QueryValidationEndpointFilterTests {
                     FilterConditionNode.GreaterThanOrEqual("price", 1500)
                 ]);
 
+            Query<Item> query = new(validRequest);
+
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, validRequest);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
             bool nextCalled = false;
 
             // Act
@@ -67,9 +69,10 @@ public class QueryValidationEndpointFilterTests {
             QuerySchema<Item> schema = CreateSampleSchema();
             QueryValidationEndpointFilter<Item> filter = new(schema);
             QueryRequest emptyRequest = QueryRequest.Empty;
+            Query<Item> query = new(emptyRequest);
 
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, emptyRequest);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
             bool nextCalled = false;
 
             // Act
@@ -85,25 +88,17 @@ public class QueryValidationEndpointFilterTests {
         }
 
         [Fact]
-        public async Task Should_Pass_Through_When_No_QueryRequest_Argument_Exists_In_Context() {
+        public async Task Should_Throw_InvalidOperationException_When_No_Query_Argument_Exists_In_Context() {
             // Arrange
             QuerySchema<Item> schema = CreateSampleSchema();
             QueryValidationEndpointFilter<Item> filter = new(schema);
 
             DefaultHttpContext httpContext = new();
             DefaultEndpointFilterInvocationContext filterContext = new(httpContext, 12345, "param", CancellationToken.None);
-            bool nextCalled = false;
 
-            // Act
-            object? result = await filter.InvokeAsync(filterContext, _ => {
-                nextCalled = true;
-                return ValueTask.FromResult<object?>(Results.Ok("NoQueryRequest"));
-            });
-
-            // Assert
-            Assert.True(nextCalled);
-            Ok<string> okResult = Assert.IsType<Ok<string>>(result);
-            Assert.Equal("NoQueryRequest", okResult.Value);
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok())).AsTask());
         }
     }
 
@@ -120,8 +115,12 @@ public class QueryValidationEndpointFilterTests {
                 new("UnregisteredField", QueryOperator.Equal, "123")
             ]);
 
+            Query<Item> invalidQuery = new(new QueryRequest(filters: [
+                new("UnregisteredField", QueryOperator.Equal, "123")
+            ]));
+
             object?[] arguments = [42, "test_string", CancellationToken.None];
-            arguments[targetPosition] = invalidRequest;
+            arguments[targetPosition] = invalidQuery;
 
             DefaultHttpContext httpContext = new();
             DefaultEndpointFilterInvocationContext filterContext = new(httpContext, arguments);
@@ -147,9 +146,10 @@ public class QueryValidationEndpointFilterTests {
             QueryRequest request = new(filters: [
                 FilterConditionNode.Equal("InternalTag", "Secret")
             ]);
+            Query<Item> query = new(request);
 
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, request);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
 
             // Act
             object? result = await filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok()));
@@ -171,8 +171,10 @@ public class QueryValidationEndpointFilterTests {
                 FilterConditionNode.LessThan("price", 500)
             ]);
 
+            Query<Item> query = request;
+
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, request);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
 
             // Act
             object? result = await filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok()));
@@ -192,8 +194,10 @@ public class QueryValidationEndpointFilterTests {
             QueryValidationEndpointFilter<Item> filter = new(schema);
             QueryRequest request = new(sort: new Sort("Title"));
 
+            Query<Item> query = request;
+
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, request);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
 
             // Act
             object? result = await filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok()));
@@ -219,9 +223,10 @@ public class QueryValidationEndpointFilterTests {
             QueryRequest request = new(filters: [
                 new(field, QueryOperator.Equal, invalidValue)
             ]);
+            Query<Item> query = request;
 
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, request);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
 
             // Act
             object? result = await filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok()));
@@ -245,9 +250,10 @@ public class QueryValidationEndpointFilterTests {
             QueryRequest request = new(filters: [
                 new("price", QueryOperator.Between, malformedRange)
             ]);
+            Query<Item> query = request;
 
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, request);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
 
             // Act
             object? result = await filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok()));
@@ -274,8 +280,10 @@ public class QueryValidationEndpointFilterTests {
                 FilterConditionNode.Equal("title", "D")
             ]);
 
+            Query<Item> query = request;
+
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, request);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
 
             // Act
             object? result = await filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok()));
@@ -294,9 +302,10 @@ public class QueryValidationEndpointFilterTests {
             QuerySchema<Item> schema = CreateSampleSchema();
             QueryValidationEndpointFilter<Item> filter = new(schema);
             QueryRequest request = new(sort: new Sort("price,createdAt,title"));
+            Query<Item> query = request;
 
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, request);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
 
             // Act
             object? result = await filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok()));
@@ -321,8 +330,10 @@ public class QueryValidationEndpointFilterTests {
                     FilterConditionNode.LessThan("price", 100)
                 ]);
 
+            Query<Item> query = request;
+
             DefaultHttpContext httpContext = new();
-            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, request);
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
 
             // Act
             object? result = await filter.InvokeAsync(filterContext, _ => ValueTask.FromResult<object?>(Results.Ok()));

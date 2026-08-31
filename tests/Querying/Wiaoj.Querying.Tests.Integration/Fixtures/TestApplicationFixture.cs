@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using System.Text;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -10,21 +11,11 @@ using Wiaoj.Querying.Extensions;
 
 namespace Wiaoj.Querying.Tests.Integration.Fixtures;
 
-/// <summary>
-/// Modern in-memory test host fixture utilizing <see cref="WebApplicationBuilder"/> and <see cref="TestServer"/>.
-/// </summary>
 public sealed class TestApplicationFixture : IAsyncLifetime {
     private WebApplication? _app;
 
-    /// <summary>
-    /// Gets the configured HTTP client to send requests to the in-memory test server.
-    /// </summary>
     public HttpClient Client { get; private set; } = null!;
-
-    /// <summary>
-    /// Gets the in-memory test server instance.
-    /// </summary>
-    public TestServer Server => this._app!.GetTestServer();
+    public TestServer Server => this._app?.GetTestServer() ?? throw new Exception("Test server not found");
 
     public async ValueTask InitializeAsync() {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions {
@@ -38,6 +29,23 @@ public sealed class TestApplicationFixture : IAsyncLifetime {
         builder.Services.AddDbContext<TestDbContext>(options =>
             options.UseInMemoryDatabase(databaseName));
 
+        // 1. Yeni IQueryingBuilder mimarimiz ile şemayı kaydediyoruz
+        builder.Services.AddQuerying()
+            .AddSchema<Product>(schema => {
+                schema.AllowFilter(x => x.Id, x => x.Category, x => x.Status);
+                schema.Property(x => x.Price, p => p.AllowFilter(
+                    QueryOperator.Equal,
+                    QueryOperator.GreaterThanOrEqual,
+                    QueryOperator.GreaterThan,
+                    QueryOperator.LessThan,
+                    QueryOperator.LessThanOrEqual,
+                    QueryOperator.Between).AllowSort());
+                schema.AllowFilter(x => x.CreatedAt, x => x.DeletedAt);
+                schema.AllowSort(x => x.Id, x => x.CreatedAt);
+                schema.SearchIn(x => x.Name, x => x.Category);
+                schema.ConfigureLimits(maxFilters: 5, maxInValues: 5, maxSortFields: 3);
+            });
+
         builder.WebHost.UseTestServer();
 
         this._app = builder.Build();
@@ -47,24 +55,19 @@ public sealed class TestApplicationFixture : IAsyncLifetime {
             TestDbContext.SeedData(db);
         }
 
-        // Schema configuration with strict whitelist and limits
-        var productSchema = new QuerySchema<Product>()
-            .AllowFilter(x => x.Id, x => x.Category, x => x.Status)
-            .Property(x => x.Price, p => p.AllowFilter(QueryOperator.Equal, QueryOperator.GreaterThanOrEqual, QueryOperator.GreaterThan, QueryOperator.LessThan, QueryOperator.LessThanOrEqual, QueryOperator.Between).AllowSort())
-            .AllowFilter(x => x.CreatedAt, x => x.DeletedAt)
-            .AllowSort(x => x.Id, x => x.CreatedAt)
-            .SearchIn(x => x.Name, x => x.Category)
-            .ConfigureLimits(maxFilters: 5, maxInValues: 5, maxSortFields: 3);
+        // 2. Endpoint hem GET, hem QUERY, hem de POST kabul edecek şekilde bağlanır:
+        this._app.MapMethods("/api/v1/products", ["GET", "QUERY", "POST"], async (
+            Query<Product> query,
+            QuerySchema<Product> schema,
+            TestDbContext db) => {
 
-        // Minimal API Endpoint Under Test wired with QueryRequestBinder and WithQueryValidation filter
-        this._app.MapGet("/api/v1/products", async (Query<Product> query, TestDbContext db) => {  
-            var products = await db.Products
-                .AsNoTracking()
-                .ApplyQuery(query, productSchema)
-                .ToListAsync();
+                var products = await db.Products
+                    .AsNoTracking()
+                    .ApplyQuery(query, schema)
+                    .ToListAsync();
 
-            return Results.Ok(products);
-        }).WithQueryValidation(productSchema);
+                return Results.Ok(products);
+            }).WithQueryValidation<Product>();
 
         await this._app.StartAsync();
         this.Client = this._app.GetTestClient();

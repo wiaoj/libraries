@@ -4,23 +4,22 @@ using Wiaoj.Preconditions;
 namespace Wiaoj.Querying.AspNetCore;
 
 /// <summary>
-/// An internal endpoint filter that validates an already-bound <see cref="Query{T}"/> argument against a
-/// <see cref="QuerySchema{T}"/>, automatically producing an RFC 7807 <c>ValidationProblem</c>
-/// (HTTP 400 Bad Request) on schema rule violations.
+/// Endpoint filter that validates an already-bound <see cref="Query{T}"/> argument against a
+/// <see cref="QuerySchema{T}"/> and automatically produces an RFC 7807 <c>ValidationProblem</c>
+/// response (HTTP 400 Bad Request) on schema rule violations.
 /// </summary>
 /// <typeparam name="T">The entity type of the query schema.</typeparam>
-/// <remarks>
-/// This filter does <b>not</b> perform binding itself — that already happened via
-/// <see cref="Query{T}.BindAsync"/> before the filter pipeline runs. It only locates the bound
-/// <see cref="Query{T}"/> argument in <see cref="EndpointFilterInvocationContext.Arguments"/> and validates it.
-/// </remarks>
 internal sealed class QueryValidationEndpointFilter<T> : IEndpointFilter {
+    private const string AcceptQueryHeader = "Accept-Query";
+    private const string SupportedQueryMediaTypes = "text/plain, application/x-www-form-urlencoded";
+
     private readonly QuerySchema<T> _schema;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="QueryValidationEndpointFilter{T}"/> class.
     /// </summary>
     /// <param name="schema">The schema rules to enforce.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="schema"/> is <see langword="null"/>.</exception>
     public QueryValidationEndpointFilter(QuerySchema<T> schema) {
         Preca.ThrowIfNull(schema);
         this._schema = schema;
@@ -30,6 +29,8 @@ internal sealed class QueryValidationEndpointFilter<T> : IEndpointFilter {
     public ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next) {
         Preca.ThrowIfNull(context);
         Preca.ThrowIfNull(next);
+
+        context.HttpContext.Response.Headers[AcceptQueryHeader] = SupportedQueryMediaTypes;
 
         QueryRequest? request = null;
         for(int i = 0; i < context.Arguments.Count; i++) {
