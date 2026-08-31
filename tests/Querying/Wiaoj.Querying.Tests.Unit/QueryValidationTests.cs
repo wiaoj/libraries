@@ -63,6 +63,65 @@ public class QueryValidationTests {
         }
     }
 
+    public sealed class EmptyFilterValidationScenarios : QueryValidationTests {
+        [Fact]
+        public void Should_Skip_Validation_For_Empty_Filters_When_IgnoreEmptyFilters_Is_True() {
+            // Arrange: price[gte]= with empty string should NOT produce InvalidValueFormat when IgnoreEmptyFilters is true
+            var schema = new QuerySchema<Product>()
+                .IgnoreEmptyFilters(true)
+                .AllowFilter(x => x.Price, x => x.Name);
+
+            var request = new QueryRequest(filters: [
+                new("price", QueryOperator.GreaterThanOrEqual, string.Empty),
+                new("name", QueryOperator.Equal, "   ")
+            ]);
+
+            // Act
+            QueryValidationResult result = schema.Validate(request);
+
+            // Assert
+            Assert.True(result.IsValid);
+            Assert.Empty(result.Errors);
+        }
+
+        [Fact]
+        public void Should_Allow_Empty_String_When_Property_Explicitly_Configures_AllowEmpty() {
+            // Arrange: Name allows empty string
+            var schema = new QuerySchema<Product>()
+                .Property(x => x.Name, p => p.AllowFilter().AllowEmpty(true));
+
+            var request = new QueryRequest(filters: [
+                FilterConditionNode.Equal("name", string.Empty)
+            ]);
+
+            // Act
+            QueryValidationResult result = schema.Validate(request);
+
+            // Assert
+            Assert.True(result.IsValid);
+        }
+
+        [Fact]
+        public void Should_Fail_For_Empty_Numeric_Filter_When_IgnoreEmptyFilters_Is_False() {
+            // Arrange: Default IgnoreEmptyFilters is false; price[gte]= must fail with InvalidValueFormat
+            var schema = new QuerySchema<Product>()
+                .AllowFilter(x => x.Price);
+
+            var request = new QueryRequest(filters: [
+                new("price", QueryOperator.GreaterThanOrEqual, string.Empty)
+            ]);
+
+            // Act
+            QueryValidationResult result = schema.Validate(request);
+
+            // Assert
+            Assert.False(result.IsValid);
+            var error = Assert.Single(result.Errors);
+            Assert.Equal("price", error.PropertyName);
+            Assert.Equal(QueryValidationErrorCode.InvalidValueFormat, error.ErrorCode);
+        }
+    }
+
     public sealed class OperatorValidation : QueryValidationTests {
         [Fact]
         public void Should_Fail_With_OperatorNotAllowed_When_Operator_Is_Restricted_By_Bitmask() {

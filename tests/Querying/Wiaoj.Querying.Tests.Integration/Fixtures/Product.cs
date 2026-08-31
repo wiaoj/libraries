@@ -10,4 +10,5 @@ public sealed class Product {
     public string Category { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }

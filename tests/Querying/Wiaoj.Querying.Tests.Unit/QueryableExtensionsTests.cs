@@ -481,6 +481,47 @@ public class QueryableExtensionsTests {
         }
     }
 
+    public sealed class EmptyFilterExecutionScenarios : QueryableExtensionsTests {
+        [Fact]
+        public void Should_Omit_Empty_Filters_From_Query_When_IgnoreEmptyFilters_Is_True() {
+            // Arrange: price[gte]= and status[eq]= are empty; should be skipped and return all seed items
+            var schema = CreateDefaultSchema().IgnoreEmptyFilters(true);
+            var request = new QueryRequest(filters: [
+                new("Price", QueryOperator.GreaterThanOrEqual, string.Empty),
+                new("Status", QueryOperator.Equal, "   ")
+            ]);
+
+            // Act
+            var result = SeedItems.AsQueryable().ApplyQuery(request, schema).ToList();
+
+            // Assert: All 5 items returned because empty filters were omitted
+            Assert.Equal(SeedItems.Count, result.Count);
+        }
+
+        [Fact]
+        public void Should_Filter_By_Literal_Empty_String_When_AllowEmpty_Is_Configured() {
+            // Arrange: Add item with empty description to seed
+            var testItems = new List<Item>(SeedItems) {
+                new() { Id = 99, Name = "Item With Empty Desc", Description = string.Empty }
+            };
+
+            var schema = new QuerySchema<Item>()
+                .Property(x => x.Description, p => p.AllowFilter().AllowEmpty(true));
+
+            var request = new QueryRequest(filters: [
+                FilterConditionNode.Equal("Description", string.Empty)
+            ]);
+
+            // Act
+            var result = testItems.AsQueryable().ApplyQuery(request, schema).ToList();
+
+            // Assert
+            var item = Assert.Single(result);
+            Assert.Equal(99, item.Id);
+            Assert.Equal(string.Empty, item.Description);
+        }
+    }
+
     public sealed class SecurityAndBoundaryEnforcement : QueryableExtensionsTests {
         [Fact]
         public void Should_Silently_Ignore_Filters_On_Unregistered_Fields() {

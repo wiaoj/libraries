@@ -99,6 +99,8 @@
     <Project Path="src/Preconditions/Wiaoj.Preconditions/Wiaoj.Preconditions.csproj" />
   </Folder>
   <Folder Name="/src/Querying/">
+    <File Path="src/Querying/README.md" />
+    <Project Path="src/Querying/Wiaoj.Querying.AspNetCore/Wiaoj.Querying.AspNetCore.csproj" Id="6a48f363-f483-4338-b76e-a0d765352991" />
     <Project Path="src/Querying/Wiaoj.Querying/Wiaoj.Querying.csproj" Id="e6109869-8592-4b25-aa38-1e394e98392f" />
   </Folder>
   <Folder Name="/src/RateLimiting/">
@@ -170,6 +172,7 @@
     <Project Path="tests/Pagination/Wiaoj.Pagination.Tests.Unit/Wiaoj.Pagination.Tests.Unit.csproj" Id="63446244-a358-4a02-9cf8-e8d3dc69150d" />
   </Folder>
   <Folder Name="/tests/Querying/">
+    <Project Path="tests/Querying/Wiaoj.Querying.AspNetCore.Tests.Unit/Wiaoj.Querying.AspNetCore.Tests.Unit.csproj" />
     <Project Path="tests/Querying/Wiaoj.Querying.Tests.Integration/Wiaoj.Querying.Tests.Integration.csproj" Id="114e3316-eebd-41ce-987b-e528d4b7136b" />
     <Project Path="tests/Querying/Wiaoj.Querying.Tests.Unit/Wiaoj.Querying.Tests.Unit.csproj" Id="28500331-19a0-440a-9400-2f19e2a2c489" />
   </Folder>

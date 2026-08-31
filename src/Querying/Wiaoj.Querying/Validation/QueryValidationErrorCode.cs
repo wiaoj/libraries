@@ -26,5 +26,11 @@ public enum QueryValidationErrorCode : byte {
     MaxInValuesCountExceeded = 7,
 
     /// <summary>The total number of sort fields exceeds the configured maximum limit.</summary>
-    MaxSortFieldsCountExceeded = 8
+    MaxSortFieldsCountExceeded = 8,
+
+    /// <summary>A filter's raw value exceeds the configured maximum character length.</summary>
+    FilterValueTooLong = 9,
+
+    /// <summary>The free-text search term exceeds the configured maximum character length.</summary>
+    SearchTermTooLong = 10
 }

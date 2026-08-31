@@ -246,6 +246,42 @@ public class QuerySchemaTests {
         }
     }
 
+    public sealed class EmptyFilterPolicyConfiguration : QuerySchemaTests {
+        [Fact]
+        public void Should_Have_IgnoreEmptyFilterValues_False_By_Default() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Assert
+            Assert.False(schema.IgnoreEmptyFilterValues);
+        }
+
+        [Fact]
+        public void Should_Configure_IgnoreEmptyFilters_Fluently() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act
+            schema.IgnoreEmptyFilters(true);
+
+            // Assert
+            Assert.True(schema.IgnoreEmptyFilterValues);
+        }
+
+        [Fact]
+        public void Should_Configure_Property_Level_AllowEmpty() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act
+            schema.Property(x => x.Title, p => p.AllowFilter().AllowEmpty(true));
+
+            // Assert
+            Assert.True(schema.TryGetProperty("Title", out var prop));
+            Assert.True(prop.AllowEmptyString);
+        }
+    }
+
     public sealed class AliasMappingAndCollisions : QuerySchemaTests {
         [Fact]
         public void Should_Replace_Previous_Alias_When_Property_Is_Renamed_Sequentially() {
@@ -394,6 +430,200 @@ public class QuerySchemaTests {
                 Assert.True(schema.IsSortAllowed("CreatedAt"));
                 Assert.False(schema.IsFilterAllowed("UnregisteredField"));
             });
+        }
+    }
+
+    public sealed class TextComparisonAndLengthLimits : QuerySchemaTests {
+        [Fact]
+        public void Should_Have_Case_Insensitive_Text_Comparisons_Enabled_By_Default() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Assert
+            Assert.True(schema.UseCaseInsensitiveTextComparisons);
+        }
+
+        [Fact]
+        public void Should_Configure_UseCaseInsensitiveText_Fluently() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act
+            schema.UseCaseInsensitiveText(false);
+
+            // Assert
+            Assert.False(schema.UseCaseInsensitiveTextComparisons);
+        }
+
+        [Fact]
+        public void Should_Have_Sensible_Default_Value_Length_Limits() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Assert
+            Assert.Equal(512, schema.MaxFilterValueLength);
+            Assert.Equal(256, schema.MaxSearchTermLength);
+        }
+
+        [Fact]
+        public void Should_Allow_Customizing_Value_Length_Limits_Via_ConfigureLimits() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act
+            schema.ConfigureLimits(maxFilters: 10, maxInValues: 25, maxSortFields: 2, maxFilterValueLength: 64, maxSearchTermLength: 32);
+
+            // Assert
+            Assert.Equal(64, schema.MaxFilterValueLength);
+            Assert.Equal(32, schema.MaxSearchTermLength);
+        }
+
+        [Fact]
+        public void ConfigureLimits_Should_Remain_Backward_Compatible_With_Three_Arguments() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act: legacy 3-argument call site should still compile and use new defaults
+            schema.ConfigureLimits(maxFilters: 10, maxInValues: 25, maxSortFields: 2);
+
+            // Assert
+            Assert.Equal(512, schema.MaxFilterValueLength);
+            Assert.Equal(256, schema.MaxSearchTermLength);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-5)]
+        public void Should_Throw_ArgumentOutOfRangeException_When_MaxFilterValueLength_Is_Invalid(int invalidLength) {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
+                schema.ConfigureLimits(maxFilters: 10, maxInValues: 10, maxSortFields: 5, maxFilterValueLength: invalidLength));
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-5)]
+        public void Should_Throw_ArgumentOutOfRangeException_When_MaxSearchTermLength_Is_Invalid(int invalidLength) {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
+                schema.ConfigureLimits(maxFilters: 10, maxInValues: 10, maxSortFields: 5, maxSearchTermLength: invalidLength));
+        }
+    }
+
+    public sealed class RequiredAndDefaultRules : QuerySchemaTests {
+        [Fact]
+        public void Should_Register_RequireFilter_Predicate() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>()
+                .RequireFilter(x => !x.IsDeleted);
+
+            // Assert
+            Assert.Single(schema.RequiredFilters);
+        }
+
+        [Fact]
+        public void Should_Accumulate_Multiple_RequireFilter_Predicates_In_Registration_Order() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>()
+                .RequireFilter(x => !x.IsDeleted)
+                .RequireFilter(x => x.Id > 0);
+
+            // Assert
+            Assert.Equal(2, schema.RequiredFilters.Count);
+        }
+
+        [Fact]
+        public void Should_Throw_ArgumentNullException_When_RequireFilter_Predicate_Is_Null() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentNullException>(() => schema.RequireFilter(null!));
+        }
+
+        [Fact]
+        public void Should_Register_DefaultFilter_With_Member_Path() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>()
+                .DefaultFilter(x => x.Priority, x => x.Priority == Priority.Medium);
+
+            // Assert
+            var rule = Assert.Single(schema.DefaultFilterRules);
+            Assert.Equal("Priority", rule.MemberPath);
+        }
+
+        [Fact]
+        public void Should_Throw_ArgumentNullException_When_DefaultFilter_Arguments_Are_Null() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentNullException>(() => schema.DefaultFilter<decimal>(null!, x => x.Price > 0));
+            Assert.ThrowsAny<ArgumentNullException>(() => schema.DefaultFilter(x => x.Price, null!));
+        }
+
+        [Fact]
+        public void Should_Resolve_DefaultFilter_Exposed_Name_Through_Alias_Applied_Afterward() {
+            // Arrange: DefaultFilter registered before HasName is applied to the same property
+            var schema = new QuerySchema<ComplexProduct>()
+                .DefaultFilter(x => x.Priority, x => x.Priority == Priority.Medium);
+
+            schema.Property(x => x.Priority, p => p.HasName("prio").AllowFilter());
+
+            // Act
+            string resolved = schema.ResolveExposedName(schema.DefaultFilterRules[0].MemberPath);
+
+            // Assert: the later alias is still picked up correctly
+            Assert.Equal("prio", resolved);
+        }
+
+        [Fact]
+        public void Should_Fall_Back_To_Member_Path_When_DefaultFilter_Field_Was_Never_Separately_Registered() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>()
+                .DefaultFilter(x => x.Priority, x => x.Priority == Priority.Medium);
+
+            // Act
+            string resolved = schema.ResolveExposedName("Priority");
+
+            // Assert
+            Assert.Equal("Priority", resolved);
+        }
+
+        [Fact]
+        public void Should_Register_DefaultSort_Applier() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>()
+                .DefaultSort(x => x.CreatedAt, SortDirection.Descending);
+
+            // Assert
+            Assert.Single(schema.DefaultSortAppliers);
+        }
+
+        [Fact]
+        public void Should_Accumulate_Multiple_DefaultSort_Fields_In_Registration_Order() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>()
+                .DefaultSort(x => x.Priority)
+                .DefaultSort(x => x.CreatedAt, SortDirection.Descending);
+
+            // Assert
+            Assert.Equal(2, schema.DefaultSortAppliers.Count);
+        }
+
+        [Fact]
+        public void Should_Throw_ArgumentNullException_When_DefaultSort_Selector_Is_Null() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentNullException>(() => schema.DefaultSort<decimal>(null!));
         }
     }
 }
