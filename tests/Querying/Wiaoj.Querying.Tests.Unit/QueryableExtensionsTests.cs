@@ -486,13 +486,13 @@ public class QueryableExtensionsTests {
         public void Should_Omit_Empty_Filters_From_Query_When_IgnoreEmptyFilters_Is_True() {
             // Arrange: price[gte]= and status[eq]= are empty; should be skipped and return all seed items
             QuerySchema<Item> schema = CreateDefaultSchema().IgnoreEmptyFilters(true);
-            var request = new QueryRequest(filters: [
+            QueryRequest request = new(filters: [
                 new("Price", QueryOperator.GreaterThanOrEqual, string.Empty),
                 new("Status", QueryOperator.Equal, "   ")
             ]);
 
             // Act
-            var result = SeedItems.AsQueryable().ApplyQuery(request, schema).ToList();
+            List<Item> result = SeedItems.AsQueryable().ApplyQuery(request, schema).ToList();
 
             // Assert: All 5 items returned because empty filters were omitted
             Assert.Equal(SeedItems.Count, result.Count);
@@ -501,19 +501,19 @@ public class QueryableExtensionsTests {
         [Fact]
         public void Should_Filter_By_Literal_Empty_String_When_AllowEmpty_Is_Configured() {
             // Arrange: Add item with empty description to seed
-            var testItems = new List<Item>(SeedItems) {
-                new() { Id = 99, Name = "Item With Empty Desc", Description = string.Empty }
-            };
+            List<Item> testItems = [
+.. SeedItems,                 new() { Id = 99, Name = "Item With Empty Desc", Description = string.Empty }
+            ];
 
             QuerySchema<Item> schema = new QuerySchema<Item>()
                 .Property(x => x.Description, p => p.AllowFilter().AllowEmpty(true));
 
-            var request = new QueryRequest(filters: [
+            QueryRequest request = new(filters: [
                 FilterConditionNode.Equal("Description", string.Empty)
             ]);
 
             // Act
-            var result = testItems.AsQueryable().ApplyQuery(request, schema).ToList();
+            List<Item> result = testItems.AsQueryable().ApplyQuery(request, schema).ToList();
 
             // Assert
             Item item = Assert.Single(result);
@@ -657,7 +657,6 @@ public class QueryableExtensionsTests {
             Assert.Equal(SeedItems.Count, result.Count);
         }
     }
-
     public sealed class RequiredFiltersEnforcement : QueryableExtensionsTests {
         [Fact]
         public void Should_Apply_RequireFilter_Even_When_Request_Is_Empty() {
