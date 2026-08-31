@@ -1,5 +1,4 @@
-﻿
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using Wiaoj.Querying.Tests.Integration.Builders;
 using Wiaoj.Querying.Tests.Integration.Fixtures;

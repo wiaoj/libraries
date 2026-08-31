@@ -4,14 +4,14 @@ namespace Wiaoj.Querying.Parsers;
 /// <summary>
 /// Parses bracket-style query parameters into <see cref="FilterConditionNode"/> instances.
 /// </summary>
-internal sealed class BracketQueryParser {
+public static class BracketQueryParser {
     /// <summary>
     /// Attempts to parse a single query key-value pair into a <see cref="FilterConditionNode"/>.
     /// </summary>
     /// <param name="input">The raw query parameter span (e.g., <c>price[gte]=100</c>, <c>deletedAt[isNull]</c>).</param>
     /// <param name="result">The parsed condition node if successful; otherwise, default.</param>
     /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryParse(ReadOnlySpan<char> input, out FilterConditionNode result) {
+    public static bool TryParse(ReadOnlySpan<char> input, out FilterConditionNode result) {
         result = default;
 
         ReadOnlySpan<char> trimmed = input.Trim();
@@ -101,7 +101,6 @@ internal sealed class BracketQueryParser {
             return false;
         }
 
-        // Only unary operators (isNull, isNotNull) are valid without an '=' and value
         if(!IsUnaryOperator(queryOperator)) {
             return false;
         }
@@ -115,12 +114,10 @@ internal sealed class BracketQueryParser {
     }
 
     private static bool IsValidBracketStructure(ReadOnlySpan<char> span, int openIndex, int closeIndex) {
-        // Must contain valid bracket positions
         if(openIndex <= 0 || closeIndex <= openIndex + 1 || closeIndex != span.Length - 1) {
             return false;
         }
 
-        // Ensure there are no duplicate brackets (e.g., "field[[op]]=1" or "field[op][extra]=1")
         return span.LastIndexOf(QuerySyntax.OpenBracket) == openIndex &&
                span.LastIndexOf(QuerySyntax.CloseBracket) == closeIndex;
     }
@@ -138,11 +135,15 @@ internal sealed class BracketQueryParser {
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.LessThan) => QueryOperator.LessThan,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.LessThanOrEqual) => QueryOperator.LessThanOrEqual,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.Contains) => QueryOperator.Contains,
+            _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.NotContains) => QueryOperator.NotContains,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.StartsWith) => QueryOperator.StartsWith,
+            _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.NotStartsWith) => QueryOperator.NotStartsWith,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.EndsWith) => QueryOperator.EndsWith,
+            _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.NotEndsWith) => QueryOperator.NotEndsWith,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.In) => QueryOperator.In,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.NotIn) => QueryOperator.NotIn,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.Between) => QueryOperator.Between,
+            _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.NotBetween) => QueryOperator.NotBetween,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.IsNull) => QueryOperator.IsNull,
             _ when opSpan.EqualsOrdinalIgnoreCase(QuerySyntax.Operators.IsNotNull) => QueryOperator.IsNotNull,
             _ => default

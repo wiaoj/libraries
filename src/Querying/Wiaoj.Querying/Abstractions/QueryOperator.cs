@@ -40,37 +40,57 @@ public enum QueryOperator : byte {
     Contains = 7,
 
     /// <summary>
+    /// Substring exclusion (<c>notContains</c>).
+    /// </summary>
+    NotContains = 8,
+
+    /// <summary>
     /// Prefix search (<c>startsWith</c>).
     /// </summary>
-    StartsWith = 8,
+    StartsWith = 9,
+
+    /// <summary>
+    /// Prefix exclusion (<c>notStartsWith</c>).
+    /// </summary>
+    NotStartsWith = 10,
 
     /// <summary>
     /// Suffix search (<c>endsWith</c>).
     /// </summary>
-    EndsWith = 9,
+    EndsWith = 11,
+
+    /// <summary>
+    /// Suffix exclusion (<c>notEndsWith</c>).
+    /// </summary>
+    NotEndsWith = 12,
 
     /// <summary>
     /// Set inclusion check (<c>in</c>).
     /// </summary>
-    In = 10,
+    In = 13,
 
     /// <summary>
     /// Set exclusion check (<c>notIn</c>).
     /// </summary>
-    NotIn = 11,
+    NotIn = 14,
 
     /// <summary>
-    /// Range boundary check (<c>between</c>).
+    /// Range boundary inclusion check (<c>between</c>).
     /// </summary>
-    Between = 12,
+    Between = 15,
+
+    /// <summary>
+    /// Range boundary exclusion check (<c>notBetween</c>).
+    /// </summary>
+    NotBetween = 16,
 
     /// <summary>
     /// Null check (<c>isNull</c>).
     /// </summary>
-    IsNull = 13,
+    IsNull = 17,
 
     /// <summary>
     /// Not null check (<c>isNotNull</c>).
     /// </summary>
-    IsNotNull = 14
+    IsNotNull = 18
 }

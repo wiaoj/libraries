@@ -6,8 +6,7 @@ namespace Wiaoj.Querying.Tests.Unit;
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Feature", "BracketParser")]
-public class BracketQueryParserTests {
-    private static readonly BracketQueryParser Sut = new();
+public class BracketQueryParserTests { 
 
     /// <summary>
     /// Tests for standard and implicit equality conditions.
@@ -19,7 +18,7 @@ public class BracketQueryParserTests {
             const string input = "status[eq]=Active";
 
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -34,7 +33,7 @@ public class BracketQueryParserTests {
             const string input = "status=Active";
 
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -51,8 +50,8 @@ public class BracketQueryParserTests {
             string expectedField,
             QueryOperator expectedOperator,
             string expectedValue) {
-            // Act: Parse parameters with explicit empty value
-            bool isParsed = Sut.TryParse(input, out var result);
+            // Act
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -82,7 +81,7 @@ public class BracketQueryParserTests {
             QueryOperator expectedOperator,
             string expectedValue) {
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -108,7 +107,7 @@ public class BracketQueryParserTests {
             QueryOperator expectedOperator,
             string expectedValue) {
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -119,7 +118,33 @@ public class BracketQueryParserTests {
     }
 
     /// <summary>
-    /// Tests for collection and range operators: in, notIn, between.
+    /// Tests for negative/exclusion pattern operators: notContains, notStartsWith, notEndsWith.
+    /// </summary>
+    public sealed class StringExclusionOperators : BracketQueryParserTests {
+        [Theory]
+        [InlineData("title[notContains]=Outlet", "title", QueryOperator.NotContains, "Outlet")]
+        [InlineData("name[notContains]=refurbished", "name", QueryOperator.NotContains, "refurbished")]
+        [InlineData("sku[notStartsWith]=TEMP-", "sku", QueryOperator.NotStartsWith, "TEMP-")]
+        [InlineData("email[notEndsWith]=@spam.com", "email", QueryOperator.NotEndsWith, "@spam.com")]
+        [InlineData("file[notEndsWith]=.tmp", "file", QueryOperator.NotEndsWith, ".tmp")]
+        public void Should_Parse_String_Exclusion_Operators_Correctly(
+            string input,
+            string expectedField,
+            QueryOperator expectedOperator,
+            string expectedValue) {
+            // Act
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
+
+            // Assert
+            Assert.True(isParsed);
+            Assert.Equal(expectedField, result.Field);
+            Assert.Equal(expectedOperator, result.Operator);
+            Assert.Equal(expectedValue, result.RawValue);
+        }
+    }
+
+    /// <summary>
+    /// Tests for collection and range operators: in, notIn, between, notBetween.
     /// </summary>
     public sealed class CollectionAndRangeOperators : BracketQueryParserTests {
         [Theory]
@@ -128,6 +153,8 @@ public class BracketQueryParserTests {
         [InlineData("category[notIn]=Electronics,Clothing", "category", QueryOperator.NotIn, "Electronics,Clothing")]
         [InlineData("tenantId[in]=d3b07384-d113-4a0b-90f7-d4642d991b10", "tenantId", QueryOperator.In, "d3b07384-d113-4a0b-90f7-d4642d991b10")]
         [InlineData("price[between]=100..500", "price", QueryOperator.Between, "100..500")]
+        [InlineData("price[notBetween]=100..500", "price", QueryOperator.NotBetween, "100..500")]
+        [InlineData("age[notBetween]=18..65", "age", QueryOperator.NotBetween, "18..65")]
         [InlineData("temperature[between]=-20.5..40.0", "temperature", QueryOperator.Between, "-20.5..40.0")]
         [InlineData("date[between]=2026-01-01..2026-12-31", "date", QueryOperator.Between, "2026-01-01..2026-12-31")]
         public void Should_Parse_Collection_And_Range_Operators_Correctly(
@@ -136,7 +163,7 @@ public class BracketQueryParserTests {
             QueryOperator expectedOperator,
             string expectedValue) {
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -161,7 +188,7 @@ public class BracketQueryParserTests {
             QueryOperator expectedOperator,
             string? expectedValue) {
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -180,8 +207,8 @@ public class BracketQueryParserTests {
             string expectedField,
             QueryOperator expectedOperator,
             string expectedValue) {
-            // Act: Parse literal null strings for hybrid compatibility
-            bool isParsed = Sut.TryParse(input, out var result);
+            // Act
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -209,7 +236,7 @@ public class BracketQueryParserTests {
             QueryOperator expectedOperator,
             string expectedValue) {
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -233,7 +260,7 @@ public class BracketQueryParserTests {
             QueryOperator expectedOperator,
             string expectedValue) {
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -257,7 +284,7 @@ public class BracketQueryParserTests {
             QueryOperator expectedOperator,
             string expectedValue) {
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -268,16 +295,18 @@ public class BracketQueryParserTests {
     }
 
     /// <summary>
-    /// Tests for case-insensitivity in operator names.
+    /// Tests for case-insensitivity in operator names (including exclusion operators).
     /// </summary>
     public sealed class CaseInsensitiveOperators : BracketQueryParserTests {
         [Theory]
         [InlineData("price[GTE]=100", "price", QueryOperator.GreaterThanOrEqual, "100")]
-        [InlineData("price[Gte]=100", "price", QueryOperator.GreaterThanOrEqual, "100")]
         [InlineData("status[EQ]=Active", "status", QueryOperator.Equal, "Active")]
         [InlineData("name[CONTAINS]=john", "name", QueryOperator.Contains, "john")]
+        [InlineData("title[NOTCONTAINS]=outlet", "title", QueryOperator.NotContains, "outlet")]
+        [InlineData("sku[NOTSTARTSWITH]=temp", "sku", QueryOperator.NotStartsWith, "temp")]
+        [InlineData("email[NOTENDSWITH]=.org", "email", QueryOperator.NotEndsWith, ".org")]
         [InlineData("category[NOTIN]=A,B", "category", QueryOperator.NotIn, "A,B")]
-        [InlineData("range[BETWEEN]=1..10", "range", QueryOperator.Between, "1..10")]
+        [InlineData("range[NOTBETWEEN]=1..10", "range", QueryOperator.NotBetween, "1..10")]
         [InlineData("deletedAt[ISNULL]", "deletedAt", QueryOperator.IsNull, null)]
         [InlineData("deletedAt[ISNOTNULL]", "deletedAt", QueryOperator.IsNotNull, null)]
         public void Should_Map_Operators_Regardless_Of_Casing(
@@ -286,7 +315,7 @@ public class BracketQueryParserTests {
             QueryOperator expectedOperator,
             string expectedValue) {
             // Act
-            bool isParsed = Sut.TryParse(input, out var result);
+            bool isParsed = BracketQueryParser.TryParse(input, out var result);
 
             // Assert
             Assert.True(isParsed);
@@ -318,7 +347,7 @@ public class BracketQueryParserTests {
         [InlineData("[isNull]")]                  // Unary operator with missing field name
         public void Should_Return_False_When_Input_Is_Malformed(string malformedInput) {
             // Act
-            bool isParsed = Sut.TryParse(malformedInput, out var result);
+            bool isParsed = BracketQueryParser.TryParse(malformedInput, out var result);
 
             // Assert
             Assert.False(isParsed);

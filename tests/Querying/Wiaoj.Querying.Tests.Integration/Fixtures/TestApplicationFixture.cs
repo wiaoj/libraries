@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Wiaoj.Querying.Extensions;
+using Wiaoj.Querying.Parsers;
 
 namespace Wiaoj.Querying.Tests.Integration.Fixtures;
 /// <summary>
@@ -29,11 +31,12 @@ public sealed class TestApplicationFixture : IAsyncLifetime {
             EnvironmentName = Environments.Development
         });
 
+        var databaseName = Guid.NewGuid().ToString();
+
         builder.Services.AddRouting();
         builder.Services.AddDbContext<TestDbContext>(options =>
-            options.UseInMemoryDatabase(Guid.NewGuid().ToString()));
+            options.UseInMemoryDatabase(databaseName));
 
-        // Configures WebApplication to use in-memory TestServer
         builder.WebHost.UseTestServer();
 
         this._app = builder.Build();
@@ -44,10 +47,50 @@ public sealed class TestApplicationFixture : IAsyncLifetime {
             TestDbContext.SeedData(db);
         }
 
-        // Minimal API Endpoint Under Test
-        this._app.MapGet("/api/v1/products", async (TestDbContext db) => {
-            // Currently returns all products without filtering; .ApplyQuery() will be integrated here
-            List<Product> products = await db.Products.AsNoTracking().ToListAsync();
+        // Configure query schema for Product entity
+        QuerySchema<Product> productSchema = new QuerySchema<Product>()
+            .AllowFilter(x => x.Id, x => x.Price, x => x.CreatedAt)
+            .AllowFilter(x => x.Category, x => x.Status, x => x.Name)
+            .AllowSort(x => x.Id, x => x.Price, x => x.CreatedAt)
+            .SearchIn(x => x.Name, x => x.Category);
+
+        // Minimal API Endpoint Under Test with structured querying applied
+        this._app.MapGet("/api/v1/products", async (HttpContext context, TestDbContext db) => {
+            Q q = default;
+            Sort sort = default;
+            List<FilterConditionNode>? filters = null;
+
+            foreach((string? key, Microsoft.Extensions.Primitives.StringValues stringValues) in context.Request.Query) {
+                if(string.IsNullOrEmpty(key)) {
+                    continue;
+                }
+
+                if(key.Equals("q", StringComparison.OrdinalIgnoreCase)) {
+                    q = new Q(stringValues.ToString());
+                    continue;
+                }
+
+                if(key.Equals("sort", StringComparison.OrdinalIgnoreCase)) {
+                    sort = new Sort(stringValues.ToString());
+                    continue;
+                }
+
+                foreach(var val in stringValues) {
+                    var rawPair = string.IsNullOrEmpty(val) ? key : $"{key}={val}";
+                    if(BracketQueryParser.TryParse(rawPair, out FilterConditionNode filterNode)) {
+                        filters ??= [];
+                        filters.Add(filterNode);
+                    }
+                }
+            }
+
+            var queryRequest = new QueryRequest(q: q, sort: sort, filters: filters);
+
+            List<Product> products = await db.Products
+                .AsNoTracking()
+                .ApplyQuery(queryRequest, productSchema)
+                .ToListAsync();
+
             return Results.Ok(products);
         });
 
