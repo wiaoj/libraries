@@ -5,11 +5,9 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Wiaoj.Primitives.Buffers;
 using Wiaoj.Primitives.Hashing;
-using Wiaoj.Querying.JsonConverters;
 using Wiaoj.Querying.Parsers;
 
 namespace Wiaoj.Querying;
@@ -19,7 +17,6 @@ namespace Wiaoj.Querying;
 /// </summary>
 [DebuggerDisplay("Q: {Q.Value}, Sort: {Sort}, Filters: {Filters.Count}, Hash: {QueryHash}")]
 [StructLayout(LayoutKind.Auto)]
-[JsonConverter(typeof(QueryRequestJsonConverter))]
 public readonly record struct QueryRequest :
     IEquatable<QueryRequest>,
     ISpanParsable<QueryRequest>,

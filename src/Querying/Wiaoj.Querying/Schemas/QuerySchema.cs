@@ -1,6 +1,9 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Text;
+using Wiaoj.Preconditions;
+using Wiaoj.Querying.Expressions;
+using Wiaoj.Querying.Parsers;
 
 namespace Wiaoj.Querying;
 
@@ -44,9 +47,9 @@ public class QuerySchema<T> {
     /// Configures security and abuse limits for query evaluation.
     /// </summary>
     public QuerySchema<T> ConfigureLimits(int maxFilters, int maxInValues, int maxSortFields) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxFilters);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxInValues);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxSortFields);
+        Preca.ThrowIfNegativeOrZero(maxFilters);
+        Preca.ThrowIfNegativeOrZero(maxInValues);
+        Preca.ThrowIfNegativeOrZero(maxSortFields);
 
         this.MaxFilterCount = maxFilters;
         this.MaxInValuesCount = maxInValues;
@@ -56,10 +59,196 @@ public class QuerySchema<T> {
     }
 
     /// <summary>
+    /// Validates a <see cref="QueryRequest"/> against the configured schema rules, permitted operators, and security limits.
+    /// </summary>
+    /// <param name="request">The query request to validate.</param>
+    /// <returns>A <see cref="QueryValidationResult"/> detailing whether validation succeeded and any diagnostic errors encountered.</returns>
+    public QueryValidationResult Validate(QueryRequest request) {
+        if(request.IsEmpty) {
+            return QueryValidationResult.Success;
+        }
+
+        List<QueryValidationError>? errors = null;
+
+        // 1. Security limits: MaxFilterCount
+        if(request.Filters.Count > this.MaxFilterCount) {
+            errors ??= [];
+            errors.Add(new QueryValidationError(
+                propertyName: null,
+                errorCode: QueryValidationErrorCode.MaxFilterCountExceeded,
+                message: $"The request contains {request.Filters.Count} filters, which exceeds the maximum limit of {this.MaxFilterCount}."));
+        }
+
+        // 2. Security limits: MaxSortFieldsCount
+        if(request.Sort.Count > this.MaxSortFieldsCount) {
+            errors ??= [];
+            errors.Add(new QueryValidationError(
+                propertyName: null,
+                errorCode: QueryValidationErrorCode.MaxSortFieldsCountExceeded,
+                message: $"The request contains {request.Sort.Count} sort fields, which exceeds the maximum limit of {this.MaxSortFieldsCount}."));
+        }
+
+        // 3. Validate Sort fields
+        for(int i = 0; i < request.Sort.Count; i++) {
+            SortNode sortNode = request.Sort[i];
+            if(!IsSortAllowed(sortNode.Field)) {
+                errors ??= [];
+                errors.Add(new QueryValidationError(
+                    propertyName: sortNode.Field,
+                    errorCode: QueryValidationErrorCode.FieldNotSortable,
+                    message: $"Sorting by field '{sortNode.Field}' is not allowed."));
+            }
+        }
+
+        // 4. Validate Filters
+        for(int i = 0; i < request.Filters.Count; i++) {
+            FilterConditionNode filter = request.Filters[i];
+
+            if(!TryGetProperty(filter.Field, out QueryProperty<T>? prop) || !prop.IsFilterable) {
+                errors ??= [];
+                errors.Add(new QueryValidationError(
+                    propertyName: filter.Field,
+                    errorCode: QueryValidationErrorCode.FieldNotFilterable,
+                    message: $"Filtering by field '{filter.Field}' is not allowed."));
+                continue;
+            }
+
+            if(!IsFilterAllowed(filter.Field, filter.Operator)) {
+                errors ??= [];
+                errors.Add(new QueryValidationError(
+                    propertyName: filter.Field,
+                    errorCode: QueryValidationErrorCode.OperatorNotAllowed,
+                    message: $"Operator '{filter.Operator}' is not allowed on field '{filter.Field}'."));
+                continue;
+            }
+
+            Type underlyingType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+
+            switch(filter.Operator) {
+                case QueryOperator.IsNull:
+                case QueryOperator.IsNotNull:
+                    break;
+
+                case QueryOperator.In:
+                case QueryOperator.NotIn: {
+                    if(!string.IsNullOrEmpty(filter.RawValue)) {
+                        string[] parts = filter.RawValue.Split(QuerySyntax.Comma, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+                        if(parts.Length > this.MaxInValuesCount) {
+                            errors ??= [];
+                            errors.Add(new QueryValidationError(
+                                propertyName: filter.Field,
+                                errorCode: QueryValidationErrorCode.MaxInValuesCountExceeded,
+                                message: $"The IN operation on field '{filter.Field}' contains {parts.Length} values, exceeding the maximum limit of {this.MaxInValuesCount}.",
+                                attemptedValue: filter.RawValue));
+                        }
+
+                        for(int p = 0; p < parts.Length; p++) {
+                            if(!TryResolveValidationValue(parts[p], prop, underlyingType, out _)) {
+                                errors ??= [];
+                                errors.Add(new QueryValidationError(
+                                    propertyName: filter.Field,
+                                    errorCode: QueryValidationErrorCode.InvalidValueFormat,
+                                    message: $"Value '{parts[p]}' is not a valid format for property '{filter.Field}' of type '{underlyingType.Name}'.",
+                                    attemptedValue: parts[p]));
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case QueryOperator.Between:
+                case QueryOperator.NotBetween: {
+                    if(string.IsNullOrEmpty(filter.RawValue)) {
+                        errors ??= [];
+                        errors.Add(new QueryValidationError(
+                            propertyName: filter.Field,
+                            errorCode: QueryValidationErrorCode.MalformedRange,
+                            message: $"Range operation on field '{filter.Field}' requires lower and upper bounds separated by '{QuerySyntax.RangeDelimiter}'.",
+                            attemptedValue: filter.RawValue));
+                        break;
+                    }
+
+                    int delimiterIndex = filter.RawValue.IndexOf(QuerySyntax.RangeDelimiter, StringComparison.Ordinal);
+                    if(delimiterIndex == -1) {
+                        errors ??= [];
+                        errors.Add(new QueryValidationError(
+                            propertyName: filter.Field,
+                            errorCode: QueryValidationErrorCode.MalformedRange,
+                            message: $"Range operation on field '{filter.Field}' requires lower and upper bounds separated by '{QuerySyntax.RangeDelimiter}'.",
+                            attemptedValue: filter.RawValue));
+                        break;
+                    }
+
+                    string lowerStr = filter.RawValue[..delimiterIndex].Trim();
+                    string upperStr = filter.RawValue[(delimiterIndex + QuerySyntax.RangeDelimiter.Length)..].Trim();
+
+                    if(string.IsNullOrEmpty(lowerStr) || string.IsNullOrEmpty(upperStr)) {
+                        errors ??= [];
+                        errors.Add(new QueryValidationError(
+                            propertyName: filter.Field,
+                            errorCode: QueryValidationErrorCode.MalformedRange,
+                            message: $"Range operation on field '{filter.Field}' contains empty bounds.",
+                            attemptedValue: filter.RawValue));
+                        break;
+                    }
+
+                    if(!TryResolveValidationValue(lowerStr, prop, underlyingType, out _) ||
+                       !TryResolveValidationValue(upperStr, prop, underlyingType, out _)) {
+                        errors ??= [];
+                        errors.Add(new QueryValidationError(
+                            propertyName: filter.Field,
+                            errorCode: QueryValidationErrorCode.InvalidValueFormat,
+                            message: $"Range boundary values in '{filter.RawValue}' are not valid for property '{filter.Field}' of type '{underlyingType.Name}'.",
+                            attemptedValue: filter.RawValue));
+                    }
+                    break;
+                }
+
+                default: {
+                    if(filter.RawValue != null && !TryResolveValidationValue(filter.RawValue, prop, underlyingType, out _)) {
+                        errors ??= [];
+                        errors.Add(new QueryValidationError(
+                            propertyName: filter.Field,
+                            errorCode: QueryValidationErrorCode.InvalidValueFormat,
+                            message: $"Value '{filter.RawValue}' is not a valid format for property '{filter.Field}' of type '{underlyingType.Name}'.",
+                            attemptedValue: filter.RawValue));
+                    }
+                    break;
+                }
+            }
+        }
+
+        return errors == null ? QueryValidationResult.Success : new QueryValidationResult(errors);
+    }
+
+    private static bool TryResolveValidationValue(string? rawValue,
+                                                  QueryProperty<T> prop,
+                                                  Type underlyingType,
+                                                  out object? result) {
+        result = null;
+        if(rawValue is null) return false;
+
+        if(prop.CustomParser != null) {
+            try {
+                result = prop.CustomParser(rawValue);
+                return result != null;
+            }
+            catch {
+                result = null;
+                return false;
+            }
+        }
+
+        return TypeConverterHelper.TryConvertValue(rawValue, underlyingType, out result);
+    }
+
+    /// <summary>
     /// Configures a specific entity property with fine-grained rules or aliases via a builder.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> Property<TProperty>(Expression<Func<T, TProperty>> propertySelector) {
-        ArgumentNullException.ThrowIfNull(propertySelector);
+        Preca.ThrowIfNull(propertySelector);
 
         string memberPath = ExtractMemberPath(propertySelector.Body);
 
@@ -81,10 +270,9 @@ public class QuerySchema<T> {
     /// <summary>
     /// Configures a specific entity property using an inline action and returns the schema for method chaining.
     /// </summary>
-    public QuerySchema<T> Property<TProperty>(
-        Expression<Func<T, TProperty>> propertySelector,
-        Action<PropertyRuleBuilder<T, TProperty>> configure) {
-        ArgumentNullException.ThrowIfNull(configure);
+    public QuerySchema<T> Property<TProperty>(Expression<Func<T, TProperty>> propertySelector,
+                                              Action<PropertyRuleBuilder<T, TProperty>> configure) {
+        Preca.ThrowIfNull(configure);
         PropertyRuleBuilder<T, TProperty> builder = Property(propertySelector);
         configure(builder);
         return this;
@@ -156,10 +344,10 @@ public class QuerySchema<T> {
     /// Configures properties to be queried during free-text search (<c>q=term</c>).
     /// </summary>
     public QuerySchema<T> SearchIn(params Expression<Func<T, string>>[] selectors) {
-        ArgumentNullException.ThrowIfNull(selectors);
+        Preca.ThrowIfNull(selectors);
         for(int i = 0; i < selectors.Length; i++) {
             Expression<Func<T, string>> selector = selectors[i];
-            ArgumentNullException.ThrowIfNull(selector, nameof(selectors));
+            Preca.ThrowIfNull(selector, nameof(selectors));
             this._searchSelectors.Add(selector);
         }
         return this;
@@ -290,7 +478,7 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     /// Sets a custom exposed name (alias) for the property in query parameters.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> HasName(string alias) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(alias);
+        Preca.ThrowIfNullOrWhiteSpace(alias);
         string oldName = this._property.ExposedName;
         this._property = this._property with { ExposedName = alias.Trim() };
         this._schema.UpdateProperty(oldName, this._property);
@@ -301,7 +489,7 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     /// Registers a custom parser delegate to convert raw string values into <typeparamref name="TProperty"/>.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> WithParser(Func<string, TProperty> parser) {
-        ArgumentNullException.ThrowIfNull(parser);
+        Preca.ThrowIfNull(parser);
 
         this._property = this._property with {
             CustomParser = raw => parser(raw)

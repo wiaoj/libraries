@@ -4,7 +4,7 @@ namespace Wiaoj.Querying.Tests.Unit;
 
 /// <summary>
 /// Unit test suite for <see cref="FilterConditionNode"/> validating factories, self-contained parsing,
-/// formatting, unary helpers, and structural equality.
+/// formatting, unary helpers, preconditions, and structural equality.
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Feature", "FilterConditionNode")]
@@ -25,7 +25,7 @@ public class FilterConditionNodeTests {
         [Fact]
         public void Factory_Equal_Should_Construct_Proper_Node() {
             // Arrange & Act
-            var node = FilterConditionNode.Equal("status", "Active");
+            FilterConditionNode node = FilterConditionNode.Equal("status", "Active");
 
             // Assert
             Assert.Equal("status", node.Field);
@@ -38,7 +38,7 @@ public class FilterConditionNodeTests {
         [Fact]
         public void Factory_GreaterThanOrEqual_Should_Format_Numeric_Value() {
             // Arrange & Act
-            var node = FilterConditionNode.GreaterThanOrEqual("price", 150.5m);
+            FilterConditionNode node = FilterConditionNode.GreaterThanOrEqual("price", 150.5m);
 
             // Assert
             Assert.Equal("price", node.Field);
@@ -49,7 +49,7 @@ public class FilterConditionNodeTests {
         [Fact]
         public void Factory_Between_Should_Format_Range_Syntax() {
             // Arrange & Act
-            var node = FilterConditionNode.Between("price", 100, 500);
+            FilterConditionNode node = FilterConditionNode.Between("price", 100, 500);
 
             // Assert
             Assert.Equal("price", node.Field);
@@ -60,7 +60,7 @@ public class FilterConditionNodeTests {
         [Fact]
         public void Factory_IsNull_Should_Create_Unary_Node_With_Null_Value() {
             // Arrange & Act
-            var node = FilterConditionNode.IsNull("deletedAt");
+            FilterConditionNode node = FilterConditionNode.IsNull("deletedAt");
 
             // Assert
             Assert.Equal("deletedAt", node.Field);
@@ -68,6 +68,26 @@ public class FilterConditionNodeTests {
             Assert.Null(node.RawValue);
             Assert.True(node.IsUnary);
             Assert.False(node.HasValue);
+        }
+    }
+
+    public sealed class PreconditionEnforcement : FilterConditionNodeTests {
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void Factory_Should_Throw_ArgumentException_When_Field_Is_Null_Or_Whitespace(string? invalidField) {
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentException>(() => FilterConditionNode.Equal(invalidField!, "Active"));
+            Assert.ThrowsAny<ArgumentException>(() => FilterConditionNode.IsNull(invalidField!));
+            Assert.ThrowsAny<ArgumentException>(() => FilterConditionNode.Between(invalidField!, 1, 10));
+        }
+
+        [Fact]
+        public void Between_Factory_Should_Throw_ArgumentNullException_When_Bounds_Are_Null() {
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentNullException>(() => FilterConditionNode.Between("price", null!, 100));
+            Assert.ThrowsAny<ArgumentNullException>(() => FilterConditionNode.Between("price", 100, null!));
         }
     }
 
@@ -121,11 +141,54 @@ public class FilterConditionNodeTests {
         }
     }
 
+    public sealed class Equality : FilterConditionNodeTests {
+        [Fact]
+        public void Nodes_With_Same_State_Should_Be_Equal_Regardless_Of_Creation_Method() {
+            // Arrange
+            FilterConditionNode factoryNode = FilterConditionNode.GreaterThanOrEqual("price", 100);
+            FilterConditionNode ctorNode = new("price", QueryOperator.GreaterThanOrEqual, "100");
+            bool isParsed = FilterConditionNode.TryParse("price[gte]=100", out var parsedNode);
+
+            // Act & Assert
+            Assert.True(isParsed);
+            Assert.Equal(factoryNode, ctorNode);
+            Assert.Equal(factoryNode, parsedNode);
+            Assert.True(factoryNode == ctorNode);
+            Assert.Equal(factoryNode.GetHashCode(), ctorNode.GetHashCode());
+        }
+
+        [Fact]
+        public void Default_Instance_Should_Equal_Explicitly_Empty_Node() {
+            // Arrange
+            FilterConditionNode defaultNode = default;
+            FilterConditionNode emptyNode = FilterConditionNode.Empty;
+            FilterConditionNode ctorEmpty = new();
+
+            // Act & Assert
+            Assert.Equal(defaultNode, emptyNode);
+            Assert.Equal(emptyNode, ctorEmpty);
+            Assert.True(defaultNode == emptyNode);
+        }
+
+        [Fact]
+        public void Different_States_Should_Not_Be_Equal() {
+            // Arrange
+            FilterConditionNode node1 = FilterConditionNode.GreaterThan("price", 100);
+            FilterConditionNode node2 = FilterConditionNode.GreaterThanOrEqual("price", 100);
+            FilterConditionNode node3 = FilterConditionNode.GreaterThan("price", 200);
+
+            // Act & Assert
+            Assert.NotEqual(node1, node2);
+            Assert.NotEqual(node1, node3);
+            Assert.True(node1 != node2);
+        }
+    }
+
     public sealed class Formatting : FilterConditionNodeTests {
         [Fact]
         public void ToString_Should_Format_Standard_Condition_With_Operator_Brackets() {
             // Arrange
-            var node = FilterConditionNode.GreaterThanOrEqual("price", 100);
+            FilterConditionNode node = FilterConditionNode.GreaterThanOrEqual("price", 100);
 
             // Act
             string result = node.ToString();
@@ -137,7 +200,7 @@ public class FilterConditionNodeTests {
         [Fact]
         public void ToString_Should_Format_Unary_Null_Condition_Without_Equals() {
             // Arrange
-            var node = FilterConditionNode.IsNull("deletedAt");
+            FilterConditionNode node = FilterConditionNode.IsNull("deletedAt");
 
             // Act
             string result = node.ToString();
@@ -149,7 +212,7 @@ public class FilterConditionNodeTests {
         [Fact]
         public void TryFormat_Char_Should_Format_Directly_Into_Span() {
             // Arrange
-            var node = FilterConditionNode.Equal("category", "Books");
+            FilterConditionNode node = FilterConditionNode.Equal("category", "Books");
             Span<char> destination = stackalloc char[32];
 
             // Act
@@ -163,7 +226,7 @@ public class FilterConditionNodeTests {
         [Fact]
         public void TryFormat_Utf8_Should_Format_Directly_Into_Byte_Span() {
             // Arrange
-            var node = FilterConditionNode.GreaterThanOrEqual("price", 250);
+            FilterConditionNode node = FilterConditionNode.GreaterThanOrEqual("price", 250);
             Span<byte> destination = stackalloc byte[32];
 
             // Act

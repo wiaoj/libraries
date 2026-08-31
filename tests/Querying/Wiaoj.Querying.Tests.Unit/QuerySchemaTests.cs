@@ -241,7 +241,7 @@ public class QuerySchemaTests {
             var schema = new QuerySchema<ComplexProduct>();
 
             // Act & Assert
-            Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
                 schema.ConfigureLimits(maxFilters, maxInValues, maxSortFields));
         }
     }
@@ -282,7 +282,7 @@ public class QuerySchemaTests {
             var schema = new QuerySchema<ComplexProduct>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
+            Assert.ThrowsAny<ArgumentException>(() =>
                 schema.Property(x => x.Price, p => p.HasName(invalidAlias)));
         }
 
@@ -352,7 +352,7 @@ public class QuerySchemaTests {
             var schema = new QuerySchema<ComplexProduct>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => schema.Property<string>(null!));
+            Assert.ThrowsAny<ArgumentNullException>(() => schema.Property<string>(null!));
         }
 
         [Fact]
@@ -361,8 +361,8 @@ public class QuerySchemaTests {
             var schema = new QuerySchema<ComplexProduct>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => schema.SearchIn(null!));
-            Assert.Throws<ArgumentNullException>(() => schema.SearchIn(x => x.Title, null!));
+            Assert.ThrowsAny<ArgumentNullException>(() => schema.SearchIn(null!));
+            Assert.ThrowsAny<ArgumentNullException>(() => schema.SearchIn(x => x.Title, null!));
         }
 
         [Theory]

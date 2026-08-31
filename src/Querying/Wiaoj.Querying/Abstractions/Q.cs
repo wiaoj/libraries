@@ -4,10 +4,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Wiaoj.Primitives.Buffers;
-using Wiaoj.Querying.JsonConverters;
 
 namespace Wiaoj.Querying;
 /// <summary>
@@ -21,7 +19,6 @@ namespace Wiaoj.Querying;
 /// </remarks>
 [DebuggerDisplay("{Value,nq}")]
 [StructLayout(LayoutKind.Auto)]
-[JsonConverter(typeof(QJsonConverter))]
 public readonly record struct Q :
     IEquatable<Q>,
     IComparable<Q>,
@@ -121,7 +118,7 @@ public readonly record struct Q :
         }
 
         using ValueBuffer<char> buffer = new(utf8Text.Length, stackalloc char[StackallocCharThreshold]);
-        var charBuffer = buffer.Span;
+        Span<char> charBuffer = buffer.Span;
         if(Utf8.ToUtf16(utf8Text, charBuffer, out _, out var charsWritten, replaceInvalidSequences: false) == OperationStatus.Done) {
             return new Q(charBuffer[..charsWritten]);
         }
@@ -176,7 +173,7 @@ public readonly record struct Q :
         }
 
         using ValueBuffer<char> buffer = new(utf8Text.Length, stackalloc char[StackallocCharThreshold]);
-        var charBuffer = buffer.Span;
+        Span<char> charBuffer = buffer.Span;
         if(Utf8.ToUtf16(utf8Text, charBuffer, out _, out var charsWritten, replaceInvalidSequences: false) == OperationStatus.Done) {
             result = new Q(charBuffer[..charsWritten]);
             return true;

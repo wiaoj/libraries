@@ -5,11 +5,9 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Wiaoj.Preconditions;
 using Wiaoj.Primitives.Buffers;
-using Wiaoj.Querying.JsonConverters;
 using Wiaoj.Querying.Parsers;
 
 namespace Wiaoj.Querying;
@@ -19,7 +17,6 @@ namespace Wiaoj.Querying;
 /// </summary>
 [DebuggerDisplay("{ToString(),nq}")]
 [StructLayout(LayoutKind.Auto)]
-[JsonConverter(typeof(FilterConditionNodeJsonConverter))]
 public readonly record struct FilterConditionNode :
     IEquatable<FilterConditionNode>,
     ISpanParsable<FilterConditionNode>,
@@ -38,9 +35,10 @@ public readonly record struct FilterConditionNode :
     public static readonly FilterConditionNode Empty = default;
 
     /// <summary>
-    /// Gets the target property or exposed field name.
+    /// Gets the target property or exposed field name. Never <see langword="null"/>,
+    /// even for <see langword="default"/>-initialized instances.
     /// </summary>
-    public string Field { get; init; }
+    public string Field => field ?? string.Empty;
 
     /// <summary>
     /// Gets the operator to apply.
@@ -71,7 +69,7 @@ public readonly record struct FilterConditionNode :
     /// Initializes a new instance of the <see cref="FilterConditionNode"/> struct with default values.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public FilterConditionNode() : this(string.Empty, QueryOperator.Equal, null) { }
+    public FilterConditionNode() : this(string.Empty, default, null) { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FilterConditionNode"/> struct with an implicit equality operator.
@@ -233,6 +231,39 @@ public readonly record struct FilterConditionNode :
 
     private static string FormatValue(object? value) {
         return value is null ? string.Empty : Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+    }
+
+    #endregion
+
+    #region Equality (Structural, Empty-Aware)
+
+    /// <summary>
+    /// Determines whether this instance equals <paramref name="other"/> using structural, empty-aware comparison.
+    /// </summary>
+    public bool Equals(FilterConditionNode other) {
+        if(this.IsEmpty && other.IsEmpty) {
+            return true;
+        }
+
+        if(this.IsEmpty != other.IsEmpty) {
+            return false;
+        }
+
+        return string.Equals(this.Field, other.Field, StringComparison.OrdinalIgnoreCase) &&
+               this.Operator == other.Operator &&
+               string.Equals(this.RawValue, other.RawValue, StringComparison.Ordinal);
+    }
+
+    /// <inheritdoc/>
+    public override int GetHashCode() {
+        if(this.IsEmpty) {
+            return 0;
+        }
+
+        return HashCode.Combine(
+            StringComparer.OrdinalIgnoreCase.GetHashCode(this.Field),
+            (byte)this.Operator,
+            this.RawValue != null ? StringComparer.Ordinal.GetHashCode(this.RawValue) : 0);
     }
 
     #endregion

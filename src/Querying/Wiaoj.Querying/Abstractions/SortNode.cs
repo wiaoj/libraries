@@ -7,9 +7,7 @@ namespace Wiaoj.Querying;
 /// </summary>
 /// <param name="Field">The target property or exposed field name to sort on.</param>
 /// <param name="Direction">The sort direction to apply.</param>
-public readonly record struct SortNode(
-    string Field,
-    SortDirection Direction = SortDirection.Ascending) {
+public readonly record struct SortNode(string Field, SortDirection Direction) {
 
     /// <summary>
     /// Gets a value indicating whether the sort direction is ascending.
