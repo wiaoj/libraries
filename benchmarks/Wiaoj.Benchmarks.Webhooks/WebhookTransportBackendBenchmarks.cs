@@ -5,13 +5,14 @@ using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Threading.Channels;
 using Tyto;
 using Tyto.DependencyInjection;
 using Wiaoj.Benchmarks.Webhooks.Transports;
+using Wiaoj.Primitives;
 using Wiaoj.Security;
 using Wiaoj.Security.Testing;
 using Wiaoj.Serialization;
-using Wiaoj.Serialization.DependencyInjection;
 using Wiaoj.Serialization.SystemTextJson;
 using Wiaoj.Webhooks;
 using Wolverine;
@@ -19,58 +20,30 @@ using IHost = Microsoft.Extensions.Hosting.IHost;
 
 namespace Wiaoj.Benchmarks.Webhooks;
 
-/// <summary>
-/// End-to-end execution counters verifying actual message processing across transports.
-/// </summary>
-public static class ProcessedCounters {
-    public static long Tyto;
-    public static long MassTransit;
-    public static long Wolverine;
-
-    public static long SentTyto;
-    public static long SentMassTransit;
-    public static long SentWolverine;
-
-    public static void Reset() {
-        Interlocked.Exchange(ref Tyto, 0);
-        Interlocked.Exchange(ref MassTransit, 0);
-        Interlocked.Exchange(ref Wolverine, 0);
-        Interlocked.Exchange(ref SentTyto, 0);
-        Interlocked.Exchange(ref SentMassTransit, 0);
-        Interlocked.Exchange(ref SentWolverine, 0);
-    }
-
-    public static void Report() {
-        Console.WriteLine();
-        Console.WriteLine("==================== END-TO-END EXECUTION REPORT ====================");
-        Console.WriteLine($"Tyto        -> Enqueued: {Interlocked.Read(ref SentTyto),-10} Fully Handled: {Interlocked.Read(ref Tyto),-10}");
-        Console.WriteLine($"MassTransit -> Enqueued: {Interlocked.Read(ref SentMassTransit),-10} Fully Handled: {Interlocked.Read(ref MassTransit),-10}");
-        Console.WriteLine($"Wolverine   -> Enqueued: {Interlocked.Read(ref SentWolverine),-10} Fully Handled: {Interlocked.Read(ref Wolverine),-10}");
-        Console.WriteLine("=====================================================================");
-        Console.WriteLine();
-    }
-}
-
 [MemoryDiagnoser]
 [ThreadingDiagnoser]
 [SimpleJob(RunStrategy.Throughput, iterationCount: 15, warmupCount: 5)]
 public class WebhookTransportBackendBenchmarks {
+    [Params(10_000, 100_000, 1_000_000)]
+    public int OperationsPerInvoke { get; set; }
 
-    private const int OperationsPerInvoke = 10_000;
+    private static readonly int Concurrency = Environment.ProcessorCount;
 
     [WebhookEvent("order.created")]
     public sealed record BenchmarkOrderEvent(string OrderId, decimal Amount) : IWebhookEvent;
 
-    // ── 1. Wiaoj + Tyto Engine ──
+    private readonly BenchmarkOrderEvent _sampleEvent = new("ORD-BENCH-1", 150m);
+
+    // ── 1. Tyto Setup ──
     private IHost _tytoHost = null!;
     private IWebhookDispatcher _tytoDispatcher = null!;
 
-    // ── 2. Wiaoj + MassTransit Engine ──
+    // ── 2. MassTransit Setup ──
     private ServiceProvider _massTransitProvider = null!;
     private IWebhookDispatcher _massTransitDispatcher = null!;
     private IBusControl _massTransitBus = null!;
 
-    // ── 3. Wiaoj + Wolverine Engine ──
+    // ── 3. Wolverine Setup ──
     private IHost _wolverineHost = null!;
     private IWebhookDispatcher _wolverineDispatcher = null!;
 
@@ -78,7 +51,6 @@ public class WebhookTransportBackendBenchmarks {
 
     [GlobalSetup]
     public async Task Setup() {
-        ProcessedCounters.Reset();
         this._endpointId = new WebhookEndpointId("ep_benchmark");
         FakeSecretProtector<WebhookSigningContext> protector = new();
 
@@ -89,78 +61,63 @@ public class WebhookTransportBackendBenchmarks {
             protector.Protect("whsec_bench_secret")));
 
         // ═════════════════════════════════════════════════════════════════════
-        // A. Setup: Wiaoj Webhooks + TYTO Transport
+        // A. Setup: Tyto
         // ═════════════════════════════════════════════════════════════════════
-        HostApplicationBuilder tytoHostBuilder = Host.CreateApplicationBuilder();
-        tytoHostBuilder.Services.AddLogging(logging => {
-            logging.ClearProviders();
-            logging.SetMinimumLevel(LogLevel.None);
-        });
+        HostApplicationBuilder tytoBuilder = Host.CreateApplicationBuilder();
+        tytoBuilder.Services.AddLogging(l => l.ClearProviders().SetMinimumLevel(LogLevel.None));
+        tytoBuilder.Services.AddSingleton<ISecretProtector<WebhookSigningContext>>(protector);
+        tytoBuilder.Services.AddSingleton<IWebhookEndpointResolver>(resolver);
+        tytoBuilder.Services.AddSingleton<ISerializer<WebhookSerializerKey>, SystemTextJsonSerializer<WebhookSerializerKey>>();
+        tytoBuilder.Services.AddSingleton<IWebhookJobHandler, NoOpWebhookJobHandler>();
 
-        tytoHostBuilder.Services.AddSingleton<ISecretProtector<WebhookSigningContext>>(protector);
-        tytoHostBuilder.Services.AddSingleton<IWebhookEndpointResolver>(resolver);
+        tytoBuilder.AddTyto(tyto => {
+            tyto.MessageDefinitions(d => d.Add<TytoWebhookJobEnvelope>("webhook.delivery.job", 1));
 
-        tytoHostBuilder.Services.AddWiaojSerializer(opts => {
-            opts.UseSystemTextJson<WebhookSerializerKey>();
-            opts.UseProxy<TytoJsonSerializerKey>(x => {
-                x.LeaseDuration = TimeSpan.FromMinutes(10);
-            });
-        });
-
-        tytoHostBuilder.AddTyto(tyto => {
-            tyto.MessageDefinitions(define => {
-                define.Add<TytoWebhookJobEnvelope>("webhook.delivery.job", 1);
+            tyto.Publishing(x => {
+                x.UseAsyncDispatch(100_000); 
             });
 
-            //tyto.Publishing(x => x.UseAsyncDispatch(10_000_000));
-
-            tyto.Transports(transports => {
-                transports.AddInMemory("memory", options => {
-
-                    options.DefaultConcurrencyLimit = 10;
-                    options.FullMode = System.Threading.Channels.BoundedChannelFullMode.DropOldest;
-                    options.ChannelCapacity = 10_000_000;
-
-                    options.Bind("ex.webhook.jobs", "q.webhook.jobs");
+            tyto.Transports(t => {
+                t.AddInMemory("memory", opt => {
+                    opt.DefaultConcurrencyLimit = Concurrency;
+                    opt.FullMode = BoundedChannelFullMode.Wait;
+                    opt.ChannelCapacity = 100_000;
+                    opt.Bind("ex.webhook.jobs", "q.webhook.jobs");
                 });
             });
 
-            tyto.Endpoints(endpoints => {
-                endpoints.Add("WEBHOOK-DISPATCH-EP", ep => {
-                    ep.ListenOn("memory", "q.webhook.jobs");
-                    ep.Routing.Publish<TytoWebhookJobEnvelope>().To("memory", "ex.webhook.jobs");
-                    ep.AddHandler<TytoWebhookJobHandler>();
-
+            tyto.Endpoints(ep => {
+                ep.Add("WEBHOOK-DISPATCH-EP", e => {
+                    e.ListenOn("memory", "q.webhook.jobs");
+                    e.Routing.Publish<TytoWebhookJobEnvelope>().To("memory", "ex.webhook.jobs");
+                    e.AddHandler<TytoWebhookJobHandler>();
                 });
             });
         });
 
-        tytoHostBuilder.Services.AddWiaojWebhooks(w => {
-            w.Services.AddSingleton<IWebhookTransport, TytoWebhookTransport>();
+        tytoBuilder.Services.AddWiaojWebhooks(w => {
+            w.Services.AddSingleton<IWebhookTransport, TytoWebhookTransport>(); 
             w.RegisterEvent<BenchmarkOrderEvent>("order.created");
         });
 
-        this._tytoHost = tytoHostBuilder.Build();
+        this._tytoHost = tytoBuilder.Build();
         await this._tytoHost.StartAsync();
-
         this._tytoDispatcher = this._tytoHost.Services.GetRequiredService<IWebhookDispatcher>();
 
         // ═════════════════════════════════════════════════════════════════════
-        // B. Setup: Wiaoj Webhooks + MASSTRANSIT Transport
+        // B. Setup: MassTransit
         // ═════════════════════════════════════════════════════════════════════
         ServiceCollection mtServices = new();
-        mtServices.AddLogging(logging => {
-            logging.ClearProviders();
-            logging.SetMinimumLevel(LogLevel.None);
-        });
-
-        mtServices.AddSingleton<ISerializer<WebhookSerializerKey>, SystemTextJsonSerializer<WebhookSerializerKey>>();
+        mtServices.AddLogging(l => l.ClearProviders().SetMinimumLevel(LogLevel.None));
         mtServices.AddSingleton<ISecretProtector<WebhookSigningContext>>(protector);
         mtServices.AddSingleton<IWebhookEndpointResolver>(resolver);
+        mtServices.AddSingleton<ISerializer<WebhookSerializerKey>, SystemTextJsonSerializer<WebhookSerializerKey>>();
+        mtServices.AddSingleton<IWebhookJobHandler, NoOpWebhookJobHandler>();
 
         mtServices.AddMassTransit(x => {
             x.AddConsumer<MassTransitWebhookJobConsumer>();
             x.UsingInMemory((ctx, cfg) => {
+                cfg.ConcurrentMessageLimit = Concurrency;
                 cfg.ConfigureEndpoints(ctx);
             });
         });
@@ -176,18 +133,15 @@ public class WebhookTransportBackendBenchmarks {
         this._massTransitDispatcher = this._massTransitProvider.GetRequiredService<IWebhookDispatcher>();
 
         // ═════════════════════════════════════════════════════════════════════
-        // C. Setup: Wiaoj Webhooks + WOLVERINE Transport
+        // C. Setup: Wolverine
         // ═════════════════════════════════════════════════════════════════════
         this._wolverineHost = await Host.CreateDefaultBuilder()
             .ConfigureServices(services => {
-                services.AddLogging(logging => {
-                    logging.ClearProviders();
-                    logging.SetMinimumLevel(LogLevel.None);
-                });
-
-                services.AddSingleton<ISerializer<WebhookSerializerKey>, SystemTextJsonSerializer<WebhookSerializerKey>>();
+                services.AddLogging(l => l.ClearProviders().SetMinimumLevel(LogLevel.None));
                 services.AddSingleton<ISecretProtector<WebhookSigningContext>>(protector);
                 services.AddSingleton<IWebhookEndpointResolver>(resolver);
+                services.AddSingleton<ISerializer<WebhookSerializerKey>, SystemTextJsonSerializer<WebhookSerializerKey>>();
+                services.AddSingleton<IWebhookJobHandler, NoOpWebhookJobHandler>();
 
                 services.AddWiaojWebhooks(w => {
                     w.Services.AddSingleton<IWebhookTransport, WolverineWebhookTransport>();
@@ -195,7 +149,9 @@ public class WebhookTransportBackendBenchmarks {
                 });
             })
             .UseWolverine(opts => {
-                opts.PublishMessage<WebhookDeliveryJob>().ToLocalQueue("webhook_jobs");
+                opts.PublishMessage<WebhookDeliveryJob>()
+                    .ToLocalQueue("webhook_jobs")
+                    .MaximumParallelMessages(Concurrency);
             })
             .StartAsync();
 
@@ -204,74 +160,72 @@ public class WebhookTransportBackendBenchmarks {
 
     [GlobalCleanup]
     public async Task Cleanup() {
-        ProcessedCounters.Report();
-
         await this._massTransitBus.StopAsync();
         await this._massTransitProvider.DisposeAsync();
-
         await this._tytoHost.StopAsync();
         this._tytoHost.Dispose();
-
         await this._wolverineHost.StopAsync();
         this._wolverineHost.Dispose();
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // BENCHMARKS
+    // BENCHMARKS (10.000 mesaj gerçekten TÜKETİLENE kadar bekler)
     // ────────────────────────────────────────────────────────────────────────
 
-    [Benchmark(Baseline = true, Description = "Webhooks + Tyto", OperationsPerInvoke = OperationsPerInvoke)]
+    [Benchmark(Baseline = true, Description = "Webhooks + Tyto")]
     public async Task Webhooks_With_Tyto() {
-        BenchmarkOrderEvent @event = new("ORD-BENCH-1", 150m);
+        BenchmarkCompletionTracker.Reset(OperationsPerInvoke);
+
         for(int i = 0; i < OperationsPerInvoke; i++) {
-            await this._tytoDispatcher.DispatchAsync(this._endpointId, @event, CancellationToken.None);
+            await this._tytoDispatcher.DispatchAsync(this._endpointId, this._sampleEvent, CancellationToken.None);
         }
+
+        await BenchmarkCompletionTracker.WaitForCompletionAsync();
     }
 
-    [Benchmark(Description = "Webhooks + MassTransit", OperationsPerInvoke = OperationsPerInvoke)]
+    [Benchmark(Description = "Webhooks + MassTransit")]
     public async Task Webhooks_With_MassTransit() {
-        BenchmarkOrderEvent @event = new("ORD-BENCH-1", 150m);
+        BenchmarkCompletionTracker.Reset(OperationsPerInvoke);
+
         for(int i = 0; i < OperationsPerInvoke; i++) {
-            await this._massTransitDispatcher.DispatchAsync(this._endpointId, @event, CancellationToken.None);
+            await this._massTransitDispatcher.DispatchAsync(this._endpointId, this._sampleEvent, CancellationToken.None);
         }
+
+        await BenchmarkCompletionTracker.WaitForCompletionAsync();
     }
 
-    [Benchmark(Description = "Webhooks + Wolverine", OperationsPerInvoke = OperationsPerInvoke)]
+    [Benchmark(Description = "Webhooks + Wolverine")]
     public async Task Webhooks_With_Wolverine() {
-        BenchmarkOrderEvent @event = new("ORD-BENCH-1", 150m);
+        BenchmarkCompletionTracker.Reset(OperationsPerInvoke);
+
         for(int i = 0; i < OperationsPerInvoke; i++) {
-            await this._wolverineDispatcher.DispatchAsync(this._endpointId, @event, CancellationToken.None);
+            await this._wolverineDispatcher.DispatchAsync(this._endpointId, this._sampleEvent, CancellationToken.None);
         }
+
+        await BenchmarkCompletionTracker.WaitForCompletionAsync();
     }
 
-    // ── Consumers & Handlers ──
+    // ── No-Op Job Handler (Sadece transport overhead'ini ölçmek için) ──
+    private sealed class NoOpWebhookJobHandler : IWebhookJobHandler {
+        private static readonly WebhookDeliveryAttempt DummyAttempt = new(
+            new WebhookEndpointId("ep_benchmark"),
+            1,
+            UnixTimestamp.Now, // veya default(UnixTimestamp)
+            TimeSpan.Zero,
+            WebhookDeliveryResult.Success() // WebhookDeliveryResult.Success veya default
+        );
 
-    private sealed class MassTransitWebhookJobConsumer(IServiceScopeFactory scopeFactory) : IConsumer<WebhookDeliveryJob> {
-        public async Task Consume(ConsumeContext<WebhookDeliveryJob> context) {
-            using IServiceScope scope = scopeFactory.CreateScope();
-            IWebhookJobHandler handler = scope.ServiceProvider.GetRequiredService<IWebhookJobHandler>();
-            await handler.HandleAsync(context.Message, context.CancellationToken);
-            Interlocked.Increment(ref ProcessedCounters.MassTransit);
-        }
-    }
+        private static readonly Task<WebhookDeliveryAttempt> CachedResult = Task.FromResult(DummyAttempt);
 
-    public sealed class WolverineWebhookJobHandler {
-        public static async Task Handle(WebhookDeliveryJob job, IServiceScopeFactory scopeFactory, CancellationToken ct) {
-            using IServiceScope scope = scopeFactory.CreateScope();
-            IWebhookJobHandler handler = scope.ServiceProvider.GetRequiredService<IWebhookJobHandler>();
-            await handler.HandleAsync(job, ct).ConfigureAwait(false);
-            Interlocked.Increment(ref ProcessedCounters.Wolverine);
+        public Task<WebhookDeliveryAttempt> HandleAsync(WebhookDeliveryJob job, CancellationToken cancellationToken = default) {
+            return CachedResult;
         }
     }
 
     private sealed class InMemoryTestEndpointResolver : IWebhookEndpointResolver {
         private readonly Dictionary<WebhookEndpointId, WebhookEndpoint> _endpoints = [];
-        public void Register(WebhookEndpoint endpoint) {
-            this._endpoints[endpoint.Id] = endpoint;
-        }
-
-        public ValueTask<WebhookEndpoint?> ResolveAsync(WebhookEndpointId endpointId, CancellationToken cancellationToken = default) {
-            return ValueTask.FromResult(this._endpoints.GetValueOrDefault(endpointId));
-        }
+        public void Register(WebhookEndpoint endpoint) => this._endpoints[endpoint.Id] = endpoint;
+        public ValueTask<WebhookEndpoint?> ResolveAsync(WebhookEndpointId endpointId, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(this._endpoints.GetValueOrDefault(endpointId));
     }
 }

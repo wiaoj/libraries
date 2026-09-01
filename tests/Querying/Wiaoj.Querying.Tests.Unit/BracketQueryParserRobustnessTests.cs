@@ -8,13 +8,13 @@ namespace Wiaoj.Querying.Tests.Unit;
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Feature", "BracketParser")]
-public class BracketQueryParserExtendedTests {
+public class BracketQueryParserRobustnessTests {
 
     /// <summary>
     /// Tests for values that legitimately contain '=' characters (connection strings, tokens, etc.),
     /// proving the parser only splits on the FIRST '=' and preserves the rest verbatim.
     /// </summary>
-    public sealed class MultipleEqualsSignsInValue : BracketQueryParserExtendedTests {
+    public sealed class MultipleEqualsSignsInValue : BracketQueryParserRobustnessTests {
         [Fact]
         public void Should_Preserve_Connection_String_Style_Value_With_Multiple_Equals_Signs() {
             // Arrange
@@ -65,7 +65,7 @@ public class BracketQueryParserExtendedTests {
     /// Tests proving that bracket characters appearing inside the VALUE (as opposed to the key)
     /// do not confuse the bracket-structure detection, since only the key segment is inspected.
     /// </summary>
-    public sealed class BracketCharactersInsideValue : BracketQueryParserExtendedTests {
+    public sealed class BracketCharactersInsideValue : BracketQueryParserRobustnessTests {
         [Theory]
         [InlineData("tag[eq]=a[b]c]d[e", "tag", QueryOperator.Equal, "a[b]c]d[e")]
         [InlineData("regex[eq]=^[A-Z]{3}[0-9]+$", "regex", QueryOperator.Equal, "^[A-Z]{3}[0-9]+$")]
@@ -90,7 +90,7 @@ public class BracketQueryParserExtendedTests {
     /// value: the value is silently discarded rather than rejected. If stricter validation is
     /// desired later, this test should be updated to expect <c>false</c> instead.
     /// </summary>
-    public sealed class UnaryOperatorWithExplicitValue : BracketQueryParserExtendedTests {
+    public sealed class UnaryOperatorWithExplicitValue : BracketQueryParserRobustnessTests {
         [Theory]
         [InlineData("deletedAt[isNull]=somevalue")]
         [InlineData("deletedAt[isNotNull]=2026-01-01")]
@@ -108,7 +108,7 @@ public class BracketQueryParserExtendedTests {
     /// <summary>
     /// Tests for operator blocks that are present but consist only of whitespace after trimming.
     /// </summary>
-    public sealed class WhitespaceOnlyOperatorBlock : BracketQueryParserExtendedTests {
+    public sealed class WhitespaceOnlyOperatorBlock : BracketQueryParserRobustnessTests {
         [Theory]
         [InlineData("price[   ]=100")]
         [InlineData("price[\t]=100")]
@@ -125,7 +125,7 @@ public class BracketQueryParserExtendedTests {
     /// <summary>
     /// Tests for tab/newline whitespace handling around the entire input, beyond plain spaces.
     /// </summary>
-    public sealed class NonSpaceWhitespaceResilience : BracketQueryParserExtendedTests {
+    public sealed class NonSpaceWhitespaceResilience : BracketQueryParserRobustnessTests {
         [Fact]
         public void Should_Trim_Tabs_And_Newlines_Surrounding_Input() {
             // Arrange
@@ -146,7 +146,7 @@ public class BracketQueryParserExtendedTests {
     /// Tests for surrogate-pair (non-BMP) Unicode values such as emoji, proving UTF-16 span
     /// slicing does not corrupt characters outside the Basic Multilingual Plane.
     /// </summary>
-    public sealed class SurrogatePairValues : BracketQueryParserExtendedTests {
+    public sealed class SurrogatePairValues : BracketQueryParserRobustnessTests {
         [Fact]
         public void Should_Preserve_Emoji_Surrogate_Pairs_Intact() {
             // Arrange
@@ -169,7 +169,7 @@ public class BracketQueryParserExtendedTests {
     /// an unrecognized token like "0" causes rejection. This documents a real limitation: field
     /// names cannot themselves contain bracket syntax.
     /// </summary>
-    public sealed class FieldNamesCannotContainBracketSyntax : BracketQueryParserExtendedTests {
+    public sealed class FieldNamesCannotContainBracketSyntax : BracketQueryParserRobustnessTests {
         [Theory]
         [InlineData("tags[0]=x")]
         [InlineData("items[1]=y")]
@@ -187,7 +187,7 @@ public class BracketQueryParserExtendedTests {
     /// Tests for large values to confirm there is no arbitrary length ceiling and no
     /// performance/stack cliff, since the parser is span-based rather than stackalloc-based.
     /// </summary>
-    public sealed class LargeValues : BracketQueryParserExtendedTests {
+    public sealed class LargeValues : BracketQueryParserRobustnessTests {
         [Fact]
         public void Should_Parse_Very_Large_Value_Without_Throwing() {
             // Arrange
@@ -209,7 +209,7 @@ public class BracketQueryParserExtendedTests {
     /// classic "Turkish I" bug (tr-TR: 'i'.ToUpper() != 'I') cannot break operator recognition,
     /// and that field/value casing is preserved verbatim rather than being culturally folded.
     /// </summary>
-    public sealed class TurkishCultureSafety : BracketQueryParserExtendedTests {
+    public sealed class TurkishCultureSafety : BracketQueryParserRobustnessTests {
         [Theory]
         [InlineData("city[IN]=Ankara,Istanbul", "city", QueryOperator.In, "Ankara,Istanbul")]
         [InlineData("city[in]=Ankara,Istanbul", "city", QueryOperator.In, "Ankara,Istanbul")]
@@ -270,7 +270,7 @@ public class BracketQueryParserExtendedTests {
     /// it NEVER throws — a malformed or hostile query string must only ever yield <c>false</c>,
     /// never an unhandled exception, since this parser sits directly on untrusted HTTP input.
     /// </summary>
-    public sealed class FuzzRobustness : BracketQueryParserExtendedTests {
+    public sealed class FuzzRobustness : BracketQueryParserRobustnessTests {
         [Fact]
         public void Should_Never_Throw_On_Random_Or_Malformed_Input() {
             // Arrange
@@ -313,11 +313,12 @@ public class BracketQueryParserExtendedTests {
     /// since <see cref="BracketQueryParser"/> intentionally does not validate field name shape —
     /// that responsibility belongs to a downstream schema/whitelist check.
     /// </summary>
-    public sealed class PermissiveFieldNameFormatting : BracketQueryParserExtendedTests {
+    public sealed class PermissiveFieldNameFormatting : BracketQueryParserRobustnessTests {
         [Theory]
         [InlineData("customer.[eq]=x", "customer.", QueryOperator.Equal, "x")]
         [InlineData(".customer[eq]=x", ".customer", QueryOperator.Equal, "x")]
-        public void Should_Accept_Field_Names_With_Leading_Or_Trailing_Dots(
+        [InlineData("a..b[eq]=x", "a..b", QueryOperator.Equal, "x")]   // consecutive dots: no field-shape validation here either
+        public void Should_Accept_Field_Names_With_Unusual_Dot_Placement(
             string input,
             string expectedField,
             QueryOperator expectedOperator,

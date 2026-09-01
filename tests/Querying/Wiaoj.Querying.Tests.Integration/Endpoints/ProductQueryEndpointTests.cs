@@ -321,6 +321,65 @@ public class ProductQueryEndpointTests(TestApplicationFixture fixture) : IClassF
         }
     }
 
+    /// <summary>
+    /// Tests for MaxFilterValueLength / MaxSearchTermLength, both left at their schema defaults
+    /// (512 and 256 respectively) by <see cref="TestApplicationFixture"/>'s 3-argument ConfigureLimits call.
+    /// </summary>
+    public sealed class ValueLengthLimits(TestApplicationFixture fixture) : ProductQueryEndpointTests(fixture) {
+        [Fact]
+        public async Task Should_Return_Http_400_When_Filter_Value_Exceeds_MaxFilterValueLength() {
+            // Arrange: 513 characters, one over the default 512-character limit
+            string oversizedValue = new('x', 513);
+            string url = QueryBuilder.Create()
+                .Where("category", QueryOperator.Equal, oversizedValue)
+                .BuildUrl("/api/v1/products");
+
+            // Act
+            HttpResponseMessage response = await this.Client.GetAsync(url, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            ValidationProblemDetails? problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>(TestContext.Current.CancellationToken);
+
+            Assert.NotNull(problem);
+            Assert.True(problem.Errors.ContainsKey("category"));
+        }
+
+        [Fact]
+        public async Task Should_Accept_Filter_Value_At_Exactly_MaxFilterValueLength() {
+            // Arrange: exactly 512 characters — the boundary itself must still be accepted
+            string boundaryValue = new('x', 512);
+            string url = QueryBuilder.Create()
+                .Where("category", QueryOperator.Equal, boundaryValue)
+                .BuildUrl("/api/v1/products");
+
+            // Act
+            HttpResponseMessage response = await this.Client.GetAsync(url, TestContext.Current.CancellationToken);
+
+            // Assert: no matching product, but the request itself is valid — not a 400
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        [Fact]
+        public async Task Should_Return_Http_400_When_Search_Term_Exceeds_MaxSearchTermLength() {
+            // Arrange: 257 characters, one over the default 256-character limit
+            string oversizedTerm = new('x', 257);
+            string url = QueryBuilder.Create()
+                .Search(oversizedTerm)
+                .BuildUrl("/api/v1/products");
+
+            // Act
+            HttpResponseMessage response = await this.Client.GetAsync(url, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            ValidationProblemDetails? problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>(TestContext.Current.CancellationToken);
+
+            Assert.NotNull(problem);
+            Assert.True(problem.Errors.ContainsKey("q"));
+        }
+    }
+
     public sealed class HttpQueryPayloadEndpoints(TestApplicationFixture fixture) : ProductQueryEndpointTests(fixture) {
         [Fact]
         public async Task Should_Filter_Products_Using_Http_Query_Method_With_Json_Body() {
@@ -402,6 +461,82 @@ public class ProductQueryEndpointTests(TestApplicationFixture fixture) : IClassF
 
             // Assert
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        [Fact]
+        public async Task Should_Filter_Products_Using_Http_Post_Method_With_Json_Body() {
+            // Arrange: POST is mapped alongside GET and QUERY; the same binder pipeline should apply
+            const string jsonPayload = """
+            {
+              "sort": "-price",
+              "filters": [
+                { "field": "category", "op": "eq", "value": "Electronics" },
+                { "field": "price", "op": "gte", "value": 300 }
+              ]
+            }
+            """;
+
+            using HttpRequestMessage request = new(HttpMethod.Post, "/api/v1/products") {
+                Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
+            };
+
+            // Act
+            HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert: same result as the equivalent QUERY test — Gaming Laptop X and 4K Gaming Monitor
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            List<Product>? items = await response.Content.ReadFromJsonAsync<List<Product>>(TestContext.Current.CancellationToken);
+
+            Assert.NotNull(items);
+            Assert.Equal(2, items.Count);
+            Assert.Equal(2500m, items[0].Price);
+            Assert.Equal(450m, items[1].Price);
+            Assert.All(items, x => Assert.Equal("Electronics", x.Category));
+        }
+
+        [Fact]
+        public async Task Should_Return_Http_400_When_Json_Body_Field_Is_Not_Filterable() {
+            // Arrange: same "field not in schema" scenario as the query-string ValidationAndProblemDetails
+            // tests, but exercised through the JSON request-body path instead — proving validation applies
+            // to both binding routes, not just the query-string one.
+            const string jsonPayload = """{"filters":[{"field":"InternalSecret","op":"eq","value":"123"}]}""";
+
+            using HttpRequestMessage request = new(new HttpMethod("QUERY"), "/api/v1/products") {
+                Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
+            };
+
+            // Act
+            HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            ValidationProblemDetails? problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>(TestContext.Current.CancellationToken);
+
+            Assert.NotNull(problem);
+            Assert.True(problem.Errors.ContainsKey("InternalSecret"));
+        }
+
+        [Fact]
+        public async Task Should_Gracefully_Reject_Json_Body_Exceeding_The_Parser_Size_Limit() {
+            // Arrange: JsonQueryParser enforces a 64 KB UTF-8 payload ceiling internally. A body past
+            // that limit must fail cleanly (no 500, no hang) — this test pins down that the failure
+            // surfaces as an ordinary 400, consistent with every other parse-failure test in this suite.
+            // NOTE: if your actual behavior differs (e.g. a 413 from Kestrel's own request body limit
+            // firing first), update this assertion to match — this documents the expected contract.
+            string oversizedValue = new('x', 70_000);
+            string jsonPayload = $$"""{"filters":[{"field":"category","op":"eq","value":"{{oversizedValue}}"}]}""";
+
+            using HttpRequestMessage request = new(new HttpMethod("QUERY"), "/api/v1/products") {
+                Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
+            };
+
+            // Act
+            HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+            // Assert: a clean client error, not a crash or a timeout
+            Assert.True(
+                (int)response.StatusCode is >= 400 and < 500,
+                $"Expected a 4xx client error for an oversized body, got: {(int)response.StatusCode} {response.StatusCode}");
         }
     }
 }

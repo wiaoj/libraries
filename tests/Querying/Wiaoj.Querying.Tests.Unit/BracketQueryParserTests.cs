@@ -345,6 +345,8 @@ public class BracketQueryParserTests {
         [InlineData("price[gte]")]                // Non-unary operator missing '=' and value
         [InlineData("price[eq]extra=100")]        // Trailing characters between bracket and '='
         [InlineData("[isNull]")]                  // Unary operator with missing field name
+        [InlineData("[isNull]")]                  // Unary operator with missing field name
+        [InlineData("price[eq=x]=100")]           // '=' inside the bracket segment breaks structure before it closes
         public void Should_Return_False_When_Input_Is_Malformed(string malformedInput) {
             // Act
             bool isParsed = BracketQueryParser.TryParse(malformedInput, out var result);

@@ -177,6 +177,11 @@ public abstract record WebhookDeliveryResult {
     // ────────────────────────────────────────────────────────────────────────
 
     /// <summary>Creates a successful <see cref="Delivered"/> result.</summary>
+    public static WebhookDeliveryResult Success() {
+        return new Delivered(200);
+    }
+
+    /// <summary>Creates a successful <see cref="Delivered"/> result.</summary>
     public static WebhookDeliveryResult Success(int statusCode) {
         return new Delivered(statusCode);
     }
