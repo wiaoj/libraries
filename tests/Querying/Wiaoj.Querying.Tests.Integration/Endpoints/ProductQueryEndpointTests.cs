@@ -518,11 +518,7 @@ public class ProductQueryEndpointTests(TestApplicationFixture fixture) : IClassF
 
         [Fact]
         public async Task Should_Gracefully_Reject_Json_Body_Exceeding_The_Parser_Size_Limit() {
-            // Arrange: JsonQueryParser enforces a 64 KB UTF-8 payload ceiling internally. A body past
-            // that limit must fail cleanly (no 500, no hang) — this test pins down that the failure
-            // surfaces as an ordinary 400, consistent with every other parse-failure test in this suite.
-            // NOTE: if your actual behavior differs (e.g. a 413 from Kestrel's own request body limit
-            // firing first), update this assertion to match — this documents the expected contract.
+            // Arrange: 70,000 chars comfortably exceeds JsonQueryParser's internal 64 KB UTF-8 ceiling
             string oversizedValue = new('x', 70_000);
             string jsonPayload = $$"""{"filters":[{"field":"category","op":"eq","value":"{{oversizedValue}}"}]}""";
 
@@ -534,9 +530,7 @@ public class ProductQueryEndpointTests(TestApplicationFixture fixture) : IClassF
             HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
             // Assert: a clean client error, not a crash or a timeout
-            Assert.True(
-                (int)response.StatusCode is >= 400 and < 500,
-                $"Expected a 4xx client error for an oversized body, got: {(int)response.StatusCode} {response.StatusCode}");
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         }
     }
 }
