@@ -101,6 +101,41 @@ public sealed class PaginationEndpointFilterTests {
             Assert.False(httpContext.Response.Headers.ContainsKey(HeaderNames.Link)); 
             Assert.IsType<NotFound>(result);
         }
+
+        [Fact]
+        public async Task Should_Not_Duplicate_PageNumber_Query_Param_In_Link_Header_When_Request_Already_Contains_It() {
+            // Arrange: Kullanıcı 2. sayfayı talep ediyor: GET /api/items?pageNumber=2&pageSize=2
+            PaginationEndpointFilter filter = PaginationEndpointFilter.Default;
+            var httpContext = new DefaultHttpContext();
+            httpContext.Request.Path = "/api/items";
+
+            // 🎯 İŞTE ZURNA'NIN ZIRT DEDİĞİ YER: İstek zaten query parametreleriyle geliyor!
+            httpContext.Request.QueryString = new QueryString("?pageNumber=2&pageSize=2");
+
+            var items = new EquatableArray<string>("Item3", "Item4");
+            // Toplam 20 kayıt var, şu an 2. sayfadayız:
+            var metadata = new PageMetadata(totalCount: 20, pageNumber: 2, pageSize: 2);
+            var pagedResult = new PagedResult<string>(items, metadata);
+
+            var context = new DefaultEndpointFilterInvocationContext(httpContext);
+
+            // Act
+            await filter.InvokeAsync(context, _ => ValueTask.FromResult<object?>(TypedResults.Ok(pagedResult)));
+
+            // Assert
+            string linkHeader = httpContext.Response.Headers[HeaderNames.Link].ToString();
+
+            // ❌ MEVCUT KODUN ÜRETTİĞİ (BUG): 
+            // </api/items?pageNumber=2&pageSize=2&pageNumber=3>; rel="next"  <-- İki tane pageNumber var!
+
+            // ✅ OLMASI GEREKEN: 
+            // </api/items?pageNumber=3&pageSize=2>; rel="next"
+
+            // KANIT ASERSIYONU: Tek bir link URL'i içinde birden fazla "pageNumber" ASLA geçmemelidir!
+            Assert.DoesNotContain("pageNumber=2&pageSize=2&pageNumber=", linkHeader);
+            Assert.Contains("pageNumber=3", linkHeader);
+            Assert.DoesNotContain("pageNumber=2&", linkHeader[(linkHeader.IndexOf("rel=\"next\"") - 60)..]);
+        }
     }
 
     private sealed class DefaultEndpointFilterInvocationContext : EndpointFilterInvocationContext {
