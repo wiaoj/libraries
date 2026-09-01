@@ -26,13 +26,13 @@ public static partial class QueryablePaginationExtensions {
     /// <list type="number">
     ///   <item><description>Executes a fast <c>COUNT_BIG(*)</c> via <see cref="EntityFrameworkQueryableExtensions.LongCountAsync{TSource}(IQueryable{TSource}, CancellationToken)"/>.</description></item>
     ///   <item><description>If <c>TotalCount == 0</c> or <c>Skip &gt;= TotalCount</c>, immediately returns an empty <see cref="PagedResult{T}"/> without issuing a second SQL data query.</description></item>
-    ///   <item><description>Otherwise, queries the database slice using <c>.Skip(skip).Take(pageSize)</c> and wraps the items into an immutable <see cref="EquatableArray{T}"/>.</description></item>
+    ///   <item><description>Otherwise, queries the database slice using <c>.Skip(skip).Take(size)</c> and wraps the items into an immutable <see cref="EquatableArray{T}"/>.</description></item>
     /// </list>
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The entity or projected data model type.</typeparam>
     /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
-    /// <param name="request">The offset pagination request parameters (PageNumber and PageSize).</param>
+    /// <param name="request">The offset pagination request parameters (Page and Size).</param>
     /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
     /// <returns>
     /// A task representing the asynchronous query execution, containing a <see cref="PagedResult{T}"/> 
@@ -42,7 +42,7 @@ public static partial class QueryablePaginationExtensions {
     /// <exception cref="OperationCanceledException">Thrown when the <paramref name="cancellationToken"/> is canceled.</exception>
     /// <example>
     /// <code>
-    /// var request = new PageRequest(pageNumber: 2, pageSize: 20);
+    /// var request = new PageRequest(page: 2, size: 20);
     /// 
     /// var result = await dbContext.Products
     ///     .AsNoTracking()
@@ -59,7 +59,7 @@ public static partial class QueryablePaginationExtensions {
 
         Preca.ThrowIfNull(source);
 
-        return ToPagedResultInternalAsync(source, request.PageNumber, request.PageSize, request.CalculateSkip(), cancellationToken);
+        return ToPagedResultInternalAsync(source, request.Page, request.Size, request.CalculateSkip(), cancellationToken);
     }
 
     /// <summary>
@@ -73,8 +73,8 @@ public static partial class QueryablePaginationExtensions {
     /// </remarks>
     /// <typeparam name="T">The entity or projected data model type.</typeparam>
     /// <param name="source">The source queryable. Must be explicitly ordered before calling pagination.</param>
-    /// <param name="pageNumber">The 1-based page index. Clamped to minimum 1.</param>
-    /// <param name="pageSize">The maximum items per page. Clamped between 1 and <see cref="PageRequest.MaxPageSize"/>.</param>
+    /// <param name="page">The 1-based page index. Clamped to minimum 1.</param>
+    /// <param name="size">The maximum items per page. Clamped between 1 and <see cref="PageRequest.MaxSize"/>.</param>
     /// <param name="cancellationToken">A token to observe while waiting for the database query to complete.</param>
     /// <returns>
     /// A task representing the asynchronous query execution, containing a <see cref="PagedResult{T}"/>.
@@ -84,20 +84,20 @@ public static partial class QueryablePaginationExtensions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<PagedResult<T>> ToPagedResultAsync<T>(
         this IQueryable<T> source,
-        int pageNumber,
-        int pageSize,
+        int page,
+        int size,
         CancellationToken cancellationToken = default) {
 
         Preca.ThrowIfNull(source);
 
-        PageRequest request = new(pageNumber, pageSize);
-        return ToPagedResultInternalAsync(source, request.PageNumber, request.PageSize, request.CalculateSkip(), cancellationToken);
+        PageRequest request = new(page, size);
+        return ToPagedResultInternalAsync(source, request.Page, request.Size, request.CalculateSkip(), cancellationToken);
     }
 
     private static async Task<PagedResult<T>> ToPagedResultInternalAsync<T>(
         IQueryable<T> source,
-        int pageNumber,
-        int pageSize,
+        int page,
+        int size,
         int skip,
         CancellationToken cancellationToken) {
 
@@ -106,17 +106,17 @@ public static partial class QueryablePaginationExtensions {
 
         // Optimization: If table is empty or requested page is out of bounds, skip the data SELECT query entirely
         if(totalCount == 0 || skip >= totalCount) {
-            return new PagedResult<T>([], new PageMetadata(totalCount, pageNumber, pageSize));
+            return new PagedResult<T>([], new PageMetadata(totalCount, page, size));
         }
 
         // 2. Fetch the paginated data slice
         List<T> itemsList = await source
             .Skip(skip)
-            .Take(pageSize)
+            .Take(size)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        PageMetadata metadata = new(totalCount, pageNumber, pageSize);
+        PageMetadata metadata = new(totalCount, page, size);
         return new PagedResult<T>(itemsList, metadata);
     }
 

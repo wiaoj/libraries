@@ -17,7 +17,7 @@ namespace Wiaoj.Pagination;
 /// in ASP.NET Core Minimal APIs and query string parsers without framework dependencies.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("PageNumber = {PageNumber}, PageSize = {PageSize}")]
+[DebuggerDisplay("Page = {Page}, Size = {Size}")]
 [StructLayout(LayoutKind.Auto)]
 public readonly record struct PageRequest :
     IEquatable<PageRequest>,
@@ -31,12 +31,12 @@ public readonly record struct PageRequest :
     /// <summary>
     /// The default page size limit applied when not specified.
     /// </summary>
-    public const int DefaultPageSize = 20;
+    public const int DefaultSize = 20;
 
     /// <summary>
     /// The absolute maximum allowed page size to protect database throughput.
     /// </summary>
-    public const int MaxPageSize = 100;
+    public const int MaxSize = 100;
 
     /// <summary>
     /// Represents an uninitialized <see cref="PageRequest"/> instance.
@@ -46,32 +46,32 @@ public readonly record struct PageRequest :
     /// <summary>
     /// Represents the default pagination request (Page 1, Size 20).
     /// </summary>
-    public static readonly PageRequest Default = new(1, DefaultPageSize);
+    public static readonly PageRequest Default = new(1, DefaultSize);
 
     /// <summary>
     /// Gets the 1-based requested page index.
     /// </summary>
-    public int PageNumber { get; }
+    public int Page { get; }
 
     /// <summary>
     /// Gets the requested page capacity.
     /// </summary>
-    public int PageSize { get; }
+    public int Size { get; }
 
     /// <summary>
     /// Gets a value indicating whether this request is uninitialized.
     /// </summary>
-    public bool IsEmpty => this.PageNumber == 0 && this.PageSize == 0;
+    public bool IsEmpty => this.Page == 0 && this.Size == 0;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PageRequest"/> struct with boundary clamping.
     /// </summary>
-    /// <param name="pageNumber">The 1-based page index. Clamped to minimum 1.</param>
-    /// <param name="pageSize">The requested page size. Clamped between 1 and <see cref="MaxPageSize"/>.</param>
+    /// <param name="page">The 1-based page index. Clamped to minimum 1.</param>
+    /// <param name="size">The requested page size. Clamped between 1 and <see cref="MaxSize"/>.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PageRequest(int pageNumber = 1, int pageSize = DefaultPageSize) {
-        this.PageNumber = pageNumber < 1 ? 1 : pageNumber;
-        this.PageSize = pageSize < 1 ? DefaultPageSize : (pageSize > MaxPageSize ? MaxPageSize : pageSize);
+    public PageRequest(int page = 1, int size = DefaultSize) {
+        this.Page = page < 1 ? 1 : page;
+        this.Size = size < 1 ? DefaultSize : (size > MaxSize ? MaxSize : size);
     }
 
     /// <summary>
@@ -80,11 +80,11 @@ public readonly record struct PageRequest :
     /// <returns>The zero-based offset calculation. Clamped to <see cref="int.MaxValue"/> on overflow.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int CalculateSkip() {
-        if(this.PageNumber <= 1 || this.PageSize <= 0) {
+        if(this.Page <= 1 || this.Size <= 0) {
             return 0;
         }
 
-        long skip = (long)(this.PageNumber - 1) * this.PageSize;
+        long skip = (long)(this.Page - 1) * this.Size;
         return skip > int.MaxValue ? int.MaxValue : (int)skip;
     }
 
@@ -92,9 +92,9 @@ public readonly record struct PageRequest :
     /// Deconstructs the request into its page index and size components.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Deconstruct(out int pageNumber, out int pageSize) {
-        pageNumber = this.PageNumber;
-        pageSize = this.PageSize;
+    public void Deconstruct(out int page, out int size) {
+        page = this.Page;
+        size = this.Size;
     }
 
     #region Parsing (ISpanParsable, IUtf8SpanParsable)
@@ -110,7 +110,7 @@ public readonly record struct PageRequest :
     private const char AlternateSeparator = ',';
 
     /// <summary>
-    /// Parses a string formatted as <c>PageNumber:PageSize</c> or <c>PageNumber,PageSize</c>.
+    /// Parses a string formatted as <c>Page:Size</c> or <c>Page,Size</c>.
     /// </summary>
     public static PageRequest Parse(string s) {
         Preca.ThrowIfNull(s);
@@ -118,13 +118,13 @@ public readonly record struct PageRequest :
     }
 
     /// <summary>
-    /// Parses a character span formatted as <c>PageNumber:PageSize</c> into a <see cref="PageRequest"/>.
+    /// Parses a character span formatted as <c>Page:Size</c> into a <see cref="PageRequest"/>.
     /// </summary>
     public static PageRequest Parse(ReadOnlySpan<char> s) {
         if(TryParse(s, out PageRequest result)) {
             return result;
         }
-        throw new FormatException($"Invalid PageRequest format. Expected 'PageNumber{PrimarySeparator}PageSize' or 'PageNumber{AlternateSeparator}PageSize'.");
+        throw new FormatException($"Invalid PageRequest format. Expected 'Page{PrimarySeparator}Size' or 'Page{AlternateSeparator}Size'.");
     }
 
     /// <summary>
@@ -160,7 +160,7 @@ public readonly record struct PageRequest :
         int separatorIndex = s.IndexOfAny(PrimarySeparator, AlternateSeparator);
         if(separatorIndex < 0) {
             if(int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int pageOnly)) {
-                result = new PageRequest(pageOnly, DefaultPageSize);
+                result = new PageRequest(pageOnly, DefaultSize);
                 return true;
             }
             result = default;
@@ -205,7 +205,7 @@ public readonly record struct PageRequest :
     /// <inheritdoc/>
     public override string ToString() {
         if(this.IsEmpty) return $"0{PrimarySeparator}0";
-        return $"{this.PageNumber}{PrimarySeparator}{this.PageSize}";
+        return $"{this.Page}{PrimarySeparator}{this.Size}";
     }
 
     /// <summary>
@@ -216,7 +216,7 @@ public readonly record struct PageRequest :
         if(this.IsEmpty) {
             return destination.TryWrite(CultureInfo.InvariantCulture, $"0{PrimarySeparator}0", out charsWritten);
         }
-        return destination.TryWrite(CultureInfo.InvariantCulture, $"{this.PageNumber}{PrimarySeparator}{this.PageSize}", out charsWritten);
+        return destination.TryWrite(CultureInfo.InvariantCulture, $"{this.Page}{PrimarySeparator}{this.Size}", out charsWritten);
     }
 
     /// <summary>
@@ -227,7 +227,7 @@ public readonly record struct PageRequest :
         if(this.IsEmpty) {
             return System.Text.Unicode.Utf8.TryWrite(utf8Destination, CultureInfo.InvariantCulture, $"0{PrimarySeparator}0", out bytesWritten);
         }
-        return System.Text.Unicode.Utf8.TryWrite(utf8Destination, CultureInfo.InvariantCulture, $"{this.PageNumber}{PrimarySeparator}{this.PageSize}", out bytesWritten);
+        return System.Text.Unicode.Utf8.TryWrite(utf8Destination, CultureInfo.InvariantCulture, $"{this.Page}{PrimarySeparator}{this.Size}", out bytesWritten);
     }
 
     // --- Explicit Interface Implementations ---

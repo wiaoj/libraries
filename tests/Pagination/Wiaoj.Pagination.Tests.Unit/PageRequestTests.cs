@@ -19,23 +19,23 @@ public sealed class PageRequestTests {
             PageRequest sut = new(inputPageNumber, 20);
 
             // Assert
-            Assert.Equal(expectedPageNumber, sut.PageNumber);
+            Assert.Equal(expectedPageNumber, sut.Page);
         }
 
         [Theory]
-        [InlineData(int.MinValue, PageRequest.DefaultPageSize)]
-        [InlineData(-10, PageRequest.DefaultPageSize)]
-        [InlineData(0, PageRequest.DefaultPageSize)]
+        [InlineData(int.MinValue, PageRequest.DefaultSize)]
+        [InlineData(-10, PageRequest.DefaultSize)]
+        [InlineData(0, PageRequest.DefaultSize)]
         [InlineData(1, 1)]
-        [InlineData(PageRequest.MaxPageSize, PageRequest.MaxPageSize)]
-        [InlineData(PageRequest.MaxPageSize + 1, PageRequest.MaxPageSize)]
-        [InlineData(int.MaxValue, PageRequest.MaxPageSize)]
+        [InlineData(PageRequest.MaxSize, PageRequest.MaxSize)]
+        [InlineData(PageRequest.MaxSize + 1, PageRequest.MaxSize)]
+        [InlineData(int.MaxValue, PageRequest.MaxSize)]
         public void Should_Clamp_PageSize_Boundaries(int inputPageSize, int expectedPageSize) {
             // Arrange & Act
             PageRequest sut = new(1, inputPageSize);
 
             // Assert
-            Assert.Equal(expectedPageSize, sut.PageSize);
+            Assert.Equal(expectedPageSize, sut.Size);
         }
 
         [Fact]
@@ -58,7 +58,7 @@ public sealed class PageRequestTests {
 
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
         private static PageRequest ExecuteInstantiation() {
-            return new PageRequest(int.MaxValue, PageRequest.MaxPageSize);
+            return new PageRequest(int.MaxValue, PageRequest.MaxSize);
         }
     }
 
@@ -93,7 +93,7 @@ public sealed class PageRequestTests {
         [Fact]
         public void Should_Prevent_Integer_Overflow_When_PageNumber_Is_Extreme() {
             // Arrange: (int.MaxValue - 1) * 100 exceeds int.MaxValue
-            PageRequest sut = new(pageNumber: int.MaxValue, pageSize: 100);
+            PageRequest sut = new(page: int.MaxValue, size: 100);
 
             // Act
             int skip = sut.CalculateSkip();
@@ -107,17 +107,17 @@ public sealed class PageRequestTests {
         [Theory]
         [InlineData("2:50", 2, 50)]
         [InlineData("3,25", 3, 25)]
-        [InlineData("5", 5, PageRequest.DefaultPageSize)]
-        [InlineData("0:0", 1, PageRequest.DefaultPageSize)]
-        [InlineData("-5:-20", 1, PageRequest.DefaultPageSize)]
-        [InlineData("1:500", 1, PageRequest.MaxPageSize)]
+        [InlineData("5", 5, PageRequest.DefaultSize)]
+        [InlineData("0:0", 1, PageRequest.DefaultSize)]
+        [InlineData("-5:-20", 1, PageRequest.DefaultSize)]
+        [InlineData("1:500", 1, PageRequest.MaxSize)]
         public void Should_Parse_And_Sanitize_Valid_Or_OutOfBound_Strings(string input, int expectedPage, int expectedSize) {
             // Act
             PageRequest result = PageRequest.Parse(input);
 
             // Assert
-            Assert.Equal(expectedPage, result.PageNumber);
-            Assert.Equal(expectedSize, result.PageSize);
+            Assert.Equal(expectedPage, result.Page);
+            Assert.Equal(expectedSize, result.Size);
         }
 
         [Fact]
@@ -154,8 +154,8 @@ public sealed class PageRequestTests {
             PageRequest result = PageRequest.Parse(utf8Input);
 
             // Assert
-            Assert.Equal(4, result.PageNumber);
-            Assert.Equal(30, result.PageSize);
+            Assert.Equal(4, result.Page);
+            Assert.Equal(30, result.Size);
         }
 
         [Fact]
@@ -168,8 +168,8 @@ public sealed class PageRequestTests {
 
             // Assert
             Assert.True(success);
-            Assert.Equal(2, result.PageNumber);
-            Assert.Equal(15, result.PageSize);
+            Assert.Equal(2, result.Page);
+            Assert.Equal(15, result.Size);
         }
 
         [Fact]
@@ -261,8 +261,8 @@ public sealed class PageRequestTests {
 
             // Assert
             Assert.Equal(original, reparsed);
-            Assert.Contains(original.PageNumber.ToString(), formatted);
-            Assert.Contains(original.PageSize.ToString(), formatted);
+            Assert.Contains(original.Page.ToString(), formatted);
+            Assert.Contains(original.Size.ToString(), formatted);
         }
     }
 
@@ -270,7 +270,7 @@ public sealed class PageRequestTests {
 
         [Fact]
         public void Should_Be_True_For_Empty_Static_Instance() {
-            // PageRequest.Empty bypasses the constructor (raw default), so PageNumber/PageSize stay 0
+            // PageRequest.Empty bypasses the constructor (raw default), so Page/Size stay 0
             Assert.True(PageRequest.Empty.IsEmpty);
         }
 

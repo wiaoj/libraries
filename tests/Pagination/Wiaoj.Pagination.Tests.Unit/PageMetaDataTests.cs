@@ -15,7 +15,7 @@ public sealed class PageMetadataTests {
         [InlineData(500, 500)]
         public void Should_Sanitize_TotalCount(int inputTotalCount, int expectedTotalCount) {
             // Arrange & Act
-            PageMetadata sut = new(totalCount: inputTotalCount, pageNumber: 1, pageSize: 20);
+            PageMetadata sut = new(totalCount: inputTotalCount, page: 1, size: 20);
 
             // Assert
             Assert.Equal(expectedTotalCount, sut.TotalCount);
@@ -28,10 +28,10 @@ public sealed class PageMetadataTests {
         [InlineData(25, 25)]
         public void Should_Sanitize_PageNumber(int inputPageNumber, int expectedPageNumber) {
             // Arrange & Act
-            PageMetadata sut = new(totalCount: 100, pageNumber: inputPageNumber, pageSize: 20);
+            PageMetadata sut = new(totalCount: 100, page: inputPageNumber, size: 20);
 
             // Assert
-            Assert.Equal(expectedPageNumber, sut.PageNumber);
+            Assert.Equal(expectedPageNumber, sut.Page);
         }
 
         [Theory]
@@ -40,16 +40,16 @@ public sealed class PageMetadataTests {
         [InlineData(50, 50)]
         public void Should_Sanitize_PageSize(int inputPageSize, int expectedPageSize) {
             // Arrange & Act
-            PageMetadata sut = new(totalCount: 100, pageNumber: 1, pageSize: inputPageSize);
+            PageMetadata sut = new(totalCount: 100, page: 1, size: inputPageSize);
 
             // Assert
-            Assert.Equal(expectedPageSize, sut.PageSize);
+            Assert.Equal(expectedPageSize, sut.Size);
         }
 
         [Fact]
         public void Should_Deconstruct_Accurately() {
             // Arrange
-            PageMetadata sut = new(totalCount: 95, pageNumber: 2, pageSize: 10);
+            PageMetadata sut = new(totalCount: 95, page: 2, size: 10);
 
             // Act
             (long totalCount, int pageNumber, int pageSize, long totalPages) = sut;
@@ -94,8 +94,8 @@ public sealed class PageMetadataTests {
             // Assert
             Assert.True(sut.IsEmpty);
             Assert.Equal(0, sut.TotalCount);
-            Assert.Equal(0, sut.PageNumber);
-            Assert.Equal(0, sut.PageSize);
+            Assert.Equal(0, sut.Page);
+            Assert.Equal(0, sut.Size);
             Assert.Equal(0, sut.TotalPages);
             Assert.False(sut.HasPrevious);
             Assert.False(sut.HasNext);
@@ -114,7 +114,7 @@ public sealed class PageMetadataTests {
         [InlineData(101, 10, 11)]
         public void Should_Calculate_Accurately(int totalCount, int pageSize, int expectedTotalPages) {
             // Arrange & Act
-            PageMetadata sut = new(totalCount: totalCount, pageNumber: 1, pageSize: pageSize);
+            PageMetadata sut = new(totalCount: totalCount, page: 1, size: pageSize);
 
             // Assert
             Assert.Equal(expectedTotalPages, sut.TotalPages);
@@ -123,7 +123,7 @@ public sealed class PageMetadataTests {
         [Fact]
         public void Should_Not_Overflow_When_TotalCount_Is_Near_MaxValue() {
             // Arrange
-            PageMetadata sut = new(totalCount: long.MaxValue, pageNumber: 1, pageSize: 10);
+            PageMetadata sut = new(totalCount: long.MaxValue, page: 1, size: 10);
 
             // Act
             long totalPages = sut.TotalPages;
@@ -162,7 +162,7 @@ public sealed class PageMetadataTests {
         [Fact]
         public void Should_Format_Standard_Representation() {
             // Arrange
-            PageMetadata sut = new(totalCount: 150, pageNumber: 2, pageSize: 50);
+            PageMetadata sut = new(totalCount: 150, page: 2, size: 50);
 
             // Act
             string result = sut.ToString();
@@ -176,7 +176,7 @@ public sealed class PageMetadataTests {
         [Fact]
         public void Should_Format_To_Char_Span() {
             // Arrange
-            PageMetadata sut = new(totalCount: 200, pageNumber: 3, pageSize: 20);
+            PageMetadata sut = new(totalCount: 200, page: 3, size: 20);
             Span<char> destination = stackalloc char[64];
 
             // Act
@@ -190,7 +190,7 @@ public sealed class PageMetadataTests {
         [Fact]
         public void Should_Format_To_Utf8_Span() {
             // Arrange
-            PageMetadata sut = new(totalCount: 300, pageNumber: 1, pageSize: 50);
+            PageMetadata sut = new(totalCount: 300, page: 1, size: 50);
             Span<byte> utf8Destination = stackalloc byte[64];
 
             // Act
@@ -205,7 +205,7 @@ public sealed class PageMetadataTests {
         [Fact]
         public void Should_Return_False_When_Buffer_Is_Too_Small() {
             // Arrange
-            PageMetadata sut = new(totalCount: 200, pageNumber: 3, pageSize: 20);
+            PageMetadata sut = new(totalCount: 200, page: 3, size: 20);
             Span<char> smallDestination = stackalloc char[4];
 
             // Act
@@ -219,7 +219,7 @@ public sealed class PageMetadataTests {
         [Fact]
         public void Should_Return_False_When_Utf8_Buffer_Is_Too_Small() {
             // Arrange
-            PageMetadata sut = new(totalCount: 200, pageNumber: 3, pageSize: 20);
+            PageMetadata sut = new(totalCount: 200, page: 3, size: 20);
             Span<byte> smallDestination = stackalloc byte[4];
 
             // Act
@@ -260,7 +260,7 @@ public sealed class PageMetadataTests {
         [Fact]
         public void Should_Serialize_And_Deserialize_Accurately() {
             // Arrange
-            var original = new PageMetadata(totalCount: 250, pageNumber: 3, pageSize: 25);
+            var original = new PageMetadata(totalCount: 250, page: 3, size: 25);
 
             // Act
             string json = JsonSerializer.Serialize(original);
@@ -269,8 +269,8 @@ public sealed class PageMetadataTests {
             // Assert
             Assert.Equal(original, deserialized);
             Assert.Equal(original.TotalCount, deserialized.TotalCount);
-            Assert.Equal(original.PageNumber, deserialized.PageNumber);
-            Assert.Equal(original.PageSize, deserialized.PageSize);
+            Assert.Equal(original.Page, deserialized.Page);
+            Assert.Equal(original.Size, deserialized.Size);
             Assert.Equal(original.TotalPages, deserialized.TotalPages);
             Assert.Equal(original.HasPrevious, deserialized.HasPrevious);
             Assert.Equal(original.HasNext, deserialized.HasNext);

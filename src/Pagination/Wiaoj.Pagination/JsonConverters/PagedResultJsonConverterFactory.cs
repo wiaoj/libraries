@@ -44,7 +44,7 @@ internal sealed class PagedResultJsonConverter<T> : JsonConverter<PagedResult<T>
             throw new JsonException("Expected StartObject token for PagedResult.");
         }
 
-        EquatableArray<T> items = EquatableArray<T>.Empty;
+        EquatableArray<T> items = [];
         PageMetadata metadata = PageMetadata.Empty;
 
         while(reader.Read()) {

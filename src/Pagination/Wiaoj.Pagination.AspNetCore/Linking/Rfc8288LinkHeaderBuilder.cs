@@ -72,12 +72,12 @@ public static class Rfc8288LinkHeaderBuilder {
 
         // 2. rel="prev"
         if(metadata.HasPrevious) {
-            sb.Append(LinkDelimiter).Append(pageUriFactory(metadata.PageNumber - 1)).Append(RelPrevSuffix);
+            sb.Append(LinkDelimiter).Append(pageUriFactory(metadata.Page - 1)).Append(RelPrevSuffix);
         }
 
         // 3. rel="next"
         if(metadata.HasNext) {
-            sb.Append(LinkDelimiter).Append(pageUriFactory(metadata.PageNumber + 1)).Append(RelNextSuffix);
+            sb.Append(LinkDelimiter).Append(pageUriFactory(metadata.Page + 1)).Append(RelNextSuffix);
         }
 
         // 4. rel="last"

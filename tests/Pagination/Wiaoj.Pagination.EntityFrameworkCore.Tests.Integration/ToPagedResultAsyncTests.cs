@@ -41,7 +41,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Paginate_First_Page_Accurately() {
             // Arrange
-            PageRequest request = new(pageNumber: 1, pageSize: 10);
+            PageRequest request = new(page: 1, size: 10);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -51,8 +51,8 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
             // Assert
             Assert.Equal(10, result.Count);
             Assert.Equal(50, result.Metadata.TotalCount);
-            Assert.Equal(1, result.Metadata.PageNumber);
-            Assert.Equal(10, result.Metadata.PageSize);
+            Assert.Equal(1, result.Metadata.Page);
+            Assert.Equal(10, result.Metadata.Size);
             Assert.Equal(5, result.Metadata.TotalPages);
             Assert.False(result.Metadata.HasPrevious);
             Assert.True(result.Metadata.HasNext);
@@ -63,7 +63,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Paginate_Middle_Page_Accurately() {
             // Arrange
-            PageRequest request = new(pageNumber: 3, pageSize: 10);
+            PageRequest request = new(page: 3, size: 10);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -81,7 +81,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Paginate_Last_Page_Accurately() {
             // Arrange
-            PageRequest request = new(pageNumber: 5, pageSize: 10);
+            PageRequest request = new(page: 5, size: 10);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -99,7 +99,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Return_Empty_Items_When_PageNumber_Exceeds_TotalPages() {
             // Arrange
-            PageRequest request = new(pageNumber: 10, pageSize: 10);
+            PageRequest request = new(page: 10, size: 10);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -119,7 +119,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         public async Task Should_Return_Empty_PagedResult_When_Database_Is_Empty() {
             // Arrange: Empty database context
             (TestDbContext? emptyContext, SqliteConnection? connection) = TestDbContext.CreateInMemoryContext();
-            PageRequest request = new(pageNumber: 1, pageSize: 20);
+            PageRequest request = new(page: 1, size: 20);
 
             // Act
             PagedResult<TestItem> result = await emptyContext.Items.ToPagedResultAsync(request, TestContext.Current.CancellationToken);
@@ -160,7 +160,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Calculate_TotalCount_Accurately_When_Where_Filter_Is_Applied() {
             // Arrange: Filter items where price > 300 (22 items: Id 29..50)
-            PageRequest request = new(pageNumber: 1, pageSize: 10);
+            PageRequest request = new(page: 1, size: 10);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -178,7 +178,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Paginate_Successfully_With_Select_Projection() {
             // Arrange: DTO projection
-            PageRequest request = new(pageNumber: 1, pageSize: 5);
+            PageRequest request = new(page: 1, size: 5);
 
             // Act
             var result = await this._fixture._context.Items
@@ -198,7 +198,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
             // Act: Invoke overload directly with raw integer parameters
             PagedResult<TestItem> result = await this._fixture._context.Items
                 .OrderBy(x => x.Id)
-                .ToPagedResultAsync(pageNumber: 2, pageSize: 15, TestContext.Current.CancellationToken);
+                .ToPagedResultAsync(page: 2, size: 15, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Equal(15, result.Count);
@@ -211,7 +211,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Handle_Exact_PageSize_Match() {
             // Arrange: Request page size exactly matching total items count
-            PageRequest request = new(pageNumber: 1, pageSize: 50);
+            PageRequest request = new(page: 1, size: 50);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -234,9 +234,9 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [InlineData(-1)]
         [InlineData(-100)]
         public async Task Should_Clamp_PageNumber_To_One_When_Zero_Or_Negative(int invalidPageNumber) {
-            // Arrange: PageRequest's constructor clamps pageNumber < 1 up to 1 (no exception).
-            PageRequest request = new(pageNumber: invalidPageNumber, pageSize: 10);
-            Assert.Equal(1, request.PageNumber);
+            // Arrange: PageRequest's constructor clamps page < 1 up to 1 (no exception).
+            PageRequest request = new(page: invalidPageNumber, size: 10);
+            Assert.Equal(1, request.Page);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -244,7 +244,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
                 .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
 
             // Assert: Behaves identically to an explicit first-page request
-            Assert.Equal(1, result.Metadata.PageNumber);
+            Assert.Equal(1, result.Metadata.Page);
             Assert.False(result.Metadata.HasPrevious);
             Assert.Equal(1, result.Items[0].Id);
         }
@@ -253,9 +253,9 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [InlineData(0)]
         [InlineData(-1)]
         public async Task Should_Clamp_PageSize_To_Default_When_Zero_Or_Negative(int invalidPageSize) {
-            // Arrange: PageRequest's constructor clamps pageSize < 1 up to DefaultPageSize (20).
-            PageRequest request = new(pageNumber: 1, pageSize: invalidPageSize);
-            Assert.Equal(PageRequest.DefaultPageSize, request.PageSize);
+            // Arrange: PageRequest's constructor clamps size < 1 up to DefaultSize (20).
+            PageRequest request = new(page: 1, size: invalidPageSize);
+            Assert.Equal(PageRequest.DefaultSize, request.Size);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -263,15 +263,15 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
                 .ToPagedResultAsync(request, TestContext.Current.CancellationToken);
 
             // Assert
-            Assert.Equal(PageRequest.DefaultPageSize, result.Count);
+            Assert.Equal(PageRequest.DefaultSize, result.Count);
             Assert.Equal(50, result.Metadata.TotalCount);
         }
 
         [Fact]
         public async Task Should_Clamp_PageSize_To_MaxPageSize_When_Exceeding_Limit() {
-            // Arrange: PageRequest's constructor clamps pageSize > MaxPageSize (100) down to 100.
-            PageRequest request = new(pageNumber: 1, pageSize: 1_000_000);
-            Assert.Equal(PageRequest.MaxPageSize, request.PageSize);
+            // Arrange: PageRequest's constructor clamps size > MaxSize (100) down to 100.
+            PageRequest request = new(page: 1, size: 1_000_000);
+            Assert.Equal(PageRequest.MaxSize, request.Size);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -286,11 +286,11 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
 
         [Fact]
         public async Task Should_Return_Empty_Page_When_Large_PageNumber_Exceeds_TotalPages() {
-            // Arrange: A large pageNumber combined with the clamped max pageSize (100) is still
+            // Arrange: A large page combined with the clamped max size (100) is still
             // far beyond the 50 seeded records, so the offset (skip) calculation must not throw
             // or misbehave, and the result must simply be an empty page.
-            PageRequest request = new(pageNumber: 100_000, pageSize: 100_000);
-            Assert.Equal(PageRequest.MaxPageSize, request.PageSize);
+            PageRequest request = new(page: 100_000, size: 100_000);
+            Assert.Equal(PageRequest.MaxSize, request.Size);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -305,7 +305,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Calculate_TotalCount_Correctly_When_Where_And_Select_Are_Combined() {
             // Arrange: Filter + projection combined (Price > 300 => 22 items)
-            PageRequest request = new(pageNumber: 1, pageSize: 5);
+            PageRequest request = new(page: 1, size: 5);
 
             // Act
             var result = await this._fixture._context.Items
@@ -328,7 +328,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
                 .ToPagedResultAsync(PageRequest.Default, TestContext.Current.CancellationToken);
 
             // Assert: Default request must resolve to the first page
-            Assert.Equal(1, result.Metadata.PageNumber);
+            Assert.Equal(1, result.Metadata.Page);
             Assert.False(result.Metadata.HasPrevious);
             Assert.Equal(1, result.Items[0].Id);
         }
@@ -338,7 +338,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
             // Arrange: Deliberately omit OrderBy to verify the method does not hard-require it.
             // Item ordering is not guaranteed by the provider in this case, but the call itself
             // must not throw and Count/TotalCount must still be correct.
-            PageRequest request = new(pageNumber: 1, pageSize: 10);
+            PageRequest request = new(page: 1, size: 10);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -354,7 +354,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Paginate_Correctly_When_PageSize_Is_One() {
             // Arrange: the smallest legal page size must still produce accurate metadata
-            PageRequest request = new(pageNumber: 3, pageSize: 1);
+            PageRequest request = new(page: 3, size: 1);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -372,7 +372,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Paginate_Correctly_On_Descending_Order() {
             // Arrange
-            PageRequest request = new(pageNumber: 1, pageSize: 5);
+            PageRequest request = new(page: 1, size: 5);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -392,7 +392,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
             singleItemContext.Items.Add(new TestItem { Id = 1, Name = "Only_Item", Price = 9.99m, CreatedAt = DateTimeOffset.UtcNow });
             await singleItemContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-            PageRequest request = new(pageNumber: 1, pageSize: 20);
+            PageRequest request = new(page: 1, size: 20);
 
             try {
                 // Act
@@ -416,7 +416,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Return_Empty_Page_When_Where_Filter_Excludes_Every_Row() {
             // Arrange: a filter that matches nothing must still return a well-formed, empty page
-            PageRequest request = new(pageNumber: 1, pageSize: 10);
+            PageRequest request = new(page: 1, size: 10);
 
             // Act
             PagedResult<TestItem> result = await this._fixture._context.Items
@@ -435,7 +435,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
         [Fact]
         public async Task Should_Paginate_Correctly_When_Where_Select_And_OrderByDescending_Are_Combined() {
             // Arrange: filter + projection + descending order, exercised together in one query
-            PageRequest request = new(pageNumber: 1, pageSize: 5);
+            PageRequest request = new(page: 1, size: 5);
 
             // Act
             var result = await this._fixture._context.Items
@@ -479,7 +479,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
             // Arrange: an empty database - the fast-path optimization must skip the SELECT entirely and
             // return an empty page purely from the LongCountAsync result.
             (TestDbContext emptyContext, SqliteConnection connection) = TestDbContext.CreateInMemoryContext();
-            PageRequest request = new(pageNumber: 1, pageSize: 10);
+            PageRequest request = new(page: 1, size: 10);
 
             try {
                 // Act
@@ -500,7 +500,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
 
         [Fact]
         public async Task Should_Respect_CancellationToken_Using_Raw_Integer_Overload() {
-            // Arrange: cancellation must be honored on the raw (pageNumber, pageSize) overload too,
+            // Arrange: cancellation must be honored on the raw (page, size) overload too,
             // not only the PageRequest overload already covered elsewhere.
             using CancellationTokenSource cts = new();
             cts.Cancel();
@@ -509,7 +509,7 @@ public sealed class ToPagedResultAsyncTests : IAsyncLifetime {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 this._fixture._context.Items
                     .OrderBy(x => x.Id)
-                    .ToPagedResultAsync(pageNumber: 1, pageSize: 10, cts.Token));
+                    .ToPagedResultAsync(page: 1, size: 10, cts.Token));
         }
 
     }

@@ -21,7 +21,7 @@ namespace Wiaoj.Pagination;
 /// An uninitialized (<see langword="default"/>) instance represents <see cref="Empty"/> where <see cref="IsEmpty"/> is <see langword="true"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Page {PageNumber} of {TotalPages} (Total: {TotalCount})")]
+[DebuggerDisplay("Page {Page} of {TotalPages} (Total: {TotalCount})")]
 [StructLayout(LayoutKind.Auto)]
 [JsonConverter(typeof(PageMetadataJsonConverter))]
 public readonly record struct PageMetadata :
@@ -52,39 +52,39 @@ public readonly record struct PageMetadata :
     /// <summary>
     /// Gets the current 1-based page index.
     /// </summary>
-    public int PageNumber { get; }
+    public int Page { get; }
 
     /// <summary>
     /// Gets the maximum number of items per page.
     /// </summary>
-    public int PageSize { get; }
+    public int Size { get; }
 
     /// <summary>
     /// Gets a value indicating whether this metadata instance is uninitialized or empty.
     /// </summary>
-    public bool IsEmpty => this.PageSize == 0;
+    public bool IsEmpty => this.Size == 0;
 
     /// <summary>
-    /// Gets the total number of pages calculated from <see cref="TotalCount"/> and <see cref="PageSize"/>.
-    /// Returns 0 if <see cref="PageSize"/> is 0.
+    /// Gets the total number of pages calculated from <see cref="TotalCount"/> and <see cref="Size"/>.
+    /// Returns 0 if <see cref="Size"/> is 0.
     /// </summary>
     /// <remarks>
-    /// Uses a division/remainder based ceiling calculation rather than <c>(TotalCount + PageSize - 1) / PageSize</c>
+    /// Uses a division/remainder based ceiling calculation rather than <c>(TotalCount + Size - 1) / Size</c>
     /// to avoid <see cref="long"/> overflow when <see cref="TotalCount"/> is near <see cref="long.MaxValue"/>.
     /// </remarks>
-    public long TotalPages => this.PageSize > 0
-        ? (this.TotalCount / this.PageSize) + (this.TotalCount % this.PageSize == 0 ? 0 : 1)
+    public long TotalPages => this.Size > 0
+        ? (this.TotalCount / this.Size) + (this.TotalCount % this.Size == 0 ? 0 : 1)
         : 0;
 
     /// <summary>
     /// Gets a value indicating whether there is a preceding page available.
     /// </summary>
-    public bool HasPrevious => this.PageNumber > 1 && this.TotalCount > 0;
+    public bool HasPrevious => this.Page > 1 && this.TotalCount > 0;
 
     /// <summary>
     /// Gets a value indicating whether there is a succeeding page available.
     /// </summary>
-    public bool HasNext => this.PageNumber < this.TotalPages;
+    public bool HasNext => this.Page < this.TotalPages;
 
     // -------------------------------------------------------------------------
     // CONSTRUCTOR & DECONSTRUCTOR
@@ -94,27 +94,27 @@ public readonly record struct PageMetadata :
     /// Initializes a new instance of the <see cref="PageMetadata"/> struct with defensive bound sanitization.
     /// </summary>
     /// <param name="totalCount">The total number of records across all pages. Negative values are clamped to 0.</param>
-    /// <param name="pageNumber">The 1-based page number. Values less than 1 are clamped to 1.</param>
-    /// <param name="pageSize">The page size limit. Values less than 1 are clamped to 1.</param>
+    /// <param name="page">The 1-based page number. Values less than 1 are clamped to 1.</param>
+    /// <param name="size">The page size limit. Values less than 1 are clamped to 1.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PageMetadata(long totalCount, int pageNumber, int pageSize) {
+    public PageMetadata(long totalCount, int page, int size) {
         this.TotalCount = totalCount < 0 ? 0 : totalCount;
-        this.PageNumber = pageNumber < 1 ? 1 : pageNumber;
-        this.PageSize = pageSize < 1 ? 1 : pageSize;
+        this.Page = page < 1 ? 1 : page;
+        this.Size = size < 1 ? 1 : size;
     }
 
     /// <summary>
     /// Deconstructs the <see cref="PageMetadata"/> into its primary components.
     /// </summary>
     /// <param name="totalCount">The total item count.</param>
-    /// <param name="pageNumber">The current page index.</param>
-    /// <param name="pageSize">The page size capacity.</param>
+    /// <param name="page">The current page index.</param>
+    /// <param name="size">The page size capacity.</param>
     /// <param name="totalPages">The calculated total page count.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Deconstruct(out long totalCount, out int pageNumber, out int pageSize, out long totalPages) {
+    public void Deconstruct(out long totalCount, out int page, out int size, out long totalPages) {
         totalCount = this.TotalCount;
-        pageNumber = this.PageNumber;
-        pageSize = this.PageSize;
+        page = this.Page;
+        size = this.Size;
         totalPages = this.TotalPages;
     }
 
@@ -127,7 +127,7 @@ public readonly record struct PageMetadata :
         if(this.IsEmpty) {
             return "Page 0 of 0 (Total: 0)";
         }
-        return $"Page {this.PageNumber} of {this.TotalPages} (Total: {this.TotalCount})";
+        return $"Page {this.Page} of {this.TotalPages} (Total: {this.TotalCount})";
     }
 
     /// <summary>
@@ -144,7 +144,7 @@ public readonly record struct PageMetadata :
 
         return destination.TryWrite(
             CultureInfo.InvariantCulture,
-            $"Page {this.PageNumber} of {this.TotalPages} (Total: {this.TotalCount})",
+            $"Page {this.Page} of {this.TotalPages} (Total: {this.TotalCount})",
             out charsWritten);
     }
 
@@ -163,7 +163,7 @@ public readonly record struct PageMetadata :
         return System.Text.Unicode.Utf8.TryWrite(
             utf8Destination,
             CultureInfo.InvariantCulture,
-            $"Page {this.PageNumber} of {this.TotalPages} (Total: {this.TotalCount})",
+            $"Page {this.Page} of {this.TotalPages} (Total: {this.TotalCount})",
             out bytesWritten);
     }
 

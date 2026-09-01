@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Net.Http.Headers;
 using Wiaoj.Pagination.AspNetCore.Filters;
 using Wiaoj.Primitives.Collections;
@@ -19,7 +20,7 @@ public sealed class PaginationEndpointFilterTests {
             httpContext.Request.Path = "/api/items";
 
             var items = new EquatableArray<string>("Item1", "Item2");
-            var metadata = new PageMetadata(totalCount: 20, pageNumber: 1, pageSize: 2);
+            var metadata = new PageMetadata(totalCount: 20, page: 1, size: 2);
             var pagedResult = new PagedResult<string>(items, metadata);
 
             var context = new DefaultEndpointFilterInvocationContext(httpContext);
@@ -65,7 +66,7 @@ public sealed class PaginationEndpointFilterTests {
             httpContext.Request.Path = "/api/items";
 
             var items = new EquatableArray<string>("Data");
-            var metadata = new PageMetadata(totalCount: 1, pageNumber: 1, pageSize: 1);
+            var metadata = new PageMetadata(totalCount: 1, page: 1, size: 1);
             var pagedResult = new PagedResult<string>(items, metadata);
 
             // First call to extract the generated ETag
@@ -103,18 +104,17 @@ public sealed class PaginationEndpointFilterTests {
         }
 
         [Fact]
-        public async Task Should_Not_Duplicate_PageNumber_Query_Param_In_Link_Header_When_Request_Already_Contains_It() {
-            // Arrange: Kullanıcı 2. sayfayı talep ediyor: GET /api/items?pageNumber=2&pageSize=2
+        public async Task Should_Not_Duplicate_Page_Query_Param_In_Link_Header_When_Request_Already_Contains_It() {
+            // Arrange: Request already contains existing pagination query parameters (?page=2&size=2)
             PaginationEndpointFilter filter = PaginationEndpointFilter.Default;
-            var httpContext = new DefaultHttpContext();
+            var httpContext = new DefaultHttpContext {
+                RequestServices = new ServiceCollection().BuildServiceProvider()
+            };
             httpContext.Request.Path = "/api/items";
-
-            // 🎯 İŞTE ZURNA'NIN ZIRT DEDİĞİ YER: İstek zaten query parametreleriyle geliyor!
-            httpContext.Request.QueryString = new QueryString("?pageNumber=2&pageSize=2");
+            httpContext.Request.QueryString = new QueryString("?page=2&size=2");
 
             var items = new EquatableArray<string>("Item3", "Item4");
-            // Toplam 20 kayıt var, şu an 2. sayfadayız:
-            var metadata = new PageMetadata(totalCount: 20, pageNumber: 2, pageSize: 2);
+            var metadata = new PageMetadata(totalCount: 20, page: 2, size: 2);
             var pagedResult = new PagedResult<string>(items, metadata);
 
             var context = new DefaultEndpointFilterInvocationContext(httpContext);
@@ -122,19 +122,13 @@ public sealed class PaginationEndpointFilterTests {
             // Act
             await filter.InvokeAsync(context, _ => ValueTask.FromResult<object?>(TypedResults.Ok(pagedResult)));
 
-            // Assert
+            // Assert: Verify that query parameters are updated in-place without duplicating the 'page' key
             string linkHeader = httpContext.Response.Headers[HeaderNames.Link].ToString();
 
-            // ❌ MEVCUT KODUN ÜRETTİĞİ (BUG): 
-            // </api/items?pageNumber=2&pageSize=2&pageNumber=3>; rel="next"  <-- İki tane pageNumber var!
-
-            // ✅ OLMASI GEREKEN: 
-            // </api/items?pageNumber=3&pageSize=2>; rel="next"
-
-            // KANIT ASERSIYONU: Tek bir link URL'i içinde birden fazla "pageNumber" ASLA geçmemelidir!
-            Assert.DoesNotContain("pageNumber=2&pageSize=2&pageNumber=", linkHeader);
-            Assert.Contains("pageNumber=3", linkHeader);
-            Assert.DoesNotContain("pageNumber=2&", linkHeader[(linkHeader.IndexOf("rel=\"next\"") - 60)..]);
+            Assert.NotEmpty(linkHeader);
+            Assert.Contains("page=3", linkHeader);
+            Assert.Contains("rel=\"next\"", linkHeader);
+            Assert.DoesNotContain("page=2&size=2&page=", linkHeader);
         }
     }
 

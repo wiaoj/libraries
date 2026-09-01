@@ -11,7 +11,7 @@ public sealed class Rfc8288LinkHeaderBuilderTests {
         [Fact]
         public void Should_Generate_First_Next_Last_Links_When_On_First_Page() {
             // Arrange: Page 1 of 5
-            PageMetadata metadata = new(totalCount: 50, pageNumber: 1, pageSize: 10);
+            PageMetadata metadata = new(totalCount: 50, page: 1, size: 10);
             string PageUriFactory(int page) => $"https://api.example.com/items?page={page}&size=10";
 
             // Act
@@ -27,7 +27,7 @@ public sealed class Rfc8288LinkHeaderBuilderTests {
         [Fact]
         public void Should_Generate_All_Links_When_On_Middle_Page() {
             // Arrange: Page 3 of 5
-            PageMetadata metadata = new(totalCount: 50, pageNumber: 3, pageSize: 10);
+            PageMetadata metadata = new(totalCount: 50, page: 3, size: 10);
             string PageUriFactory(int page) => $"https://api.example.com/items?page={page}&size=10";
 
             // Act
@@ -43,7 +43,7 @@ public sealed class Rfc8288LinkHeaderBuilderTests {
         [Fact]
         public void Should_Generate_First_Prev_Links_When_On_Last_Page() {
             // Arrange: Page 5 of 5
-            PageMetadata metadata = new(totalCount: 50, pageNumber: 5, pageSize: 10);
+            PageMetadata metadata = new(totalCount: 50, page: 5, size: 10);
             string PageUriFactory(int page) => $"https://api.example.com/items?page={page}&size=10";
 
             // Act
@@ -57,8 +57,8 @@ public sealed class Rfc8288LinkHeaderBuilderTests {
 
         [Fact]
         public void Should_Generate_Only_First_Link_When_TotalPages_Is_One() {
-            // Arrange: Total 5 items, PageSize 10 -> TotalPages = 1
-            PageMetadata metadata = new(totalCount: 5, pageNumber: 1, pageSize: 10);
+            // Arrange: Total 5 items, Size 10 -> TotalPages = 1
+            PageMetadata metadata = new(totalCount: 5, page: 1, size: 10);
             string PageUriFactory(int page) => $"https://api.example.com/items?page={page}";
 
             // Act

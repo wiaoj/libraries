@@ -130,8 +130,8 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
     }
 
     private static string BuildOffsetUri(PathString path, IQueryCollection query, int pageNumber) {
-        if(query.Count == 0 || (query.Count == 1 && query.ContainsKey("pageNumber"))) {
-            return $"{path}?pageNumber={pageNumber}";
+        if(query.Count == 0 || (query.Count == 1 && query.ContainsKey("page"))) {
+            return $"{path}?page={pageNumber}";
         }
 
         StringBuilder sb = new(path.Value?.Length + 32 ?? 32);
@@ -139,14 +139,14 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
         char separator = '?';
 
         foreach(KeyValuePair<string, StringValues> pair in query) {
-            if(string.Equals(pair.Key, "pageNumber", StringComparison.OrdinalIgnoreCase))
+            if(string.Equals(pair.Key, "page", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             sb.Append(separator).Append(pair.Key).Append('=').Append(pair.Value);
             separator = '&';
         }
 
-        sb.Append(separator).Append("pageNumber=").Append(pageNumber);
+        sb.Append(separator).Append("page=").Append(pageNumber);
         return sb.ToString();
     }
 

@@ -39,7 +39,7 @@ internal sealed class CursorResultJsonConverter<T> : JsonConverter<CursorResult<
             throw new JsonException("Expected StartObject token for CursorResult.");
         }
 
-        EquatableArray<T> items = EquatableArray<T>.Empty;
+        EquatableArray<T> items = [];
         CursorMetadata metadata = CursorMetadata.Empty;
 
         while(reader.Read()) {
