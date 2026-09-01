@@ -18,4 +18,12 @@ public interface IQueryPayloadParser {
     /// <param name="result">When this method returns, contains the parsed instance if successful; otherwise, <see cref="QueryRequest.Empty"/>.</param>
     /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
     bool TryParse(ReadOnlySpan<byte> utf8Payload, out QueryRequest result);
+
+    /// <summary>
+    /// Gets the maximum payload size, in bytes, this parser is willing to accept. The binder uses this
+    /// to stop streaming the request body early — before the host's much larger general-purpose request
+    /// body limit (commonly tens of megabytes, meant for uploads) would otherwise let an oversized query
+    /// payload accumulate in memory. Defaults to 64 KB; override to raise or lower it per parser.
+    /// </summary>
+    int MaxPayloadBytes => 64 * 1024;
 }

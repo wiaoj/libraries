@@ -529,8 +529,9 @@ public class ProductQueryEndpointTests(TestApplicationFixture fixture) : IClassF
             // Act
             HttpResponseMessage response = await this.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
-            // Assert: a clean client error, not a crash or a timeout
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            // Assert: a clean client error, not a crash or a timeout — now caught early by the binder's
+            // own MaxPayloadBytes check (65,536 bytes) rather than late by JsonQueryParser's internal one
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
         }
     }
 }

@@ -56,7 +56,7 @@ internal static class QueryRequestBinder {
         if(allowBodyPayloads && IsBodyQuerySupported(request.Method) && request.Body != null) {
             string? contentType = request.ContentType;
             if(!string.IsNullOrWhiteSpace(contentType)) {
-                QueryRequest? bodyRequest = await TryBindFromBodyAsync(context, contentType).ConfigureAwait(false);
+                QueryRequest? bodyRequest = await TryBindFromBodyAsync(context, contentType, options).ConfigureAwait(false);
                 if(bodyRequest.HasValue) {
                     return bodyRequest.Value;
                 }
@@ -75,7 +75,7 @@ internal static class QueryRequestBinder {
         return HttpMethods.IsPost(method) || HttpMethods.IsQuery(method);
     }
 
-    private static async ValueTask<QueryRequest?> TryBindFromBodyAsync(HttpContext context, string contentType) {
+    private static async ValueTask<QueryRequest?> TryBindFromBodyAsync(HttpContext context, string contentType, QueryOptions? options) {
         HttpRequest request = context.Request;
         IQueryPayloadParser[] parsers = ResolveParsers(context.RequestServices);
 
@@ -96,14 +96,29 @@ internal static class QueryRequestBinder {
         PipeReader reader = request.BodyReader;
         long? maxRequestBodySize = context.Features.Get<IHttpMaxRequestBodySizeFeature>()?.MaxRequestBodySize;
 
+        // Three-way minimum: the parser's own default (e.g. 64 KB), an optional application-wide
+        // ceiling from QueryOptions (tightens uniformly across all parsers, never loosens below a
+        // parser's own limit), and the host's general-purpose limit (often tens of megabytes, sized
+        // for uploads). Without this, an oversized query payload would stream all the way up to
+        // whichever of those is largest before ever being rejected.
+        long effectiveMaxPayloadBytes = selectedParser.MaxPayloadBytes;
+
+        if(options?.MaxPayloadBytes is int optionsLimit) {
+            effectiveMaxPayloadBytes = Math.Min(effectiveMaxPayloadBytes, optionsLimit);
+        }
+
+        if(maxRequestBodySize.HasValue) {
+            effectiveMaxPayloadBytes = Math.Min(effectiveMaxPayloadBytes, maxRequestBodySize.Value);
+        }
+
         while(true) {
             ReadResult readResult = await reader.ReadAsync().ConfigureAwait(false);
             ReadOnlySequence<byte> buffer = readResult.Buffer;
 
-            if(maxRequestBodySize.HasValue && buffer.Length > maxRequestBodySize.Value) {
+            if(buffer.Length > effectiveMaxPayloadBytes) {
                 reader.AdvanceTo(buffer.End);
                 throw new BadHttpRequestException(
-                    "The query payload exceeds the configured maximum request body size.",
+                    "The query payload exceeds the configured maximum size for this content type.",
                     StatusCodes.Status413PayloadTooLarge);
             }
 
