@@ -22,7 +22,7 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
     private long _shardCounter;
 
     /// <inheritdoc/>
-    public string Name => Configuration.Name;
+    public string Name => this.Configuration.Name;
 
     /// <inheritdoc/>
     public BloomFilterConfiguration Configuration { get; }
@@ -32,7 +32,7 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
     /// </summary>
     public bool IsDirty {
         get {
-            var currentShards = Atomic.Read(ref _shards);
+            Shard[] currentShards = Atomic.Read(ref this._shards);
             for(int i = 0; i < currentShards.Length; i++) {
                 if(currentShards[i].Filter.IsDirty) return true;
             }
@@ -60,51 +60,52 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
         Preca.ThrowIfNull(context);
         Preca.ThrowIfNegativeOrZero(shardCount);
 
-        Configuration = baseConfig;
-        _context = context;
-        _shardDuration = windowSize / shardCount;
-        _shards = new Shard[shardCount];
+        this.Configuration = baseConfig;
+        this._context = context;
+        this._shardDuration = windowSize / shardCount;
+        this._shards = new Shard[shardCount];
 
         long itemsPerShard = (long)Math.Ceiling((double)baseConfig.ExpectedItems / shardCount);
 
         // Time Alignment: Ensure the start point is smooth (e.g., align to midnight for daily shards).
-        UnixTimestamp alignedNow = AlignTimestamp(context.TimeProvider.GetUnixTimestamp(), _shardDuration);
+        UnixTimestamp alignedNow = AlignTimestamp(context.TimeProvider.GetUnixTimestamp(), this._shardDuration);
 
         // Pre-allocate shards for the initial window.
         for(int i = 0; i < shardCount; i++) {
-            var expiration = alignedNow + (_shardDuration * (i + 1));
-            _shards[i] = CreateShard(expiration, itemsPerShard);
+            int offsetFromActive = i - (shardCount - 1);
+            UnixTimestamp expiration = alignedNow + (this._shardDuration * (offsetFromActive + 1));
+            this._shards[i] = CreateShard(expiration, itemsPerShard);
         }
     }
 
     /// <inheritdoc/>
     public bool Add(ReadOnlySpan<byte> item) {
-        _disposeState.ThrowIfDisposingOrDisposed(Name);
+        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
 
         // Ensure the active time window is current; rotate shards if necessary.
         EnsureActiveShard();
 
-        _lock.EnterReadLock();
+        this._lock.EnterReadLock();
         try {
-            var currentShards = Atomic.Read(ref _shards);
+            Shard[] currentShards = Atomic.Read(ref this._shards);
             // Additions are always performed on the newest (active) shard.
             return currentShards[^1].Filter.Add(item);
         }
         finally {
-            _lock.ExitReadLock();
+            this._lock.ExitReadLock();
         }
     }
 
     /// <inheritdoc/>
     public bool Contains(ReadOnlySpan<byte> item) {
-        _disposeState.ThrowIfDisposingOrDisposed(Name);
+        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
 
         // Ensure shards are up-to-date before searching.
         EnsureActiveShard();
 
-        _lock.EnterReadLock();
+        this._lock.EnterReadLock();
         try {
-            var currentShards = Atomic.Read(ref _shards);
+            Shard[] currentShards = Atomic.Read(ref this._shards);
             // Zero-allocation search: iterate from newest to oldest data.
             for(int i = currentShards.Length - 1; i >= 0; i--) {
                 if(currentShards[i].Filter.Contains(item)) return true;
@@ -112,82 +113,79 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
             return false;
         }
         finally {
-            _lock.ExitReadLock();
+            this._lock.ExitReadLock();
         }
     }
 
     private void EnsureActiveShard() {
-        var now = _context.TimeProvider.GetUnixTimestamp();
-        var currentShards = Atomic.Read(ref _shards);
+        UnixTimestamp now = this._context.TimeProvider.GetUnixTimestamp();
+        Shard[] currentShards = Atomic.Read(ref this._shards);
 
         // Fast lock-free check. If the active shard has not expired, exit.
-        if(now <= currentShards[^1].Expiration) return;
+        if(now < currentShards[^1].Expiration) return;
 
-        _lock.EnterWriteLock();
+        this._lock.EnterWriteLock();
         try {
-            // Double-check: another thread might have performed the rotation.
-            currentShards = Atomic.Read(ref _shards);
-            if(now <= currentShards[^1].Expiration) return;
+            currentShards = Atomic.Read(ref this._shards);
+            if(now < currentShards[^1].Expiration) return;
 
-            // Determine how many shards have expired (multiple shards may be skipped if the app was offline).
-            int shifts = 1;
-            while(now > currentShards[^1].Expiration + (_shardDuration * shifts) && shifts < currentShards.Length) {
-                shifts++;
-            }
+            // Calculate how many intervals have passed since the active shard expired
+            double elapsedTicks = (now - currentShards[^1].Expiration).TotalMilliseconds;
+            int shifts = 1 + (int)(elapsedTicks / this._shardDuration.TotalMilliseconds);
+            shifts = Math.Min(shifts, currentShards.Length);
 
             var newShards = new Shard[currentShards.Length];
             long itemsPerShard = currentShards[0].Filter.Configuration.ExpectedItems;
 
-            // 1. Cleanup expired shards (release memory and persistent storage).
+            // 1. Cleanup expired shards
             for(int i = 0; i < shifts; i++) {
-                var deadFilter = currentShards[i].Filter;
-
-                // Dispose in-memory resources.
+                IPersistentBloomFilter deadFilter = currentShards[i].Filter;
                 if(deadFilter is IDisposable d) d.Dispose();
 
-                // Permanently delete from storage provider (Fire-and-Forget).
-                if(_context.Storage != null) {
-                    _ = _context.Storage.DeleteAsync(deadFilter.Name, CancellationToken.None);
+                if(this._context.Storage != null) {
+                    _ = this._context.Storage.DeleteAsync(deadFilter.Name, CancellationToken.None);
                 }
             }
 
-            // 2. Shift remaining active shards to the left.
+            // 2. Shift remaining shards to the left
             int remaining = currentShards.Length - shifts;
             if(remaining > 0) {
                 Array.Copy(currentShards, shifts, newShards, 0, remaining);
             }
 
-            // 3. Create fresh shards for the future at the end of the array.
-            var baseExpiration = remaining > 0 ? currentShards[^1].Expiration : AlignTimestamp(now, _shardDuration);
+            // 3. Create fresh shards on the right
+            UnixTimestamp baseExpiration = remaining > 0
+                ? currentShards[^1].Expiration
+                : AlignTimestamp(now, this._shardDuration);
 
             for(int i = remaining; i < newShards.Length; i++) {
-                var expiration = baseExpiration + (_shardDuration * (i - remaining + 1));
+                UnixTimestamp expiration = baseExpiration + (this._shardDuration * (i - remaining + 1));
                 newShards[i] = CreateShard(expiration, itemsPerShard);
             }
 
-            // Atomically swap the shard array.
-            Atomic.Write(ref _shards, newShards);
+            // Atomically swap
+            Atomic.Write(ref this._shards, newShards);
         }
         finally {
-            _lock.ExitWriteLock();
+            this._lock.ExitWriteLock();
         }
     }
 
     private Shard CreateShard(UnixTimestamp expiration, long expectedItems) {
-        long nextId = Interlocked.Increment(ref _shardCounter);
+        long nextId = Interlocked.Increment(ref this._shardCounter);
 
-        var config = _context.ConfigFactory.Create(
-            FilterName.Parse($"{Configuration.Name.Value}_W{nextId}"),
+        BloomFilterConfiguration config = this._context.ConfigFactory.Create(
+            FilterName.Parse($"{this.Configuration.Name.Value}_W{nextId}"),
             expectedItems,
-            Configuration.ErrorRate,
-            Configuration.HashSeed + (uint)nextId
+            this.Configuration.ErrorRate,
+            this.Configuration.HashSeed + (uint)nextId
         );
 
         // Intelligent Layer Factory: selects InMemory or Sharded based on size.
         long totalBytes = (config.SizeInBits + 7) / 8;
-        IPersistentBloomFilter filter = (totalBytes > _context.Options.Lifecycle.ShardingThresholdBytes)
-            ? new ShardedBloomFilter(config.WithShardCount((int)BitOperations.RoundUpToPowerOf2((uint)Math.Ceiling((double)totalBytes / _context.Options.Lifecycle.ShardingThresholdBytes))), _context)
-            : new InMemoryBloomFilter(config, _context);
+        IPersistentBloomFilter filter = (totalBytes > this._context.Options.Lifecycle.ShardingThresholdBytes)
+            ? new ShardedBloomFilter(config.WithShardCount((int)BitOperations.RoundUpToPowerOf2((uint)Math.Ceiling((double)totalBytes / this._context.Options.Lifecycle.ShardingThresholdBytes))), this._context)
+            : new InMemoryBloomFilter(config, this._context);
 
         return new Shard(filter, expiration);
     }
@@ -206,11 +204,11 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
 
     /// <inheritdoc/>
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
-        _disposeState.ThrowIfDisposingOrDisposed(Name);
-        var currentShards = Atomic.Read(ref _shards);
+        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+        Shard[] currentShards = Atomic.Read(ref this._shards);
 
         // Persist only the active shards that have pending modifications.
-        var saveTasks = currentShards
+        IEnumerable<Task> saveTasks = currentShards
             .Where(s => s.Filter.IsDirty)
             .Select(s => s.Filter.SaveAsync(cancellationToken).AsTask());
 
@@ -219,10 +217,10 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
 
     /// <inheritdoc/>
     public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
-        _disposeState.ThrowIfDisposingOrDisposed(Name);
-        var currentShards = Atomic.Read(ref _shards);
+        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+        Shard[] currentShards = Atomic.Read(ref this._shards);
 
-        var reloadTasks = currentShards.Select(s => s.Filter.ReloadAsync(cancellationToken).AsTask());
+        IEnumerable<Task> reloadTasks = currentShards.Select(s => s.Filter.ReloadAsync(cancellationToken).AsTask());
         await Task.WhenAll(reloadTasks);
     }
 
@@ -244,15 +242,15 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
 
     /// <inheritdoc/>
     public long GetPopCount() {
-        _lock.EnterReadLock();
+        this._lock.EnterReadLock();
         try {
             long total = 0;
-            var currentShards = Atomic.Read(ref _shards);
+            Shard[] currentShards = Atomic.Read(ref this._shards);
             for(int i = 0; i < currentShards.Length; i++) total += currentShards[i].Filter.GetPopCount();
             return total;
         }
         finally {
-            _lock.ExitReadLock();
+            this._lock.ExitReadLock();
         }
     }
 
@@ -260,19 +258,19 @@ public sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
     /// Releases all resources used by the Rotating Bloom Filter and its underlying shards.
     /// </summary>
     public void Dispose() {
-        if(_disposeState.TryBeginDispose()) {
-            _lock.EnterWriteLock();
+        if(this._disposeState.TryBeginDispose()) {
+            this._lock.EnterWriteLock();
             try {
-                var currentShards = Atomic.Read(ref _shards);
-                foreach(var shard in currentShards) {
+                Shard[] currentShards = Atomic.Read(ref this._shards);
+                foreach(Shard shard in currentShards) {
                     if(shard.Filter is IDisposable d) d.Dispose();
                 }
             }
             finally {
-                _lock.ExitWriteLock();
-                _lock.Dispose();
+                this._lock.ExitWriteLock();
+                this._lock.Dispose();
             }
-            _disposeState.SetDisposed();
+            this._disposeState.SetDisposed();
         }
     }
 }

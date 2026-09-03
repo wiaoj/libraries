@@ -10,7 +10,9 @@ internal sealed class BloomFilterConfigurationFactory : IBloomFilterConfiguratio
 
     public BloomFilterConfiguration Create(FilterName name, long expectedItems, double errorRate, long? hashSeed = null) {
         Preca.ThrowIfNegativeOrZero(expectedItems);
-        Preca.ThrowIfOutOfRange(errorRate, 0.0, 1.0, () => new ArgumentException("Error rate must be between 0 and 1."));
+        if(errorRate <= 0.0 || errorRate >= 1.0) {
+            throw new ArgumentOutOfRangeException(nameof(errorRate), "Error rate must be strictly between 0 and 1 (exclusive).");
+        }
 
         // Formula for optimal bit size (m): m = -(n * ln(p)) / (ln(2)^2)
         double m = -(expectedItems * Math.Log(errorRate)) / Math.Pow(Math.Log(2), 2);

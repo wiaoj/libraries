@@ -1,41 +1,43 @@
 using Microsoft.Extensions.Logging;
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Text;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Concurrency;
 using Wiaoj.ObjectPool;
 using Wiaoj.Primitives;
-using Wiaoj.Primitives.Buffers;
 
 namespace Wiaoj.BloomFilter.Internal;
+
 /// <summary>
-/// A high-performance, thread-safe, in-memory implementation of a Bloom Filter
-/// with support for persistence, streaming, and pooled memory management.
+/// In-memory implementation of a persistent Bloom Filter.
+/// Uses SIMD vectorization for hash evaluations and atomic operations for concurrency.
 /// </summary>
 internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable {
     private volatile bool _isDirty;
-    public bool IsDirty => this._isDirty;
-
-    public string Name => this.Configuration.Name;
-    public BloomFilterConfiguration Configuration { get; }
-
     private PooledBitArray _bits;
+
     private readonly IBloomFilterStorage? _storage;
     private readonly ILogger _logger;
     private readonly BloomFilterOptions _options;
     private readonly IObjectPool<MemoryStream> _memoryStreamPool;
-
-    // Lock for Storage I/O (Serialization/Deserialization)
-    private readonly AsyncLock _ioLock = new();
-
-    // Lock for Memory Access (Add/Contains vs Reload/Swap)
-    // Using ReaderWriterLockSlim allows concurrent Add/Contains (ReadLock)
-    // while blocking everything during Reload (WriteLock).
-    private readonly ReaderWriterLockSlim _memoryLock = new();
-
-    private readonly DisposeState _disposeState = new();
     private readonly TimeProvider _timeProvider;
+    private readonly AsyncLock _ioLock = new();
+    private readonly DisposeState _disposeState = new();
+
+    /// <inheritdoc/>
+    public bool IsDirty => this._isDirty;
+
+    /// <inheritdoc/>
+    public string Name => this.Configuration.Name.Value;
+
+    /// <inheritdoc/>
+    public BloomFilterConfiguration Configuration { get; }
+
+    /// <summary>
+    /// Gets the timestamp when this filter was last successfully persisted.
+    /// </summary>
     public DateTimeOffset LastSavedAt { get; private set; }
 
     /// <summary>
@@ -50,191 +52,237 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
         this._memoryStreamPool = context.MemoryStreamPool;
         this._logger = context.Logger;
         this._options = context.Options;
-
-        // Allocate memory from pool
-        this._bits = new PooledBitArray(config.SizeInBits);
-
-        this._logger.LogFilterInitialized(this.Name, config.ExpectedItems, config.ErrorRate, config.SizeInBits);
-
         this._timeProvider = context.TimeProvider;
+
+        this._bits = new PooledBitArray(config.SizeInBits);
         this.LastSavedAt = this._timeProvider.GetUtcNow();
+
+        this._logger.LogFilterInitialized(this.Configuration.Name, config.ExpectedItems, config.ErrorRate, config.SizeInBits);
     }
 
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public bool Add(ReadOnlySpan<byte> item) {
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
-        this._memoryLock.EnterReadLock();
-        try {
 
-            BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
+        PooledBitArray bits = Volatile.Read(ref this._bits);
+        BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
-            bool atLeastOneSet = false;
-            long size = this.Configuration.SizeInBits;
-            int k = this.Configuration.HashFunctionCount;
-            int i = 0;
+        bool atLeastOneSet = false;
+        long size = this.Configuration.SizeInBits;
+        int k = this.Configuration.HashFunctionCount;
+        int i = 0;
 
-            // SIMD: 64-bit (ulong) üzerinden 2'şerli gruplar
-            if(Vector128.IsHardwareAccelerated && k >= 2) {
-                Vector128<ulong> vIndices = Vector128.Create(0UL, 1UL);
-                Vector128<ulong> vH1 = Vector128.Create(h1);
-                Vector128<ulong> vH2 = Vector128.Create(h2);
-                Vector128<ulong> vStep = Vector128.Create(2UL, 2UL);
+        // Vector256 (AVX2): Process 4 hashes in parallel
+        if(Vector256.IsHardwareAccelerated && k >= 4) {
+            Vector256<ulong> vH1 = Vector256.Create(h1);
+            Vector256<ulong> vH2 = Vector256.Create(h2);
+            Vector256<ulong> vIndices = Vector256.Create(0UL, 1UL, 2UL, 3UL);
+            Vector256<ulong> vStep = Vector256.Create(4UL, 4UL, 4UL, 4UL);
 
-                for(; i <= k - 2; i += 2) {
-                    // combinedHash = h1 + (i * h2)
-                    Vector128<ulong> vCombined = vH1 + (vIndices * vH2);
+            for(; i <= k - 4; i += 4) {
+                Vector256<ulong> vCombined = vH1 + (vIndices * vH2);
 
-                    for(int j = 0; j < 2; j++) {
-                        ulong finalHash = vCombined.GetElement(j);
-                        // 64-bit Fast Modulo ( UInt128 kullanarak )
-                        long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
-                        if(this._bits.Set(pos)) atLeastOneSet = true;
+                for(int j = 0; j < 4; j++) {
+                    ulong finalHash = vCombined.GetElement(j);
+                    long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
+                    if(bits.Set(pos)) {
+                        atLeastOneSet = true;
                     }
-                    vIndices += vStep;
                 }
+                vIndices += vStep;
             }
-
-            // Kalanlar için Standart 64-bit Döngü
-            for(; i < k; i++) {
-                long pos = BloomHasher.GetBitPosition(h1, h2, i, size);
-                if(this._bits.Set(pos)) atLeastOneSet = true;
-            }
-
-            if(atLeastOneSet) {
-                this._isDirty = true;
-            }
-
-            return atLeastOneSet;
         }
-        finally { this._memoryLock.ExitReadLock(); }
+
+        // Vector128 (SSE2 / NEON): Process remaining pairs
+        if(Vector128.IsHardwareAccelerated && (k - i) >= 2) {
+            Vector128<ulong> vH1 = Vector128.Create(h1);
+            Vector128<ulong> vH2 = Vector128.Create(h2);
+            Vector128<ulong> vIndices = Vector128.Create((ulong)i, (ulong)(i + 1));
+            Vector128<ulong> vStep = Vector128.Create(2UL, 2UL);
+
+            for(; i <= k - 2; i += 2) {
+                Vector128<ulong> vCombined = vH1 + (vIndices * vH2);
+
+                for(int j = 0; j < 2; j++) {
+                    ulong finalHash = vCombined.GetElement(j);
+                    long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
+                    if(bits.Set(pos)) {
+                        atLeastOneSet = true;
+                    }
+                }
+                vIndices += vStep;
+            }
+        }
+
+        // Scalar loop for remaining hash iterations
+        for(; i < k; i++) {
+            long pos = BloomHasher.GetBitPosition(h1, h2, i, size);
+            if(bits.Set(pos)) {
+                atLeastOneSet = true;
+            }
+        }
+
+        if(atLeastOneSet) {
+            this._isDirty = true;
+        }
+
+        return atLeastOneSet;
     }
 
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public bool Contains(ReadOnlySpan<byte> item) {
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
-        this._memoryLock.EnterReadLock();
-        try {
-            BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
-            long size = this.Configuration.SizeInBits;
-            int k = this.Configuration.HashFunctionCount;
-            int i = 0;
+        PooledBitArray bits = Volatile.Read(ref this._bits);
+        BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
-            if(Vector128.IsHardwareAccelerated && k >= 2) {
-                Vector128<ulong> vIndices = Vector128.Create(0UL, 1UL);
-                Vector128<ulong> vH1 = Vector128.Create(h1);
-                Vector128<ulong> vH2 = Vector128.Create(h2);
-                Vector128<ulong> vStep = Vector128.Create(2UL, 2UL);
+        long size = this.Configuration.SizeInBits;
+        int k = this.Configuration.HashFunctionCount;
+        int i = 0;
 
-                for(; i <= k - 2; i += 2) {
-                    Vector128<ulong> vCombined = vH1 + (vIndices * vH2);
-                    for(int j = 0; j < 2; j++) {
-                        ulong finalHash = vCombined.GetElement(j);
-                        long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
-                        if(!this._bits.Get(pos)) return false;
+        // Vector256 (AVX2): Process 4 hashes in parallel
+        if(Vector256.IsHardwareAccelerated && k >= 4) {
+            Vector256<ulong> vH1 = Vector256.Create(h1);
+            Vector256<ulong> vH2 = Vector256.Create(h2);
+            Vector256<ulong> vIndices = Vector256.Create(0UL, 1UL, 2UL, 3UL);
+            Vector256<ulong> vStep = Vector256.Create(4UL, 4UL, 4UL, 4UL);
+
+            for(; i <= k - 4; i += 4) {
+                Vector256<ulong> vCombined = vH1 + (vIndices * vH2);
+
+                for(int j = 0; j < 4; j++) {
+                    ulong finalHash = vCombined.GetElement(j);
+                    long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
+                    if(!bits.Get(pos)) {
+                        return false;
                     }
-                    vIndices += vStep;
                 }
+                vIndices += vStep;
             }
-
-            for(; i < k; i++) {
-                ulong combinedHash = h1 + ((ulong)i * h2);
-                long pos = (long)(((UInt128)combinedHash * (ulong)size) >> 64);
-                if(!this._bits.Get(pos)) return false;
-            }
-
-            return true;
         }
-        finally { this._memoryLock.ExitReadLock(); }
+
+        // Vector128 (SSE2 / NEON): Process remaining pairs
+        if(Vector128.IsHardwareAccelerated && (k - i) >= 2) {
+            Vector128<ulong> vH1 = Vector128.Create(h1);
+            Vector128<ulong> vH2 = Vector128.Create(h2);
+            Vector128<ulong> vIndices = Vector128.Create((ulong)i, (ulong)(i + 1));
+            Vector128<ulong> vStep = Vector128.Create(2UL, 2UL);
+
+            for(; i <= k - 2; i += 2) {
+                Vector128<ulong> vCombined = vH1 + (vIndices * vH2);
+
+                for(int j = 0; j < 2; j++) {
+                    ulong finalHash = vCombined.GetElement(j);
+                    long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
+                    if(!bits.Get(pos)) {
+                        return false;
+                    }
+                }
+                vIndices += vStep;
+            }
+        }
+
+        // Scalar loop for remaining hash iterations
+        for(; i < k; i++) {
+            long pos = BloomHasher.GetBitPosition(h1, h2, i, size);
+            if(!bits.Get(pos)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
-    /// <inheritdoc/>  
+    /// <inheritdoc/>
     public bool Add(ReadOnlySpan<char> item) {
         int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
 
-        // 256 byte'a kadar stackalloc kullan, fazlası için pool'a git
-        using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
+        if(maxBytes <= 256) {
+            Span<byte> buffer = stackalloc byte[maxBytes];
+            int written = Encoding.UTF8.GetBytes(item, buffer);
+            return Add(buffer[..written]);
+        }
 
-        int written = Encoding.UTF8.GetBytes(item, buffer.Span);
-        return Add(buffer.Span[..written]);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(maxBytes);
+        try {
+            int written = Encoding.UTF8.GetBytes(item, rented);
+            return Add(rented.AsSpan(0, written));
+        }
+        finally {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
     }
 
     /// <inheritdoc/>
     public bool Contains(ReadOnlySpan<char> item) {
         int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
+
         if(maxBytes <= 256) {
             Span<byte> buffer = stackalloc byte[maxBytes];
             int written = Encoding.UTF8.GetBytes(item, buffer);
             return Contains(buffer[..written]);
         }
+
         byte[] rented = ArrayPool<byte>.Shared.Rent(maxBytes);
         try {
             int written = Encoding.UTF8.GetBytes(item, rented);
             return Contains(rented.AsSpan(0, written));
         }
-        finally { ArrayPool<byte>.Shared.Return(rented); }
+        finally {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
     }
 
     /// <inheritdoc/>
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
 
-        if(this._storage == null) return;
-        if(!this._isDirty) return;
+        if(this._storage == null || !this._isDirty) {
+            return;
+        }
 
-
-        using(await this._ioLock.LockAsync(cancellationToken)) {
-            this._logger.LogSaveStarted(this.Name);
+        using(await this._ioLock.LockAsync(cancellationToken).ConfigureAwait(false)) {
+            this._logger.LogSaveStarted(this.Configuration.Name);
 
             try {
-                using PooledObject<MemoryStream> memoryStreamPool = this._memoryStreamPool.Lease();
-                MemoryStream snapshotStream = memoryStreamPool.Item;
+                using PooledObject<MemoryStream> pooledStream = this._memoryStreamPool.Lease();
+                MemoryStream snapshotStream = pooledStream.Item;
                 snapshotStream.SetLength(0);
 
-                ulong checksum = 0;
+                PooledBitArray bits = Volatile.Read(ref this._bits);
+                ulong checksum = bits.CalculateChecksum();
 
-                // 2. Memory Kilidi: RAM'deki veriyi dondur (Snapshot al)
-                this._memoryLock.EnterWriteLock();
-                try {
-                    // a. Checksum hesapla (Anlık durum)
-                    checksum = this._bits.CalculateChecksum();
+                BloomFilterHeader.WriteHeader(snapshotStream, checksum, this.Configuration, Encoding.UTF8);
+                await bits.WriteToStreamAsync(snapshotStream, cancellationToken).ConfigureAwait(false);
+                this._isDirty = false;
 
-                    // b. Header'ı stream'e yaz
-                    BloomFilterHeader.WriteHeader(snapshotStream, checksum, this.Configuration, Encoding.UTF8);
-
-                    // c. Veriyi stream'e yaz (Hala kilitli, veri değişemez)
-                    await this._bits.WriteToStreamAsync(snapshotStream, cancellationToken);
-                    this._isDirty = false;
-                }
-                finally {
-                    this._memoryLock.ExitWriteLock();
-                }
-
-                // 3. Disk Yazma (Yavaş işlem kilit dışındadır, Add işlemlerini bloklamaz)
                 snapshotStream.Position = 0;
-                await this._storage.SaveAsync(this.Name, this.Configuration, snapshotStream, cancellationToken);
+                await this._storage.SaveAsync(this.Name, this.Configuration, snapshotStream, cancellationToken).ConfigureAwait(false);
 
                 this.LastSavedAt = this._timeProvider.GetUtcNow();
-                this._logger.LogSaveSuccess(this.Name, checksum, (int)snapshotStream.Length);
+                this._logger.LogSaveSuccess(this.Configuration.Name, checksum, (int)snapshotStream.Length);
             }
             catch(Exception ex) {
-                this._logger.LogSaveFailed(ex, this.Name);
-                throw; // Hatayı yutma, yukarı bildir
+                this._logger.LogSaveFailed(ex, this.Configuration.Name);
+                throw;
             }
         }
     }
 
     /// <inheritdoc/>
     public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
-        if(this._storage == null) return;
+        if(this._storage == null) {
+            return;
+        }
+
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
 
-        // I/O Kilidini al (Aynı anda tek bir reload/save çalışsın)
-        using(await this._ioLock.LockAsync(cancellationToken)) {
-
-            (BloomFilterConfiguration Config, Stream DataStream)? loadResult = await this._storage.LoadStreamAsync(this.Name, cancellationToken);
+        using(await this._ioLock.LockAsync(cancellationToken).ConfigureAwait(false)) {
+            var loadResult = await this._storage.LoadStreamAsync(this.Name, cancellationToken).ConfigureAwait(false);
             if(loadResult == null) {
-                this._logger.LogReloadNotFound(this.Name);
+                this._logger.LogReloadNotFound(this.Configuration.Name);
                 return;
             }
 
@@ -242,168 +290,73 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
 
             try {
                 using(Stream stream = loadResult.Value.DataStream) {
-                    // 1. Yeni Header Yapısını Oku (Encoding parametresi ile)
                     if(!BloomFilterHeader.TryReadHeader(
                         stream,
                         out ulong expectedChecksum,
                         out long storedSize,
                         out int storedHashCount,
-                        out ulong storedFingerprint, // Fingerprint eklendi
-                        Encoding.UTF8)) // Encoder eklendi
-                    {
-                        this._logger.LogInvalidHeaderWarning(this.Name);
+                        out ulong storedFingerprint,
+                        Encoding.UTF8)) {
 
-                        if(this._options.Lifecycle.EnableIntegrityCheck)
-                            throw new DataIntegrityException("Invalid Bloom Filter Header.");
+                        this._logger.LogInvalidHeaderWarning(this.Configuration.Name);
+                        if(this._options.Lifecycle.EnableIntegrityCheck) {
+                            throw new DataIntegrityException("Invalid Bloom Filter header data.");
+                        }
 
-                        // Header okuyamazsak devam etmeye çalışmak riskli,
-                        // ama eski mantığa uyarak seek yapıp raw okumayı deneyebilirsin.
-                        if(stream.CanSeek) stream.Position = 0;
+                        if(stream.CanSeek) {
+                            stream.Position = 0;
+                        }
                     }
                     else {
-                        // 2. Fingerprint ve Config Kontrolü
-                        // Reload sırasında config değişmişse (Fingerprint tutmuyorsa) yüklemeyi reddetmeliyiz.
                         if(storedFingerprint != this.Configuration.GetFingerprint()) {
-                            throw new DataIntegrityException($"Fingerprint mismatch during reload! Disk: {storedFingerprint:X}, Memory: {this.Configuration.GetFingerprint():X}");
+                            throw new DataIntegrityException($"Configuration fingerprint mismatch during reload. Disk: {storedFingerprint:X}, Memory: {this.Configuration.GetFingerprint():X}");
                         }
 
                         if(storedSize != this.Configuration.SizeInBits) {
-                            throw new DataIntegrityException("Disk size mismatch during reload!");
+                            throw new DataIntegrityException("Bit array size mismatch during reload.");
                         }
                     }
 
-                    // 3. Geçici (Swap için) yeni bir BitArray oluştur
-                    // Bu işlem sadece ~628MB yer ayırır (Buffer kiralama yok)
                     newBits = new PooledBitArray(this.Configuration.SizeInBits);
+                    ulong actualChecksum = await newBits.LoadFromStreamAsync(stream, cancellationToken).ConfigureAwait(false);
 
-                    // 4. Doğrudan Stream'den Oku (Zero-Copy / Chunked Read)
-                    // LoadFromStreamAsync metodumuz veriyi okurken checksum'ı da hesaplayıp dönüyordu.
-                    ulong actualChecksum = await newBits.LoadFromStreamAsync(stream, cancellationToken);
-
-                    // 5. Checksum Doğrulama
-                    if(this._options.Lifecycle.EnableIntegrityCheck) {
-                        if(actualChecksum != expectedChecksum)
-                            throw new DataIntegrityException($"Checksum mismatch!...");
+                    if(this._options.Lifecycle.EnableIntegrityCheck && actualChecksum != expectedChecksum) {
+                        throw new DataIntegrityException($"Checksum verification failed during reload. Expected: {expectedChecksum:X}, Actual: {actualChecksum:X}");
                     }
 
-                    this._logger.LogReloadSuccess(this.Name, expectedChecksum);
+                    this._logger.LogReloadSuccess(this.Configuration.Name, expectedChecksum);
                 }
 
-                // 6. KRİTİK SWAP (Bellek Değişimi)
-                // Okuma ve doğrulama bitti, şimdi canlı veriyi değiştirmek için WriteLock alıyoruz.
-                this._memoryLock.EnterWriteLock();
-                try {
-                    // A. Eski referansı yerel bir değişkene al (Sakla)
-                    PooledBitArray oldBits = this._bits;
+                // Atomic reference swap
+                PooledBitArray oldBits = Interlocked.Exchange(ref this._bits, newBits);
+                newBits = null;
+                this._isDirty = false;
 
-                    // B. Yeni veriyi asıl field'a ata (Atomik referans değişimi)
-                    // Şu andan itibaren 'Contains/Add' metodları yeni bitleri kullanmaya başlar.
-                    this._bits = newBits;
-
-                    // C. newBits'in finally bloğunda yanlışlıkla dispose edilmesini engelle
-                    // Çünkü sahipliği artık this._bits'e devrettik.
-                    newBits = null;
-
-                    // Veri diskten taze geldiği için 'Kirli' değildir
-                    this._isDirty = false;
-
-                    // D. Artık kullanılmayan eski belleği temizle.
-                    // Bunu burada yapmak güvenlidir çünkü WriteLock içindeyiz, kimse okuyamaz.
-                    oldBits?.Dispose();
-                }
-                finally {
-                    this._memoryLock.ExitWriteLock();
-                    newBits?.Dispose();
-                }
+                oldBits?.Dispose();
             }
             catch(Exception ex) {
-                this._logger.LogError(ex, "Reload failed for '{Name}'", this.Name);
-                throw; // Hatayı yukarı fırlat
+                this._logger.LogError(ex, "Failed to reload Bloom Filter '{Name}'.", this.Name);
+                throw;
             }
             finally {
-                // Eğer swap gerçekleşmeden hata oluştuysa, oluşturduğumuz geçici newBits'i temizle
                 newBits?.Dispose();
             }
         }
     }
 
-
+    /// <inheritdoc/>
     public long GetPopCount() {
         this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
-
-        this._memoryLock.EnterReadLock();
-        try {
-            return this._bits.GetPopCount();
-        }
-        finally {
-            this._memoryLock.ExitReadLock();
-        }
+        PooledBitArray bits = Volatile.Read(ref this._bits);
+        return bits.GetPopCount();
     }
 
-    /// <summary>
-    /// Releases all resources used by the Bloom Filter.
-    /// </summary>
+    /// <inheritdoc/>
     public void Dispose() {
         if(this._disposeState.TryBeginDispose()) {
-            // Acquire WriteLock to ensure no active operations during disposal
-            this._memoryLock.EnterWriteLock();
-            try {
-                this._bits?.Dispose();
-            }
-            finally {
-                this._memoryLock.ExitWriteLock();
-                this._memoryLock.Dispose();
-            }
+            PooledBitArray? bits = Interlocked.Exchange(ref this._bits, null!);
+            bits?.Dispose();
             this._disposeState.SetDisposed();
-        }
-    }
-
-    /// <summary>
-    /// Factory method to create and hydrate a filter from a data stream.
-    /// </summary>
-    internal static async Task<InMemoryBloomFilter> CreateFromStreamAsync(BloomFilterConfiguration config,
-                                                                          Stream sourceStream,
-                                                                          BloomFilterContext context,
-                                                                          CancellationToken cancellationToken) {
-
-        using(sourceStream) {
-            context.Logger.LogHydratingFromStream(config.Name);
-            InMemoryBloomFilter filter = new(config, context);
-
-            try {
-                if(BloomFilterHeader.TryReadHeader(sourceStream,
-                                                   out ulong expectedChecksum,
-                                                   out long storedSize,
-                                                   out int storedHashCount,
-                                                   out ulong storedFingerprint,
-                                                    Encoding.UTF8)) {
-                    // Fingerprint kontrolü
-                    if(storedFingerprint != config.GetFingerprint()) {
-                        if(context.Options.Lifecycle.AutoResetOnMismatch) {
-                            context.Logger.LogWarning("Fingerprint mismatch...");
-                            return new InMemoryBloomFilter(config, context);
-                        }
-                        throw new DataIntegrityException("Fingerprint mismatch!");
-                    }
-
-                    // Size ve HashCount kontrolü (Fingerprint tutuyorsa bunlar da tutar ama double-check)
-                    if(storedSize != config.SizeInBits || storedHashCount != config.HashFunctionCount) {
-                        throw new DataIntegrityException("Config mismatch despite matching fingerprint!");
-                    }
-                }
-
-                ulong actual = await filter._bits.LoadFromStreamAsync(sourceStream, cancellationToken);
-
-                if(context.Options.Lifecycle.EnableIntegrityCheck && actual != expectedChecksum)
-                    throw new DataIntegrityException("Checksum mismatch!");
-
-                context.Logger.LogHydrationSuccess(config.Name);
-                return filter;
-            }
-            catch {
-                filter.Dispose();
-                throw;
-            }
         }
     }
 }

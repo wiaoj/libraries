@@ -61,7 +61,9 @@ public sealed record BloomFilterConfiguration {
         int shardCount = 1) {
 
         Preca.ThrowIfNegativeOrZero(expectedItems);
-        Preca.ThrowIfOutOfRange(errorRate, 0.0, 1.0, () => new ArgumentException("Error rate must be between 0 and 1."));
+        if(errorRate <= 0.0 || errorRate >= 1.0) {
+            throw new ArgumentOutOfRangeException(nameof(errorRate), "Error rate must be strictly between 0 and 1 (exclusive).");
+        }
         Preca.ThrowIfNegativeOrZero(sizeInBits);
         Preca.ThrowIfNegativeOrZero(hashFunctionCount);
         Preca.ThrowIfLessThan(shardCount, 1);

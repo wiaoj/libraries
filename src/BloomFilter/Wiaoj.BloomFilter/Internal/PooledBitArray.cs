@@ -6,22 +6,24 @@ using System.Runtime.InteropServices;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter.Internal;
+
 /// <summary>
-/// A thread-safe, high-performance bit array implementation that uses pooled memory to reduce GC pressure.
-/// Supports atomic bit setting operations.
+/// Thread-safe bit array implementation backed by pooled memory arrays.
+/// Provides atomic bit manipulations and fast bit count operations.
 /// </summary>
 internal sealed class PooledBitArray : IDisposable {
     private ulong[] _array;
     private readonly DisposeState _disposeState;
 
     /// <summary>
-    /// Gets the total number of bits in the array.
+    /// Gets the total number of bits managed by this array.
     /// </summary>
     public long Length { get; }
 
     /// <summary>
-    /// Initializes a new empty instance of <see cref="PooledBitArray"/> with the specified length.
+    /// Initializes a new instance of <see cref="PooledBitArray"/> with the specified bit capacity.
     /// </summary>
+    /// <param name="length">The total number of bits required.</param>
     public PooledBitArray(long length) {
         this.Length = length;
         int arraySize = (int)((length + 63) / 64);
@@ -31,46 +33,30 @@ internal sealed class PooledBitArray : IDisposable {
     }
 
     /// <summary>
-    /// Initializes a new instance of <see cref="PooledBitArray"/> by copying data from a byte buffer.
-    /// </summary>
-    public PooledBitArray(byte[] bytes, long length) {
-        this.Length = length;
-        int arraySize = (int)((length + 63) / 64);
-        this._array = ArrayPool<ulong>.Shared.Rent(arraySize);
-
-        // Copy bytes to ulong array
-        int bytesToCopy = Math.Min(bytes.Length, arraySize * 8);
-        Buffer.BlockCopy(bytes, 0, this._array, 0, bytesToCopy);
-
-        // Zero out any remaining padding in the last ulong if necessary
-        int copiedLongs = (bytesToCopy + 7) / 8;
-        if(copiedLongs < arraySize) {
-            Array.Clear(this._array, copiedLongs, arraySize - copiedLongs);
-        }
-        this._disposeState = new DisposeState();
-    }
-
-    /// <summary>
     /// Atomically sets the bit at the specified index to 1.
     /// </summary>
-    /// <returns><c>true</c> if the bit was changed from 0 to 1; otherwise, <c>false</c>.</returns>
+    /// <param name="index">The zero-based bit index to set.</param>
+    /// <returns><see langword="true"/> if the bit was changed from 0 to 1; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Set(long index) {
-        long wordIndex = index >> 6; // index / 64
-        int bitIndex = (int)(index & 63); // index % 64
+        long wordIndex = index >> 6;
+        int bitIndex = (int)(index & 63);
         ulong mask = 1UL << bitIndex;
 
         ulong current = Volatile.Read(ref this._array[wordIndex]);
-        if((current & mask) != 0) return false;
+        if((current & mask) != 0) {
+            return false;
+        }
 
-        // Değişiklik gerekliyse atomik işlem yap
         ulong original = Interlocked.Or(ref this._array[wordIndex], mask);
         return (original & mask) == 0;
     }
 
     /// <summary>
-    /// Gets the value of the bit at the specified index.
+    /// Gets the boolean value of the bit at the specified index.
     /// </summary>
+    /// <param name="index">The zero-based bit index to read.</param>
+    /// <returns><see langword="true"/> if the bit is 1; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Get(long index) {
         long wordIndex = index >> 6;
@@ -80,71 +66,76 @@ internal sealed class PooledBitArray : IDisposable {
     }
 
     /// <summary>
-    /// Copies the underlying bits to a destination byte array.
+    /// Asynchronously writes the active bytes of the bit array to a destination stream.
     /// </summary>
-    public void CopyTo(byte[] destination) {
-        int byteCount = (int)((this.Length + 7) / 8);
-        if(destination.Length < byteCount) throw new ArgumentException("Destination array is too small.");
-        Buffer.BlockCopy(this._array, 0, destination, 0, byteCount);
-    }
-
+    /// <param name="destination">The stream to write data into.</param>
+    /// <param name="ct">The cancellation token.</param>
     public async ValueTask WriteToStreamAsync(Stream destination, CancellationToken ct) {
-        // Asıl veri boyutu (Padding hariç)
         int byteCount = (int)((this.Length + 7) / 8);
-
-        // MemoryManager kullanarak allocation yapmadan yaz
         using UlongToByteMemoryManager manager = new(this._array);
         Memory<byte> memory = manager.Memory;
 
-        await destination.WriteAsync(memory[..byteCount], ct);
+        await destination.WriteAsync(memory[..byteCount], ct).ConfigureAwait(false);
     }
 
-
+    /// <summary>
+    /// Calculates the 64-bit XXHash3 checksum over the active bytes of the array.
+    /// </summary>
+    /// <returns>A 64-bit unsigned checksum integer.</returns>
     public ulong CalculateChecksum() {
         Span<byte> byteSpan = MemoryMarshal.AsBytes(this._array.AsSpan());
         int byteCount = (int)((this.Length + 7) / 8);
         return XxHash3.HashToUInt64(byteSpan[..byteCount]);
     }
 
+    /// <summary>
+    /// Asynchronously reads bytes from a stream into the bit array and verifies the checksum.
+    /// </summary>
+    /// <param name="source">The source stream to read from.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The calculated checksum of the loaded data.</returns>
     public async ValueTask<ulong> LoadFromStreamAsync(Stream source, CancellationToken ct) {
         using UlongToByteMemoryManager manager = new(this._array);
         Memory<byte> buffer = manager.Memory;
 
         int bytesToRead = (int)((this.Length + 7) / 8);
-        Memory<byte> target = buffer[0..bytesToRead];
+        Memory<byte> target = buffer[..bytesToRead];
 
         int totalRead = 0;
         while(totalRead < bytesToRead) {
-            // Artik hata vermez çünkü 'target' bir Memory<byte>'dır!
-            int read = await source.ReadAsync(target[totalRead..], ct);
-            if(read == 0) break;
+            int read = await source.ReadAsync(target[totalRead..], ct).ConfigureAwait(false);
+            if(read == 0) {
+                break;
+            }
             totalRead += read;
         }
 
         return XxHash3.HashToUInt64(target.Span);
     }
 
+    /// <summary>
+    /// Counts the total number of bits currently set to 1 using CPU population count instructions.
+    /// </summary>
+    /// <returns>The total number of set bits.</returns>
     public long GetPopCount() {
-        // Pool'dan gelen dizinin tamamını değil, sadece bizim kullandığımız kısmını saymalıyız.
         int wordCount = (int)((this.Length + 63) / 64);
         long count = 0;
 
         for(int i = 0; i < wordCount; i++) {
-            // Bu metod CPU'daki POPCNT komutunu kullanır, inanılmaz hızlıdır.
-            count += BitOperations.PopCount(this._array[i]);
+            count += BitOperations.PopCount(Volatile.Read(ref this._array[i]));
         }
 
         return count;
     }
 
     /// <summary>
-    /// Returns the underlying array to the pool.
+    /// Returns the underlying buffer to the shared array pool.
     /// </summary>
     public void Dispose() {
         if(this._disposeState.TryBeginDispose()) {
-            if(this._array != null) {
-                ArrayPool<ulong>.Shared.Return(this._array);
-                this._array = null!;
+            ulong[]? array = Interlocked.Exchange(ref this._array, null!);
+            if(array != null) {
+                ArrayPool<ulong>.Shared.Return(array);
             }
             this._disposeState.SetDisposed();
         }
@@ -155,26 +146,15 @@ internal sealed class PooledBitArray : IDisposable {
             return MemoryMarshal.AsBytes(array.AsSpan());
         }
 
-        // Belleği sabitlemek isteyen olursa burası çalışır
         public override unsafe MemoryHandle Pin(int elementIndex = 0) {
-            // GCHandle ile diziyi belleğe çiviliyoruz
             GCHandle handle = GCHandle.Alloc(array, GCHandleType.Pinned);
-
-            // Sabitlenmiş adresin pointer'ını hesaplıyoruz
             void* pointer = (void*)handle.AddrOfPinnedObject();
-
-            // Byte bazlı offset ekliyoruz
             byte* offsetPointer = (byte*)pointer + elementIndex;
-
-            // handle'ı da MemoryHandle içine veriyoruz ki Unpin dendiğinde free edilebilsin
             return new MemoryHandle(offsetPointer, handle, this);
         }
 
-        // MemoryHandle doğrudan GCHandle'ı yönettiği için burası artık güvenle boş kalabilir.
         public override void Unpin() { }
 
-        // Dizi Pool'dan geldiği için burada diziyi dispose etmiyoruz (zaten Pool yönetecek).
-        // Sadece manager'ın kendisiyle ilgili bir temizlik varsa yapılır.
         protected override void Dispose(bool disposing) { }
     }
 }
