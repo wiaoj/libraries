@@ -1,6 +1,5 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Wiaoj.BloomFilter.Internal;
 using Wiaoj.BloomFilter.Seeder;
 
 namespace Wiaoj.BloomFilter.Hosting; 

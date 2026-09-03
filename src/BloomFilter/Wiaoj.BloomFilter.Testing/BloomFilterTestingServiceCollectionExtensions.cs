@@ -39,10 +39,10 @@ public static class BloomFilterTestingServiceCollectionExtensions {
     /// <summary>
     /// Registers the in-memory test storage for Bloom Filter persistence testing.
     /// </summary>
-    public static IServiceCollection AddInMemoryBloomFilterStorage(this IServiceCollection services) {
+    public static IServiceCollection AddFakeBloomFilterStorage(this IServiceCollection services) {
         Preca.ThrowIfNull(services);
         services.RemoveAll<IBloomFilterStorage>();
-        services.AddSingleton<IBloomFilterStorage, InMemoryBloomFilterStorage>();
+        services.AddSingleton<IBloomFilterStorage, FakeBloomFilterStorage>();
         return services;
     }
 }

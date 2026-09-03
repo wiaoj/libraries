@@ -1,11 +1,21 @@
-namespace Wiaoj.BloomFilter;
 using Wiaoj.Preconditions;
 
+namespace Wiaoj.BloomFilter;
 /// <summary>
 /// Represents the immutable configuration parameters for a Bloom Filter.
 /// This is a pure data record without any calculation logic.
 /// </summary>
 public sealed record BloomFilterConfiguration {
+    /// <summary>
+    /// The exclusive minimum allowed error rate (0.0).
+    /// </summary>
+    public const double MinimumErrorRate = 0.0;
+
+    /// <summary>
+    /// The exclusive maximum allowed error rate (1.0).
+    /// </summary>
+    public const double MaximumErrorRate = 1.0;
+
     /// <summary>
     /// Gets the unique name of the filter.
     /// </summary>
@@ -20,12 +30,12 @@ public sealed record BloomFilterConfiguration {
     /// Gets the desired false positive probability (p).
     /// </summary>
     public double ErrorRate { get; init; }
-    
+
     /// <summary>
     /// Gets the number of shards for the filter.
     /// </summary>
     public int ShardCount { get; init; }
-  
+
     /// <summary>
     /// Gets the hash seed used for bit calculation.
     /// </summary>
@@ -61,13 +71,11 @@ public sealed record BloomFilterConfiguration {
         int shardCount = 1) {
 
         Preca.ThrowIfNegativeOrZero(expectedItems);
-        if(errorRate <= 0.0 || errorRate >= 1.0) {
-            throw new ArgumentOutOfRangeException(nameof(errorRate), "Error rate must be strictly between 0 and 1 (exclusive).");
-        }
+        Preca.ThrowIfNotBetweenExclusive(errorRate, MinimumErrorRate, MaximumErrorRate);
         Preca.ThrowIfNegativeOrZero(sizeInBits);
         Preca.ThrowIfNegativeOrZero(hashFunctionCount);
         Preca.ThrowIfLessThan(shardCount, 1);
-        
+
         this.Name = name;
         this.ExpectedItems = expectedItems;
         this.ErrorRate = errorRate;
@@ -80,16 +88,22 @@ public sealed record BloomFilterConfiguration {
     /// <summary>
     /// Creates a new configuration with the specified shard count.
     /// </summary>
-    /// <param name="count">The new shard count.</param>
+    /// <param name="count">The new shard count. Must be greater than or equal to 1.</param>
     /// <returns>A new configuration instance.</returns>
-    public BloomFilterConfiguration WithShardCount(int count) => this with { ShardCount = count };
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="count"/> is less than 1.</exception>
+    public BloomFilterConfiguration WithShardCount(int count) {
+        Preca.ThrowIfLessThan(count, 1, () => new ArgumentOutOfRangeException(nameof(count), "Shard count must be greater than or equal to 1."));
+        return this with { ShardCount = count };
+    }
 
     /// <summary>
     /// Creates a new configuration with the specified hash seed.
     /// </summary>
     /// <param name="seed">The new hash seed.</param>
     /// <returns>A new configuration instance.</returns>
-    public BloomFilterConfiguration WithHashSeed(long seed) => this with { HashSeed = seed };
+    public BloomFilterConfiguration WithHashSeed(long seed) {
+        return this with { HashSeed = seed };
+    }
 
     /// <summary>
     /// Calculates a unique fingerprint for this configuration.

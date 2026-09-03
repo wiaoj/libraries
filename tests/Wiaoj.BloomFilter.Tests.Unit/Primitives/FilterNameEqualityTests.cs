@@ -1,4 +1,3 @@
-﻿using Wiaoj.BloomFilter.Internal;
 using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Primitives;

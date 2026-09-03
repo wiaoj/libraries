@@ -1,0 +1,74 @@
+﻿using System.Runtime.CompilerServices;
+
+namespace Wiaoj.BloomFilter;
+
+/// <summary>
+/// Provides mathematical functions and formulas for Bloom Filter sizing, capacity, and probability estimations.
+/// </summary>
+public static class BloomMath {
+    /// <summary>
+    /// Natural logarithm of 2: ln(2) ≈ 0.6931471805599453
+    /// </summary>
+    public const double Ln2 = 0.693147180559945309417232121458;
+
+    /// <summary>
+    /// Square of the natural logarithm of 2: (ln 2)^2 ≈ 0.4804530139182014
+    /// </summary>
+    public const double Ln2Squared = 0.480453013918201424667102526327;
+
+    /// <summary>
+    /// Calculates the optimal bit array size (m) for a target capacity and error rate.
+    /// Formula: m = -(n * ln(p)) / (ln(2)^2)
+    /// </summary>
+    /// <param name="expectedItems">The expected number of items (n).</param>
+    /// <param name="errorRate">The target false positive probability (p), strictly between 0 and 1.</param>
+    /// <returns>The optimal size in bits.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long CalculateOptimalBits(long expectedItems, double errorRate) {
+        double m = -(expectedItems * Math.Log(errorRate)) / Ln2Squared;
+        return (long)Math.Ceiling(m);
+    }
+
+    /// <summary>
+    /// Calculates the optimal number of hash functions (k) for a given bit size and item capacity.
+    /// Formula: k = (m / n) * ln(2)
+    /// </summary>
+    /// <param name="sizeInBits">The total size of the bit array in bits (m).</param>
+    /// <param name="expectedItems">The expected number of items (n).</param>
+    /// <returns>The optimal number of hash functions.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CalculateOptimalHashCount(long sizeInBits, long expectedItems) {
+        double k = ((double)sizeInBits / expectedItems) * Ln2;
+        return Math.Max(1, (int)Math.Ceiling(k));
+    }
+
+    /// <summary>
+    /// Estimates the current false positive probability based on bit saturation and hash count.
+    /// Formula: p ≈ (fillRatio)^k
+    /// </summary>
+    /// <param name="fillRatio">The ratio of set bits (0.0 to 1.0).</param>
+    /// <param name="hashFunctionCount">The number of hash functions (k).</param>
+    /// <returns>The estimated false positive probability.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double EstimateFalsePositiveProbability(double fillRatio, int hashFunctionCount) {
+        return Math.Pow(fillRatio, hashFunctionCount);
+    }
+
+    /// <summary>
+    /// Estimates the approximate number of distinct items inserted into the filter based on set bits count.
+    /// Formula: n* ≈ -(m / k) * ln(1 - X / m)
+    /// </summary>
+    /// <param name="sizeInBits">The total size of the bit array (m).</param>
+    /// <param name="setBitsCount">The number of bits set to 1 (X).</param>
+    /// <param name="hashFunctionCount">The number of hash functions (k).</param>
+    /// <returns>The estimated number of inserted items.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long EstimateInsertedItems(long sizeInBits, long setBitsCount, int hashFunctionCount) {
+        if(setBitsCount <= 0) return 0;
+        if(setBitsCount >= sizeInBits) return sizeInBits;
+
+        double ratio = (double)setBitsCount / sizeInBits;
+        double estimated = -((double)sizeInBits / hashFunctionCount) * Math.Log(1.0 - ratio);
+        return (long)Math.Round(estimated);
+    }
+}

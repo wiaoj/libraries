@@ -1,8 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter.Hosting;
-using Wiaoj.BloomFilter.Internal;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
 using Xunit;
@@ -29,7 +28,7 @@ public class BloomFilterWarmUpServiceTests {
                 [],
                 TimeProvider.System,
                 new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
-                new InMemoryBloomFilterStorage()
+                new FakeBloomFilterStorage()
             );
 
             LazyBloomFilterProxy proxy1 = new("warm-1", factory, registry, NullLoggerFactory.Instance);
@@ -47,10 +46,13 @@ public class BloomFilterWarmUpServiceTests {
                 NullLogger<BloomFilterWarmUpService>.Instance
             );
 
-            // Act
+            // Act: Start service and wait for its internal execution task to complete
             await warmUpService.StartAsync(CancellationToken.None);
+            if(warmUpService.ExecuteTask != null) {
+                await warmUpService.ExecuteTask;
+            }
 
-            // Assert: Both proxies should now be loaded into memory
+            // Assert: Both proxies are now fully loaded in memory
             Assert.NotNull(proxy1.GetInnerIfCreated());
             Assert.NotNull(proxy2.GetInnerIfCreated());
         }

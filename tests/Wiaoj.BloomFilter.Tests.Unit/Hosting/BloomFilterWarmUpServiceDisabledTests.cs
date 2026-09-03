@@ -1,8 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter.Hosting;
-using Wiaoj.BloomFilter.Internal;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
 using Xunit;
@@ -28,7 +27,7 @@ public class BloomFilterWarmUpServiceDisabledTests {
                 [],
                 TimeProvider.System,
                 new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
-                new InMemoryBloomFilterStorage()
+                new FakeBloomFilterStorage()
             );
 
             LazyBloomFilterProxy proxy = new("cold-1", factory, registry, NullLoggerFactory.Instance);

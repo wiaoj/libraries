@@ -1,6 +1,5 @@
 using System.IO.Hashing;
 using System.Text.Unicode;
-using Wiaoj.BloomFilter.Internal;
 using Wiaoj.Primitives.Buffers;
 
 namespace Wiaoj.BloomFilter.Extensions;

@@ -1,101 +1,253 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using Wiaoj.BloomFilter.Hosting;
-using Wiaoj.BloomFilter.Internal;
+using Microsoft.Extensions.Logging.Abstractions;
+using Wiaoj.Preconditions;
 
-#pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Wiaoj.BloomFilter;
-#pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
-/// Provides extension methods for <see cref="IBloomFilterBuilder"/> to configure and register Bloom Filters.
+/// Extension methods for configuring and registering Bloom Filters via explicit method overloads.
 /// </summary>
 public static class BloomFilterBuilderExtensions {
 
+    #region Standard In-Memory Filter Overloads
+
     /// <summary>
-    /// Defines a Bloom Filter with a customizable configuration.
+    /// Registers a standard In-Memory Bloom Filter linked to a marker type tag.
     /// </summary>
-    /// <param name="builder">The builder to extend.</param>
-    /// <param name="name">The unique name of the filter.</param>
-    /// <param name="expectedItems">The expected number of items to be stored.</param>
-    /// <param name="errorRate">The desired false positive probability (between 0 and 1).</param>
-    /// <param name="configure">An optional action to further configure the filter definition.</param>
-    /// <returns>The builder for chaining.</returns>
-    public static IBloomFilterBuilder AddFilter(
+    public static IBloomFilterBuilder AddInMemoryFilter<TTag>(
         this IBloomFilterBuilder builder,
         string name,
         long expectedItems,
-        double errorRate,
-        Action<FilterDefinition>? configure = null) {
+        double errorRate) where TTag : notnull {
 
-        FilterDefinition def = new() {
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(expectedItems);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
+
+        FilterDefinition definition = new() {
             ExpectedItems = expectedItems,
-            ErrorRate = errorRate
+            ErrorRate = errorRate,
+            Type = BloomFilterType.InMemory
         };
-        configure?.Invoke(def);
 
-        builder.Services.Configure<BloomFilterOptions>(options => {
-            options.Filters[name] = def;
-        });
-
-        return builder.RegisterFilter(name);
+        return builder.RegisterFilterDefinition<TTag>(name, definition);
     }
 
     /// <summary>
-    /// Registers a filter defined in configuration (e.g., appsettings.json) into the Dependency Injection container.
+    /// Registers a standard In-Memory Bloom Filter.
     /// </summary>
-    /// <param name="builder">The builder to extend.</param>
-    /// <param name="name">The unique name of the filter as defined in configuration.</param>
-    /// <returns>The builder for chaining.</returns>
-    public static IBloomFilterBuilder RegisterFilter(this IBloomFilterBuilder builder, string name) {
-        builder.Services.TryAddKeyedSingleton<IBloomFilter>(name, (sp, key) => {
-            BloomFilterFactory factory = sp.GetRequiredService<BloomFilterFactory>();
-            IBloomFilterRegistry registry = sp.GetRequiredService<IBloomFilterRegistry>();
-            ILoggerFactory loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new LazyBloomFilterProxy(key?.ToString() ?? string.Empty, factory, registry, loggerFactory);
-        });
+    public static IBloomFilterBuilder AddInMemoryFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate) {
 
-        builder.Services.TryAddKeyedSingleton<IPersistentBloomFilter>(name, (sp, key) =>
-            (IPersistentBloomFilter)sp.GetRequiredKeyedService<IBloomFilter>(key));
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(expectedItems);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
 
-        return builder;
+        FilterDefinition definition = new() {
+            ExpectedItems = expectedItems,
+            ErrorRate = errorRate,
+            Type = BloomFilterType.InMemory
+        };
+
+        return builder.RegisterFilterDefinition(name, definition);
     }
 
     /// <summary>
-    /// Registers a strongly-typed Bloom Filter interface linked to a specific filter name.
+    /// Alias for <see cref="AddInMemoryFilter{TTag}"/>.
     /// </summary>
-    /// <typeparam name="TTag">The marker type for the filter.</typeparam>
-    /// <param name="builder">The builder to extend.</param>
-    /// <param name="name">The unique name of the filter.</param>
-    /// <param name="expectedItems">The expected number of items.</param>
-    /// <param name="errorRate">The target false positive rate.</param>
-    /// <param name="configure">Optional configuration action.</param>
-    /// <returns>The builder for chaining.</returns>
     public static IBloomFilterBuilder AddFilter<TTag>(
         this IBloomFilterBuilder builder,
         string name,
         long expectedItems,
-        double errorRate,
-        Action<FilterDefinition>? configure = null) where TTag : notnull {
-
-        builder.AddFilter(name, expectedItems, errorRate, configure);
-
-        builder.Services.TryAddSingleton<IBloomFilter<TTag>>(sp => {
-            IBloomFilter innerFilter = sp.GetRequiredKeyedService<IBloomFilter>(name);
-            return new TypedBloomFilterWrapper<TTag>(innerFilter);
-        });
-
-        return builder;
+        double errorRate) where TTag : notnull {
+        return builder.AddInMemoryFilter<TTag>(name, expectedItems, errorRate);
     }
 
     /// <summary>
-    /// Maps an existing filter name from configuration to a strongly-typed Bloom Filter interface.
+    /// Alias for <see cref="AddInMemoryFilter"/>.
     /// </summary>
-    /// <typeparam name="TTag">The marker type for the filter.</typeparam>
-    /// <param name="builder">The builder to extend.</param>
-    /// <param name="filterName">The name of the filter defined in configuration.</param>
-    /// <returns>The builder for chaining.</returns>
+    public static IBloomFilterBuilder AddFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate) {
+        return builder.AddInMemoryFilter(name, expectedItems, errorRate);
+    }
+
+    #endregion
+
+    #region Rotating Filter Overloads
+
+    /// <summary>
+    /// Registers a sliding-window Rotating Bloom Filter linked to a marker type tag.
+    /// </summary>
+    public static IBloomFilterBuilder AddRotatingFilter<TTag>(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate,
+        TimeSpan windowSize,
+        int shardCount) where TTag : notnull {
+
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(expectedItems);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
+        Preca.ThrowIfLessThan(shardCount, 1);
+
+        FilterDefinition definition = new() {
+            ExpectedItems = expectedItems,
+            ErrorRate = errorRate,
+            Type = BloomFilterType.Rotating,
+            WindowSize = windowSize,
+            ShardCount = shardCount
+        };
+
+        return builder.RegisterFilterDefinition<TTag>(name, definition);
+    }
+
+    /// <summary>
+    /// Registers a sliding-window Rotating Bloom Filter.
+    /// </summary>
+    public static IBloomFilterBuilder AddRotatingFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate,
+        TimeSpan windowSize,
+        int shardCount) {
+
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(expectedItems);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
+        Preca.ThrowIfLessThan(shardCount, 1);
+
+        FilterDefinition definition = new() {
+            ExpectedItems = expectedItems,
+            ErrorRate = errorRate,
+            Type = BloomFilterType.Rotating,
+            WindowSize = windowSize,
+            ShardCount = shardCount
+        };
+
+        return builder.RegisterFilterDefinition(name, definition);
+    }
+
+    #endregion
+
+    #region Scalable Filter Overloads
+
+    /// <summary>
+    /// Registers a Scalable Bloom Filter linked to a marker type tag using default double growth and 50% saturation.
+    /// </summary>
+    public static IBloomFilterBuilder AddScalableFilter<TTag>(
+        this IBloomFilterBuilder builder,
+        string name,
+        long initialCapacity,
+        double errorRate) where TTag : notnull {
+        return builder.AddScalableFilter<TTag>(name, initialCapacity, errorRate, GrowthRate.Double, 0.50);
+    }
+
+    /// <summary>
+    /// Registers a Scalable Bloom Filter linked to a marker type tag with custom growth rate.
+    /// </summary>
+    public static IBloomFilterBuilder AddScalableFilter<TTag>(
+        this IBloomFilterBuilder builder,
+        string name,
+        long initialCapacity,
+        double errorRate,
+        GrowthRate growthRate) where TTag : notnull {
+        return builder.AddScalableFilter<TTag>(name, initialCapacity, errorRate, growthRate, 0.50);
+    }
+
+    /// <summary>
+    /// Registers a Scalable Bloom Filter linked to a marker type tag with custom growth rate and saturation threshold.
+    /// </summary>
+    public static IBloomFilterBuilder AddScalableFilter<TTag>(
+        this IBloomFilterBuilder builder,
+        string name,
+        long initialCapacity,
+        double errorRate,
+        GrowthRate growthRate,
+        double saturationThreshold) where TTag : notnull {
+
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(initialCapacity);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
+        Preca.ThrowIfNotBetweenExclusive(saturationThreshold, 0.0, 1.0);
+
+        FilterDefinition definition = new() {
+            ExpectedItems = initialCapacity,
+            ErrorRate = errorRate,
+            Type = BloomFilterType.Scalable,
+            GrowthRate = growthRate.Value,
+            SaturationThreshold = saturationThreshold
+        };
+
+        return builder.RegisterFilterDefinition<TTag>(name, definition);
+    }
+
+    /// <summary>
+    /// Registers a Scalable Bloom Filter using default double growth and 50% saturation.
+    /// </summary>
+    public static IBloomFilterBuilder AddScalableFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long initialCapacity,
+        double errorRate) {
+        return builder.AddScalableFilter(name, initialCapacity, errorRate, GrowthRate.Double, 0.50);
+    }
+
+    /// <summary>
+    /// Registers a Scalable Bloom Filter with custom growth rate.
+    /// </summary>
+    public static IBloomFilterBuilder AddScalableFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long initialCapacity,
+        double errorRate,
+        GrowthRate growthRate) {
+        return builder.AddScalableFilter(name, initialCapacity, errorRate, growthRate, 0.50);
+    }
+
+    /// <summary>
+    /// Registers a Scalable Bloom Filter with custom growth rate and saturation threshold.
+    /// </summary>
+    public static IBloomFilterBuilder AddScalableFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long initialCapacity,
+        double errorRate,
+        GrowthRate growthRate,
+        double saturationThreshold) {
+
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(initialCapacity);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
+        Preca.ThrowIfNotBetweenExclusive(saturationThreshold, 0.0, 1.0);
+
+        FilterDefinition definition = new() {
+            ExpectedItems = initialCapacity,
+            ErrorRate = errorRate,
+            Type = BloomFilterType.Scalable,
+            GrowthRate = growthRate.Value,
+            SaturationThreshold = saturationThreshold
+        };
+
+        return builder.RegisterFilterDefinition(name, definition);
+    }
+
+    #endregion
+
+    #region AppSettings Mapping & Storage
+
+    /// <summary>
+    /// Maps a named filter configured in appsettings.json to a strongly-typed marker tag.
+    /// </summary>
     public static IBloomFilterBuilder MapFilter<TTag>(this IBloomFilterBuilder builder, string filterName)
         where TTag : notnull {
 
@@ -110,35 +262,58 @@ public static class BloomFilterBuilderExtensions {
     }
 
     /// <summary>
-    /// Configures global <see cref="BloomFilterOptions"/>.
+    /// Registers a custom persistent storage provider.
     /// </summary>
-    /// <param name="builder">The builder to extend.</param>
-    /// <param name="configure">The configuration action.</param>
-    /// <returns>The builder for chaining.</returns>
-    public static IBloomFilterBuilder Configure(this IBloomFilterBuilder builder, Action<BloomFilterOptions> configure) {
-        builder.Services.Configure(configure);
-        return builder;
-    }
-
-    /// <summary>
-    /// Adds a custom storage implementation for Bloom Filters.
-    /// </summary>
-    /// <typeparam name="TStorage">The type of the storage implementation.</typeparam>
-    /// <param name="builder">The builder to extend.</param>
-    /// <returns>The builder for chaining.</returns>
     public static IBloomFilterBuilder AddStorage<TStorage>(this IBloomFilterBuilder builder)
         where TStorage : class, IBloomFilterStorage {
         builder.Services.Replace(ServiceDescriptor.Singleton<IBloomFilterStorage, TStorage>());
         return builder;
     }
 
-    /// <summary>
-    /// Enables automatic background saving of dirty filters.
-    /// </summary>
-    /// <param name="builder">The builder to extend.</param>
-    /// <returns>The builder for chaining.</returns>
-    public static IBloomFilterBuilder AddAutoSave(this IBloomFilterBuilder builder) {
-        builder.Services.AddHostedService<BloomFilterAutoSaveService>();
+    #endregion
+
+    #region Internal Registration Helpers
+
+    private static IBloomFilterBuilder RegisterFilterDefinition<TTag>(
+        this IBloomFilterBuilder builder,
+        string name,
+        FilterDefinition definition) where TTag : notnull {
+
+        builder.RegisterFilterDefinition(name, definition);
+
+        builder.Services.TryAddSingleton<IBloomFilter<TTag>>(sp => {
+            IBloomFilter innerFilter = sp.GetRequiredKeyedService<IBloomFilter>(name);
+            return new TypedBloomFilterWrapper<TTag>(innerFilter);
+        });
+
         return builder;
     }
+
+    private static IBloomFilterBuilder RegisterFilterDefinition(
+        this IBloomFilterBuilder builder,
+        string name,
+        FilterDefinition definition) {
+
+        builder.Services.Configure<BloomFilterOptions>(options => {
+            options.Filters[name] = definition;
+        });
+
+        return builder.RegisterFilter(name);
+    }
+
+    private static IBloomFilterBuilder RegisterFilter(this IBloomFilterBuilder builder, string name) {
+        builder.Services.TryAddKeyedSingleton<IBloomFilter>(name, (sp, key) => {
+            BloomFilterFactory factory = sp.GetRequiredService<BloomFilterFactory>();
+            IBloomFilterRegistry registry = sp.GetRequiredService<IBloomFilterRegistry>();
+            ILoggerFactory loggerFactory = sp.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance;
+            return new LazyBloomFilterProxy(key?.ToString() ?? string.Empty, factory, registry, loggerFactory);
+        });
+
+        builder.Services.TryAddKeyedSingleton<IPersistentBloomFilter>(name, (sp, key) =>
+            (IPersistentBloomFilter)sp.GetRequiredKeyedService<IBloomFilter>(key));
+
+        return builder;
+    }
+
+    #endregion
 }

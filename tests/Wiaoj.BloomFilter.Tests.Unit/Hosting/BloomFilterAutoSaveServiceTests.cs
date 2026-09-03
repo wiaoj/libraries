@@ -1,18 +1,16 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Wiaoj.BloomFilter.Hosting;
-using Wiaoj.BloomFilter.Internal;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
-using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Hosting;
 
 public class BloomFilterAutoSaveServiceTests {
     private readonly FakeTimeProvider _fakeTime = new();
     private readonly BloomFilterRegistry _registry = new();
-    private readonly InMemoryBloomFilterStorage _storage = new();
+    private readonly FakeBloomFilterStorage _storage = new();
     private readonly BloomFilterConfigurationFactory _configFactory = new();
 
     private InMemoryBloomFilter CreateTestFilter(string name) {
@@ -53,16 +51,19 @@ public class BloomFilterAutoSaveServiceTests {
 
             using CancellationTokenSource cts = new();
 
-            // Act: Start service in background
+            // Act: Start background service and allow loop to reach timer.WaitForNextTickAsync
             Task executeTask = service.StartAsync(cts.Token);
+            await Task.Yield();
+            await Task.Delay(20, TestContext.Current.CancellationToken);
 
             // Advance time to trigger timer tick
             this._fakeTime.Advance(TimeSpan.FromMinutes(5));
 
-            // Wait a small delay for execution cycle
-            await Task.Delay(50);
+            // Spin until the background loop completes save operation
+            bool saved = SpinWait.SpinUntil(() => !filter.IsDirty, 2000);
 
             // Assert
+            Assert.True(saved);
             Assert.False(filter.IsDirty);
             Assert.True(this._storage.Exists("auto-save-filter"));
 
@@ -75,7 +76,7 @@ public class BloomFilterAutoSaveServiceTests {
         public async Task Should_PerformFinalSave_OnGracefulShutdown() {
             // Arrange
             BloomFilterOptions options = new();
-            options.Lifecycle.AutoSaveInterval = TimeSpan.FromHours(1); // Long interval (won't tick)
+            options.Lifecycle.AutoSaveInterval = TimeSpan.FromHours(1);
             IOptions<BloomFilterOptions> optionsWrapper = Options.Create(options);
 
             using InMemoryBloomFilter filter = CreateTestFilter("shutdown-filter");
@@ -91,10 +92,10 @@ public class BloomFilterAutoSaveServiceTests {
 
             await service.StartAsync(CancellationToken.None);
 
-            // Act: Request service stop
+            // Act
             await service.StopAsync(CancellationToken.None);
 
-            // Assert: Filter must have been saved during shutdown
+            // Assert
             Assert.False(filter.IsDirty);
             Assert.True(this._storage.Exists("shutdown-filter"));
         }

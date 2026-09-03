@@ -1,37 +1,50 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter;
 using Wiaoj.BloomFilter.DependencyInjection;
-using Wiaoj.BloomFilter.Internal;
+using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
+using Wiaoj.ObjectPool;
 
-#pragma warning disable IDE0130
 namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130 
 
 /// <summary>
-/// Provides extension methods for <see cref="IServiceCollection"/> to register Bloom Filter services.
+/// Service collection extension methods for Bloom Filter registration.
 /// </summary>
 public static class BloomFilterServiceCollectionExtensions {
     /// <summary>
-    /// Adds Bloom Filter infrastructure and services to the specified <see cref="IServiceCollection"/>.
+    /// Registers core Bloom Filter infrastructure.
     /// </summary>
-    /// <param name="services">The service collection to add services to.</param>
-    /// <param name="setupAction">An optional action to configure the Bloom Filter builder.</param>
-    /// <returns>The same service collection so that multiple calls can be chained.</returns>
-    public static IServiceCollection AddBloomFilter(
-    this IServiceCollection services,
-    Action<IBloomFilterBuilder>? setupAction = null) {
+    public static IServiceCollection AddBloomFilter(this IServiceCollection services) {
+        return services.AddBloomFilter(_ => { });
+    }
 
-        services.AddOptions<BloomFilterOptions>()
-                .BindConfiguration(BloomFilterOptions.SectionName);
+    /// <summary>
+    /// Registers core Bloom Filter infrastructure and configures filters via builder.
+    /// </summary>
+    public static IServiceCollection AddBloomFilter(
+        this IServiceCollection services,
+        Action<IBloomFilterBuilder> setupAction) {
+
+        services.AddOptions<BloomFilterOptions>();
+
+        // Safely bind IConfiguration if registered in DI container (Optional Binding)
+        services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<BloomFilterOptions>, OptionalConfigurationBinder>());
 
         BloomFilterBuilder builder = new(services);
-        setupAction?.Invoke(builder);
+        setupAction(builder);
 
-        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
+        services.TryAddSingleton(TimeProvider.System);
 
-        // Core
+        // Fallback logging for tests and standalone apps without explicit AddLogging()
+        services.TryAddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.TryAdd(ServiceDescriptor.Singleton(typeof(ILogger<>), typeof(NullLogger<>)));
+
+        // Internal engine infrastructure
         services.TryAddSingleton<IBloomFilterConfigurationFactory, BloomFilterConfigurationFactory>();
         services.TryAddSingleton<IBloomFilterRegistry, BloomFilterRegistry>();
         services.TryAddSingleton<BloomFilterFactory>();
@@ -45,5 +58,12 @@ public static class BloomFilterServiceCollectionExtensions {
         );
 
         return services;
+    }
+
+    private sealed class OptionalConfigurationBinder(IServiceProvider serviceProvider) : IConfigureOptions<BloomFilterOptions> {
+        public void Configure(BloomFilterOptions options) {
+            IConfiguration? configuration = serviceProvider.GetService<IConfiguration>();
+            configuration?.GetSection(BloomFilterOptions.SectionName).Bind(options);
+        }
     }
 }
