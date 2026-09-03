@@ -9,8 +9,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using static Wiaoj.Primitives.Hashing.Internal.XxHashShared;
 
-namespace Wiaoj.Primitives.Hashing.Internal
-{
+namespace Wiaoj.Primitives.Hashing.Internal {
     /// <summary>Provides an implementation of the XXH3 hash algorithm for generating a 64-bit hash.</summary>
     /// <remarks>
     /// For methods that persist the computed numerical hash value as bytes,
@@ -19,33 +18,37 @@ namespace Wiaoj.Primitives.Hashing.Internal
 #if NET
     [SkipLocalsInit]
 #endif
-    internal sealed unsafe class XxHash3Core : NonCryptographicHashAlgorithm
-    {
+    internal sealed unsafe class XxHash3Core : NonCryptographicHashAlgorithm {
         /// <summary>XXH3 produces 8-byte hashes.</summary>
         private new const int HashLengthInBytes = 8;
 
         private State _state;
 
         /// <summary>Initializes a new instance of the <see cref="XxHash3"/> class using the default seed value 0.</summary>
-        public XxHash3Core() : this(0)
-        {
+        public XxHash3Core() : this(0) {
         }
 
         /// <summary>Initializes a new instance of the <see cref="XxHash3"/> class using the specified seed.</summary>
-        public XxHash3Core(long seed) : base(HashLengthInBytes)
-        {
+        public XxHash3Core(long seed) : base(HashLengthInBytes) {
             Initialize(ref _state, (ulong)seed);
         }
 
         /// <summary>Initializes a new instance of the <see cref="XxHash3"/> class using the state from another instance.</summary>
-        private XxHash3Core(State state) : base(HashLengthInBytes)
-        {
+        private XxHash3Core(State state) : base(HashLengthInBytes) {
             _state = state;
         }
 
         /// <summary>Returns a clone of the current instance, with a copy of the current instance's internal state.</summary>
         /// <returns>A new instance that will produce the same sequence of values as the current instance.</returns>
         public XxHash3Core Clone() => new(_state);
+
+        /// <summary>Re-initializes this instance's internal state to start a fresh computation using the specified seed.</summary>
+        /// <remarks>
+        /// This exists so pooled/cached <see cref="XxHash3Core"/> instances (e.g. thread-static writers) can be
+        /// reseeded on rent instead of allocating a brand-new instance whenever a non-zero seed is requested.
+        /// </remarks>
+        /// <param name="seed">The seed value to initialize the new computation with.</param>
+        internal void Reinitialize(long seed) => Initialize(ref _state, (ulong)seed);
 
         /// <summary>Computes the XXH3 hash of the provided <paramref name="source"/> data.</summary>
         /// <param name="source">The data to hash.</param>
@@ -58,8 +61,7 @@ namespace Wiaoj.Primitives.Hashing.Internal
         /// <param name="seed">The seed value for this hash computation.</param>
         /// <returns>The XXH3 64-bit hash code of the provided data.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        public static byte[] Hash(byte[] source, long seed)
-        {
+        public static byte[] Hash(byte[] source, long seed) {
             ArgumentNullException.ThrowIfNull(source);
 
             return Hash(new ReadOnlySpan<byte>(source), seed);
@@ -69,8 +71,7 @@ namespace Wiaoj.Primitives.Hashing.Internal
         /// <param name="source">The data to hash.</param>
         /// <param name="seed">The seed value for this hash computation. The default is zero.</param>
         /// <returns>The XXH3 64-bit hash code of the provided data.</returns>
-        public static byte[] Hash(ReadOnlySpan<byte> source, long seed = 0)
-        {
+        public static byte[] Hash(ReadOnlySpan<byte> source, long seed = 0) {
             byte[] result = new byte[HashLengthInBytes];
             ulong hash = HashToUInt64(source, seed);
             BinaryPrimitives.WriteUInt64BigEndian(result, hash);
@@ -83,10 +84,8 @@ namespace Wiaoj.Primitives.Hashing.Internal
         /// <param name="seed">The seed value for this hash computation. The default is zero.</param>
         /// <returns>The number of bytes written to <paramref name="destination"/>.</returns>
         /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="HashLengthInBytes"/> (8 bytes).</exception>
-        public static int Hash(ReadOnlySpan<byte> source, Span<byte> destination, long seed = 0)
-        {
-            if (!TryHash(source, destination, out int bytesWritten, seed))
-            {
+        public static int Hash(ReadOnlySpan<byte> source, Span<byte> destination, long seed = 0) {
+            if(!TryHash(source, destination, out int bytesWritten, seed)) {
                 ThrowDestinationTooShort();
             }
 
@@ -99,14 +98,11 @@ namespace Wiaoj.Primitives.Hashing.Internal
         /// <param name="bytesWritten">When this method returns, contains the number of bytes written to <paramref name="destination"/>.</param>
         /// <param name="seed">The seed value for this hash computation. The default is zero.</param>
         /// <returns><see langword="true"/> if <paramref name="destination"/> is long enough to receive the computed hash value (8 bytes); otherwise, <see langword="false"/>.</returns>
-        public static bool TryHash(ReadOnlySpan<byte> source, Span<byte> destination, out int bytesWritten, long seed = 0)
-        {
-            if (destination.Length >= sizeof(long))
-            {
+        public static bool TryHash(ReadOnlySpan<byte> source, Span<byte> destination, out int bytesWritten, long seed = 0) {
+            if(destination.Length >= sizeof(long)) {
                 ulong hash = HashToUInt64(source, seed);
 
-                if (BitConverter.IsLittleEndian)
-                {
+                if(BitConverter.IsLittleEndian) {
                     hash = BinaryPrimitives.ReverseEndianness(hash);
                 }
                 Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(destination), hash);
@@ -124,23 +120,18 @@ namespace Wiaoj.Primitives.Hashing.Internal
         /// <param name="seed">The seed value for this hash computation.</param>
         /// <returns>The computed XXH3 hash.</returns>
         [CLSCompliant(false)]
-        public static ulong HashToUInt64(ReadOnlySpan<byte> source, long seed = 0)
-        {
+        public static ulong HashToUInt64(ReadOnlySpan<byte> source, long seed = 0) {
             uint length = (uint)source.Length;
-            fixed (byte* sourcePtr = &MemoryMarshal.GetReference(source))
-            {
-                if (length <= 16)
-                {
+            fixed(byte* sourcePtr = &MemoryMarshal.GetReference(source)) {
+                if(length <= 16) {
                     return HashLength0To16(sourcePtr, length, (ulong)seed);
                 }
 
-                if (length <= 128)
-                {
+                if(length <= 128) {
                     return HashLength17To128(sourcePtr, length, (ulong)seed);
                 }
 
-                if (length <= MidSizeMaxBytes)
-                {
+                if(length <= MidSizeMaxBytes) {
                     return HashLength129To240(sourcePtr, length, (ulong)seed);
                 }
 
@@ -149,22 +140,19 @@ namespace Wiaoj.Primitives.Hashing.Internal
         }
 
         /// <summary>Resets the hash computation to the initial state.</summary>
-        public override void Reset()
-        {
+        public override void Reset() {
             XxHashShared.Reset(ref _state);
         }
 
         /// <summary>Appends the contents of <paramref name="source"/> to the data already processed for the current hash computation.</summary>
         /// <param name="source">The data to process.</param>
-        public override void Append(ReadOnlySpan<byte> source)
-        {
+        public override void Append(ReadOnlySpan<byte> source) {
             XxHashShared.Append(ref _state, source);
         }
 
         /// <summary>Writes the computed 64-bit hash value to <paramref name="destination"/> without modifying accumulated state.</summary>
         /// <param name="destination">The buffer that receives the computed hash value.</param>
-        protected override void GetCurrentHashCore(Span<byte> destination)
-        {
+        protected override void GetCurrentHashCore(Span<byte> destination) {
             ulong hash = GetCurrentHashAsUInt64();
             BinaryPrimitives.WriteUInt64BigEndian(destination, hash);
         }
@@ -172,26 +160,21 @@ namespace Wiaoj.Primitives.Hashing.Internal
         /// <summary>Gets the current computed hash value without modifying accumulated state.</summary>
         /// <returns>The hash value for the data already provided.</returns>
         [CLSCompliant(false)]
-        public ulong GetCurrentHashAsUInt64()
-        {
+        public ulong GetCurrentHashAsUInt64() {
             ulong current;
 
-            if (_state.TotalLength > MidSizeMaxBytes)
-            {
+            if(_state.TotalLength > MidSizeMaxBytes) {
                 // Digest on a local copy to ensure the accumulators remain unaltered.
                 ulong* accumulators = stackalloc ulong[AccumulatorCount];
                 CopyAccumulators(ref _state, accumulators);
 
-                fixed (byte* secret = _state.Secret)
-                {
+                fixed(byte* secret = _state.Secret) {
                     DigestLong(ref _state, accumulators, secret);
                     current = MergeAccumulators(accumulators, secret + SecretMergeAccsStartBytes, _state.TotalLength * Prime64_1);
                 }
             }
-            else
-            {
-                fixed (byte* buffer = _state.Buffer)
-                {
+            else {
+                fixed(byte* buffer = _state.Buffer) {
                     current = HashToUInt64(new ReadOnlySpan<byte>(buffer, (int)_state.TotalLength), (long)_state.Seed);
                 }
             }
@@ -199,20 +182,16 @@ namespace Wiaoj.Primitives.Hashing.Internal
             return current;
         }
 
-        private static ulong HashLength0To16(byte* source, uint length, ulong seed)
-        {
-            if (length > 8)
-            {
+        private static ulong HashLength0To16(byte* source, uint length, ulong seed) {
+            if(length > 8) {
                 return HashLength9To16(source, length, seed);
             }
 
-            if (length >= 4)
-            {
+            if(length >= 4) {
                 return HashLength4To8(source, length, seed);
             }
 
-            if (length != 0)
-            {
+            if(length != 0) {
                 return HashLength1To3(source, length, seed);
             }
 
@@ -221,8 +200,7 @@ namespace Wiaoj.Primitives.Hashing.Internal
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static ulong HashLength1To3(byte* source, uint length, ulong seed)
-        {
+        private static ulong HashLength1To3(byte* source, uint length, ulong seed) {
             Debug.Assert(length >= 1 && length <= 3);
 
             // When source.Length == 1, c1 == source[0], c2 == source[0], c3 == source[0]
@@ -239,8 +217,7 @@ namespace Wiaoj.Primitives.Hashing.Internal
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static ulong HashLength4To8(byte* source, uint length, ulong seed)
-        {
+        private static ulong HashLength4To8(byte* source, uint length, ulong seed) {
             Debug.Assert(length >= 4 && length <= 8);
 
             seed ^= (ulong)BinaryPrimitives.ReverseEndianness((uint)seed) << 32;
@@ -256,8 +233,7 @@ namespace Wiaoj.Primitives.Hashing.Internal
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static ulong HashLength9To16(byte* source, uint length, ulong seed)
-        {
+        private static ulong HashLength9To16(byte* source, uint length, ulong seed) {
             Debug.Assert(length >= 9 && length <= 16);
 
             const ulong SecretXorL = DefaultSecretUInt64_3 ^ DefaultSecretUInt64_4;
@@ -275,14 +251,12 @@ namespace Wiaoj.Primitives.Hashing.Internal
                 Multiply64To128ThenFold(inputLow, inputHigh));
         }
 
-        private static ulong HashLength17To128(byte* source, uint length, ulong seed)
-        {
+        private static ulong HashLength17To128(byte* source, uint length, ulong seed) {
             Debug.Assert(length >= 17 && length <= 128);
 
             ulong hash = length * Prime64_1;
 
-            switch ((length - 1) / 32)
-            {
+            switch((length - 1) / 32) {
                 default: // case 3
                     hash += Mix16Bytes(source + 48, DefaultSecretUInt64_12, DefaultSecretUInt64_13, seed);
                     hash += Mix16Bytes(source + length - 64, DefaultSecretUInt64_14, DefaultSecretUInt64_15, seed);
@@ -304,8 +278,7 @@ namespace Wiaoj.Primitives.Hashing.Internal
             return Avalanche(hash);
         }
 
-        private static ulong HashLength129To240(byte* source, uint length, ulong seed)
-        {
+        private static ulong HashLength129To240(byte* source, uint length, ulong seed) {
             Debug.Assert(length >= 129 && length <= 240);
 
             ulong hash = length * Prime64_1;
@@ -321,8 +294,7 @@ namespace Wiaoj.Primitives.Hashing.Internal
 
             hash = Avalanche(hash);
 
-            switch ((length - (16 * 8)) / 16)
-            {
+            switch((length - (16 * 8)) / 16) {
                 default: // case 7
                     Debug.Assert((length - 16 * 8) / 16 == 7);
                     hash += Mix16Bytes(source + (16 * 14), DefaultSecret3UInt64_12, DefaultSecret3UInt64_13, seed);
@@ -353,15 +325,12 @@ namespace Wiaoj.Primitives.Hashing.Internal
             return Avalanche(hash);
         }
 
-        private static ulong HashLengthOver240(byte* source, uint length, ulong seed)
-        {
+        private static ulong HashLengthOver240(byte* source, uint length, ulong seed) {
             Debug.Assert(length > 240);
 
-            fixed (byte* defaultSecret = &MemoryMarshal.GetReference(DefaultSecret))
-            {
+            fixed(byte* defaultSecret = &MemoryMarshal.GetReference(DefaultSecret)) {
                 byte* secret = defaultSecret;
-                if (seed != 0)
-                {
+                if(seed != 0) {
                     byte* customSecret = stackalloc byte[SecretLengthBytes];
                     DeriveSecretFromSeed(customSecret, seed);
                     secret = customSecret;
@@ -377,8 +346,3 @@ namespace Wiaoj.Primitives.Hashing.Internal
         }
     }
 }
-
-
-
-
-

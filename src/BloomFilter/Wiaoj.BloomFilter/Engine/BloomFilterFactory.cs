@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Numerics;
@@ -7,6 +8,9 @@ using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter;
 
+/// <summary>
+/// Internal factory responsible for instantiating, hydrating, and recovering persistent Bloom Filter instances.
+/// </summary>
 internal sealed class BloomFilterFactory(
     IBloomFilterConfigurationFactory configFactory,
     IOptionsMonitor<BloomFilterOptions> optionsMonitor,
@@ -14,19 +18,27 @@ internal sealed class BloomFilterFactory(
     IEnumerable<IAutoBloomFilterSeeder> autoSeeders,
     TimeProvider timeProvider,
     IObjectPool<MemoryStream> memoryStreamPool,
+    IHostApplicationLifetime? hostLifetime = null,
     IBloomFilterStorage? storage = null) {
 
-    public async Task<IPersistentBloomFilter> Create(string filterNameStr, CancellationToken cancellationToken = default) {
-        FilterName name = FilterName.Parse(filterNameStr);
-        var currentOptions = optionsMonitor.CurrentValue;
+    private readonly ILogger _logger = loggerFactory.CreateLogger<BloomFilterFactory>();
+
+    /// <summary>
+    /// Creates and hydrates a Bloom Filter instance by name.
+    /// </summary>
+    public async Task<IPersistentBloomFilter> Create(FilterName name, CancellationToken cancellationToken = default) {
+        if(name.IsEmpty) {
+            throw new ArgumentException("Filter name cannot be empty.", nameof(name));
+        }
+
+        BloomFilterOptions currentOptions = optionsMonitor.CurrentValue;
 
         if(!currentOptions.Filters.TryGetValue(name.Value, out FilterDefinition? definition)) {
-            InvalidOperationException ex = new($"Filter configuration for '{name}' not found.");
-            loggerFactory.CreateLogger<BloomFilterFactory>().LogError(ex, "Configuration missing.");
+            InvalidOperationException ex = new($"Filter configuration for '{name.Value}' was not found in options.");
+            this._logger.LogError(ex, "Configuration missing for Bloom Filter '{Name}'.", name.Value);
             throw ex;
         }
 
-        // Context (Tüm filtre tiplerinin ihtiyaç duyduğu ortak bağımlılıklar)
         BloomFilterContext context = new(
             storage,
             memoryStreamPool,
@@ -36,43 +48,53 @@ internal sealed class BloomFilterFactory(
             configFactory
         );
 
-        // BloomFilter Configuration
-        BloomFilterConfiguration config = configFactory.Create(
-            name,
-            definition.ExpectedItems,
-            definition.ErrorRate,
-            currentOptions.Performance.GlobalHashSeed == 0 ? null : currentOptions.Performance.GlobalHashSeed
-        );
+        BloomFilterConfiguration config = currentOptions.DefaultHashSeed.HasValue
+            ? configFactory.Create(name, definition.ExpectedItems, definition.ErrorRate, currentOptions.DefaultHashSeed.Value)
+            : configFactory.Create(name, definition.ExpectedItems, definition.ErrorRate);
 
-        // Filtreyi Tipe Göre Factory Et
         IPersistentBloomFilter filter = definition.Type switch {
-            BloomFilterType.Scalable => new ScalableBloomFilter(config, context, (GrowthRate)definition.GrowthRate),
-
-            BloomFilterType.Rotating => new RotatingBloomFilter(config, context, definition.WindowSize, definition.ShardCount),
-
+            BloomFilterType.Scalable => new ScalableBloomFilter(config,
+                                                                context,
+                                                                (GrowthRate)definition.GrowthRate,
+                                                                Percentage.FromDouble(definition.SaturationThreshold)),
+            BloomFilterType.Rotating => new RotatingBloomFilter(config,
+                                                                context,
+                                                                definition.WindowSize,
+                                                                definition.ShardCount),
             _ => CreateDefaultFilter(config, context, currentOptions)
         };
 
-        // Yükleme ve Hata Yönetimi
+        // Hydration and Failure Recovery
         try {
-            await filter.ReloadAsync(cancellationToken);
+            await filter.ReloadAsync(cancellationToken).ConfigureAwait(false);
         }
         catch(Exception ex) {
-            loggerFactory.CreateLogger<BloomFilterFactory>().LogError(ex, "Load failed for '{Name}'. Resetting...", name);
+            this._logger.LogError(ex, "Failed to hydrate Bloom Filter '{Name}' from storage. Reinitializing clean filter.", name.Value);
 
             if(storage != null) {
-                await storage.DeleteAsync(name.Value, cancellationToken);
+                try {
+                    await storage.DeleteAsync(name, cancellationToken).ConfigureAwait(false);
+                }
+                catch(Exception delEx) {
+                    this._logger.LogWarning(delEx, "Failed to delete corrupted storage files for '{Name}'.", name.Value);
+                }
             }
 
             if(currentOptions.Lifecycle.AutoReseed) {
-                _ = Task.Run(() => TriggerAutoReseedAsync(filter, name, CancellationToken.None), CancellationToken.None);
+                // Execute managed background reseed linked to host shutdown token
+                CancellationToken stoppingToken = hostLifetime?.ApplicationStopping ?? CancellationToken.None;
+                _ = Task.Run(async () => await ExecuteManagedReseedAsync(filter, name, stoppingToken).ConfigureAwait(false), stoppingToken);
             }
         }
 
         return filter;
     }
 
-    private static IPersistentBloomFilter CreateDefaultFilter(BloomFilterConfiguration config, BloomFilterContext context, BloomFilterOptions options) {
+    private static IPersistentBloomFilter CreateDefaultFilter(
+        BloomFilterConfiguration config,
+        BloomFilterContext context,
+        BloomFilterOptions options) {
+
         long totalBytes = (config.SizeInBits + 7) / 8;
         int calculatedShards = 1;
 
@@ -87,12 +109,28 @@ internal sealed class BloomFilterFactory(
             : new InMemoryBloomFilter(config, context);
     }
 
-    private async Task TriggerAutoReseedAsync(IPersistentBloomFilter filter, FilterName name, CancellationToken ct) {
-        List<IAutoBloomFilterSeeder> matchingSeeders = autoSeeders.Where(s => s.FilterName == name).ToList();
-        if(matchingSeeders.Count > 0) {
-            var tasks = matchingSeeders.Select(s => s.SeedAsync(filter, ct));
-            await Task.WhenAll(tasks);
-            await filter.SaveAsync(ct);
+    private async Task ExecuteManagedReseedAsync(IPersistentBloomFilter filter, FilterName name, CancellationToken ct) {
+        try {
+            List<IAutoBloomFilterSeeder> matchingSeeders = autoSeeders.Where(s => s.FilterName == name).ToList();
+            if(matchingSeeders.Count == 0) {
+                return;
+            }
+
+            this._logger.LogInformation("Triggering automatic reseeding for Bloom Filter '{Name}'.", name.Value);
+
+            foreach(IAutoBloomFilterSeeder seeder in matchingSeeders) {
+                ct.ThrowIfCancellationRequested();
+                await seeder.SeedAsync(filter, ct).ConfigureAwait(false);
+            }
+
+            await filter.SaveAsync(ct).ConfigureAwait(false);
+            this._logger.LogInformation("Automatic reseeding completed successfully for '{Name}'.", name.Value);
+        }
+        catch(OperationCanceledException) {
+            this._logger.LogWarning("Automatic reseeding for '{Name}' was aborted due to application shutdown.", name.Value);
+        }
+        catch(Exception ex) {
+            this._logger.LogError(ex, "Critical failure during automatic reseeding of '{Name}'.", name.Value);
         }
     }
 }

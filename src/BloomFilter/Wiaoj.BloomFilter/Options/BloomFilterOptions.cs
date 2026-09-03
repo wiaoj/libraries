@@ -10,14 +10,15 @@ public class BloomFilterOptions {
     public const string SectionName = "BloomFilter";
 
     /// <summary>
+    /// Default global hash seed used when individual filters do not specify one.
+    /// If null, the factory's internal default seed is used.
+    /// </summary>
+    public long? DefaultHashSeed { get; set; }
+
+    /// <summary>
     /// Storage provider configuration.
     /// </summary>
     public StorageOptions Storage { get; set; } = new();
-
-    /// <summary>
-    /// Performance and hashing options.
-    /// </summary>
-    public PerformanceOptions Performance { get; set; } = new();
 
     /// <summary>
     /// Lifecycle and background worker options.
@@ -27,7 +28,7 @@ public class BloomFilterOptions {
     /// <summary>
     /// Dictionary of configured filter definitions keyed by filter name.
     /// </summary>
-    public Dictionary<string, FilterDefinition> Filters { get; set; } = new();
+    public Dictionary<string, FilterDefinition> Filters { get; set; } = [];
 }
 
 /// <summary>
@@ -58,16 +59,6 @@ public class StorageOptions {
     /// Indicates whether to suppress storage I/O errors and operate in-memory.
     /// </summary>
     public bool IgnoreErrors { get; set; } = true;
-}
-
-/// <summary>
-/// Runtime performance options.
-/// </summary>
-public class PerformanceOptions {
-    /// <summary>
-    /// Global hash seed used when individual filters do not specify one.
-    /// </summary>
-    public long GlobalHashSeed { get; set; } = 0;
 }
 
 /// <summary>

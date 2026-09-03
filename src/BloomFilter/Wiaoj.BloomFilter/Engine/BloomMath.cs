@@ -1,9 +1,10 @@
 ﻿using System.Runtime.CompilerServices;
+using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter;
 
 /// <summary>
-/// Provides mathematical functions and formulas for Bloom Filter sizing, capacity, and probability estimations.
+/// Provides mathematical calculations for Bloom Filter sizing, capacity, and probability estimations.
 /// </summary>
 public static class BloomMath {
     /// <summary>
@@ -21,11 +22,12 @@ public static class BloomMath {
     /// Formula: m = -(n * ln(p)) / (ln(2)^2)
     /// </summary>
     /// <param name="expectedItems">The expected number of items (n).</param>
-    /// <param name="errorRate">The target false positive probability (p), strictly between 0 and 1.</param>
+    /// <param name="errorRate">The target false positive rate percentage (p).</param>
     /// <returns>The optimal size in bits.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static long CalculateOptimalBits(long expectedItems, double errorRate) {
-        double m = -(expectedItems * Math.Log(errorRate)) / Ln2Squared;
+    public static long CalculateOptimalBits(long expectedItems, Percentage errorRate) {
+        double p = errorRate.Value;
+        double m = -(expectedItems * Math.Log(p)) / Ln2Squared;
         return (long)Math.Ceiling(m);
     }
 
@@ -43,15 +45,16 @@ public static class BloomMath {
     }
 
     /// <summary>
-    /// Estimates the current false positive probability based on bit saturation and hash count.
+    /// Estimates the current false positive probability based on fill ratio and hash function count.
     /// Formula: p ≈ (fillRatio)^k
     /// </summary>
-    /// <param name="fillRatio">The ratio of set bits (0.0 to 1.0).</param>
+    /// <param name="fillRatio">The saturation percentage of set bits.</param>
     /// <param name="hashFunctionCount">The number of hash functions (k).</param>
-    /// <returns>The estimated false positive probability.</returns>
+    /// <returns>The estimated false positive probability as a <see cref="Percentage"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double EstimateFalsePositiveProbability(double fillRatio, int hashFunctionCount) {
-        return Math.Pow(fillRatio, hashFunctionCount);
+    public static Percentage EstimateFalsePositiveProbability(Percentage fillRatio, int hashFunctionCount) {
+        double prob = Math.Pow(fillRatio.Value, hashFunctionCount);
+        return Percentage.FromDouble(prob);
     }
 
     /// <summary>

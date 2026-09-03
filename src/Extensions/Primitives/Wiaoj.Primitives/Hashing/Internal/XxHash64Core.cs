@@ -3,11 +3,9 @@ using static Wiaoj.Primitives.Hashing.Internal.XxHashShared;
 
 namespace Wiaoj.Primitives.Hashing.Internal;
 
-internal static class XxHash64Core
-{
+internal static class XxHash64Core {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Avalanche(ulong hash)
-    {
+    public static ulong Avalanche(ulong hash) {
         hash ^= hash >> 33;
         hash *= Prime64_2;
         hash ^= hash >> 29;
@@ -16,4 +14,3 @@ internal static class XxHash64Core
         return hash;
     }
 }
-

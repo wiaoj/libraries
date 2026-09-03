@@ -1,4 +1,5 @@
 using Wiaoj.Preconditions;
+using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter;
 
@@ -8,14 +9,15 @@ namespace Wiaoj.BloomFilter;
 internal sealed class BloomFilterConfigurationFactory : IBloomFilterConfigurationFactory {
     private const long DefaultHashSeed = 0x7769616F6A5F6266;
 
-    public BloomFilterConfiguration Create(FilterName name, long expectedItems, double errorRate, long? hashSeed = null) {
+    public BloomFilterConfiguration Create(FilterName name, long expectedItems, double errorRate, long hashSeed) {
+        Preca.ThrowIfDefault(name);
         Preca.ThrowIfNegativeOrZero(expectedItems);
         Preca.ThrowIfNotBetweenExclusive(errorRate,
                                          BloomFilterConfiguration.MinimumErrorRate,
                                          BloomFilterConfiguration.MaximumErrorRate);
 
 
-        long sizeInBits = BloomMath.CalculateOptimalBits(expectedItems, errorRate);
+        long sizeInBits = BloomMath.CalculateOptimalBits(expectedItems, Percentage.FromDouble(errorRate));
         int hashFunctionCount = BloomMath.CalculateOptimalHashCount(sizeInBits, expectedItems);
 
         return new BloomFilterConfiguration(
@@ -24,6 +26,10 @@ internal sealed class BloomFilterConfigurationFactory : IBloomFilterConfiguratio
             errorRate,
             sizeInBits,
             hashFunctionCount,
-            hashSeed ?? DefaultHashSeed);
+            hashSeed);
+    }
+
+    public BloomFilterConfiguration Create(FilterName name, long expectedItems, double errorRate) {
+        return Create(name, expectedItems, errorRate, DefaultHashSeed);
     }
 }

@@ -1,30 +1,37 @@
-using System.IO.Hashing;
 using System.Runtime.CompilerServices;
+using Wiaoj.Primitives.Hashing;
 
-namespace Wiaoj.BloomFilter; 
+namespace Wiaoj.BloomFilter;
+
 /// <summary>
-/// Encapsulates high-performance hashing mathematics for Bloom Filters, 
-/// including the Kirsch-Mitzenmacher technique and Fast Modulo reduction.
+/// Mathematical hashing engine for Bloom Filters.
+/// Implements the Kirsch-Mitzenmacher double hashing technique and Fast Modulo reduction.
 /// </summary>
 internal static class BloomHasher {
-
     /// <summary>
-    /// Computes the two foundational 64-bit hashes required for the Kirsch-Mitzenmacher technique.
+    /// Computes two independent 64-bit base hashes from a single seeded 128-bit hash execution.
     /// </summary>
+    /// <param name="item">The byte span of the item to hash.</param>
+    /// <param name="seed">The 64-bit hash seed.</param>
+    /// <param name="h1">The lower 64-bit hash.</param>
+    /// <param name="h2">The upper 64-bit hash.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ComputeBaseHashes(ReadOnlySpan<byte> item, long seed, out ulong h1, out ulong h2) {
-        ulong hash64 = XxHash3.HashToUInt64(item, seed);
-        h1 = hash64;
-        h2 = (hash64 >> 32) | (hash64 << 32);
+        (h1, h2) = XxHash128.Compute(item, seed);
     }
 
     /// <summary>
-    /// Computes the specific bit index for the i-th hash function using Fast Modulo reduction.
-    /// </summary>[MethodImpl(MethodImplOptions.AggressiveInlining)]
+    /// Computes the bit index position for the i-th hash function using Fast Modulo reduction.
+    /// Formula: (h1 + i * h2) mod sizeInBits
+    /// </summary>
+    /// <param name="h1">The lower 64-bit base hash.</param>
+    /// <param name="h2">The upper 64-bit base hash.</param>
+    /// <param name="index">The 0-based hash iteration index (i).</param>
+    /// <param name="sizeInBits">The total size of the bit array in bits (m).</param>
+    /// <returns>The calculated bit index position in the range [0, sizeInBits - 1].</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long GetBitPosition(ulong h1, ulong h2, int index, long sizeInBits) {
         ulong combinedHash = h1 + ((ulong)index * h2);
-
-        // Fast Modulo: (hash * size) >> 64 is much faster than (hash % size)
         return (long)(((UInt128)combinedHash * (ulong)sizeInBits) >> 64);
     }
 }

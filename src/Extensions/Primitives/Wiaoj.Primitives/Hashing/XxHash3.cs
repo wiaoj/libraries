@@ -288,12 +288,35 @@ public readonly struct XxHash3
     }
 
     /// <summary>
+    /// Computes the XXHash3-64 hash for the contents of a secure <see cref="Secret{Byte}"/> using the specified seed.
+    /// </summary>
+    /// <param name="secret">The secret byte data to hash.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash3 Compute(Secret<byte> secret, long seed) {
+        Preca.ThrowIfNull(secret);
+        return secret.Expose(span => Compute(span, seed));
+    }
+
+    /// <summary>
     /// Computes the XXHash3-64 hash of a byte span using SIMD hardware acceleration without heap allocations.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [SkipLocalsInit]
     public static XxHash3 Compute(ReadOnlySpan<byte> data) {
         return new(XxHash3Core.HashToUInt64(data));
+    }
+
+    /// <summary>
+    /// Computes the XXHash3-64 hash of a byte span using SIMD hardware acceleration without heap allocations,
+    /// using the specified seed.
+    /// </summary>
+    /// <param name="data">The byte span to hash.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [SkipLocalsInit]
+    public static XxHash3 Compute(ReadOnlySpan<byte> data, long seed) {
+        return new(XxHash3Core.HashToUInt64(data, seed));
     }
 
     /// <summary>
@@ -304,6 +327,17 @@ public readonly struct XxHash3
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static XxHash3 Compute(ReadOnlySpan<char> chars) {
         return Compute(chars, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the XXHash3-64 hash of a character span using UTF-8 encoding and the specified seed.
+    /// </summary>
+    /// <param name="chars">The character span to hash.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    /// <returns>A new <see cref="XxHash3"/> instance containing the 64-bit digest.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash3 Compute(ReadOnlySpan<char> chars, long seed) {
+        return Compute(chars, Encoding.UTF8, seed);
     }
 
     /// <summary>
@@ -323,6 +357,23 @@ public readonly struct XxHash3
     }
 
     /// <summary>
+    /// Computes the XXHash3-64 hash of a character span using the specified encoding and seed.
+    /// </summary>
+    /// <param name="chars">The character span to hash.</param>
+    /// <param name="encoding">The encoding used to convert the characters to bytes before hashing.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    /// <returns>A new <see cref="XxHash3"/> instance containing the 64-bit digest.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [SkipLocalsInit]
+    public static XxHash3 Compute(ReadOnlySpan<char> chars, Encoding encoding, long seed) {
+        Preca.ThrowIfNull(encoding);
+        int maxByteCount = encoding.GetMaxByteCount(chars.Length);
+        using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+        int bytesWritten = encoding.GetBytes(chars, buffer.Span);
+        return Compute(buffer.Span[..bytesWritten], seed);
+    }
+
+    /// <summary>
     /// Computes the XXHash3-64 hash for the contents of a secure <see cref="Secret{Char}"/> using the specified encoding.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -338,11 +389,39 @@ public readonly struct XxHash3
     }
 
     /// <summary>
+    /// Computes the XXHash3-64 hash for the contents of a secure <see cref="Secret{Char}"/> using the specified encoding and seed.
+    /// </summary>
+    /// <param name="secret">The secret character data to hash.</param>
+    /// <param name="encoding">The encoding used to convert the characters to bytes before hashing.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash3 Compute(Secret<char> secret, Encoding encoding, long seed) {
+        Preca.ThrowIfNull(secret);
+        Preca.ThrowIfNull(encoding);
+        return secret.Expose(chars => {
+            int maxByteCount = encoding.GetMaxByteCount(chars.Length);
+            using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+            int bytesWritten = encoding.GetBytes(chars, buffer.Span);
+            return Compute(buffer.Span[..bytesWritten], seed);
+        });
+    }
+
+    /// <summary>
     /// Computes the XXHash3-64 hash for the contents of a secure <see cref="Secret{Char}"/> using UTF-8 encoding.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static XxHash3 Compute(Secret<char> secret) {
         return Compute(secret, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the XXHash3-64 hash for the contents of a secure <see cref="Secret{Char}"/> using UTF-8 encoding and the specified seed.
+    /// </summary>
+    /// <param name="secret">The secret character data to hash.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash3 Compute(Secret<char> secret, long seed) {
+        return Compute(secret, Encoding.UTF8, seed);
     }
 
     /// <summary>
@@ -360,11 +439,38 @@ public readonly struct XxHash3
     }
 
     /// <summary>
+    /// Computes the XXHash3-64 hash of a string using the specified encoding and seed.
+    /// </summary>
+    /// <param name="text">The string to hash.</param>
+    /// <param name="encoding">The encoding used to convert the string to bytes before hashing.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [SkipLocalsInit]
+    public static XxHash3 Compute(string text, Encoding encoding, long seed) {
+        Preca.ThrowIfNull(text);
+        Preca.ThrowIfNull(encoding);
+        int maxByteCount = encoding.GetMaxByteCount(text.Length);
+        using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+        int bytesWritten = encoding.GetBytes(text, buffer.Span);
+        return Compute(buffer.Span[..bytesWritten], seed);
+    }
+
+    /// <summary>
     /// Computes the XXHash3-64 hash of a string using UTF-8 encoding.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static XxHash3 Compute(string text) {
         return Compute(text, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the XXHash3-64 hash of a string using UTF-8 encoding and the specified seed.
+    /// </summary>
+    /// <param name="text">The string to hash.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash3 Compute(string text, long seed) {
+        return Compute(text, Encoding.UTF8, seed);
     }
 
     /// <summary>
@@ -396,12 +502,43 @@ public readonly struct XxHash3
     }
 
     /// <summary>
+    /// Computes the XXHash3-64 hash by streaming data written to an <see cref="IBufferWriter{Byte}"/>,
+    /// using the specified seed.
+    /// </summary>
+    /// <param name="state">A user-defined state object passed through to <paramref name="writeAction"/>.</param>
+    /// <param name="writeAction">The delegate that writes the data to be hashed.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    public static XxHash3 Compute<TState>(TState state, Action<IBufferWriter<byte>, TState> writeAction, long seed) {
+        Preca.ThrowIfNull(writeAction);
+
+        StreamingXxHash3Writer writer = StreamingXxHash3Writer.Rent(seed);
+        try {
+            writeAction(writer, state);
+            return new(writer.GetCurrentHashAsUInt64());
+        }
+        finally {
+            StreamingXxHash3Writer.Return(writer);
+        }
+    }
+
+    /// <summary>
     /// Convenience overload for parameterless or static write actions.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static XxHash3 Compute(Action<IBufferWriter<byte>> writeAction) {
         Preca.ThrowIfNull(writeAction);
         return Compute(writeAction, static (writer, act) => act(writer));
+    }
+
+    /// <summary>
+    /// Convenience overload for parameterless or static write actions, using the specified seed.
+    /// </summary>
+    /// <param name="writeAction">The delegate that writes the data to be hashed.</param>
+    /// <param name="seed">The seed to initialize the hash computation with.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static XxHash3 Compute(Action<IBufferWriter<byte>> writeAction, long seed) {
+        Preca.ThrowIfNull(writeAction);
+        return Compute(writeAction, static (writer, act) => act(writer), seed);
     }
 
     #endregion
@@ -583,6 +720,19 @@ public readonly struct XxHash3
         if(!ok) { bytesWritten = 0; return false; }
         bytesWritten = Encoding.UTF8.GetBytes(charBuf, utf8Destination);
         return true;
+    }
+
+    #endregion
+
+    #region Deconstruction
+
+    /// <summary>
+    /// Deconstructs the <see cref="XxHash3"/> struct into its 64-bit unsigned integer hash value.
+    /// </summary>
+    /// <param name="value">The 64-bit unsigned integer representation of the hash.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void Deconstruct(out ulong value) {
+        value = this._value;
     }
 
     #endregion
@@ -773,6 +923,11 @@ public readonly struct XxHash3
             this._buffer = ArrayPool<byte>.Shared.Rent(capacity);
         }
 
+        private StreamingXxHash3Writer(int capacity, long seed) {
+            this._hasher = new XxHash3Core(seed);
+            this._buffer = ArrayPool<byte>.Shared.Rent(capacity);
+        }
+
         /// <summary>
         /// Rents a writer for the current thread. Returns the cached instance (reset) when available,
         /// or allocates a new one on first use or during reentrant calls.
@@ -789,6 +944,23 @@ public readonly struct XxHash3
                 return writer;
             }
             return new(DefaultCapacity);
+        }
+
+        /// <summary>
+        /// Rents a writer for the current thread, initialized with the specified seed. Returns the cached
+        /// instance (reseeded) when available, or allocates a new one on first use or during reentrant calls.
+        /// </summary>
+        /// <param name="seed">The seed to initialize the hash computation with.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static StreamingXxHash3Writer Rent(long seed) {
+            StreamingXxHash3Writer? writer = _cached;
+            if(writer is not null) {
+                _cached = null;
+                writer._hasher.Reinitialize(seed);
+                writer._bufferedBytes = 0;
+                return writer;
+            }
+            return new(DefaultCapacity, seed);
         }
 
         /// <summary>
@@ -877,6 +1049,17 @@ public static partial class XxHash3Extensions {
         }
 
         /// <summary>
+        /// Asynchronously computes the <see cref="XxHash3"/> hash of a stream using SIMD hardware streaming
+        /// and the specified seed.
+        /// </summary>
+        /// <param name="stream">The source stream to hash.</param>
+        /// <param name="seed">The seed to initialize the hash computation with.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<XxHash3> ComputeAsync(Stream stream, long seed) {
+            return ComputeAsync(stream, CancellationToken.None, seed);
+        }
+
+        /// <summary>
         /// Asynchronously computes the <see cref="XxHash3"/> hash of a stream using SIMD hardware streaming.
         /// </summary>
         public static async ValueTask<XxHash3> ComputeAsync(Stream stream, CancellationToken cancellationToken) {
@@ -884,6 +1067,35 @@ public static partial class XxHash3Extensions {
             if(stream.CanSeek) stream.Position = 0;
 
             XxHash3Core hasher = new();
+            byte[] rented = ArrayPool<byte>.Shared.Rent(81_920); // 80 KB chunks
+
+            try {
+                int bytesRead;
+                while((bytesRead = await stream.ReadAsync(rented, cancellationToken)
+                    .ConfigureAwait(false)) > 0) {
+                    hasher.Append(rented.AsSpan(0, bytesRead));
+                }
+
+                return new(hasher.GetCurrentHashAsUInt64());
+            }
+            finally {
+                ArrayPool<byte>.Shared.Return(rented);
+                if(stream.CanSeek) stream.Position = 0;
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously computes the <see cref="XxHash3"/> hash of a stream using SIMD hardware streaming
+        /// and the specified seed.
+        /// </summary>
+        /// <param name="stream">The source stream to hash.</param>
+        /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
+        /// <param name="seed">The seed to initialize the hash computation with.</param>
+        public static async ValueTask<XxHash3> ComputeAsync(Stream stream, CancellationToken cancellationToken, long seed) {
+            Preca.ThrowIfNull(stream);
+            if(stream.CanSeek) stream.Position = 0;
+
+            XxHash3Core hasher = new(seed);
             byte[] rented = ArrayPool<byte>.Shared.Rent(81_920); // 80 KB chunks
 
             try {
