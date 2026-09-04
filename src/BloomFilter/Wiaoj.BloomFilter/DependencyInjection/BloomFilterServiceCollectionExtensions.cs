@@ -8,6 +8,7 @@ using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
+using Wiaoj.BloomFilter.Storage;
 
 namespace Microsoft.Extensions.DependencyInjection;
 

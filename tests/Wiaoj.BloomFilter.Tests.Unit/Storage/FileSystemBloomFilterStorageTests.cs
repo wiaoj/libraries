@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter.Engine;
+using Wiaoj.BloomFilter.Storage;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Storage;
 
