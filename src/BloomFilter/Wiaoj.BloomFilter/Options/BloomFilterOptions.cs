@@ -1,3 +1,5 @@
+using Wiaoj.Preconditions;
+
 namespace Wiaoj.BloomFilter;
 
 /// <summary>
@@ -24,6 +26,23 @@ public class BloomFilterOptions {
     /// Dictionary of configured filter definitions keyed by filter name.
     /// </summary>
     public Dictionary<string, FilterDefinition> Filters { get; set; } = [];
+
+    /// <summary>
+    /// Validates the global Bloom Filter options and all configured filter definitions.
+    /// </summary>
+    public void Validate() {
+        if(this.Lifecycle.AutoSaveInterval <= TimeSpan.Zero) {
+            throw new ArgumentOutOfRangeException(nameof(this.Lifecycle.AutoSaveInterval), "AutoSaveInterval must be greater than zero.");
+        }
+
+        if(this.Lifecycle.ShardingThresholdBytes <= 0) {
+            throw new ArgumentOutOfRangeException(nameof(this.Lifecycle.ShardingThresholdBytes), "ShardingThresholdBytes must be greater than zero.");
+        }
+
+        foreach(var (name, filter) in this.Filters) {
+            filter.Validate(name);
+        }
+    }
 }
 
 /// <summary>
@@ -67,6 +86,8 @@ public class LifecycleOptions {
 public enum BloomFilterType {
     /// <summary> Standard fixed-capacity filter (single or auto-sharded). </summary>
     InMemory,
+    /// <summary> Explicitly partitioned filter across power-of-two shards to eliminate LOH allocations and scale concurrency. </summary>
+    Sharded,
     /// <summary> Dynamically layered filter that scales as saturation increases. </summary>
     Scalable,
     /// <summary> Time-windowed sliding filter with rotating shards. </summary>
@@ -95,6 +116,48 @@ public class FilterDefinition {
     /// <summary> Total time window duration for Rotating filters. </summary>
     public TimeSpan WindowSize { get; set; }
 
-    /// <summary> Total number of active sliding shards for Rotating filters. </summary>
+    /// <summary> Total number of active sliding shards for Rotating filters, or explicit partition shards for Sharded filters. </summary>
     public int ShardCount { get; set; }
+
+    /// <summary>
+    /// Validates the filter definition options and throws an exception if any parameters are invalid.
+    /// </summary>
+    /// <param name="filterName">The name of the filter being validated.</param>
+    public void Validate(string filterName) {
+        Preca.ThrowIfNullOrWhiteSpace(filterName);
+
+        if(this.ExpectedItems <= 0) {
+            throw new ArgumentOutOfRangeException(nameof(this.ExpectedItems), $"Filter '{filterName}' ExpectedItems must be greater than zero.");
+        }
+
+        if(this.ErrorRate <= 0.0 || this.ErrorRate >= 1.0) {
+            throw new ArgumentOutOfRangeException(nameof(this.ErrorRate), $"Filter '{filterName}' ErrorRate must be strictly between 0 and 1.");
+        }
+
+        switch(this.Type) {
+            case BloomFilterType.Sharded:
+                if(this.ShardCount != 0 && (this.ShardCount < 2 || (this.ShardCount & (this.ShardCount - 1)) != 0)) {
+                    throw new ArgumentException($"Filter '{filterName}' ShardCount must be at least 2 and a power of 2 (or 0 for automatic calculation), but received {this.ShardCount}.", nameof(this.ShardCount));
+                }
+                break;
+
+            case BloomFilterType.Scalable:
+                if(this.GrowthRate <= 1.0) {
+                    throw new ArgumentOutOfRangeException(nameof(this.GrowthRate), $"Filter '{filterName}' GrowthRate must be greater than 1.0, but received {this.GrowthRate}.");
+                }
+                if(this.SaturationThreshold <= 0.0 || this.SaturationThreshold >= 1.0) {
+                    throw new ArgumentOutOfRangeException(nameof(this.SaturationThreshold), $"Filter '{filterName}' SaturationThreshold must be strictly between 0 and 1, but received {this.SaturationThreshold}.");
+                }
+                break;
+
+            case BloomFilterType.Rotating:
+                if(this.WindowSize <= TimeSpan.Zero) {
+                    throw new ArgumentOutOfRangeException(nameof(this.WindowSize), $"Filter '{filterName}' WindowSize must be greater than zero for Rotating filters.");
+                }
+                if(this.ShardCount < 1) {
+                    throw new ArgumentOutOfRangeException(nameof(this.ShardCount), $"Filter '{filterName}' ShardCount must be at least 1 for Rotating filters.");
+                }
+                break;
+        }
+    }
 }

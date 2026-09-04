@@ -84,6 +84,88 @@ public static class BloomFilterBuilderExtensions {
 
     #endregion
 
+    #region Sharded Filter Overloads
+
+    /// <summary>
+    /// Registers an explicitly partitioned Sharded Bloom Filter linked to a marker type tag with an optimal shard count.
+    /// </summary>
+    public static IBloomFilterBuilder AddShardedFilter<TTag>(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate) where TTag : notnull {
+        return builder.AddShardedFilter<TTag>(name, expectedItems, errorRate, shardCount: 0);
+    }
+
+    /// <summary>
+    /// Registers an explicitly partitioned Sharded Bloom Filter linked to a marker type tag with the specified power-of-two shard count.
+    /// </summary>
+    public static IBloomFilterBuilder AddShardedFilter<TTag>(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate,
+        int shardCount) where TTag : notnull {
+
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(expectedItems);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
+        if(shardCount != 0) {
+            Preca.ThrowIfLessThan(shardCount, 2, () => new ArgumentOutOfRangeException(nameof(shardCount), "Shard count must be at least 2."));
+            Preca.ThrowIfNotPowerOfTwo(shardCount, () => new ArgumentException("Shard count must be a power of 2.", nameof(shardCount)));
+        }
+
+        FilterDefinition definition = new() {
+            ExpectedItems = expectedItems,
+            ErrorRate = errorRate,
+            Type = BloomFilterType.Sharded,
+            ShardCount = shardCount
+        };
+
+        return builder.RegisterFilterDefinition<TTag>(name, definition);
+    }
+
+    /// <summary>
+    /// Registers an explicitly partitioned Sharded Bloom Filter with an optimal shard count.
+    /// </summary>
+    public static IBloomFilterBuilder AddShardedFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate) {
+        return builder.AddShardedFilter(name, expectedItems, errorRate, shardCount: 0);
+    }
+
+    /// <summary>
+    /// Registers an explicitly partitioned Sharded Bloom Filter with the specified power-of-two shard count.
+    /// </summary>
+    public static IBloomFilterBuilder AddShardedFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate,
+        int shardCount) {
+
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(expectedItems);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
+        if(shardCount != 0) {
+            Preca.ThrowIfLessThan(shardCount, 2, () => new ArgumentOutOfRangeException(nameof(shardCount), "Shard count must be at least 2."));
+            Preca.ThrowIfNotPowerOfTwo(shardCount, () => new ArgumentException("Shard count must be a power of 2.", nameof(shardCount)));
+        }
+
+        FilterDefinition definition = new() {
+            ExpectedItems = expectedItems,
+            ErrorRate = errorRate,
+            Type = BloomFilterType.Sharded,
+            ShardCount = shardCount
+        };
+
+        return builder.RegisterFilterDefinition(name, definition);
+    }
+
+    #endregion
+
     #region Rotating Filter Overloads
 
     /// <summary>

@@ -91,7 +91,10 @@ builder.Services.AddBloomFilter(builder => {
     // 1. Fixed capacity in-memory filter
     builder.AddFilter<UserBlacklistTag>("user-blacklist", expectedItems: 500_000, errorRate: 0.01);
 
-    // 2. Scalable dynamically-layered filter
+    // 2. Explicitly partitioned sharded filter (eliminates LOH allocations for massive sets)
+    builder.AddShardedFilter<LargeCatalogTag>("catalog", expectedItems: 10_000_000, errorRate: 0.01, shardCount: 8);
+
+    // 3. Scalable dynamically-layered filter
     builder.AddScalableFilter<PaymentDeduplicationTag>(
         "payment-dedup",
         initialCapacity: 100_000,
@@ -99,7 +102,7 @@ builder.Services.AddBloomFilter(builder => {
         growthRate: 2.0,
         saturationThreshold: 0.50);
 
-    // 3. Sliding-window rotating filter
+    // 4. Sliding-window rotating filter
     builder.AddRotatingFilter<IpRateLimitTag>(
         "ip-rate-limit",
         capacity: 1_000_000,

@@ -30,7 +30,11 @@ public static class BloomFilterServiceCollectionExtensions {
         this IServiceCollection services,
         Action<IBloomFilterBuilder> setupAction) {
 
-        services.AddOptions<BloomFilterOptions>();
+        services.AddOptions<BloomFilterOptions>()
+            .Validate(opts => {
+                opts.Validate();
+                return true;
+            });
         services.AddOptions<FileSystemStorageOptions>();
 
         // Safely bind IConfiguration if registered in DI container (Optional Binding)

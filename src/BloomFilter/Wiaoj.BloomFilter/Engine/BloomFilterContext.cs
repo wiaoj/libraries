@@ -31,4 +31,16 @@ internal sealed record class BloomFilterContext(
             ? new ShardedBloomFilter(config.WithShardCount(shards), this)
             : new InMemoryBloomFilter(config, this);
     }
+
+    /// <summary>
+    /// Creates an explicitly partitioned ShardedBloomFilter using the specified shard count,
+    /// or calculates the optimal shard count based on ShardingThresholdBytes if shardCount is not specified.
+    /// </summary>
+    public IPersistentBloomFilter CreateShardedFilter(BloomFilterConfiguration config, int shardCount = 0) {
+        int shards = shardCount >= 2
+            ? shardCount
+            : Math.Max(2, BloomMath.CalculateOptimalShardCount(config.SizeInBits, this.Options.Lifecycle.ShardingThresholdBytes));
+
+        return new ShardedBloomFilter(config.WithShardCount(shards), this);
+    }
 }

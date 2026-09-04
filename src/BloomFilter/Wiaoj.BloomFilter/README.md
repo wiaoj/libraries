@@ -59,16 +59,28 @@ dotnet add package Wiaoj.BloomFilter
 
 ```csharp
 builder.Services.AddBloomFilter(builder => {
+    // Persistent storage configuration
     builder.UseFileSystemStorage(storage => {
         storage.Path = "BloomData";
         storage.EnableCompression = true;
     });
 
+    // Lifecycle services
     builder.AddAutoSave();
     builder.AddWarmUp();
     builder.AddAutoReseed();
 
+    // 1. InMemory filter
     builder.AddFilter<UserSessionTag>("sessions", 1_000_000, 0.01);
+
+    // 2. Sharded filter (LOH-safe, power-of-two partitions)
+    builder.AddShardedFilter<CatalogTag>("catalog", expectedItems: 5_000_000, errorRate: 0.01, shardCount: 8);
+
+    // 3. Scalable filter (dynamic layered growth)
+    builder.AddScalableFilter<TransactionTag>("transactions", initialCapacity: 100_000, errorRate: 0.001);
+
+    // 4. Rotating filter (time-windowed sliding expiration)
+    builder.AddRotatingFilter<RateLimitTag>("rate-limits", capacity: 500_000, errorRate: 0.01, windowSize: TimeSpan.FromHours(1), shardCount: 6);
 });
 ```
 

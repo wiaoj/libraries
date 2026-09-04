@@ -37,6 +37,8 @@ internal sealed class BloomFilterFactory(
             throw ex;
         }
 
+        definition.Validate(name.Value);
+
         BloomFilterContext context = new(
             storage,
             memoryStreamPool,
@@ -51,6 +53,7 @@ internal sealed class BloomFilterFactory(
             : configFactory.Create(name, definition.ExpectedItems, definition.ErrorRate);
 
         IPersistentBloomFilter filter = definition.Type switch {
+            BloomFilterType.Sharded => context.CreateShardedFilter(config, definition.ShardCount),
             BloomFilterType.Scalable => new ScalableBloomFilter(config,
                                                                 context,
                                                                 (GrowthRate)definition.GrowthRate,
