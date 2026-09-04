@@ -27,7 +27,6 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Wiaoj.DistributedCounter.Abstractions\Wiaoj.DistributedCounter.Abstractions.csproj" />
 		<ProjectReference Include="..\..\Extensions\Concurrency\Wiaoj.Concurrency\Wiaoj.Concurrency.csproj" />
-		<ProjectReference Include="..\..\ObjectPool\Wiaoj.ObjectPool\Wiaoj.ObjectPool.csproj" />
 		<ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
 	</ItemGroup>
 

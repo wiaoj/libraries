@@ -18,15 +18,11 @@ public sealed class DistributedCounterServiceTests {
             CancellationToken ct = TestContext.Current.CancellationToken;
 
             // Act
-            using(CounterValueCollection result = await service.GetValuesAsync([], ct)) {
-                // Assert within active scope
-                Assert.Equal(0, result.Count);
-                Assert.Equal(0, context.Storage.GetCallCount);
-                Assert.Equal(1, context.Pool.ActiveLeases);
-            }
+            CounterValueCollection result = await service.GetValuesAsync([], ct);
 
-            // Assert: Returned cleanly to the pool
-            Assert.Equal(0, context.Pool.ActiveLeases);
+            // Assert within active scope
+            Assert.Equal(0, result.Count);
+            Assert.Equal(0, context.Storage.GetCallCount);
         }
 
         [Fact]
@@ -43,40 +39,14 @@ public sealed class DistributedCounterServiceTests {
             CancellationToken ct = TestContext.Current.CancellationToken;
 
             // Act
-            using(CounterValueCollection result = await service.GetValuesAsync(["orders", "users", "errors", "missing"], ct)) {
-                // Assert
-                Assert.Equal(4, result.Count);
-                Assert.Equal(100, result["orders"].Value);
-                Assert.Equal(50, result["users"].Value);
-                Assert.Equal(2, result["errors"].Value);
-                Assert.Equal(0, result["missing"].Value);
-                Assert.Equal(1, context.Pool.ActiveLeases);
-            }
+            CounterValueCollection result = await service.GetValuesAsync(["orders", "users", "errors", "missing"], ct);
 
-            // Assert: Pool object is recycled
-            Assert.Equal(0, context.Pool.ActiveLeases);
-            Assert.Equal(1, context.Pool.TotalReturned);
-        }
-    }
-
-    public sealed class TheObjectPoolLeakAndFaultSafety {
-
-        [Fact]
-        public async Task WhenStorageThrowsException_RentedDictionaryIsSafelyReturnedToPoolWithoutLeak() {
-            // Arrange
-            DistributedCounterTestContext context = new();
-            context.Storage.SimulateGetManyFailure(new InvalidOperationException("Storage communication failure!"));
-
-            IDistributedCounterService service = context.CreateService();
-            CancellationToken ct = TestContext.Current.CancellationToken;
-
-            // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetValuesAsync(["c1", "c2"], ct).AsTask());
-
-            // Assert: Zero active leases left behind! (Guaranteed no memory leak on failure)
-            Assert.Equal(1, context.Pool.TotalLeased);
-            Assert.Equal(1, context.Pool.TotalReturned);
-            Assert.Equal(0, context.Pool.ActiveLeases);
+            // Assert
+            Assert.Equal(4, result.Count);
+            Assert.Equal(100, result["orders"].Value);
+            Assert.Equal(50, result["users"].Value);
+            Assert.Equal(2, result["errors"].Value);
+            Assert.Equal(0, result["missing"].Value);
         }
     }
 
@@ -102,7 +72,7 @@ public sealed class DistributedCounterServiceTests {
                 .Select(_ => Task.Run(async () => {
                     for (int q = 0; q < queriesPerTask; q++) {
                         string[] keys = ["metric_1", "metric_5", "metric_10", "metric_15"];
-                        using CounterValueCollection values = await service.GetValuesAsync(keys, ct);
+                        CounterValueCollection values = await service.GetValuesAsync(keys, ct);
 
                         // Strict integrity assertion during high concurrency
                         Assert.Equal(10, values["metric_1"].Value);
@@ -113,11 +83,6 @@ public sealed class DistributedCounterServiceTests {
                 }, ct))];
 
             await Task.WhenAll(tasks);
-
-            // Assert: All 1,000 leased dictionaries are safely returned without a single leak!
-            Assert.Equal(concurrency * queriesPerTask, context.Pool.TotalLeased);
-            Assert.Equal(concurrency * queriesPerTask, context.Pool.TotalReturned);
-            Assert.Equal(0, context.Pool.ActiveLeases);
         }
 
         [Fact]

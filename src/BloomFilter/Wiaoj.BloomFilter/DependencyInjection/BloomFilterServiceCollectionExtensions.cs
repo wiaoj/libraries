@@ -3,13 +3,13 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.IO;
 using Wiaoj.BloomFilter;
 using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
 using Wiaoj.BloomFilter.Storage;
-using Wiaoj.ObjectPool;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -73,15 +73,12 @@ public static class BloomFilterServiceCollectionExtensions {
             sp.GetRequiredService<ILoggerFactory>(),
             sp.GetServices<IAutoBloomFilterSeeder>(),
             sp.GetRequiredService<TimeProvider>(),
-            sp.GetRequiredService<IObjectPool<MemoryStream>>(),
+            sp.GetRequiredService<RecyclableMemoryStreamManager>(),
             sp.GetService<IBloomFilterStorage>()));
         services.TryAddSingleton<IBloomFilterService, BloomFilterService>();
         services.TryAddSingleton<IBloomFilterSeeder, BloomFilterSeeder>();
 
-        services.AddObjectPool<MemoryStream>(
-            factory: () => new MemoryStream(),
-            resetter: ms => { ms.SetLength(0); return true; }
-        );
+        services.TryAddSingleton<RecyclableMemoryStreamManager>();
 
         return services;
     }

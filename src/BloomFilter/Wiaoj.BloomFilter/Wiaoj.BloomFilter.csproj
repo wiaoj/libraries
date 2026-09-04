@@ -40,11 +40,13 @@
 		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.2" /> 
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" /> 
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" /> 
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.2" /> 
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.2" />
+		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\ObjectPool\Wiaoj.ObjectPool\Wiaoj.ObjectPool.csproj" />
+	  <ProjectReference Include="..\..\Extensions\Concurrency\Wiaoj.Concurrency\Wiaoj.Concurrency.csproj" />
+	  <ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
 	  <ProjectReference Include="..\Wiaoj.BloomFilter.Abstractions\Wiaoj.BloomFilter.Abstractions.csproj" />
 	</ItemGroup>
 

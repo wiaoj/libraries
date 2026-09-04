@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Options;
 using System.Buffers;
-using Wiaoj.ObjectPool;
 
 namespace Wiaoj.DistributedCounter.Internal;
 
@@ -9,16 +8,14 @@ internal sealed class DistributedCounterService : IDistributedCounterService {
     private readonly ICounterKeyBuilder _keyBuilder;
     private readonly IDistributedCounterFactory _factory;
     private readonly DistributedCounterOptions _options;
-    private readonly IObjectPool<Dictionary<string, CounterValue>> _pool;
     private readonly IServiceProvider? _serviceProvider;
 
     public DistributedCounterService(
         ICounterStorage defaultStorage,
         ICounterKeyBuilder keyBuilder,
         IDistributedCounterFactory factory,
-        IOptions<DistributedCounterOptions> options,
-        IObjectPool<Dictionary<string, CounterValue>> pool)
-        : this(defaultStorage, keyBuilder, factory, options, pool, null) {
+        IOptions<DistributedCounterOptions> options)
+        : this(defaultStorage, keyBuilder, factory, options, null) {
     }
 
     public DistributedCounterService(
@@ -26,13 +23,11 @@ internal sealed class DistributedCounterService : IDistributedCounterService {
         ICounterKeyBuilder keyBuilder,
         IDistributedCounterFactory factory,
         IOptions<DistributedCounterOptions> options,
-        IObjectPool<Dictionary<string, CounterValue>> pool,
         IServiceProvider? serviceProvider) {
         this._defaultStorage = defaultStorage;
         this._keyBuilder = keyBuilder;
         this._factory = factory;
         this._options = options.Value;
-        this._pool = pool;
         this._serviceProvider = serviceProvider;
     }
 
@@ -41,15 +36,15 @@ internal sealed class DistributedCounterService : IDistributedCounterService {
         IEnumerable<string> counterNames,
         CancellationToken cancellationToken) {
 
-        PooledObject<Dictionary<string, CounterValue>> pooledDict = this._pool.Lease();
-        Dictionary<string, CounterValue> resultDict = pooledDict.Item;
-
         int totalCount = counterNames is ICollection<string> col ? col.Count : counterNames.Count();
-        if(totalCount == 0) return new CounterValueCollection(resultDict, pooledDict);
+
+        Dictionary<string, CounterValue> resultDict = new(totalCount, StringComparer.Ordinal);
+
+        if(totalCount == 0) return new CounterValueCollection(resultDict);
 
         try {
             // Group names by their resolved storage
-            Dictionary<ICounterStorage, List<string>> storageGroups = new();
+            Dictionary<ICounterStorage, List<string>> storageGroups = [];
             foreach(string name in counterNames) {
                 ICounterStorage storage = ResolveStorage(name);
                 if(!storageGroups.TryGetValue(storage, out List<string>? list)) {
@@ -88,10 +83,9 @@ internal sealed class DistributedCounterService : IDistributedCounterService {
                 }
             }
 
-            return new CounterValueCollection(resultDict, pooledDict);
+            return new CounterValueCollection(resultDict);
         }
         catch {
-            pooledDict.Dispose();
             throw;
         }
     }

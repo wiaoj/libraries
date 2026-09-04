@@ -1,26 +1,27 @@
-using System.Diagnostics.Metrics;
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IO;
+using System.Diagnostics.Metrics;
+using System.Text;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeding;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Diagnostics;
 
 public class BloomFilterDiagnosticsTests : IDisposable {
     private readonly MeterListener _meterListener;
-    private readonly List<(Instrument Instrument, object Value, KeyValuePair<string, object?>[] Tags)> _measurements = new();
+    private readonly List<(Instrument Instrument, object Value, KeyValuePair<string, object?>[] Tags)> _measurements = [];
     private readonly BloomFilterConfigurationFactory _configFactory = new();
 
     public BloomFilterDiagnosticsTests() {
-        this._meterListener = new MeterListener();
-        this._meterListener.InstrumentPublished = (instrument, listener) => {
-            if(instrument.Meter.Name == BloomFilterDiagnostics.MeterName) {
-                listener.EnableMeasurementEvents(instrument);
+        this._meterListener = new MeterListener {
+            InstrumentPublished = (instrument, listener) => {
+                if(instrument.Meter.Name == BloomFilterDiagnostics.MeterName) {
+                    listener.EnableMeasurementEvents(instrument);
+                }
             }
         };
         this._meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) => {
@@ -46,7 +47,7 @@ public class BloomFilterDiagnosticsTests : IDisposable {
         BloomFilterOptions options = new();
         BloomFilterContext context = new(
             Storage: effectiveStorage,
-            MemoryStreamPool: new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            RecyclableMemoryStreamManager: new RecyclableMemoryStreamManager(),
             Logger: NullLogger.Instance,
             Options: options,
             TimeProvider: TimeProvider.System,
@@ -199,7 +200,7 @@ public class BloomFilterDiagnosticsTests : IDisposable {
         BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse(filterName), 1_000, 0.01);
         BloomFilterContext context = new(
             Storage: new FakeBloomFilterStorage(),
-            MemoryStreamPool: new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            RecyclableMemoryStreamManager: new RecyclableMemoryStreamManager(),
             Logger: NullLogger.Instance,
             Options: new BloomFilterOptions(),
             TimeProvider: TimeProvider.System,

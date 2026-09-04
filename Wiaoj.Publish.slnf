@@ -24,7 +24,6 @@
       "src\\Extensions\\Security\\Wiaoj.Security.Testing\\Wiaoj.Security.Testing.csproj",
       "src\\Extensions\\Wiaoj.Extensions\\Wiaoj.Extensions.csproj",
       "src\\Extensions\\Concurrency\\Wiaoj.Concurrency\\Wiaoj.Concurrency.csproj",
-      "src\\ObjectPool\\Wiaoj.ObjectPool\\Wiaoj.ObjectPool.csproj",
       "src\\Preconditions\\Wiaoj.Preconditions\\Wiaoj.Preconditions.csproj",
       "src\\Serialization\\Core\\Wiaoj.Serialization.Abstractions\\Wiaoj.Serialization.Abstractions.csproj",
       "src\\Serialization\\Core\\Wiaoj.Serialization.DependencyInjection\\Wiaoj.Serialization.DependencyInjection.csproj",

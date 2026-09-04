@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Options;
 using Wiaoj.DistributedCounter.Internal;
 using Wiaoj.DistributedCounter.Testing;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.DistributedCounter.Tests.Unit.Internal;
 
@@ -25,7 +24,6 @@ public sealed class DistributedCounterServiceMultiStorageTests {
         options.AddImmediateCounter("memory_metric", cfg => cfg.UseStorage(_ => inMemoryFake));
 
         DefaultCounterKeyBuilder keyBuilder = new();
-        FakeObjectPool<Dictionary<string, CounterValue>> pool = new(() => new(StringComparer.Ordinal), d => d.Clear());
 
         IServiceProvider serviceProvider = services.BuildServiceProvider();
         DistributedCounterFactory factory = new(
@@ -39,7 +37,6 @@ public sealed class DistributedCounterServiceMultiStorageTests {
             keyBuilder,
             factory,
             Options.Create(options),
-            pool,
             serviceProvider);
 
         CancellationToken ct = TestContext.Current.CancellationToken;
@@ -50,7 +47,7 @@ public sealed class DistributedCounterServiceMultiStorageTests {
         defaultStorage.SetupGetValue(keyBuilder.Build("default_metric", options), new CounterValue(111));
 
         // Act
-        using CounterValueCollection results = await service.GetValuesAsync(
+        CounterValueCollection results = await service.GetValuesAsync(
             ["redis_metric", "memory_metric", "default_metric"],
             ct);
 

@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -17,7 +17,7 @@ public class RotatingBloomFilterTests {
         BloomFilterOptions options = new();
         this._context = new BloomFilterContext(
             Storage: new FakeBloomFilterStorage(),
-            MemoryStreamPool: new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            RecyclableMemoryStreamManager: new RecyclableMemoryStreamManager(),
             Logger: NullLogger.Instance,
             Options: options,
             TimeProvider: this._fakeTimeProvider,
@@ -135,8 +135,14 @@ public class RotatingBloomFilterTests {
     }
 
     private sealed class FaultyDeleteStorage : IBloomFilterStorage {
-        public Task<bool> SaveAsync(FilterName filterName, BloomFilterConfiguration config, Stream source, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public ValueTask<(BloomFilterConfiguration? Config, Stream DataStream)?> LoadStreamAsync(FilterName filterName, CancellationToken cancellationToken = default) => ValueTask.FromResult<(BloomFilterConfiguration?, Stream)?>(null);
+        public Task<bool> SaveAsync(FilterName filterName, BloomFilterConfiguration config, Stream source, CancellationToken cancellationToken = default) {
+            return Task.FromResult(true);
+        }
+
+        public ValueTask<(BloomFilterConfiguration? Config, Stream DataStream)?> LoadStreamAsync(FilterName filterName, CancellationToken cancellationToken = default) {
+            return ValueTask.FromResult<(BloomFilterConfiguration?, Stream)?>(null);
+        }
+
         public Task DeleteAsync(FilterName filterName, CancellationToken cancellationToken = default) {
             throw new IOException("Simulated storage delete error");
         }

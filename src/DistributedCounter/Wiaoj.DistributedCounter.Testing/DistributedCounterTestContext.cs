@@ -1,5 +1,4 @@
 ﻿using Wiaoj.DistributedCounter.Internal;
-using Wiaoj.ObjectPool.Testing;
 using Wiaoj.Preconditions;
 
 namespace Wiaoj.DistributedCounter.Testing;
@@ -21,9 +20,6 @@ public sealed class DistributedCounterTestContext {
 
     /// <summary>Gets or sets the configuration options.</summary>
     public DistributedCounterOptions Options { get; set; } = new();
-
-    /// <summary>Gets or sets the pooled dictionary test double.</summary>
-    public FakeObjectPool<Dictionary<string, CounterValue>> Pool { get; set; } = new(() => new(StringComparer.Ordinal), d => d.Clear());
 
     /// <summary>
     /// Gets the scoped singleton <see cref="IDistributedCounterFactory"/> instance for this test context.
@@ -78,7 +74,6 @@ public sealed class DistributedCounterTestContext {
             this.Storage,
             this.KeyBuilder,
             this.Factory,
-            Microsoft.Extensions.Options.Options.Create(this.Options),
-            this.Pool);
+            Microsoft.Extensions.Options.Options.Create(this.Options));
     }
 }

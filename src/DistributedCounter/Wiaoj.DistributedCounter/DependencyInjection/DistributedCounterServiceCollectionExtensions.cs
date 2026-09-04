@@ -3,7 +3,6 @@ using Microsoft.Extensions.Options;
 using Wiaoj.DistributedCounter;
 using Wiaoj.DistributedCounter.DependencyInjection;
 using Wiaoj.DistributedCounter.Internal;
-using Wiaoj.ObjectPool;
 using Wiaoj.Preconditions;
 
 #pragma warning disable IDE0130
@@ -41,22 +40,9 @@ public static class DistributedCounterServiceCollectionExtensions {
             sp.GetRequiredService<ICounterKeyBuilder>(),
             sp.GetRequiredService<IDistributedCounterFactory>(),
             sp.GetRequiredService<IOptions<DistributedCounterOptions>>(),
-            sp.GetRequiredService<IObjectPool<Dictionary<string, CounterValue>>>(),
             sp));
 
         services.TryAddTransient(typeof(IDistributedCounter<>), typeof(TypedDistributedCounterWrapper<>));
-
-        services.AddObjectPool<Dictionary<string, CounterValue>>(
-            factory: static () => new Dictionary<string, CounterValue>(StringComparer.Ordinal),
-            resetter: static dict => {
-                dict.Clear();
-                return true;
-            },
-            configure: static opt => {
-                opt.MaximumRetained = 1024;
-                opt.AccessMode = PoolAccessMode.FIFO;
-            }
-        );
 
         return new DistributedCounterBuilder(services);
     }

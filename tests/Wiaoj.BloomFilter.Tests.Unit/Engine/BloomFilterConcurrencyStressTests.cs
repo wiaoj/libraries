@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
@@ -13,7 +13,7 @@ public class BloomFilterConcurrencyStressTests {
     internal BloomFilterContext CreateContext(TimeProvider? timeProvider = null, FakeBloomFilterStorage? storage = null) {
         return new BloomFilterContext(
             Storage: storage ?? new FakeBloomFilterStorage(),
-            MemoryStreamPool: new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            RecyclableMemoryStreamManager: new RecyclableMemoryStreamManager(),
             Logger: NullLogger.Instance,
             Options: new BloomFilterOptions(),
             TimeProvider: timeProvider ?? TimeProvider.System,

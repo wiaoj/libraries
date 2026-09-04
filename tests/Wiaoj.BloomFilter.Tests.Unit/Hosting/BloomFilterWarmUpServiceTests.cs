@@ -1,11 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.BloomFilter.Tests.Unit.Fakes;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Hosting;
 
@@ -28,7 +28,7 @@ public class BloomFilterWarmUpServiceTests {
                 NullLoggerFactory.Instance,
                 [],
                 TimeProvider.System,
-                new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+                new RecyclableMemoryStreamManager(),
                 new FakeBloomFilterStorage()
             );
 
@@ -74,7 +74,7 @@ public class BloomFilterWarmUpServiceTests {
                 NullLoggerFactory.Instance,
                 [],
                 TimeProvider.System,
-                new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+                new RecyclableMemoryStreamManager(),
                 new FakeBloomFilterStorage()
             );
 

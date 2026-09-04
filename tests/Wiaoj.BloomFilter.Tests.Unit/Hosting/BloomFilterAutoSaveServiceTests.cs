@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Hosting;
 
@@ -18,7 +18,7 @@ public class BloomFilterAutoSaveServiceTests {
         BloomFilterOptions options = new();
         BloomFilterContext context = new(
             this._storage,
-            new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            new RecyclableMemoryStreamManager(),
             NullLogger.Instance,
             options,
             this._fakeTime,

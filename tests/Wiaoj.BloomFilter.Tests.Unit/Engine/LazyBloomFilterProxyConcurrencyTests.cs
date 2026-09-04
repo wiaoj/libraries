@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.BloomFilter.Tests.Unit.Fakes;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -22,7 +22,7 @@ public class LazyBloomFilterProxyConcurrencyTests {
             NullLoggerFactory.Instance,
             [],
             TimeProvider.System,
-            new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            new RecyclableMemoryStreamManager(),
             new FakeBloomFilterStorage()
         );
     }

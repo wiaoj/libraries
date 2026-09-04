@@ -1,9 +1,8 @@
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.BloomFilter.Seeder;
-using Wiaoj.ObjectPool;
 using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
 
@@ -18,7 +17,7 @@ internal sealed class BloomFilterFactory(
     ILoggerFactory loggerFactory,
     IEnumerable<IAutoBloomFilterSeeder> autoSeeders,
     TimeProvider timeProvider,
-    IObjectPool<MemoryStream> memoryStreamPool,
+    RecyclableMemoryStreamManager recyclableMemoryStreamManager,
     IBloomFilterStorage? storage = null) {
 
     private readonly ILogger _logger = loggerFactory.CreateLogger<BloomFilterFactory>();
@@ -41,7 +40,7 @@ internal sealed class BloomFilterFactory(
 
         BloomFilterContext context = new(
             storage,
-            memoryStreamPool,
+            recyclableMemoryStreamManager,
             loggerFactory.CreateLogger(name.Value),
             currentOptions,
             timeProvider,
@@ -81,7 +80,7 @@ internal sealed class BloomFilterFactory(
                 }
             }
 
-            if(currentOptions.Lifecycle.AutoReseed) { 
+            if(currentOptions.Lifecycle.AutoReseed) {
                 _ = Task.Run(async () => await ExecuteManagedReseedAsync(filter, name, cancellationToken).ConfigureAwait(false), cancellationToken);
             }
         }

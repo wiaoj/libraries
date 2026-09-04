@@ -1,8 +1,8 @@
-using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IO;
+using System.Text;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -12,7 +12,7 @@ public class BloomFilterEmptyInputTests {
     internal BloomFilterContext CreateContext() {
         return new BloomFilterContext(
             Storage: new FakeBloomFilterStorage(),
-            MemoryStreamPool: new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            RecyclableMemoryStreamManager: new RecyclableMemoryStreamManager(),
             Logger: NullLogger.Instance,
             Options: new BloomFilterOptions(),
             TimeProvider: TimeProvider.System,

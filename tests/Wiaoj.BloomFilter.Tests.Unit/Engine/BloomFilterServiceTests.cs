@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -17,7 +17,7 @@ public class BloomFilterServiceTests {
 
         BloomFilterContext context = new(
             new FakeBloomFilterStorage(),
-            new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            new RecyclableMemoryStreamManager(),
             NullLogger.Instance,
             options,
             TimeProvider.System,
@@ -107,7 +107,7 @@ public class BloomFilterServiceTests {
 
             BloomFilterContext context = new(
                 new FakeBloomFilterStorage(),
-                new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+                new RecyclableMemoryStreamManager(),
                 NullLogger.Instance,
                 options,
                 TimeProvider.System,
@@ -153,7 +153,7 @@ public class BloomFilterServiceTests {
 
             BloomFilterContext context = new(
                 storage,
-                new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+                new RecyclableMemoryStreamManager(),
                 NullLogger.Instance,
                 options,
                 TimeProvider.System,
@@ -216,7 +216,7 @@ public class BloomFilterServiceTests {
 
             BloomFilterContext context = new(
                 storage,
-                new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+                new RecyclableMemoryStreamManager(),
                 NullLogger.Instance,
                 options,
                 TimeProvider.System,

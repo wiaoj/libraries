@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Hosting;
 
@@ -25,7 +25,7 @@ public class BloomFilterSeedingServiceTests : IDisposable {
         BloomFilterOptions options = new();
         BloomFilterContext context = new(
             this._storage,
-            new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            new RecyclableMemoryStreamManager(),
             NullLogger.Instance,
             options,
             TimeProvider.System,

@@ -1,11 +1,10 @@
-
 using Microsoft.Extensions.Logging;
+using Microsoft.IO;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Concurrency;
-using Wiaoj.ObjectPool;
 
 namespace Wiaoj.BloomFilter.Engine;
 /// <summary>
@@ -19,7 +18,7 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
     private readonly IBloomFilterStorage? _storage;
     private readonly ILogger _logger;
     private readonly BloomFilterOptions _options;
-    private readonly IObjectPool<MemoryStream> _memoryStreamPool;
+    private readonly RecyclableMemoryStreamManager _recyclableMemoryStreamManager;
     private readonly TimeProvider _timeProvider;
     private readonly AsyncLock _ioLock = new();
     private readonly ReaderWriterLockSlim _rwLock = new(LockRecursionPolicy.NoRecursion);
@@ -47,7 +46,7 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
 
         this.Configuration = config;
         this._storage = context.Storage;
-        this._memoryStreamPool = context.MemoryStreamPool;
+        this._recyclableMemoryStreamManager = context.RecyclableMemoryStreamManager;
         this._logger = context.Logger;
         this._options = context.Options;
         this._timeProvider = context.TimeProvider;
@@ -60,7 +59,7 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
                                           config.ErrorRate,
                                           config.SizeInBits,
                                           BloomMath.BitsToBytes(config.SizeInBits),
-                                          config.HashFunctionCount); 
+                                          config.HashFunctionCount);
     }
 
     /// <inheritdoc/>
@@ -270,8 +269,7 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
             this._logger.LogSaveStarted(this.Configuration.Name);
 
             try {
-                using PooledObject<MemoryStream> pooledStream = this._memoryStreamPool.Lease();
-                MemoryStream snapshotStream = pooledStream.Item;
+                await using MemoryStream snapshotStream = this._recyclableMemoryStreamManager.GetStream();
                 snapshotStream.SetLength(0);
 
                 ulong checksum;

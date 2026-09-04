@@ -21,7 +21,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\ObjectPool\Wiaoj.ObjectPool.Testing\Wiaoj.ObjectPool.Testing.csproj" />
 		<ProjectReference Include="..\Wiaoj.DistributedCounter\Wiaoj.DistributedCounter.csproj" />
 	</ItemGroup>
 

@@ -3,13 +3,12 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.IO;
 using StackExchange.Redis;
-using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Redis.Engine;
 using Wiaoj.BloomFilter.Redis.Options;
 using Wiaoj.BloomFilter.Redis.Storage;
-using Wiaoj.ObjectPool;
 using Wiaoj.Preconditions;
 
 #pragma warning disable IDE0130
@@ -465,14 +464,14 @@ public static class RedisBloomFilterBuilderExtensions {
         BloomFilterConfiguration config = configFactory.Create(FilterName.Parse(name), expectedItems, errorRate, hashSeed);
 
         IBloomFilterStorage? storage = sp.GetService<IBloomFilterStorage>();
-        IObjectPool<MemoryStream> memoryStreamPool = sp.GetRequiredService<IObjectPool<MemoryStream>>();
+        RecyclableMemoryStreamManager recyclableMemoryStreamManager = sp.GetRequiredService<RecyclableMemoryStreamManager>();
         ILoggerFactory? loggerFactory = sp.GetService<ILoggerFactory>();
         ILogger filterLogger = loggerFactory?.CreateLogger(name) ?? NullLogger.Instance;
         TimeProvider timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
 
         BloomFilterContext context = new(
             storage,
-            memoryStreamPool,
+            recyclableMemoryStreamManager,
             filterLogger,
             filterOptions,
             timeProvider,

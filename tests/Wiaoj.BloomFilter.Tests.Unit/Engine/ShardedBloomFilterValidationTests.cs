@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IO;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -17,7 +17,7 @@ public class ShardedBloomFilterValidationTests {
         BloomFilterOptions options = new();
         this._context = new BloomFilterContext(
             Storage: new FakeBloomFilterStorage(),
-            MemoryStreamPool: new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            RecyclableMemoryStreamManager: new RecyclableMemoryStreamManager(),
             Logger: NullLogger.Instance,
             Options: options,
             TimeProvider: TimeProvider.System,

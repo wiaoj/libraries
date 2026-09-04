@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.IO;
 using NSubstitute;
 using StackExchange.Redis;
 using System.Text;
@@ -8,7 +8,6 @@ using Wiaoj.BloomFilter.Redis.Engine;
 using Wiaoj.BloomFilter.Redis.Messaging;
 using Wiaoj.BloomFilter.Redis.Options;
 using Wiaoj.BloomFilter.Testing;
-using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Redis.Tests.Unit.Engine;
 
@@ -39,7 +38,7 @@ public class SynchronizedRedisBloomFilterTests {
     private InMemoryBloomFilter CreateInMemoryFilter() {
         BloomFilterContext context = new(
             Storage: this._storage,
-            MemoryStreamPool: new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            RecyclableMemoryStreamManager: new RecyclableMemoryStreamManager(),
             Logger: NullLogger.Instance,
             Options: new BloomFilterOptions(),
             TimeProvider: TimeProvider.System,
