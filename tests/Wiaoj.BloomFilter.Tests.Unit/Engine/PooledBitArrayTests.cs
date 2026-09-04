@@ -183,4 +183,19 @@ public sealed class PooledBitArrayTests {
             Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Set(negativeIndex));
         }
     }
+
+    public sealed class DisposalLifecycleMethod {
+        [Fact]
+        public void Should_ThrowObjectDisposedException_When_OperationsCalledAfterDisposal() {
+            // Arrange
+            PooledBitArray bitArray = new(1024);
+            bitArray.Dispose();
+
+            // Act & Assert
+            Assert.Throws<ObjectDisposedException>(() => bitArray.Set(42));
+            Assert.Throws<ObjectDisposedException>(() => bitArray.Get(42));
+            Assert.Throws<ObjectDisposedException>(() => bitArray.GetPopCount());
+            Assert.Throws<ObjectDisposedException>(() => bitArray.CalculateChecksum());
+        }
+    }
 }

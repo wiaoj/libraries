@@ -1,13 +1,16 @@
-﻿using Wiaoj.Preconditions.Extensions;
+using Wiaoj.Preconditions.Extensions;
 
 namespace Wiaoj.Preconditions.Extensions;
 
+/// <summary>
+/// Provides fluent extension methods for null validation.
+/// </summary>
 [DebuggerNonUserCode, DebuggerStepThrough]
 public static class ThrowIfNullExtensions {
     /// <summary>
     /// Validates that the specified argument is not null.
     /// </summary>
-    /// <param name="_"></param>
+    /// <param name="_">The fluent extension target.</param>
     /// <param name="argument">The argument to validate. Must not be null.</param>
     /// <param name="paramName">The name of the parameter being validated. This parameter is automatically populated by the compiler.</param>
     /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="argument"/> is null. Inherits from <see cref="ArgumentNullException"/>.</exception>

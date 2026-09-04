@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.BloomFilter.Engine;
 
@@ -8,19 +9,21 @@ internal interface IBloomFilterRegistry {
 }
 
 internal sealed class BloomFilterRegistry : IBloomFilterRegistry, IDisposable {
-    private readonly ConcurrentBag<IPersistentBloomFilter> _filters = [];
+    private readonly ConcurrentDictionary<FilterName, IPersistentBloomFilter> _filters = new();
 
     public void Register(IPersistentBloomFilter filter) {
-        this._filters.Add(filter);
+        Preca.ThrowIfNull(filter);
+        this._filters[filter.Name] = filter;
     }
 
-    public IEnumerable<IPersistentBloomFilter> GetAll() => this._filters;
+    public IEnumerable<IPersistentBloomFilter> GetAll() => this._filters.Values;
 
     public void Dispose() {
-        foreach(var filter in this._filters) {
+        foreach(IPersistentBloomFilter filter in this._filters.Values) {
             if(filter is IDisposable disposable) {
                 disposable.Dispose();
             }
         }
+        this._filters.Clear();
     }
 }

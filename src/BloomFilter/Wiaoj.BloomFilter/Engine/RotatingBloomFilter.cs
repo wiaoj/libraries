@@ -103,7 +103,12 @@ internal sealed class RotatingBloomFilter : BloomFilterBase {
 
         if(now < currentShards[^1].Expiration) return;
 
-        this._lock.EnterWriteLock();
+        // Try to acquire write lock without queuing; if another thread is already rotating,
+        // do not queue up behind it (prevents lock convoy on expiry window transition).
+        if(!this._lock.TryEnterWriteLock(0)) {
+            return;
+        }
+
         try {
             currentShards = Atomic.Read(ref this._shards);
             if(now < currentShards[^1].Expiration) return;

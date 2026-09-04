@@ -310,6 +310,9 @@ public unsafe struct Sha512Hash
     /// <summary>
     /// Computes the SHA512 hash of a string using the specified encoding.
     /// </summary>
+    /// <param name="text">The string to hash.</param>
+    /// <param name="encoding">The character encoding used to convert the string to bytes.</param>
+    /// <returns>The computed <see cref="Sha512Hash"/>.</returns>
     public static Sha512Hash Compute(string text, Encoding encoding) {
         Preca.ThrowIfNull(text);
         return Compute(text.AsSpan(), encoding);
@@ -318,6 +321,8 @@ public unsafe struct Sha512Hash
     /// <summary>
     /// Computes the SHA512 hash of a string using UTF-8 encoding by default.
     /// </summary>
+    /// <param name="text">The string to hash.</param>
+    /// <returns>The computed <see cref="Sha512Hash"/>.</returns>
     public static Sha512Hash Compute(string text) {
         return Compute(text, Encoding.UTF8);
     }

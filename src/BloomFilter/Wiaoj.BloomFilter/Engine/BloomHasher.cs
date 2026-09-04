@@ -18,6 +18,9 @@ internal static class BloomHasher {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ComputeBaseHashes(ReadOnlySpan<byte> item, long seed, out ulong h1, out ulong h2) {
         (h1, h2) = XxHash128.Compute(item, seed);
+        if(h2 == 0) {
+            h2 = BloomMath.GoldenRatio64;
+        }
     }
 
     /// <summary>
@@ -31,6 +34,9 @@ internal static class BloomHasher {
     /// <returns>The calculated bit index position in the range [0, sizeInBits - 1].</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long GetBitPosition(ulong h1, ulong h2, int index, long sizeInBits) {
+        if(h2 == 0) {
+            h2 = BloomMath.GoldenRatio64;
+        }
         ulong combinedHash = h1 + ((ulong)index * h2);
         return (long)(((UInt128)combinedHash * (ulong)sizeInBits) >> 64);
     }

@@ -123,10 +123,11 @@ public class FakeBloomFilter : IPersistentBloomFilter {
         return this._items.ContainsKey(item);
     }
 
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     private static string ConvertToKey(ReadOnlySpan<byte> bytes) {
-        // UTF-8 olarak okumayı dener; geçersizse hex string'e çevirir (tam binary uyumluluğu)
         try {
-            return Encoding.UTF8.GetString(bytes);
+            return StrictUtf8.GetString(bytes);
         }
         catch {
             return Convert.ToHexStringLower(bytes);

@@ -126,4 +126,28 @@ public sealed class BloomMathCalculationTests {
             Assert.Equal(expectedWords, BloomMath.BitsToWordCount(bits));
         }
     }
+
+    public sealed class CalculateOptimalHashCountMethod {
+        [Fact]
+        public void Should_RoundToNearestInteger_When_OptimalValueHasFractionalPart() {
+            // Arrange: k = (m / n) * ln(2). With 58,429 bits and 10,000 items, theoretical k ≈ 4.05
+            long expectedItems = 10_000;
+            long sizeInBits = 58_429;
+
+            // Act
+            int hashCount = BloomMath.CalculateOptimalHashCount(sizeInBits, expectedItems);
+
+            // Assert: Must round to 4, not ceiling to 5
+            Assert.Equal(4, hashCount);
+        }
+
+        [Fact]
+        public void Should_ReturnAtLeastOne_When_CalculatedValueIsBelowOne() {
+            // Act
+            int hashCount = BloomMath.CalculateOptimalHashCount(sizeInBits: 1, expectedItems: 10_000);
+
+            // Assert
+            Assert.Equal(1, hashCount);
+        }
+    }
 }

@@ -1,5 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Wiaoj.BloomFilter.Engine;
+using Wiaoj.BloomFilter.Testing;
 using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.DependencyInjection;
@@ -53,6 +55,22 @@ public class BloomFilterRegistrationTests {
             Assert.True(options.Value.Filters.ContainsKey("custom-filter"));
             Assert.Equal(50_000, options.Value.Filters["custom-filter"].ExpectedItems);
             Assert.Equal(0.001, options.Value.Filters["custom-filter"].ErrorRate);
+        }
+    }
+
+    public sealed class RegistryMethods {
+        [Fact]
+        public void Should_PreventDuplicateEntries_When_SameFilterIsRegisteredMultipleTimes() {
+            // Arrange
+            BloomFilterRegistry registry = new();
+            FakeBloomFilter filter = new("unique-filter");
+
+            // Act
+            registry.Register(filter);
+            registry.Register(filter);
+
+            // Assert: Registry deduplicates by filter name
+            Assert.Single(registry.GetAll());
         }
     }
 }

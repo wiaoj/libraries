@@ -188,6 +188,13 @@ public sealed class Sha512HashTests {
         // Act & Assert - Unicode
         byte[] unicodeExpected = SHA512.HashData(Encoding.Unicode.GetBytes(text));
         Assert.Equal(unicodeExpected, Sha512Hash.Compute(text.AsSpan(), Encoding.Unicode).AsSpan().ToArray());
+        // Act & Assert - ASCII
+        byte[] asciiExpected = SHA512.HashData(Encoding.ASCII.GetBytes(text));
+        Assert.Equal(asciiExpected, Sha512Hash.Compute(text.AsSpan(), Encoding.ASCII).AsSpan().ToArray());
+
+        // Act & Assert - Latin1
+        byte[] latin1Expected = SHA512.HashData(Encoding.Latin1.GetBytes(text));
+        Assert.Equal(latin1Expected, Sha512Hash.Compute(text.AsSpan(), Encoding.Latin1).AsSpan().ToArray());
     }
 
     [Fact]
@@ -214,6 +221,40 @@ public sealed class Sha512HashTests {
 
         // Assert
         Assert.Equal(expectedBytes, result.AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void Compute_ReadOnlySpanChar_UnderStackThreshold_ShouldProduceZeroAllocations() {
+        // Arrange
+        ReadOnlySpan<char> chars = "small-payload-for-zero-alloc-test".AsSpan();
+
+        // Warmup (JIT)
+        _ = Sha512Hash.Compute(chars);
+
+        // Act
+        long beforeAllocated = GC.GetAllocatedBytesForCurrentThread();
+        _ = Sha512Hash.Compute(chars);
+        long afterAllocated = GC.GetAllocatedBytesForCurrentThread();
+
+        // Assert
+        Assert.Equal(0, afterAllocated - beforeAllocated);
+    }
+
+    [Fact]
+    public void Compute_String_UnderStackThreshold_ShouldProduceZeroAllocations() {
+        // Arrange
+        string text = "small-string-for-zero-alloc-test";
+
+        // Warmup (JIT)
+        _ = Sha512Hash.Compute(text);
+
+        // Act
+        long beforeAllocated = GC.GetAllocatedBytesForCurrentThread();
+        _ = Sha512Hash.Compute(text);
+        long afterAllocated = GC.GetAllocatedBytesForCurrentThread();
+
+        // Assert
+        Assert.Equal(0, afterAllocated - beforeAllocated);
     }
 
     #endregion

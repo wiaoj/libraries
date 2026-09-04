@@ -72,10 +72,17 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
             BloomFilterDiagnostics.AddCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
         }
 
+        BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
+        return AddWithHashes(h1, h2);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal bool AddWithHashes(ulong h1, ulong h2) {
+        ThrowIfDisposed();
+
         this._rwLock.EnterReadLock();
         try {
             PooledBitArray bits = this._bits;
-            BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
             bool atLeastOneSet = false;
             long size = this.Configuration.SizeInBits;
@@ -148,10 +155,18 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
     public override bool Contains(ReadOnlySpan<byte> item) {
         ThrowIfDisposed();
 
+        BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
+        return ContainsWithHashes(h1, h2);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal bool ContainsWithHashes(ulong h1, ulong h2) {
+        ThrowIfDisposed();
+
         this._rwLock.EnterReadLock();
         bool result;
         try {
-            result = InternalContains(item);
+            result = InternalContains(h1, h2);
         }
         finally {
             this._rwLock.ExitReadLock();
@@ -169,9 +184,8 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
-    private bool InternalContains(ReadOnlySpan<byte> item) {
+    private bool InternalContains(ulong h1, ulong h2) {
         PooledBitArray bits = this._bits;
-        BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
         long size = this.Configuration.SizeInBits;
         int k = this.Configuration.HashFunctionCount;
@@ -330,6 +344,9 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
 
                         if(stream.CanSeek) {
                             stream.Position = 0;
+                        }
+                        else {
+                            throw new DataIntegrityException($"Invalid Bloom Filter header in non-seekable stream for '{this.Configuration.Name}'. Cannot rewind stream to offset 0.");
                         }
                     }
                     else {

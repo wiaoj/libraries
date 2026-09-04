@@ -1,11 +1,14 @@
-﻿namespace Wiaoj.Preconditions.Extensions;
+namespace Wiaoj.Preconditions.Extensions;
 
+/// <summary>
+/// Provides fluent extension methods for string whitespace validation.
+/// </summary>
 [DebuggerNonUserCode, DebuggerStepThrough]
 public static class ThrowIfNullOrWhiteSpaceExtensions {
     /// <summary>
     /// Validates that the specified string is not null, empty, or consists only of whitespace characters.
     /// </summary>
-    /// <param name="_"></param>
+    /// <param name="_">The fluent extension target.</param>
     /// <param name="argument">The string to validate.</param>
     /// <param name="paramName">The name of the parameter being validated. This parameter is automatically populated by the compiler.</param>
     /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="argument"/> is null. Inherits from <see cref="ArgumentNullException"/>.</exception>

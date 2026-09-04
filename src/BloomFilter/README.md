@@ -1,217 +1,158 @@
-﻿# Wiaoj.BloomFilter
+# Wiaoj.BloomFilter
 
-[![.NET](https://img.shields.io/badge/.NET-10.0-512bd4.svg)](https://dotnet.microsoft.com/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-**Wiaoj.BloomFilter** is a high-performance, thread-safe, and persistent implementation of the probabilistic Bloom Filter data structure for .NET 8+.
-
-It is designed for high-throughput scenarios where memory efficiency and zero-allocation operations are critical. Unlike standard in-memory implementations, this library manages the full lifecycle of the filter, including **asynchronous persistence**, **automatic sharding**, **failure recovery**, and **background hydration**.
-
-## 🚀 Key Features
-
-*   **Zero-Allocation Architecture:** Uses `ArrayPool` and `PooledBitArray` to minimize Garbage Collector (GC) pressure. Seeding and lookup operations use `ReadOnlySpan<byte>` for maximum throughput.
-*   **SIMD Optimized:** Hashing algorithms utilize SIMD (Single Instruction, Multiple Data) instructions where supported by the CPU.
-*   **Robust Persistence:**
-    *   **Atomic Writes:** Prevents data corruption during power failures using temporary files and atomic moves.
-    *   **Snapshotting:** Takes non-blocking memory snapshots to allow reads/writes to continue while saving to disk.
-    *   **Compression:** Built-in GZip support for optimizing storage space.
-*   **Advanced Lifecycle Management:**
-    *   **Auto-Save:** Background service periodically persists "dirty" filters.
-    *   **Warm-Up:** Preloads filters into memory on application startup.
-    *   **Auto-Reseed:** Automatically triggers data re-population from external sources (DB, API) if corruption is detected.
-*   **Smart Sharding:** Automatically splits massive filters into smaller shards based on a configurable threshold (e.g., 100MB) to overcome CLR object size limits.
-*   **Type-Safe Dependency Injection:** Supports typed interfaces (e.g., `IBloomFilter<UserBlacklistTag>`) to avoid "magic string" errors.
-*   **Highly Configurable:** Fully integrated with `Microsoft.Extensions.Configuration` (appsettings.json) and Options Pattern.
+High-performance, zero-allocation, thread-safe probabilistic filter library for .NET supporting Single, Auto-Sharded, Scalable (layered), and Rotating (sliding-window) architectures with persistence, compression, and observability.
 
 ---
 
-## 📦 Installation
+## Packages
+
+| Package | Description |
+| :--- | :--- |
+| **`Wiaoj.BloomFilter.Abstractions`** | Core contracts, interfaces (`IBloomFilter`, `IPersistentBloomFilter`, `IBloomFilterStorage`), configuration models (`BloomFilterConfiguration`), and value primitives (`FilterName`, `GrowthRate`, `Percentage`). Zero external dependencies. |
+| **`Wiaoj.BloomFilter`** | Core high-throughput SIMD-accelerated engine (`InMemoryBloomFilter`, `ShardedBloomFilter`, `ScalableBloomFilter`, `RotatingBloomFilter`), persistent storage provider (`FileSystemBloomFilterStorage`), background lifecycle workers, and Microsoft DI integration. |
+| **`Wiaoj.BloomFilter.Testing`** | Test doubles (`FakeBloomFilter`, `FakeBloomFilterStorage`) for unit and integration testing without filesystem or background thread dependencies. |
+
+---
+
+## Architecture Overview
+
+```
+                      ┌───────────────────────────────────────────────┐
+                      │        Wiaoj.BloomFilter.Abstractions         │
+                      │  (Contracts, Primitives, Options & Structs)   │
+                      └───────────────────────┬───────────────────────┘
+                                              │
+                     ┌────────────────────────┴────────────────────────┐
+                     │                                                 │
+                     ▼                                                 ▼
+     ┌───────────────────────────────┐                 ┌───────────────────────────────┐
+     │       Wiaoj.BloomFilter       │                 │   Wiaoj.BloomFilter.Testing   │
+     │  (Core SIMD Engine, Sharded,  │                 │    (FakeBloomFilter, Fake     │
+     │   Scalable, Rotating, Storage)│                 │     Storage & Test Harness)   │
+     └───────────────┬───────────────┘                 └───────────────────────────────┘
+                     │
+                     ▼
+     ┌───────────────────────────────┐
+     │      Hosting & Lifecycle      │
+     │   (AutoSave, WarmUp, Seeding) │
+     └───────────────────────────────┘
+```
+
+---
+
+## Architectural Variants
+
+| Variant | Implementation | Description | Best For |
+| :--- | :--- | :--- | :--- |
+| **InMemory** | `InMemoryBloomFilter` | Single bit array backed by `ArrayPool<ulong>.Shared`. SIMD-accelerated (AVX2 Vector256 / SSE2 Vector128) bit checking. | Standard fixed-capacity filtering with sub-microsecond latency. |
+| **Sharded** | `ShardedBloomFilter` | Partitions capacity across $2^N$ internal shards using base hash routing to prevent Large Object Heap (LOH) allocations. | Filters with tens or hundreds of millions of items ($> 100 \text{ MB}$). |
+| **Scalable** | `ScalableBloomFilter` | Dynamically appends new layers when saturation threshold is reached. Applies geometric error tightening ($r = 0.85$, Almeida et al., 2007) to guarantee bounded cumulative false positive rate. | Workloads with unpredictable or unbounded growth over time. |
+| **Rotating** | `RotatingBloomFilter` | Sliding-window filter with TTL expiration. Rotates time-stamped shards and evicts expired windows automatically. | Sliding deduplication windows (e.g. "seen in the last 24 hours"). |
+
+---
+
+## Hashing & Mathematical Engine
+
+- **Kirsch-Mitzenmacher Double Hashing:** Derives $k$ distinct hash values from a single 128-bit hash execution:
+  $$g_i(x) = h_1(x) + i \cdot h_2(x)$$
+- **Lemire's Fast Range Reduction:** Maps 64-bit hash values to bit array indices without costly integer modulo division:
+  $$\text{pos} = \lfloor \frac{\text{combinedHash} \times m}{2^{64}} \rfloor$$
+- **Degeneracy Protection:** When $h_2 = 0$, the engine automatically falls back to Knuth's Golden Ratio constant (`0x9E3779B97F4A7C15UL` - $2^{64} / \phi$) to maximize bit dispersion and prevent 1-hash collapse.
+- **Hardware Population Count:** PopCount queries execute via CPU vector instructions (`BitOperations.PopCount`) across 64-bit words.
+
+---
+
+## Quick Start
+
+### 1. Installation
 
 ```bash
 dotnet add package Wiaoj.BloomFilter
 ```
 
----
-
-## ⚡ Quick Start
-
-### 1. Configuration (appsettings.json)
-
-The library supports a structured configuration to tune performance, storage, and lifecycle.
-
-```json
-{
-  "BloomFilter": {
-    "Storage": {
-      "Path": "BloomData",
-      "EnableCompression": true,
-      "IgnoreErrors": false
-    },
-    "Performance": {
-      "EnableSimd": true,
-      "GlobalHashSeed": 123456789
-    },
-    "Lifecycle": {
-      "AutoSaveInterval": "00:05:00",
-      "EnableWarmUp": true,
-      "EnableIntegrityCheck": true,
-      "AutoReseed": true,
-      "ShardingThresholdBytes": 104857600
-    },
-    "Filters": {
-      "url-blacklist": {
-        "ExpectedItems": 1000000,
-        "ErrorRate": 0.001
-      },
-      "ip-whitelist": {
-        "ExpectedItems": 50000,
-        "ErrorRate": 0.01
-      }
-    }
-  }
-}
-```
-
-### 2. Registration (Program.cs)
-
-Register the services with a single line. The library automatically binds the configuration.
+### 2. Dependency Injection Setup
 
 ```csharp
 using Wiaoj.BloomFilter;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Bloom Filter services
-builder.Services.AddBloomFilter(setup => {
-    // Map a Typed Tag to a named filter configuration
-    setup.MapFilter<UrlBlacklistTag>("url-blacklist");
+builder.Services.AddBloomFilter(options => {
+    // Storage configuration for snapshots
+    options.Storage.Provider = "FileSystem";
+    options.Storage.Path = "BloomData";
+    options.Storage.EnableCompression = true;
+
+    // Background lifecycle services
+    options.AddAutoSave(); // Periodic snapshotting
+    options.AddWarmUp();   // Preload filters at startup
+
+    // 1. Fixed capacity in-memory filter
+    options.AddFilter<UserBlacklistTag>("user-blacklist", expectedItems: 500_000, errorRate: 0.01);
+
+    // 2. Scalable dynamically-layered filter
+    options.AddScalableFilter<PaymentDeduplicationTag>(
+        "payment-dedup",
+        initialCapacity: 100_000,
+        errorRate: 0.001,
+        growthRate: 2.0,
+        saturationThreshold: 0.50);
+
+    // 3. Sliding-window rotating filter
+    options.AddRotatingFilter<IpRateLimitTag>(
+        "ip-rate-limit",
+        capacity: 1_000_000,
+        errorRate: 0.01,
+        windowSize: TimeSpan.FromHours(24),
+        shardCount: 24);
 });
-
-var app = builder.Build();
 ```
 
-### 3. Usage (Minimal API)
-
-Inject `IBloomFilter<T>` directly into your endpoints.
+### 3. Usage via Strongly-Typed Marker Tags
 
 ```csharp
-app.MapGet("/check-url", (
-    [FromQuery] string url, 
-    [FromServices] IBloomFilter<UrlBlacklistTag> filter) => 
-{
-    // Fast, zero-allocation check
-    bool mightContain = filter.Contains(url);
+public sealed record UserBlacklistTag;
 
-    return mightContain 
-        ? Results.Ok("URL might be blacklisted (Probabilistic match).") 
-        : Results.Ok("URL is safe (Definite negative).");
-});
-```
+public sealed class UserService(IBloomFilter<UserBlacklistTag> blacklistFilter) {
+    public bool IsUserBlacklisted(ReadOnlySpan<char> username) {
+        return blacklistFilter.Contains(username);
+    }
 
----
-
-## 🏗 Architecture & Concepts
-
-### 1. Typed Filters (`IBloomFilter<T>`)
-To prevent using the wrong filter for a specific domain entity, the library encourages the use of Marker Types (Tags).
-
-```csharp
-// Define a marker record
-public record UrlBlacklistTag;
-
-// Inject it safely
-public class SecurityService(IBloomFilter<UrlBlacklistTag> filter) { ... }
-```
-
-### 2. Seeding & Auto-Reseed Strategy
-Populating a Bloom Filter from a database can be resource-intensive. `IAutoBloomFilterSeeder` allows you to define how a filter should be filled. This is used for:
-1.  **Initial Population:** Running a background job to fill the cache.
-2.  **Disaster Recovery:** If the library detects file corruption (Checksum mismatch), it automatically deletes the corrupt file and triggers the Seeder to refill the filter without stopping the application.
-
-**Example Seeder:**
-
-```csharp
-public class BlacklistSeeder : IAutoBloomFilterSeeder
-{
-    // Matches the config name
-    public FilterName FilterName => "url-blacklist"; 
-
-    public async Task SeedAsync(IPersistentBloomFilter filter, CancellationToken ct)
-    {
-        // Stream data from DB/API and add to filter
-        // Uses ReadOnlySpan<byte> for zero allocation
-        await foreach(var url in _repository.GetMaliciousUrlsAsync(ct)) 
-        {
-            filter.Add(Encoding.UTF8.GetBytes(url));
-        }
-        
-        // Persist immediately after seeding
-        await filter.SaveAsync(ct);
+    public void BlacklistUser(ReadOnlySpan<char> username) {
+        blacklistFilter.Add(username);
     }
 }
 ```
 
-### 3. Concurrency Model
-The library uses `ReaderWriterLockSlim` to manage thread safety:
-*   **Add / Contains:** Acquires a `ReadLock`. This allows thousands of concurrent operations. It only blocks during a Reload/Swap operation.
-*   **Save:** Takes a snapshot of the memory under a `ReadLock` (very fast), then writes to disk asynchronously without blocking new additions.
-*   **Reload:** Acquires a `WriteLock` only for the brief moment of swapping the internal bit array pointer.
+### 4. Direct Injection via Registry or Factory
 
-### 4. Persistence Layout
-Data is stored in binary format with a header containing metadata and checksums.
-
-```text
-[Header: 36 Bytes]
-+----------------+---------+----------+-------------+------------+-------------+
-| Magic ("WBF1") | Version | Checksum | SizeInBits  | HashCount  | Fingerprint |
-+----------------+---------+----------+-------------+------------+-------------+
-|     4 Bytes    | 4 Bytes |  8 Bytes |   8 Bytes   |   4 Bytes  |   8 Bytes   |
-+----------------+---------+----------+-------------+------------+-------------+
-
-[Body: Variable]
-+------------------------------------------------------------------------------+
-| Bit Array (Raw Bytes) ...                                                    |
-+------------------------------------------------------------------------------+
+```csharp
+public sealed class SecurityService(IBloomFilterRegistry registry) {
+    public bool CheckIp(string ipAddress) {
+        if (registry.TryGet("ip-rate-limit", out IPersistentBloomFilter? filter)) {
+            return filter.Contains(ipAddress);
+        }
+        return false;
+    }
+}
 ```
 
-*   **Checksum:** XXHash64 of the bit array for integrity validation.
-*   **Fingerprint:** Hash of the configuration (Capacity + ErrorRate + Seed). Prevents loading a file with mismatched settings.
+---
+
+## Observability & Diagnostics
+
+`Wiaoj.BloomFilter` includes native OpenTelemetry diagnostics:
+
+- **ActivitySource:** `"Wiaoj.BloomFilter"` traces for `Save`, `Reload`, and `ScaleUp` operations.
+- **Meters:**
+  - `bloomfilter.lookups.count`: Total lookup operations.
+  - `bloomfilter.hits.count`: Positive lookup hits.
+  - `bloomfilter.save.duration`: Time spent writing snapshots to persistent storage.
+  - `bloomfilter.reload.duration`: Time spent recovering snapshots from storage.
+  - `bloomfilter.scalable.layers.spawned`: Counter of dynamically spawned scaling layers.
 
 ---
 
-## ⚙️ Advanced Configuration
+## License
 
-### Storage Providers
-By default, the library uses the `FileSystem` provider. It saves files to the path specified in `Storage:Path`. The library is architected to support other providers (e.g., Redis) in the future via `IBloomFilterStorage` interface.
-
-### Performance Tuning
-*   **`EnableSimd`**: Uses `System.Runtime.Intrinsics` to parallelize bitwise operations and hashing on supported hardware (AVX2/NEON).
-*   **`ShardingThresholdBytes`**: If a calculated filter size exceeds this limit (default 100MB), the provider automatically splits it into multiple smaller filters (`_s0`, `_s1`, ...). This avoids LOH (Large Object Heap) fragmentation and improves GC performance.
-
----
-
-## 🛡 Handling Data Integrity
-
-1.  **Corruption Detection:** On load, the header checksum is calculated against the body.
-2.  **Configuration Mismatch:** If you change `ErrorRate` or `ExpectedItems` in `appsettings.json`, the stored file's fingerprint won't match.
-3.  **Automatic Recovery:** In both cases above, if `AutoReseed` is enabled, the library will:
-    *   Log a warning.
-    *   Delete the invalid file.
-    *   Initialize a fresh in-memory filter.
-    *   Trigger the registered `IAutoBloomFilterSeeder` in a background thread.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-1.  Fork the repository.
-2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
-3.  Commit your changes.
-4.  Open a Pull Request.
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the MIT License.

@@ -1,37 +1,38 @@
 using System.Diagnostics;
-using System.Numerics;
-using System.Text;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Concurrency;
 using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
-using Wiaoj.Primitives.Buffers;
 
 namespace Wiaoj.BloomFilter.Engine;
 
 /// <summary>
 /// A scalable, persistent Bloom Filter that automatically layers new filters when the current active layer reaches a saturation threshold.
-/// This implementation allows the filter to grow dynamically while maintaining a target false positive rate.
+/// Inherits from <see cref="BloomFilterBase"/> and tightens the error rate geometrically (Almeida et al., 2007) across subsequent layers.
 /// </summary>
-internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable {
-    private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
+internal sealed class ScalableBloomFilter : BloomFilterBase {
+    /// <summary>
+    /// Geometric error tightening ratio (r = 0.85) applied to each subsequent layer (Almeida et al., 2007)
+    /// to guarantee that the cumulative false positive probability across all layers does not exceed the target error rate.
+    /// </summary>
+    public const double TighteningRatio = 0.85;
+
+    private readonly Lock _scaleLock = new();
     private readonly BloomFilterContext _context;
     private readonly GrowthRate _growthRate;
     private readonly Percentage _saturationThreshold;
-    private readonly DisposeState _disposeState = new();
 
     private IPersistentBloomFilter[] _layers;
+    private long _addCount = 0;
 
     /// <inheritdoc/>
-    public FilterName Name => this.Configuration.Name;
+    public override FilterName Name => this.Configuration.Name;
 
     /// <inheritdoc/>
-    public BloomFilterConfiguration Configuration { get; }
+    public override BloomFilterConfiguration Configuration { get; }
 
-    /// <summary>
-    /// Gets a value indicating whether any of the underlying layers have been modified and require persistence.
-    /// </summary>
-    public bool IsDirty {
+    /// <inheritdoc/>
+    public override bool IsDirty {
         get {
             IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
             for(int i = 0; i < currentLayers.Length; i++) {
@@ -65,11 +66,9 @@ internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable 
         this._layers = [CreateLayer(baseConfig)];
     }
 
-    private long _addCount = 0;
-
     /// <inheritdoc/>
-    public bool Add(ReadOnlySpan<byte> item) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override bool Add(ReadOnlySpan<byte> item) {
+        ThrowIfDisposed();
 
         IPersistentBloomFilter[] layers = Atomic.Read(ref this._layers);
 
@@ -99,7 +98,9 @@ internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public bool Contains(ReadOnlySpan<byte> item) {
+    public override bool Contains(ReadOnlySpan<byte> item) {
+        ThrowIfDisposed();
+
         IPersistentBloomFilter[] layers = Atomic.Read(ref this._layers);
         // Search from the newest layer backwards (L4, L3, L2...)
         for(int i = layers.Length - 1; i >= 0; i--) {
@@ -109,8 +110,7 @@ internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     private void ScaleUp() {
-        this._lock.EnterWriteLock();
-        try {
+        lock(this._scaleLock) {
             IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
             IPersistentBloomFilter activeLayer = currentLayers[^1];
 
@@ -125,10 +125,13 @@ internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable 
             // Increase expected items by the growth rate
             long newExpectedItems = (long)(activeLayer.Configuration.ExpectedItems * this._growthRate.Value);
 
+            // Almeida et al. (2007): Each successive layer tightens its error rate by r = 0.85
+            double tightenedErrorRate = Math.Max(1e-6, activeLayer.Configuration.ErrorRate * TighteningRatio);
+
             BloomFilterConfiguration newConfig = this._context.ConfigFactory.Create(
                 FilterName.Parse($"{this.Configuration.Name.Value}_L{currentLayers.Length}"),
                 newExpectedItems,
-                activeLayer.Configuration.ErrorRate,
+                tightenedErrorRate,
                 activeLayer.Configuration.HashSeed + (uint)currentLayers.Length
             );
 
@@ -139,31 +142,27 @@ internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable 
             Array.Copy(currentLayers, newLayers, currentLayers.Length);
             newLayers[^1] = newLayer;
 
-            Atomic.Write(ref this._layers, newLayers); 
-            
+            Atomic.Write(ref this._layers, newLayers);
+
             BloomFilterDiagnostics.ScalableLayerSpawnCounter.Add(
-                1, 
+                1,
                 new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
 
             activity?.SetTag("bloomfilter.new_layer_capacity", newExpectedItems);
             this._context.Logger.LogScalableLayerSpawned(this.Name, fillRatio.Value, currentLayers.Length, newExpectedItems);
         }
-        finally {
-            this._lock.ExitWriteLock();
-        }
     }
 
     /// <summary>
-    /// Intelligent Layer Factory: Similar to BloomFilterProvider, determines whether to 
-    /// create a ShardedBloomFilter or InMemoryBloomFilter based on the calculated size.
+    /// Intelligent Layer Factory: Determines whether to create a ShardedBloomFilter or InMemoryBloomFilter.
     /// </summary>
     private IPersistentBloomFilter CreateLayer(BloomFilterConfiguration config) {
         return this._context.CreateLeafFilter(config);
     }
 
     /// <inheritdoc/>
-    public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
 
         IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
 
@@ -177,51 +176,46 @@ internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
 
         if(this._context.Storage != null) {
-            this._lock.EnterWriteLock();
-            try {
-                List<IPersistentBloomFilter> loadedLayers = [this._layers[0]];
-                await this._layers[0].ReloadAsync(cancellationToken).ConfigureAwait(false);
+            List<IPersistentBloomFilter> loadedLayers = [this._layers[0]];
+            await this._layers[0].ReloadAsync(cancellationToken).ConfigureAwait(false);
 
-                int layerIndex = 1;
-                while(true) {
-                    FilterName nextLayerName = FilterName.Parse($"{this.Configuration.Name.Value}_L{layerIndex}");
-                    (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await this._context.Storage.LoadStreamAsync(nextLayerName, cancellationToken).ConfigureAwait(false);
-                    if(!loadResult.HasValue) {
-                        break;
-                    }
-
-                    await loadResult.Value.DataStream.DisposeAsync().ConfigureAwait(false);
-
-                    IPersistentBloomFilter layer;
-                    if(layerIndex < this._layers.Length) {
-                        layer = this._layers[layerIndex];
-                    }
-                    else {
-                        IPersistentBloomFilter previous = loadedLayers[^1];
-                        long newExpectedItems = (long)(previous.Configuration.ExpectedItems * this._growthRate.Value);
-                        BloomFilterConfiguration nextConfig = this._context.ConfigFactory.Create(
-                            nextLayerName,
-                            newExpectedItems,
-                            previous.Configuration.ErrorRate,
-                            previous.Configuration.HashSeed + (uint)layerIndex
-                        );
-                        layer = CreateLayer(nextConfig);
-                    }
-
-                    await layer.ReloadAsync(cancellationToken).ConfigureAwait(false);
-                    loadedLayers.Add(layer);
-                    layerIndex++;
+            int layerIndex = 1;
+            while(true) {
+                FilterName nextLayerName = FilterName.Parse($"{this.Configuration.Name.Value}_L{layerIndex}");
+                (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await this._context.Storage.LoadStreamAsync(nextLayerName, cancellationToken).ConfigureAwait(false);
+                if(!loadResult.HasValue) {
+                    break;
                 }
 
-                Atomic.Write(ref this._layers, [.. loadedLayers]);
+                await loadResult.Value.DataStream.DisposeAsync().ConfigureAwait(false);
+
+                IPersistentBloomFilter layer;
+                if(layerIndex < this._layers.Length) {
+                    layer = this._layers[layerIndex];
+                }
+                else {
+                    IPersistentBloomFilter previous = loadedLayers[^1];
+                    long newExpectedItems = (long)(previous.Configuration.ExpectedItems * this._growthRate.Value);
+                    double tightenedErrorRate = Math.Max(1e-6, previous.Configuration.ErrorRate * TighteningRatio);
+                    BloomFilterConfiguration nextConfig = this._context.ConfigFactory.Create(
+                        nextLayerName,
+                        newExpectedItems,
+                        tightenedErrorRate,
+                        previous.Configuration.HashSeed + (uint)layerIndex
+                    );
+                    layer = CreateLayer(nextConfig);
+                }
+
+                await layer.ReloadAsync(cancellationToken).ConfigureAwait(false);
+                loadedLayers.Add(layer);
+                layerIndex++;
             }
-            finally {
-                this._lock.ExitWriteLock();
-            }
+
+            Atomic.Write(ref this._layers, [.. loadedLayers]);
             return;
         }
 
@@ -232,54 +226,24 @@ internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public bool Add(ReadOnlySpan<char> item) {
-        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-        using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
-        int written = Encoding.UTF8.GetBytes(item, buffer.Span);
-        return Add(buffer.Slice(0, written));
+    public override long GetPopCount() {
+        ThrowIfDisposed();
+
+        long total = 0;
+        IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
+        for(int i = 0; i < currentLayers.Length; i++) {
+            total += currentLayers[i].GetPopCount();
+        }
+        return total;
     }
 
     /// <inheritdoc/>
-    public bool Contains(ReadOnlySpan<char> item) {
-        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-        using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
-        int written = Encoding.UTF8.GetBytes(item, buffer.Span);
-        return Contains(buffer.Slice(0, written));
-    }
-
-    /// <inheritdoc/>
-    public long GetPopCount() {
-        this._lock.EnterReadLock();
-        try {
-            long total = 0;
-            IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
-            for(int i = 0; i < currentLayers.Length; i++) total += currentLayers[i].GetPopCount();
-            return total;
-        }
-        finally {
-            this._lock.ExitReadLock();
-        }
-    }
-
-    /// <summary>
-    /// Releases all resources used by the Scalable Bloom Filter and its underlying layers.
-    /// </summary>
-    public void Dispose() {
-        if(this._disposeState.TryBeginDispose()) {
-            this._lock.EnterWriteLock();
-            try {
-                IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
-                foreach(IPersistentBloomFilter? layer in currentLayers) {
-                    if(layer is IDisposable disposableLayer) {
-                        disposableLayer.Dispose();
-                    }
-                }
+    protected override void DisposeCore() {
+        IPersistentBloomFilter[] currentLayers = Atomic.Read(ref this._layers);
+        foreach(IPersistentBloomFilter? layer in currentLayers) {
+            if(layer is IDisposable disposableLayer) {
+                disposableLayer.Dispose();
             }
-            finally {
-                this._lock.ExitWriteLock();
-                this._lock.Dispose();
-            }
-            this._disposeState.SetDisposed();
         }
     }
 }

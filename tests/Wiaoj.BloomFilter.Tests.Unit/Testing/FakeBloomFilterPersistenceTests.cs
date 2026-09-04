@@ -73,4 +73,20 @@ public class FakeBloomFilterPersistenceTests {
         Assert.False(filter.IsDirty);
         Assert.Equal(1, filter.ReloadCount);
     }
+
+    [Fact]
+    public void Should_DistinguishDistinctBinarySequences_When_GivenInvalidUtf8Bytes() {
+        // Arrange: Distinct invalid UTF-8 sequences that previously collided to "\uFFFD"
+        byte[] invalidSequenceA = [0x80];
+        byte[] invalidSequenceB = [0x81];
+
+        FakeBloomFilter filter = new("binary-test");
+
+        // Act
+        filter.Add(invalidSequenceA);
+
+        // Assert: Distinct invalid binary sequences must NOT collide
+        Assert.True(filter.Contains(invalidSequenceA));
+        Assert.False(filter.Contains(invalidSequenceB));
+    }
 }

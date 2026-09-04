@@ -74,6 +74,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(argument, nameof(argument));
         Preca.ThrowIfNull(minimum, nameof(minimum));
         Preca.ThrowIfNull(exceptionFactory);
+        Preca.ThrowIfNull(state);
         if(argument < minimum) {
             Thrower.ThrowFromFactory(exceptionFactory, state);
         }

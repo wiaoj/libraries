@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using Wiaoj.Primitives;
 
@@ -17,6 +17,12 @@ public static class BloomMath {
     /// Square of the natural logarithm of 2: (ln 2)^2 ≈ 0.4804530139182014
     /// </summary>
     public const double Ln2Squared = 0.480453013918201424667102526327;
+
+    /// <summary>
+    /// 64-bit fractional golden ratio constant: 2^64 / phi ≈ 11400714819323198485 (0x9E3779B97F4A7C15UL).
+    /// Used in Fibonacci hashing and stride step generation to maximize bit entropy and dispersion.
+    /// </summary>
+    public const ulong GoldenRatio64 = 0x9E3779B97F4A7C15UL;
 
     /// <summary>
     /// Calculates the optimal bit array size (m) for a target capacity and error rate.
@@ -42,7 +48,7 @@ public static class BloomMath {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int CalculateOptimalHashCount(long sizeInBits, long expectedItems) {
         double k = ((double)sizeInBits / expectedItems) * Ln2;
-        return Math.Max(1, (int)Math.Ceiling(k));
+        return Math.Max(1, (int)Math.Round(k, MidpointRounding.AwayFromZero));
     }
 
     /// <summary>

@@ -12,7 +12,6 @@ internal sealed class ShardedBloomFilter : BloomFilterBase {
     private readonly InMemoryBloomFilter[] _shards;
     private readonly int _shardCount;
     private readonly int _shardMask;
-    private readonly StripedLock<int> _stripedIoLock = new(stripes: 128);
 
     /// <inheritdoc/>
     public override FilterName Name => this.Configuration.Name;
@@ -59,18 +58,18 @@ internal sealed class ShardedBloomFilter : BloomFilterBase {
     public override bool Add(ReadOnlySpan<byte> item) {
         ThrowIfDisposed();
 
-        ulong hash = XxHash3.Compute(item, this.Configuration.HashSeed).Value;
-        uint shardIndex = (uint)(hash & (ulong)this._shardMask);
-        return this._shards[shardIndex].Add(item);
+        BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
+        uint shardIndex = (uint)(h1 & (ulong)this._shardMask);
+        return this._shards[shardIndex].AddWithHashes(h1, h2);
     }
 
     /// <inheritdoc/>
     public override bool Contains(ReadOnlySpan<byte> item) {
         ThrowIfDisposed();
 
-        ulong hash = XxHash3.Compute(item, this.Configuration.HashSeed).Value;
-        uint shardIndex = (uint)(hash & (ulong)this._shardMask);
-        return this._shards[shardIndex].Contains(item);
+        BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
+        uint shardIndex = (uint)(h1 & (ulong)this._shardMask);
+        return this._shards[shardIndex].ContainsWithHashes(h1, h2);
     }
 
     /// <inheritdoc/>
@@ -90,12 +89,10 @@ internal sealed class ShardedBloomFilter : BloomFilterBase {
 
         if(!this.IsDirty) return;
 
-        IEnumerable<(InMemoryBloomFilter s, int idx)> dirtyShards = this._shards.Select((s, idx) => (s, idx)).Where(x => x.s.IsDirty);
+        IEnumerable<InMemoryBloomFilter> dirtyShards = this._shards.Where(s => s.IsDirty);
 
         await Parallel.ForEachAsync(dirtyShards, cancellationToken, async (shard, token) => {
-            using(await this._stripedIoLock.LockAsync(shard.idx, token).ConfigureAwait(false)) {
-                await shard.s.SaveAsync(token).ConfigureAwait(false);
-            }
+            await shard.SaveAsync(token).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 

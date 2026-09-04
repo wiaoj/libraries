@@ -60,6 +60,17 @@ public static partial class Preca {
         }
     }
 
+    /// <summary>
+    /// Validates that the specified numeric value is greater than zero, using a stateful custom exception factory.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="ISignedNumber{T}"/>.</typeparam>
+    /// <typeparam name="TState">The type of the state object passed to the exception factory.</typeparam>
+    /// <typeparam name="TException">The type of exception to throw. Must inherit from Exception and be non-null.</typeparam>
+    /// <param name="argument">The numeric value to validate.</param>
+    /// <param name="exceptionFactory">A factory function that creates the exception to throw. Cannot be null.</param>
+    /// <param name="state">The state object passed to the exception factory. Cannot be null.</param>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="exceptionFactory"/> or <paramref name="state"/> is null.</exception>
+    /// <exception cref="Exception">Thrown when <paramref name="argument"/> is zero, negative, or NaN, using the exception from <paramref name="exceptionFactory"/>.</exception>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNegativeOrZero<T, TState, TException>(T argument,

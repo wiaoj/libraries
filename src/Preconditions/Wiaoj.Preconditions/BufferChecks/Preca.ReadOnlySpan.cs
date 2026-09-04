@@ -62,6 +62,12 @@ public static partial class Preca {
         }
     }
 
+    /// <summary>
+    /// Throws an <see cref="ArgumentException"/> if the specified character span is empty or consists only of white-space characters.
+    /// </summary>
+    /// <param name="span">The read-only character span to validate.</param>
+    /// <param name="paramName">The name of the parameter being validated. This parameter is automatically populated by the compiler.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="span"/> is empty or contains only white-space characters.</exception>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfEmptyOrWhiteSpace(in ReadOnlySpan<char> span, [CallerArgumentExpression(nameof(span))] string? paramName = null) {

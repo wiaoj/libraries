@@ -1,5 +1,8 @@
-﻿namespace Wiaoj.Preconditions.Extensions;
+namespace Wiaoj.Preconditions.Extensions;
 
+/// <summary>
+/// Provides fluent extension methods for condition and type validations.
+/// </summary>
 [DebuggerNonUserCode, DebuggerStepThrough]
 public static class ThrowIfExtensions {
     /// <summary>

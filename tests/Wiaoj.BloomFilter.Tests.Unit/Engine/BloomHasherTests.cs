@@ -101,5 +101,23 @@ public sealed class BloomHasherTests {
             // Assert
             Assert.InRange(pos, 0, long.MaxValue - 1);
         }
+
+        [Fact]
+        public void Should_GenerateDistinctBitPositions_When_H2IsZero() {
+            // Arrange
+            ulong h1 = 0xDEADBEEFCAFEBABE;
+            ulong h2 = 0; // Degenerate input
+            long sizeInBits = 100_000;
+            int hashCount = 7;
+            HashSet<long> generatedPositions = [];
+
+            // Act: Guard internally replaces h2 == 0 with BloomMath.GoldenRatio64
+            for(int i = 0; i < hashCount; i++) {
+                generatedPositions.Add(BloomHasher.GetBitPosition(h1, h2, i, sizeInBits));
+            }
+
+            // Assert: Must generate distinct positions for all k hash iterations, avoiding 1-hash collapse
+            Assert.Equal(hashCount, generatedPositions.Count);
+        }
     }
 }

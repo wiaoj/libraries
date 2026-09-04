@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
@@ -53,6 +53,47 @@ public class BloomFilterIntegrityTests {
             // Act & Assert
             using InMemoryBloomFilter reloadedFilter = new(config, context);
             await Assert.ThrowsAsync<DataIntegrityException>(() => reloadedFilter.ReloadAsync(TestContext.Current.CancellationToken).AsTask());
+        }
+
+        [Fact]
+        public async Task Should_ThrowDataIntegrityException_When_NonSeekableStreamHasInvalidHeader() {
+            // Arrange: Provide a non-seekable stream with invalid/missing header
+            byte[] invalidHeaderData = [1, 2, 3, 4, 5, 6, 7, 8];
+            using MemoryStream sourceMs = new(invalidHeaderData);
+            using MemoryStream compressedMs = new();
+            using(System.IO.Compression.GZipStream compressor = new(compressedMs, System.IO.Compression.CompressionMode.Compress, leaveOpen: true)) {
+                sourceMs.CopyTo(compressor);
+            }
+            compressedMs.Position = 0;
+
+            System.IO.Compression.GZipStream nonSeekableStream = new(compressedMs, System.IO.Compression.CompressionMode.Decompress);
+            Assert.False(nonSeekableStream.CanSeek);
+
+            NonSeekableStreamStorage customStorage = new(nonSeekableStream);
+            BloomFilterOptions options = new();
+            options.Lifecycle.EnableIntegrityCheck = false; // Even when integrity check is false, cannot rewind non-seekable stream!
+
+            BloomFilterContext context = new(
+                Storage: customStorage,
+                MemoryStreamPool: new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+                Logger: NullLogger.Instance,
+                Options: options,
+                TimeProvider: TimeProvider.System,
+                ConfigFactory: this._configFactory
+            );
+
+            BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("non-seekable-filter"), 1_000, 0.01);
+            using InMemoryBloomFilter filter = new(config, context);
+
+            // Act & Assert: Must fail fast with DataIntegrityException rather than corrupting offset
+            DataIntegrityException ex = await Assert.ThrowsAsync<DataIntegrityException>(() => filter.ReloadAsync(TestContext.Current.CancellationToken).AsTask());
+            Assert.Contains("non-seekable", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed class NonSeekableStreamStorage(Stream stream) : IBloomFilterStorage {
+            public Task<bool> SaveAsync(FilterName filterName, BloomFilterConfiguration config, Stream source, CancellationToken cancellationToken = default) => Task.FromResult(true);
+            public ValueTask<(BloomFilterConfiguration? Config, Stream DataStream)?> LoadStreamAsync(FilterName filterName, CancellationToken cancellationToken = default) => ValueTask.FromResult<(BloomFilterConfiguration?, Stream)?>((null, stream));
+            public Task DeleteAsync(FilterName filterName, CancellationToken cancellationToken = default) => Task.CompletedTask;
         }
     }
 

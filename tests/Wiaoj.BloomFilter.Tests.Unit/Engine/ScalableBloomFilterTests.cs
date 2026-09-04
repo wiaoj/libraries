@@ -63,4 +63,50 @@ public class ScalableBloomFilterTests {
             Assert.False(secondAdd);
         }
     }
+
+    public sealed class ArchitectureAndTighteningMethod : ScalableBloomFilterTests {
+        [Fact]
+        public void Should_InheritFromBloomFilterBase_When_Instantiated() {
+            // Arrange & Act
+            Type scalableType = typeof(ScalableBloomFilter);
+            Type baseType = typeof(BloomFilterBase);
+
+            // Assert
+            Assert.True(baseType.IsAssignableFrom(scalableType));
+        }
+
+        [Fact]
+        public void Should_TightenErrorRateGeometrically_When_ScalingUp() {
+            // Arrange
+            const double initialErrorRate = 0.01;
+            BloomFilterConfiguration baseConfig = this._configFactory.Create(
+                FilterName.Parse("sbf-tightening-test"),
+                expectedItems: 100,
+                errorRate: initialErrorRate
+            );
+
+            using ScalableBloomFilter filter = new(
+                baseConfig,
+                this._context,
+                growthRate: GrowthRate.Double,
+                saturationThreshold: Percentage.FromDouble(0.10)
+            );
+
+            // Act
+            for(int i = 0; i < 200; i++) {
+                filter.Add($"key-{i}");
+            }
+
+            // Assert: Layer 1 must have tightened error rate (Almeida et al., 2007)
+            System.Reflection.FieldInfo? layersField = typeof(ScalableBloomFilter).GetField("_layers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(layersField);
+
+            IPersistentBloomFilter[]? layers = layersField.GetValue(filter) as IPersistentBloomFilter[];
+            Assert.NotNull(layers);
+            Assert.True(layers.Length > 1);
+
+            double expectedTightenedRate = initialErrorRate * ScalableBloomFilter.TighteningRatio;
+            Assert.Equal(expectedTightenedRate, layers[1].Configuration.ErrorRate, precision: 6);
+        }
+    }
 }

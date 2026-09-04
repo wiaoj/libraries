@@ -33,6 +33,11 @@ internal sealed class PooledBitArray : IDisposable {
         this._disposeState = new DisposeState();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ThrowIfDisposed() {
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(PooledBitArray));
+    }
+
     /// <summary>
     /// Atomically sets the bit at the specified index to 1.
     /// </summary>
@@ -40,6 +45,7 @@ internal sealed class PooledBitArray : IDisposable {
     /// <returns><see langword="true"/> if the bit was changed from 0 to 1; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Set(long index) {
+        ThrowIfDisposed();
         long wordIndex = index >> 6;
         int bitIndex = (int)(index & 63);
         ulong mask = 1UL << bitIndex;
@@ -60,6 +66,7 @@ internal sealed class PooledBitArray : IDisposable {
     /// <returns><see langword="true"/> if the bit is 1; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Get(long index) {
+        ThrowIfDisposed();
         long wordIndex = index >> 6;
         int bitIndex = (int)(index & 63);
         ulong word = Atomic.Read(ref this._array[wordIndex]);
@@ -72,6 +79,7 @@ internal sealed class PooledBitArray : IDisposable {
     /// <param name="destination">The stream to write data into.</param>
     /// <param name="ct">The cancellation token.</param>
     public async ValueTask WriteToStreamAsync(Stream destination, CancellationToken ct) {
+        ThrowIfDisposed();
         int byteCount = (int)BloomMath.BitsToBytes(this.Length);
         using UlongToByteMemoryManager manager = new(this._array);
         Memory<byte> memory = manager.Memory;
@@ -84,6 +92,7 @@ internal sealed class PooledBitArray : IDisposable {
     /// </summary>
     /// <param name="destination">The stream to write data into.</param>
     public void WriteToStream(Stream destination) {
+        ThrowIfDisposed();
         int byteCount = (int)BloomMath.BitsToBytes(this.Length);
         ReadOnlySpan<byte> byteSpan = MemoryMarshal.AsBytes(this._array.AsSpan());
         destination.Write(byteSpan[..byteCount]);
@@ -94,6 +103,7 @@ internal sealed class PooledBitArray : IDisposable {
     /// </summary>
     /// <returns>A 64-bit unsigned checksum integer.</returns>
     public ulong CalculateChecksum() {
+        ThrowIfDisposed();
         Span<byte> byteSpan = MemoryMarshal.AsBytes(this._array.AsSpan());
         int byteCount = (int)BloomMath.BitsToBytes(this.Length);
         return XxHash3.Compute(byteSpan[..byteCount]).Value;
@@ -106,6 +116,7 @@ internal sealed class PooledBitArray : IDisposable {
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The calculated checksum of the loaded data.</returns>
     public async ValueTask<ulong> LoadFromStreamAsync(Stream source, CancellationToken ct) {
+        ThrowIfDisposed();
         using UlongToByteMemoryManager manager = new(this._array);
         Memory<byte> buffer = manager.Memory;
 
@@ -129,6 +140,7 @@ internal sealed class PooledBitArray : IDisposable {
     /// </summary>
     /// <returns>The total number of set bits.</returns>
     public long GetPopCount() {
+        ThrowIfDisposed();
         int wordCount = BloomMath.BitsToWordCount(this.Length);
         long count = 0;
 

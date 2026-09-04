@@ -188,10 +188,14 @@ public sealed class HmacSha256HashTests {
         string text = "encoding-test-şüöğçı";
         byte[] utf8Expected = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(text));
         byte[] unicodeExpected = HMACSHA256.HashData(key, Encoding.Unicode.GetBytes(text));
+        byte[] asciiExpected = HMACSHA256.HashData(key, Encoding.ASCII.GetBytes(text));
+        byte[] latin1Expected = HMACSHA256.HashData(key, Encoding.Latin1.GetBytes(text));
 
         // Act & Assert
         Assert.Equal(utf8Expected, HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan(), Encoding.UTF8).AsSpan().ToArray());
         Assert.Equal(unicodeExpected, HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan(), Encoding.Unicode).AsSpan().ToArray());
+        Assert.Equal(asciiExpected, HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan(), Encoding.ASCII).AsSpan().ToArray());
+        Assert.Equal(latin1Expected, HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan(), Encoding.Latin1).AsSpan().ToArray());
     }
 
     [Fact]
@@ -235,6 +239,61 @@ public sealed class HmacSha256HashTests {
 
         // Assert
         Assert.Equal(expectedBytes, result.AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void Compute_ReadOnlySpanChar_UnderStackThreshold_ShouldProduceZeroAllocations() {
+        // Arrange
+        byte[] key = GetRandomBytes(32);
+        ReadOnlySpan<char> chars = "small-payload-for-zero-alloc-test".AsSpan();
+
+        // Warmup (JIT)
+        _ = HmacSha256Hash.Compute(key.AsSpan(), chars);
+
+        // Act
+        long beforeAllocated = GC.GetAllocatedBytesForCurrentThread();
+        _ = HmacSha256Hash.Compute(key.AsSpan(), chars);
+        long afterAllocated = GC.GetAllocatedBytesForCurrentThread();
+
+        // Assert
+        Assert.Equal(0, afterAllocated - beforeAllocated);
+    }
+
+    [Fact]
+    public void Compute_String_UnderStackThreshold_ShouldProduceZeroAllocations() {
+        // Arrange
+        byte[] key = GetRandomBytes(32);
+        string text = "small-string-for-zero-alloc-test";
+
+        // Warmup (JIT)
+        _ = HmacSha256Hash.Compute(key.AsSpan(), text);
+
+        // Act
+        long beforeAllocated = GC.GetAllocatedBytesForCurrentThread();
+        _ = HmacSha256Hash.Compute(key.AsSpan(), text);
+        long afterAllocated = GC.GetAllocatedBytesForCurrentThread();
+
+        // Assert
+        Assert.Equal(0, afterAllocated - beforeAllocated);
+    }
+
+    [Fact]
+    public void Compute_SecretKey_UnderStackThreshold_ShouldProduceZeroAllocations() {
+        // Arrange
+        byte[] keyBytes = GetRandomBytes(32);
+        using Secret<byte> key = Secret<byte>.From(keyBytes);
+        ReadOnlySpan<char> chars = "small-payload-for-zero-alloc-test".AsSpan();
+
+        // Warmup (JIT)
+        _ = HmacSha256Hash.Compute(key, chars);
+
+        // Act
+        long beforeAllocated = GC.GetAllocatedBytesForCurrentThread();
+        _ = HmacSha256Hash.Compute(key, chars);
+        long afterAllocated = GC.GetAllocatedBytesForCurrentThread();
+
+        // Assert
+        Assert.Equal(0, afterAllocated - beforeAllocated);
     }
 
     #endregion

@@ -74,6 +74,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(argument, nameof(argument));
         Preca.ThrowIfNull(maximum, nameof(maximum));
         Preca.ThrowIfNull(exceptionFactory);
+        Preca.ThrowIfNull(state);
         if(argument > maximum) {
             Thrower.ThrowFromFactory(exceptionFactory, state);
         }

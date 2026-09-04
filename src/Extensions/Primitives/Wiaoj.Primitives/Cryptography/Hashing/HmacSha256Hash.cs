@@ -94,6 +94,10 @@ public unsafe struct HmacSha256Hash
     /// <summary>
     /// Computes the HMAC-SHA256 hash of a string using a secure secret key and the specified encoding.
     /// </summary>
+    /// <param name="key">The secret key stored in unmanaged memory.</param>
+    /// <param name="data">The string data to hash.</param>
+    /// <param name="encoding">The character encoding used to convert the string to bytes.</param>
+    /// <returns>A <see cref="HmacSha256Hash"/> instance.</returns>
     public static HmacSha256Hash Compute(Secret<byte> key, string data, Encoding encoding) {
         Preca.ThrowIfNull(data);
         return Compute(key, data.AsSpan(), encoding);
@@ -102,6 +106,9 @@ public unsafe struct HmacSha256Hash
     /// <summary>
     /// Computes the HMAC-SHA256 hash of a string using a secure secret key and UTF-8 encoding.
     /// </summary>
+    /// <param name="key">The secret key stored in unmanaged memory.</param>
+    /// <param name="data">The string data to hash.</param>
+    /// <returns>A <see cref="HmacSha256Hash"/> instance.</returns>
     public static HmacSha256Hash Compute(Secret<byte> key, string data) {
         return Compute(key, data, Encoding.UTF8);
     }
