@@ -1,5 +1,6 @@
 
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using Wiaoj.BloomFilter.Diagnostics;
@@ -21,12 +22,13 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
     private readonly IObjectPool<MemoryStream> _memoryStreamPool;
     private readonly TimeProvider _timeProvider;
     private readonly AsyncLock _ioLock = new();
+    private readonly ReaderWriterLockSlim _rwLock = new(LockRecursionPolicy.NoRecursion);
 
     /// <inheritdoc/>
     public override bool IsDirty => this._isDirty;
 
     /// <inheritdoc/>
-    public override string Name => this.Configuration.Name.Value;
+    public override FilterName Name => this.Configuration.Name;
 
     /// <inheritdoc/>
     public override BloomFilterConfiguration Configuration { get; }
@@ -53,7 +55,12 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
         this._bits = new PooledBitArray(config.SizeInBits);
         this.LastSavedAt = this._timeProvider.GetUtcNow();
 
-        this._logger.LogFilterInitialized(this.Configuration.Name, config.ExpectedItems, config.ErrorRate, config.SizeInBits);
+        this._logger.LogFilterInitialized(this.Configuration.Name,
+                                          config.ExpectedItems,
+                                          config.ErrorRate,
+                                          config.SizeInBits,
+                                          BloomMath.BitsToBytes(config.SizeInBits),
+                                          config.HashFunctionCount); 
     }
 
     /// <inheritdoc/>
@@ -61,69 +68,79 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
     public override bool Add(ReadOnlySpan<byte> item) {
         ThrowIfDisposed();
 
-        PooledBitArray bits = Volatile.Read(ref this._bits);
-        BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
+        if(BloomFilterDiagnostics.AddCounter.Enabled) {
+            BloomFilterDiagnostics.AddCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+        }
 
-        bool atLeastOneSet = false;
-        long size = this.Configuration.SizeInBits;
-        int k = this.Configuration.HashFunctionCount;
-        int i = 0;
+        this._rwLock.EnterReadLock();
+        try {
+            PooledBitArray bits = this._bits;
+            BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
-        // Vector256 (AVX2): Process 4 hashes in parallel
-        if(Vector256.IsHardwareAccelerated && k >= 4) {
-            Vector256<ulong> vH1 = Vector256.Create(h1);
-            Vector256<ulong> vH2 = Vector256.Create(h2);
-            Vector256<ulong> vIndices = Vector256.Create(0UL, 1UL, 2UL, 3UL);
-            Vector256<ulong> vStep = Vector256.Create(4UL, 4UL, 4UL, 4UL);
+            bool atLeastOneSet = false;
+            long size = this.Configuration.SizeInBits;
+            int k = this.Configuration.HashFunctionCount;
+            int i = 0;
 
-            for(; i <= k - 4; i += 4) {
-                Vector256<ulong> vCombined = vH1 + (vIndices * vH2);
+            // Vector256 (AVX2): Process 4 hashes in parallel
+            if(Vector256.IsHardwareAccelerated && k >= 4) {
+                Vector256<ulong> vH1 = Vector256.Create(h1);
+                Vector256<ulong> vH2 = Vector256.Create(h2);
+                Vector256<ulong> vIndices = Vector256.Create(0UL, 1UL, 2UL, 3UL);
+                Vector256<ulong> vStep = Vector256.Create(4UL, 4UL, 4UL, 4UL);
 
-                for(int j = 0; j < 4; j++) {
-                    ulong finalHash = vCombined.GetElement(j);
-                    long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
-                    if(bits.Set(pos)) {
-                        atLeastOneSet = true;
+                for(; i <= k - 4; i += 4) {
+                    Vector256<ulong> vCombined = vH1 + (vIndices * vH2);
+
+                    for(int j = 0; j < 4; j++) {
+                        ulong finalHash = vCombined.GetElement(j);
+                        long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
+                        if(bits.Set(pos)) {
+                            atLeastOneSet = true;
+                        }
                     }
+                    vIndices += vStep;
                 }
-                vIndices += vStep;
             }
-        }
 
-        // Vector128 (SSE2 / NEON): Process remaining pairs
-        if(Vector128.IsHardwareAccelerated && (k - i) >= 2) {
-            Vector128<ulong> vH1 = Vector128.Create(h1);
-            Vector128<ulong> vH2 = Vector128.Create(h2);
-            Vector128<ulong> vIndices = Vector128.Create((ulong)i, (ulong)(i + 1));
-            Vector128<ulong> vStep = Vector128.Create(2UL, 2UL);
+            // Vector128 (SSE2 / NEON): Process remaining pairs
+            if(Vector128.IsHardwareAccelerated && (k - i) >= 2) {
+                Vector128<ulong> vH1 = Vector128.Create(h1);
+                Vector128<ulong> vH2 = Vector128.Create(h2);
+                Vector128<ulong> vIndices = Vector128.Create((ulong)i, (ulong)(i + 1));
+                Vector128<ulong> vStep = Vector128.Create(2UL, 2UL);
 
-            for(; i <= k - 2; i += 2) {
-                Vector128<ulong> vCombined = vH1 + (vIndices * vH2);
+                for(; i <= k - 2; i += 2) {
+                    Vector128<ulong> vCombined = vH1 + (vIndices * vH2);
 
-                for(int j = 0; j < 2; j++) {
-                    ulong finalHash = vCombined.GetElement(j);
-                    long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
-                    if(bits.Set(pos)) {
-                        atLeastOneSet = true;
+                    for(int j = 0; j < 2; j++) {
+                        ulong finalHash = vCombined.GetElement(j);
+                        long pos = (long)(((UInt128)finalHash * (ulong)size) >> 64);
+                        if(bits.Set(pos)) {
+                            atLeastOneSet = true;
+                        }
                     }
+                    vIndices += vStep;
                 }
-                vIndices += vStep;
             }
-        }
 
-        // Scalar loop for remaining hash iterations
-        for(; i < k; i++) {
-            long pos = BloomHasher.GetBitPosition(h1, h2, i, size);
-            if(bits.Set(pos)) {
-                atLeastOneSet = true;
+            // Scalar loop for remaining hash iterations
+            for(; i < k; i++) {
+                long pos = BloomHasher.GetBitPosition(h1, h2, i, size);
+                if(bits.Set(pos)) {
+                    atLeastOneSet = true;
+                }
             }
-        }
 
-        if(atLeastOneSet) {
-            this._isDirty = true;
-        }
+            if(atLeastOneSet) {
+                this._isDirty = true;
+            }
 
-        return atLeastOneSet;
+            return atLeastOneSet;
+        }
+        finally {
+            this._rwLock.ExitReadLock();
+        }
     }
 
     /// <inheritdoc/>
@@ -131,7 +148,29 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
     public override bool Contains(ReadOnlySpan<byte> item) {
         ThrowIfDisposed();
 
-        PooledBitArray bits = Atomic.Read(ref this._bits);
+        this._rwLock.EnterReadLock();
+        bool result;
+        try {
+            result = InternalContains(item);
+        }
+        finally {
+            this._rwLock.ExitReadLock();
+        }
+
+        if(BloomFilterDiagnostics.LookupCounter.Enabled) {
+            BloomFilterDiagnostics.LookupCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+
+            if(result && BloomFilterDiagnostics.HitCounter.Enabled) {
+                BloomFilterDiagnostics.HitCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+            }
+        }
+
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+    private bool InternalContains(ReadOnlySpan<byte> item) {
+        PooledBitArray bits = this._bits;
         BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
         long size = this.Configuration.SizeInBits;
@@ -199,6 +238,12 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
             return;
         }
 
+        long startingTimestamp = Stopwatch.GetTimestamp();
+
+        using Activity? activity = BloomFilterDiagnostics.ActivitySource.StartActivity(BloomFilterDiagnostics.ActivitySave);
+        activity?.SetTag(BloomFilterDiagnostics.TagFilterName, this.Name.Value);
+        activity?.SetTag(BloomFilterDiagnostics.TagSizeInBits, this.Configuration.SizeInBits);
+
         using(await this._ioLock.LockAsync(cancellationToken).ConfigureAwait(false)) {
             this._logger.LogSaveStarted(this.Configuration.Name);
 
@@ -207,20 +252,40 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
                 MemoryStream snapshotStream = pooledStream.Item;
                 snapshotStream.SetLength(0);
 
-                PooledBitArray bits = Atomic.Read(ref this._bits);
-                ulong checksum = bits.CalculateChecksum();
-
-                BloomFilterHeader.WriteHeader(snapshotStream, checksum, this.Configuration);
-                await bits.WriteToStreamAsync(snapshotStream, cancellationToken).ConfigureAwait(false);
-                this._isDirty = false;
+                ulong checksum;
+                this._rwLock.EnterReadLock();
+                try {
+                    checksum = this._bits.CalculateChecksum();
+                    BloomFilterHeader.WriteHeader(snapshotStream, checksum, this.Configuration);
+                    this._bits.WriteToStream(snapshotStream);
+                    this._isDirty = false;
+                }
+                finally {
+                    this._rwLock.ExitReadLock();
+                }
 
                 snapshotStream.Position = 0;
                 await this._storage.SaveAsync(this.Name, this.Configuration, snapshotStream, cancellationToken).ConfigureAwait(false);
 
                 this.LastSavedAt = this._timeProvider.GetUtcNow();
+
+                activity?.SetTag(BloomFilterDiagnostics.TagChecksum, checksum.ToString("X"));
+                activity?.SetTag(BloomFilterDiagnostics.TagBytesWritten, snapshotStream.Length);
+
+                TimeSpan elapsed = Stopwatch.GetElapsedTime(startingTimestamp);
+                BloomFilterDiagnostics.SaveDuration.Record(
+                    elapsed.TotalMilliseconds,
+                    new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+
+                BloomFilterDiagnostics.BytesWrittenCounter.Add(
+                    snapshotStream.Length,
+                    new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+
                 this._logger.LogSaveSuccess(this.Configuration.Name, checksum, (int)snapshotStream.Length);
             }
             catch(Exception ex) {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
                 this._logger.LogSaveFailed(ex, this.Configuration.Name);
                 throw;
             }
@@ -234,6 +299,11 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
         }
 
         ThrowIfDisposed();
+
+        long startingTimestamp = Stopwatch.GetTimestamp();
+
+        using Activity? activity = BloomFilterDiagnostics.ActivitySource.StartActivity(BloomFilterDiagnostics.ActivityReload);
+        activity?.SetTag(BloomFilterDiagnostics.TagFilterName, this.Name.Value);
 
         using(await this._ioLock.LockAsync(cancellationToken).ConfigureAwait(false)) {
             (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await this._storage.LoadStreamAsync(this.Name, cancellationToken).ConfigureAwait(false);
@@ -283,15 +353,29 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
                     this._logger.LogReloadSuccess(this.Configuration.Name, expectedChecksum);
                 }
 
-                // Atomic reference swap
-                PooledBitArray oldBits = Atomic.Exchange(ref this._bits, newBits);
-                newBits = null;
-                this._isDirty = false;
+                // Swap bit arrays under WriteLock to ensure no active readers/writers touch oldBits
+                this._rwLock.EnterWriteLock();
+                PooledBitArray? oldBits = null;
+                try {
+                    oldBits = this._bits;
+                    this._bits = newBits;
+                    newBits = null;
+                    this._isDirty = false;
+                    oldBits?.Dispose();
+                }
+                finally {
+                    this._rwLock.ExitWriteLock();
+                }
 
-                oldBits?.Dispose();
+                TimeSpan elapsed = Stopwatch.GetElapsedTime(startingTimestamp);
+                BloomFilterDiagnostics.ReloadDuration.Record(
+                    elapsed.TotalMilliseconds,
+                    new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
             }
             catch(Exception ex) {
-                this._logger.LogError(ex, "Failed to reload Bloom Filter '{Name}'.", this.Name);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
+                this._logger.LogReloadFailed(ex, this.Configuration.Name);
                 throw;
             }
             finally {
@@ -303,13 +387,26 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
     /// <inheritdoc/>
     public override long GetPopCount() {
         ThrowIfDisposed();
-        PooledBitArray bits = Atomic.Read(ref this._bits);
-        return bits.GetPopCount();
+        this._rwLock.EnterReadLock();
+        try {
+            return this._bits.GetPopCount();
+        }
+        finally {
+            this._rwLock.ExitReadLock();
+        }
     }
 
     /// <inheritdoc/>
     protected override void DisposeCore() {
-        PooledBitArray? bits = Atomic.Exchange(ref this._bits, null!);
-        bits?.Dispose();
+        this._rwLock.EnterWriteLock();
+        try {
+            PooledBitArray? bits = this._bits;
+            this._bits = null!;
+            bits?.Dispose();
+        }
+        finally {
+            this._rwLock.ExitWriteLock();
+            this._rwLock.Dispose();
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
@@ -75,18 +75,57 @@ public class BloomFilterDisposalTests {
         }
 
         [Fact]
-        public async Task Should_ThrowObjectDisposedException_When_PersistingOrReloadingDisposedFilter() {
+        public void Should_ThrowObjectDisposedException_When_AddingOrQueryingDisposedRotatingFilter() {
             // Arrange
             BloomFilterContext context = CreateContext();
-            BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("disposed-io"), 1_000, 0.01);
-            InMemoryBloomFilter filter = new(config, context);
+            BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("disposed-rotating"), 1_000, 0.01);
+            RotatingBloomFilter filter = new(config, context, TimeSpan.FromHours(1), 2);
 
             // Act
             filter.Dispose();
 
             // Assert
-            await Assert.ThrowsAsync<ObjectDisposedException>(() => filter.SaveAsync(TestContext.Current.CancellationToken).AsTask());
-            await Assert.ThrowsAsync<ObjectDisposedException>(() => filter.ReloadAsync(TestContext.Current.CancellationToken).AsTask());
+            Assert.Throws<ObjectDisposedException>(() => filter.Add("rot-key"u8));
+            Assert.Throws<ObjectDisposedException>(() => filter.Add("rot-key".AsSpan()));
+            Assert.Throws<ObjectDisposedException>(() => filter.Contains("rot-key"u8));
+            Assert.Throws<ObjectDisposedException>(() => filter.Contains("rot-key".AsSpan()));
+            Assert.Throws<ObjectDisposedException>(() => filter.GetPopCount());
+        }
+
+        [Fact]
+        public async Task Should_ThrowObjectDisposedException_When_PersistingOrReloadingDisposedFilter() {
+            // Arrange
+            BloomFilterContext context = CreateContext();
+            BloomFilterConfiguration inMemConfig = this._configFactory.Create(FilterName.Parse("disposed-io-inmem"), 1_000, 0.01);
+            InMemoryBloomFilter inMemFilter = new(inMemConfig, context);
+
+            BloomFilterConfiguration rotConfig = this._configFactory.Create(FilterName.Parse("disposed-io-rot"), 1_000, 0.01);
+            RotatingBloomFilter rotFilter = new(rotConfig, context, TimeSpan.FromHours(1), 2);
+
+            BloomFilterConfiguration shardedConfig = this._configFactory.Create(FilterName.Parse("disposed-io-shard"), 2_000, 0.01).WithShardCount(2);
+            ShardedBloomFilter shardedFilter = new(shardedConfig, context);
+
+            BloomFilterConfiguration scalableConfig = this._configFactory.Create(FilterName.Parse("disposed-io-scale"), 1_000, 0.01);
+            ScalableBloomFilter scalableFilter = new(scalableConfig, context);
+
+            // Act
+            inMemFilter.Dispose();
+            rotFilter.Dispose();
+            shardedFilter.Dispose();
+            scalableFilter.Dispose();
+
+            // Assert
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => inMemFilter.SaveAsync(TestContext.Current.CancellationToken).AsTask());
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => inMemFilter.ReloadAsync(TestContext.Current.CancellationToken).AsTask());
+
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => rotFilter.SaveAsync(TestContext.Current.CancellationToken).AsTask());
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => rotFilter.ReloadAsync(TestContext.Current.CancellationToken).AsTask());
+
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => shardedFilter.SaveAsync(TestContext.Current.CancellationToken).AsTask());
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => shardedFilter.ReloadAsync(TestContext.Current.CancellationToken).AsTask());
+
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => scalableFilter.SaveAsync(TestContext.Current.CancellationToken).AsTask());
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => scalableFilter.ReloadAsync(TestContext.Current.CancellationToken).AsTask());
         }
     }
 
@@ -96,12 +135,23 @@ public class BloomFilterDisposalTests {
             // Arrange
             BloomFilterContext context = CreateContext();
             BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("idempotent-dispose"), 1_000, 0.01);
-            InMemoryBloomFilter filter = new(config, context);
+            using InMemoryBloomFilter inMemFilter = new(config, context);
+            using RotatingBloomFilter rotFilter = new(config, context, TimeSpan.FromHours(1), 2);
+            using ShardedBloomFilter shardedFilter = new(config.WithShardCount(2), context);
+            using ScalableBloomFilter scalableFilter = new(config, context);
 
-            // Act & Assert
-            filter.Dispose();
-            filter.Dispose();
-            filter.Dispose();
+            // Act & Assert (multiple disposes must not throw)
+            inMemFilter.Dispose();
+            inMemFilter.Dispose();
+
+            rotFilter.Dispose();
+            rotFilter.Dispose();
+
+            shardedFilter.Dispose();
+            shardedFilter.Dispose();
+
+            scalableFilter.Dispose();
+            scalableFilter.Dispose();
         }
     }
 }

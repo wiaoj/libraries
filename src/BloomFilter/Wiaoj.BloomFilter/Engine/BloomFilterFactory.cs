@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.ObjectPool;
+using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter.Engine;
@@ -25,15 +27,13 @@ internal sealed class BloomFilterFactory(
     /// Creates and hydrates a Bloom Filter instance by name.
     /// </summary>
     public async Task<IPersistentBloomFilter> Create(FilterName name, CancellationToken cancellationToken = default) {
-        if(name.IsEmpty) {
-            throw new ArgumentException("Filter name cannot be empty.", nameof(name));
-        }
+        Preca.ThrowIfDefault(name);
 
         BloomFilterOptions currentOptions = optionsMonitor.CurrentValue;
 
         if(!currentOptions.Filters.TryGetValue(name.Value, out FilterDefinition? definition)) {
             InvalidOperationException ex = new($"Filter configuration for '{name.Value}' was not found in options.");
-            this._logger.LogError(ex, "Configuration missing for Bloom Filter '{Name}'.", name.Value);
+            this._logger.LogMissingConfiguration(ex, name);
             throw ex;
         }
 
@@ -67,14 +67,14 @@ internal sealed class BloomFilterFactory(
             await filter.ReloadAsync(cancellationToken).ConfigureAwait(false);
         }
         catch(Exception ex) {
-            this._logger.LogError(ex, "Failed to hydrate Bloom Filter '{Name}' from storage. Reinitializing clean filter.", name.Value);
+            this._logger.LogHydrationFailed(ex, name);
 
             if(storage != null) {
                 try {
                     await storage.DeleteAsync(name, cancellationToken).ConfigureAwait(false);
                 }
                 catch(Exception delEx) {
-                    this._logger.LogWarning(delEx, "Failed to delete corrupted storage files for '{Name}'.", name.Value);
+                    this._logger.LogCorruptFileCleanupFailed(delEx, name);
                 }
             }
 
@@ -93,7 +93,7 @@ internal sealed class BloomFilterFactory(
                 return;
             }
 
-            this._logger.LogInformation("Triggering automatic reseeding for Bloom Filter '{Name}'.", name.Value);
+            this._logger.LogSeedingStarted(name);
 
             foreach(IAutoBloomFilterSeeder seeder in matchingSeeders) {
                 ct.ThrowIfCancellationRequested();
@@ -101,13 +101,13 @@ internal sealed class BloomFilterFactory(
             }
 
             await filter.SaveAsync(ct).ConfigureAwait(false);
-            this._logger.LogInformation("Automatic reseeding completed successfully for '{Name}'.", name.Value);
+            this._logger.LogSeedingCompleted(name, filter.GetPopCount());
         }
         catch(OperationCanceledException) {
-            this._logger.LogWarning("Automatic reseeding for '{Name}' was aborted due to application shutdown.", name.Value);
+            this._logger.LogSeedingAborted(name);
         }
         catch(Exception ex) {
-            this._logger.LogError(ex, "Critical failure during automatic reseeding of '{Name}'.", name.Value);
+            this._logger.LogSeedingExecutionFailed(ex, name);
         }
     }
 }

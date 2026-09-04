@@ -20,6 +20,27 @@ public class ShardedBloomFilterPersistenceTests {
         );
     }
 
+    public sealed class SaveMethod : ShardedBloomFilterPersistenceTests {
+        [Fact]
+        public async Task Should_SaveAllDirtyShards_ToStorage() {
+            // Arrange
+            FakeBloomFilterStorage storage = new();
+            BloomFilterContext context = CreateContext(storage);
+            BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("sharded-persist"), 2_000, 0.01)
+                .WithShardCount(2);
+
+            using ShardedBloomFilter originalFilter = new(config, context);
+            originalFilter.Add("test-element"u8);
+
+            // Act
+            await originalFilter.SaveAsync(TestContext.Current.CancellationToken);
+
+            // Assert: Verify that shard files exist in storage (e.g. sharded-persist_s0 or s1)
+            Assert.False(originalFilter.IsDirty);
+            Assert.True(storage.Exists("sharded-persist_s0") || storage.Exists("sharded-persist_s1"));
+        }
+    }
+
     public sealed class ReloadMethod : ShardedBloomFilterPersistenceTests {
         [Fact]
         public async Task Should_RestoreAllShardData_When_ReloadedFromStorage_AfterSave() {

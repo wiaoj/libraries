@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
+using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.BloomFilter.Engine;
 
 namespace Wiaoj.BloomFilter.Hosting;
@@ -15,7 +16,7 @@ internal sealed class BloomFilterWarmUpService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         if(!options.Value.Lifecycle.EnableWarmUp) return;
 
-        logger.LogInformation("🔥 Warming up Bloom Filters...");
+        logger.LogWarmUpStarted();
         Stopwatch sw = Stopwatch.StartNew();
 
         IEnumerable<Task> tasks = options.Value.Filters.Keys.Select(async key => {
@@ -26,13 +27,13 @@ internal sealed class BloomFilterWarmUpService(
                 }
             }
             catch(Exception ex) {
-                logger.LogError(ex, "Failed to warm up '{Name}'", key);
+                logger.LogWarmUpFilterFailed(ex, key);
             }
         });
 
         await Task.WhenAll(tasks);
 
         sw.Stop();
-        logger.LogInformation("✅ All filters warmed up in {Elapsed}ms.", sw.ElapsedMilliseconds);
+        logger.LogWarmUpCompleted(sw.ElapsedMilliseconds);
     }
 }

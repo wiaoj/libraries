@@ -1,5 +1,4 @@
 
-using System.Numerics;
 using Wiaoj.Concurrency;
 using Wiaoj.Preconditions;
 using Wiaoj.Primitives.Hashing;
@@ -16,7 +15,7 @@ internal sealed class ShardedBloomFilter : BloomFilterBase {
     private readonly StripedLock<int> _stripedIoLock = new(stripes: 128);
 
     /// <inheritdoc/>
-    public override string Name => this.Configuration.Name.Value;
+    public override FilterName Name => this.Configuration.Name;
 
     /// <inheritdoc/>
     public override bool IsDirty => this._shards.Any(s => s.IsDirty);
@@ -35,10 +34,7 @@ internal sealed class ShardedBloomFilter : BloomFilterBase {
         Preca.ThrowIfNull(config, nameof(config));
         Preca.ThrowIfNull(context, nameof(context));
         Preca.ThrowIfLessThan(config.ShardCount, 2, () => new ArgumentOutOfRangeException(nameof(config), "Shard count must be at least 2 for a sharded filter."));
-
-        if(!BitOperations.IsPow2(config.ShardCount)) {
-            throw new ArgumentException("Shard count must be a power of 2.", nameof(config));
-        }
+        Preca.ThrowIfNotPowerOfTwo(config.ShardCount, () => new ArgumentException("Shard count must be a power of 2.", nameof(config)));
 
         this.Configuration = config;
         this._shardCount = config.ShardCount;

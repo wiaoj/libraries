@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.IO.Compression;
+using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Preconditions;
 
 namespace Wiaoj.BloomFilter.Storage;
@@ -45,11 +46,7 @@ internal sealed class FileSystemBloomFilterStorage : IBloomFilterStorage {
         BloomFilterConfiguration config,
         Stream source,
         CancellationToken cancellationToken = default) {
-
-        if(filterName.IsEmpty) {
-            throw new ArgumentException("Filter name cannot be empty.", nameof(filterName));
-        }
-
+        Preca.ThrowIfDefault(filterName);
         Preca.ThrowIfNull(config, nameof(config));
         Preca.ThrowIfNull(source, nameof(source));
 
@@ -81,7 +78,7 @@ internal sealed class FileSystemBloomFilterStorage : IBloomFilterStorage {
                 throw;
             }
 
-            this._logger.LogError(ex, "Failed to persist Bloom Filter '{Name}' to file system.", filterName.Value);
+            this._logger.LogSaveFailed(ex, filterName);
             return false;
         }
     }
@@ -91,10 +88,8 @@ internal sealed class FileSystemBloomFilterStorage : IBloomFilterStorage {
         FilterName filterName,
         CancellationToken cancellationToken = default) {
 
-        if(filterName.IsEmpty) {
-            throw new ArgumentException("Filter name cannot be empty.", nameof(filterName));
-        }
-
+        Preca.ThrowIfDefault(filterName);
+      
         try {
             string path = GetPath(filterName);
             if(!File.Exists(path) || new FileInfo(path).Length == 0) {
@@ -110,7 +105,7 @@ internal sealed class FileSystemBloomFilterStorage : IBloomFilterStorage {
             return ValueTask.FromResult<(BloomFilterConfiguration?, Stream)?>((null, fs));
         }
         catch(Exception ex) when(this._ignoreErrors) {
-            this._logger.LogError(ex, "Failed to load Bloom Filter stream for '{Name}'.", filterName.Value);
+            this._logger.LogStorageLoadFailed(ex, filterName);
             return ValueTask.FromResult<(BloomFilterConfiguration?, Stream)?>(null);
         }
     }
@@ -118,11 +113,9 @@ internal sealed class FileSystemBloomFilterStorage : IBloomFilterStorage {
     /// <inheritdoc/>
     public Task DeleteAsync(
         FilterName filterName,
-        CancellationToken cancellationToken = default) {
-
-        if(filterName.IsEmpty) {
-            throw new ArgumentException("Filter name cannot be empty.", nameof(filterName));
-        }
+        CancellationToken cancellationToken = default) { 
+        Preca.ThrowIfDefault(filterName);
+        
 
         try {
             string pattern = $"{filterName.Value}*{Extension}";
@@ -131,7 +124,7 @@ internal sealed class FileSystemBloomFilterStorage : IBloomFilterStorage {
             }
         }
         catch(Exception ex) when(this._ignoreErrors) {
-            this._logger.LogError(ex, "Failed to delete filter files for '{Name}'.", filterName.Value);
+            this._logger.LogStorageDeleteFailed(ex, filterName);
         }
 
         return Task.CompletedTask;
@@ -148,7 +141,7 @@ internal sealed class FileSystemBloomFilterStorage : IBloomFilterStorage {
             }
         }
         catch(Exception ex) {
-            this._logger.LogWarning(ex, "Failed to clean up temporary file '{Path}'.", path);
+            this._logger.LogTemporaryFileCleanupFailed(ex, path);
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.BloomFilter;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.Preconditions;
@@ -12,7 +12,7 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </summary>
 public static class BloomFilterTestingServiceCollectionExtensions {
     /// <summary>
-    /// Registers a fake singleton <see cref="IBloomFilter"/> under the specified name.
+    /// Registers a fake singleton <see cref="IBloomFilter"/> and <see cref="IPersistentBloomFilter"/> under the specified name.
     /// </summary>
     public static IServiceCollection AddFakeBloomFilter(this IServiceCollection services, string filterName) {
         Preca.ThrowIfNull(services);
@@ -20,7 +20,9 @@ public static class BloomFilterTestingServiceCollectionExtensions {
 
         FakeBloomFilter fake = new(filterName);
         services.AddKeyedSingleton<IBloomFilter>(filterName, fake);
+        services.AddKeyedSingleton<IPersistentBloomFilter>(filterName, fake);
         services.TryAddSingleton<IBloomFilter>(fake);
+        services.TryAddSingleton<IPersistentBloomFilter>(fake);
         return services;
     }
 
@@ -32,7 +34,10 @@ public static class BloomFilterTestingServiceCollectionExtensions {
 
         FakeBloomFilter<TTag> fake = new();
         services.AddSingleton<IBloomFilter<TTag>>(fake);
+        services.AddKeyedSingleton<IBloomFilter>(fake.Name.Value, fake);
+        services.AddKeyedSingleton<IPersistentBloomFilter>(fake.Name.Value, fake);
         services.TryAddSingleton<IBloomFilter>(fake);
+        services.TryAddSingleton<IPersistentBloomFilter>(fake);
         return services;
     }
 

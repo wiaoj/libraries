@@ -35,6 +35,19 @@ public sealed class BloomHasherTests {
             // Assert
             Assert.NotEqual(h1A, h1B);
         }
+
+        [Fact]
+        public void Should_ProduceDeterministicHashes_ForEmptySpan_AcrossDifferentSeeds() {
+            // Act
+            BloomHasher.ComputeBaseHashes(ReadOnlySpan<byte>.Empty, 100, out ulong h1A, out ulong h2A);
+            BloomHasher.ComputeBaseHashes(ReadOnlySpan<byte>.Empty, 100, out ulong h1A2, out ulong h2A2);
+            BloomHasher.ComputeBaseHashes(ReadOnlySpan<byte>.Empty, 200, out ulong h1B, out ulong h2B);
+
+            // Assert
+            Assert.Equal(h1A, h1A2);
+            Assert.Equal(h2A, h2A2);
+            Assert.NotEqual(h1A, h1B);
+        }
     }
 
     public sealed class GetBitPositionMethod {
@@ -69,6 +82,24 @@ public sealed class BloomHasherTests {
 
             // Assert
             Assert.Equal(hashCount, generatedPositions.Count);
+        }
+
+        [Fact]
+        public void Should_MapToZero_When_SizeInBitsIsOne() {
+            // Arrange & Act
+            long pos = BloomHasher.GetBitPosition(0x123456789ABCDEF0, 0xFEDCBA9876543210, 5, 1);
+
+            // Assert: Any value mapped to range [0, 0] must be 0
+            Assert.Equal(0, pos);
+        }
+
+        [Fact]
+        public void Should_NotOverflowOrReturnNegative_When_SizeInBitsIsExtremelyLarge() {
+            // Arrange & Act
+            long pos = BloomHasher.GetBitPosition(ulong.MaxValue, ulong.MaxValue, 10, long.MaxValue);
+
+            // Assert
+            Assert.InRange(pos, 0, long.MaxValue - 1);
         }
     }
 }

@@ -1,21 +1,35 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Text;
 using Wiaoj.Preconditions;
 
 namespace Wiaoj.BloomFilter.Testing;
 
 /// <summary>
-/// Thread-safe, in-memory, deterministic implementation of <see cref="IBloomFilter"/> for unit and integration testing.
+/// Thread-safe, in-memory, deterministic implementation of <see cref="IPersistentBloomFilter"/> for unit and integration testing.
 /// Provides zero false-positive rate and inspection capabilities for test assertions.
 /// </summary>
-public class FakeBloomFilter : IBloomFilter {
+public class FakeBloomFilter : IPersistentBloomFilter {
     private readonly ConcurrentDictionary<string, bool> _items = new(StringComparer.Ordinal);
+    private volatile bool _isDirty;
 
     /// <inheritdoc/>
-    public string Name { get; }
+    public FilterName Name { get; }
 
     /// <inheritdoc/>
     public BloomFilterConfiguration Configuration { get; }
+
+    /// <inheritdoc/>
+    public virtual bool IsDirty => this._isDirty;
+
+    /// <summary>
+    /// Gets the number of times <see cref="SaveAsync"/> has been called.
+    /// </summary>
+    public int SaveCount { get; private set; }
+
+    /// <summary>
+    /// Gets the number of times <see cref="ReloadAsync"/> has been called.
+    /// </summary>
+    public int ReloadCount { get; private set; }
 
     /// <summary>
     /// Gets all items that have been added to this filter as UTF-8 / string representations.
@@ -40,13 +54,17 @@ public class FakeBloomFilter : IBloomFilter {
     public FakeBloomFilter(BloomFilterConfiguration configuration) {
         Preca.ThrowIfNull(configuration);
         this.Configuration = configuration;
-        this.Name = configuration.Name.Value;
+        this.Name = configuration.Name;
     }
 
     /// <inheritdoc/>
     public virtual bool Add(ReadOnlySpan<byte> item) {
         string key = ConvertToKey(item);
-        return this._items.TryAdd(key, true);
+        bool added = this._items.TryAdd(key, true);
+        if(added) {
+            this._isDirty = true;
+        }
+        return added;
     }
 
     /// <inheritdoc/>
@@ -58,7 +76,11 @@ public class FakeBloomFilter : IBloomFilter {
     /// <inheritdoc/>
     public virtual bool Add(ReadOnlySpan<char> item) {
         string key = item.ToString();
-        return this._items.TryAdd(key, true);
+        bool added = this._items.TryAdd(key, true);
+        if(added) {
+            this._isDirty = true;
+        }
+        return added;
     }
 
     /// <inheritdoc/>
@@ -72,11 +94,26 @@ public class FakeBloomFilter : IBloomFilter {
         return this._items.Count;
     }
 
+    /// <inheritdoc/>
+    public virtual ValueTask SaveAsync(CancellationToken cancellationToken = default) {
+        this._isDirty = false;
+        this.SaveCount++;
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public virtual ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
+        this._isDirty = false;
+        this.ReloadCount++;
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>
     /// Resets the filter by clearing all recorded items.
     /// </summary>
     public void Reset() {
         this._items.Clear();
+        this._isDirty = false;
     }
 
     /// <summary>

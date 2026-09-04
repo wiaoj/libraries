@@ -17,7 +17,7 @@ internal abstract class BloomFilterBase : IPersistentBloomFilter, IDisposable {
     protected readonly DisposeState DisposeState = new();
 
     /// <inheritdoc/>
-    public abstract string Name { get; }
+    public abstract FilterName Name { get; }
 
     /// <inheritdoc/>
     public abstract BloomFilterConfiguration Configuration { get; }

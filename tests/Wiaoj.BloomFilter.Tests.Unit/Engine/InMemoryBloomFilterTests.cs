@@ -210,5 +210,82 @@ public class InMemoryBloomFilterTests {
             // Assert
             Assert.False(hasError, "Concurrent Read/Write caused an unexpected exception.");
         }
+
+        [Fact]
+        public async Task Should_RemainThreadSafe_When_ReloadAsyncExecutesConcurrentlyWithAddAndContains() {
+            // Arrange
+            FakeBloomFilterStorage storage = new();
+            BloomFilterOptions options = new();
+            BloomFilterContext context = new(
+                storage,
+                new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+                NullLogger.Instance,
+                options,
+                TimeProvider.System,
+                this._configFactory
+            );
+
+            BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("reload-race-filter"), 5_000, 0.01);
+            using InMemoryBloomFilter filter = new(config, context);
+
+            // Populate some data and persist to storage so ReloadAsync has something to load
+            for(int i = 0; i < 500; i++) {
+                filter.Add(Encoding.UTF8.GetBytes($"seed-{i}"));
+            }
+            await filter.SaveAsync(TestContext.Current.CancellationToken);
+
+            using CancellationTokenSource cts = new(TimeSpan.FromSeconds(1));
+            CancellationToken ct = cts.Token;
+            List<Exception> errors = [];
+
+            // Act: Reader threads, writer threads, and reloader task running concurrently
+            Task reader = Task.Run(() => {
+                int count = 0;
+                while(!ct.IsCancellationRequested) {
+                    try {
+                        filter.Contains(Encoding.UTF8.GetBytes($"seed-{count % 500}"));
+                        count++;
+                    }
+                    catch(Exception ex) {
+                        lock(errors) errors.Add(ex);
+                        break;
+                    }
+                }
+            }, TestContext.Current.CancellationToken);
+
+            Task writer = Task.Run(() => {
+                int count = 1000;
+                while(!ct.IsCancellationRequested) {
+                    try {
+                        filter.Add(Encoding.UTF8.GetBytes($"concurrent-add-{count++}"));
+                    }
+                    catch(Exception ex) {
+                        lock(errors) errors.Add(ex);
+                        break;
+                    }
+                }
+            }, TestContext.Current.CancellationToken);
+
+            Task reloader = Task.Run(async () => {
+                while(!ct.IsCancellationRequested) {
+                    try {
+                        await filter.ReloadAsync(TestContext.Current.CancellationToken);
+                        await Task.Delay(5, TestContext.Current.CancellationToken);
+                    }
+                    catch(OperationCanceledException) {
+                        break;
+                    }
+                    catch(Exception ex) {
+                        lock(errors) errors.Add(ex);
+                        break;
+                    }
+                }
+            }, TestContext.Current.CancellationToken);
+
+            await Task.WhenAll(reader, writer, reloader);
+
+            // Assert: No Use-After-Free, NullReferenceException, or ObjectDisposedException
+            Assert.Empty(errors);
+        }
     }
 }

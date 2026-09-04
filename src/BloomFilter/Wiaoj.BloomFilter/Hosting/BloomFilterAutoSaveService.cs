@@ -23,8 +23,12 @@ internal sealed class BloomFilterAutoSaveService(
 
                 foreach(IPersistentBloomFilter filter in registry.GetAll()) {
                     if(filter.IsDirty) {
-                        try { await filter.SaveAsync(stoppingToken); }
-                        catch(Exception ex) { logger.LogAutoSaveFailed(ex, FilterName.Parse(filter.Name)); }
+                        try {
+                            await filter.SaveAsync(stoppingToken);
+                        }
+                        catch(Exception ex) {
+                            logger.LogAutoSaveFailed(ex, FilterName.Parse(filter.Name));
+                        }
                     }
                 }
             }
@@ -33,13 +37,19 @@ internal sealed class BloomFilterAutoSaveService(
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken) {
-        logger.LogInformation("Performing final save...");
+        await base.StopAsync(cancellationToken);
+
+        logger.LogFinalSaveStarted();
         foreach(IPersistentBloomFilter filter in registry.GetAll()) {
-            if(filter.IsDirty) {
-                try { await filter.SaveAsync(CancellationToken.None); }
-                catch(Exception ex) { logger.LogError(ex, "Final save failed for {Name}", filter.Name); }
+            if(!filter.IsDirty)
+                continue;
+
+            try {
+                await filter.SaveAsync(CancellationToken.None);
+            }
+            catch(Exception ex) {
+                logger.LogFinalSaveFailed(ex, FilterName.Parse(filter.Name));
             }
         }
-        await base.StopAsync(cancellationToken);
     }
 }

@@ -1,7 +1,7 @@
 namespace Wiaoj.BloomFilter.DependencyInjection;
 
 internal sealed class TypedBloomFilterWrapper<TTag>(IBloomFilter inner) : IBloomFilter<TTag> where TTag : notnull {
-    public string Name => inner.Name;
+    public FilterName Name => inner.Name;
     public BloomFilterConfiguration Configuration => inner.Configuration;
 
     public bool Add(ReadOnlySpan<byte> item) {

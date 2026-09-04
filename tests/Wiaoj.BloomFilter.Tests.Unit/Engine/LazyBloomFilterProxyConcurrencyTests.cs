@@ -59,7 +59,7 @@ public class LazyBloomFilterProxyConcurrencyTests {
 
             // Assert
             Assert.NotNull(proxy.GetInnerIfCreated());
-            Assert.Equal("concurrent-lazy-filter", proxy.Configuration.Name.Value);
+            Assert.Equal("concurrent-lazy-filter", proxy.Configuration.Name);
         }
     }
 }

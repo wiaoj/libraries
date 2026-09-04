@@ -17,24 +17,30 @@ internal sealed class BloomFilterService(
 
         foreach(string key in options.Value.Filters.Keys) {
             FilterName name = FilterName.Parse(key);
-            var definition = options.Value.Filters[key];
+            FilterDefinition definition = options.Value.Filters[key];
 
-            var filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(key);
+            IPersistentBloomFilter filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(key);
 
             long setBits = filter.GetPopCount();
-            double ratio = (double)setBits / filter.Configuration.SizeInBits;
+            long sizeInBits = filter.Configuration.SizeInBits;
+            double ratio = sizeInBits > 0 ? (double)setBits / sizeInBits : 0.0;
+
+            bool isHealthy = definition.Type switch {
+                BloomFilterType.Scalable => ratio <= (definition.SaturationThreshold > 0 ? definition.SaturationThreshold : 0.50),
+                _ => Math.Pow(ratio, filter.Configuration.HashFunctionCount) <= definition.ErrorRate
+            };
 
             statsMap[name] = new BloomFilterStats(
                 filter.Name, definition.ExpectedItems, definition.ErrorRate,
-                filter.Configuration.SizeInBits, filter.Configuration.HashFunctionCount,
-                setBits, ratio, ratio < 0.55
+                sizeInBits, filter.Configuration.HashFunctionCount,
+                setBits, ratio, isHealthy
             );
         }
         return new ValueTask<IReadOnlyDictionary<FilterName, BloomFilterStats>>(statsMap);
     }
 
     public ValueTask<BloomFilterDetailedStats> GetDetailedStatsAsync(FilterName name) {
-        var filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(name.Value);
+        IPersistentBloomFilter filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(name.Value);
         long setBits = filter.GetPopCount();
         long m = filter.Configuration.SizeInBits;
         int k = filter.Configuration.HashFunctionCount;
@@ -44,23 +50,25 @@ internal sealed class BloomFilterService(
         if(fillRatio > 0.5) logger.LogSaturationWarning(name, fillRatio, currentFpProb);
 
         return new ValueTask<BloomFilterDetailedStats>(new BloomFilterDetailedStats(
-            name, m, setBits, fillRatio, k, currentFpProb, (m + 7) / 8));
+            name, m, setBits, fillRatio, k, currentFpProb, BloomMath.BitsToBytes(m)));
     }
 
     public async ValueTask SaveAllAsync(CancellationToken ct = default) {
-        logger.LogInformation("Global save triggered for all Bloom Filters.");
-        foreach(var filter in registry.GetAll()) {
-            if(filter.IsDirty) await filter.SaveAsync(ct);
+        logger.LogGlobalSaveTriggered();
+        foreach(IPersistentBloomFilter filter in registry.GetAll()) {
+            if(filter.IsDirty)
+                await filter.SaveAsync(ct);
         }
     }
 
     public async ValueTask ReloadFilterAsync(FilterName name, CancellationToken ct = default) {
-        var filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(name.Value);
+        IPersistentBloomFilter filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(name.Value);
         await filter.ReloadAsync(ct);
     }
 
     public async ValueTask DeleteFilterAsync(FilterName name, CancellationToken ct = default) {
-        if(storage != null) await storage.DeleteAsync(name.Value, ct);
-        logger.LogWarning("Filter '{Name}' has been deleted from storage.", name);
+        if(storage != null)
+            await storage.DeleteAsync(name.Value, ct);
+        logger.LogFilterDeleted(name);
     }
 }

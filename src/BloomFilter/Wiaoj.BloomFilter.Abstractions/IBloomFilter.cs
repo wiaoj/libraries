@@ -6,7 +6,7 @@ public interface IBloomFilter {
     /// <summary>
     /// Gets the unique name identifier of the filter.
     /// </summary>
-    string Name { get; }
+    FilterName Name { get; }
 
     /// <summary>
     /// Gets the configuration parameters (capacity, error rate, hash functions) of the filter.

@@ -83,7 +83,7 @@ public static class BloomMath {
     public static int CalculateOptimalShardCount(long sizeInBits, long thresholdBytes) {
         if(thresholdBytes <= 0) return 1;
 
-        long totalBytes = (sizeInBits + 7) / 8;
+        long totalBytes = BitsToBytes(sizeInBits);
         if(totalBytes <= thresholdBytes) {
             return 1;
         }
@@ -91,5 +91,28 @@ public static class BloomMath {
         double ratio = (double)totalBytes / thresholdBytes;
         int needed = (int)Math.Ceiling(ratio);
         return Math.Max(2, (int)BitOperations.RoundUpToPowerOf2((uint)needed));
+    }
+
+    /// <summary>
+    /// Calculates the minimum number of bytes required to hold the specified number of bits,
+    /// rounding up to the nearest whole byte.
+    /// Formula: (sizeInBits + 7) / 8
+    /// </summary>
+    /// <param name="sizeInBits">The total number of bits.</param>
+    /// <returns>The total number of bytes required.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long BitsToBytes(long sizeInBits) {
+        if(sizeInBits <= 0) return 0;
+        return (sizeInBits + 7) / 8;
+    }
+
+    /// <summary>
+    /// Calculates the minimum number of 64-bit words (ulong) required to hold the specified number of bits.
+    /// Formula: (sizeInBits + 63) / 64
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int BitsToWordCount(long sizeInBits) {
+        if(sizeInBits <= 0) return 0;
+        return (int)((sizeInBits + 63) / 64);
     }
 }

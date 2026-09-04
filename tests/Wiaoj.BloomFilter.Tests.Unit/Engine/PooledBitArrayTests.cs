@@ -112,6 +112,46 @@ public sealed class PooledBitArrayTests {
             Assert.False(destination.Get(11));
             Assert.Equal(source.CalculateChecksum(), loadedChecksum);
         }
+
+        [Fact]
+        public async Task Should_RoundTripStateAccurately_ViaSynchronousWriteToStream() {
+            // Arrange
+            using PooledBitArray source = new(10_000);
+            source.Set(7);
+            source.Set(63);
+            source.Set(64);
+            source.Set(5_000);
+
+            using MemoryStream stream = new();
+
+            // Act: Synchronous write
+            source.WriteToStream(stream);
+            stream.Position = 0;
+
+            using PooledBitArray destination = new(10_000);
+            ulong loadedChecksum = await destination.LoadFromStreamAsync(stream, CancellationToken.None);
+
+            // Assert
+            Assert.Equal(source.GetPopCount(), destination.GetPopCount());
+            Assert.True(destination.Get(7));
+            Assert.True(destination.Get(63));
+            Assert.True(destination.Get(64));
+            Assert.True(destination.Get(5_000));
+            Assert.Equal(source.CalculateChecksum(), loadedChecksum);
+        }
+
+        [Fact]
+        public async Task Should_HandleTruncatedStream_GracefullyWhenLoading() {
+            // Arrange: Stream with fewer bytes than required
+            using MemoryStream shortStream = new([0x01, 0x02, 0x03]);
+            using PooledBitArray destination = new(10_000);
+
+            // Act: Loading should calculate checksum over whatever was read without hanging
+            ulong checksum = await destination.LoadFromStreamAsync(shortStream, CancellationToken.None);
+
+            // Assert
+            Assert.NotEqual(0UL, checksum);
+        }
     }
 
     public sealed class ChecksumCalculation {
@@ -127,6 +167,20 @@ public sealed class PooledBitArrayTests {
 
             // Assert
             Assert.NotEqual(initialChecksum, updatedChecksum);
+        }
+    }
+
+    public sealed class BoundsAndExceptions {
+        [Theory]
+        [InlineData(-1)]
+        [InlineData(-100)]
+        public void Should_ThrowException_When_AccessingNegativeIndices(long negativeIndex) {
+            // Arrange
+            using PooledBitArray bitArray = new(1024);
+
+            // Act & Assert
+            Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Get(negativeIndex));
+            Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Set(negativeIndex));
         }
     }
 }

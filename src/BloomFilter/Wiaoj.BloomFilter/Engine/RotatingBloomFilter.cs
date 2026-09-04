@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Concurrency;
 using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
@@ -15,7 +17,7 @@ internal sealed class RotatingBloomFilter : BloomFilterBase {
     private Shard[] _shards;
 
     /// <inheritdoc/>
-    public override string Name => this.Configuration.Name.Value;
+    public override FilterName Name => this.Configuration.Name;
 
     /// <inheritdoc/>
     public override BloomFilterConfiguration Configuration { get; }
@@ -119,7 +121,17 @@ internal sealed class RotatingBloomFilter : BloomFilterBase {
                 if(deadFilter is IDisposable d) d.Dispose();
 
                 if(this._context.Storage != null) {
-                    _ = this._context.Storage.DeleteAsync(deadFilter.Name, CancellationToken.None);
+                    FilterName deadFilterName = deadFilter.Name;
+                    IBloomFilterStorage storage = this._context.Storage;
+                    ILogger logger = this._context.Logger;
+                    _ = Task.Run(async () => {
+                        try {
+                            await storage.DeleteAsync(deadFilterName, CancellationToken.None).ConfigureAwait(false);
+                        }
+                        catch(Exception ex) {
+                            logger.LogStorageDeleteFailed(ex, deadFilterName);
+                        }
+                    });
                 }
             }
 
@@ -197,6 +209,7 @@ internal sealed class RotatingBloomFilter : BloomFilterBase {
     /// <inheritdoc/>
     public override long GetPopCount() {
         ThrowIfDisposed();
+        EnsureActiveShard();
 
         this._lock.EnterReadLock();
         try {

@@ -100,5 +100,106 @@ public class BloomFilterAutoSaveServiceTests {
             Assert.False(filter.IsDirty);
             Assert.True(this._storage.Exists("shutdown-filter"));
         }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-10)]
+        public async Task Should_ImmediatelyComplete_When_AutoSaveIntervalIsZeroOrNegative(int seconds) {
+            // Arrange
+            BloomFilterOptions options = new();
+            options.Lifecycle.AutoSaveInterval = TimeSpan.FromSeconds(seconds);
+            IOptions<BloomFilterOptions> optionsWrapper = Options.Create(options);
+
+            using BloomFilterAutoSaveService service = new(
+                this._registry,
+                this._fakeTime,
+                optionsWrapper,
+                NullLogger<BloomFilterAutoSaveService>.Instance
+            );
+
+            // Act & Assert: starting service should immediately finish ExecuteAsync
+            await service.StartAsync(TestContext.Current.CancellationToken);
+            if(service.ExecuteTask != null) {
+                await service.ExecuteTask;
+                Assert.True(service.ExecuteTask.IsCompleted);
+            }
+        }
+
+        [Fact]
+        public async Task Should_ContinueSavingRemainingFilters_When_OneFilterFailsDuringAutoSave() {
+            // Arrange
+            BloomFilterOptions options = new();
+            options.Lifecycle.AutoSaveInterval = TimeSpan.FromMinutes(1);
+            IOptions<BloomFilterOptions> optionsWrapper = Options.Create(options);
+
+            FaultyFilter faultyFilter = new("faulty-filter");
+            faultyFilter.Add("faulty-item");
+            this._registry.Register(faultyFilter);
+
+            using InMemoryBloomFilter healthyFilter = CreateTestFilter("healthy-filter");
+            healthyFilter.Add("healthy-item"u8);
+
+            using BloomFilterAutoSaveService service = new(
+                this._registry,
+                this._fakeTime,
+                optionsWrapper,
+                NullLogger<BloomFilterAutoSaveService>.Instance
+            );
+
+            using CancellationTokenSource cts = new();
+            await service.StartAsync(cts.Token);
+            await Task.Yield();
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+
+            // Act: Trigger tick
+            this._fakeTime.Advance(TimeSpan.FromMinutes(1));
+
+            // Spin until healthyFilter is saved
+            bool healthySaved = SpinWait.SpinUntil(() => !healthyFilter.IsDirty, 2000);
+
+            // Assert: healthy filter was saved despite faulty filter throwing
+            Assert.True(healthySaved);
+            Assert.True(this._storage.Exists("healthy-filter"));
+
+            cts.Cancel();
+            await service.StopAsync(TestContext.Current.CancellationToken);
+        }
+
+        [Fact]
+        public async Task Should_ContinueSavingRemainingFilters_When_OneFilterFailsDuringStopAsync() {
+            // Arrange
+            BloomFilterOptions options = new();
+            options.Lifecycle.AutoSaveInterval = TimeSpan.FromHours(1);
+            IOptions<BloomFilterOptions> optionsWrapper = Options.Create(options);
+
+            FaultyFilter faultyFilter = new("faulty-shutdown-filter");
+            faultyFilter.Add("faulty-item");
+            this._registry.Register(faultyFilter);
+
+            using InMemoryBloomFilter healthyFilter = CreateTestFilter("healthy-shutdown-filter");
+            healthyFilter.Add("healthy-data"u8);
+
+            using BloomFilterAutoSaveService service = new(
+                this._registry,
+                this._fakeTime,
+                optionsWrapper,
+                NullLogger<BloomFilterAutoSaveService>.Instance
+            );
+
+            await service.StartAsync(TestContext.Current.CancellationToken);
+
+            // Act: StopAsync triggers final save
+            await service.StopAsync(TestContext.Current.CancellationToken);
+
+            // Assert: healthy filter must have saved despite faulty filter failure
+            Assert.False(healthyFilter.IsDirty);
+            Assert.True(this._storage.Exists("healthy-shutdown-filter"));
+        }
+    }
+
+    private sealed class FaultyFilter(string name) : FakeBloomFilter(name) {
+        public override ValueTask SaveAsync(CancellationToken cancellationToken = default) {
+            throw new InvalidOperationException("Simulated save failure in faulty filter");
+        }
     }
 }

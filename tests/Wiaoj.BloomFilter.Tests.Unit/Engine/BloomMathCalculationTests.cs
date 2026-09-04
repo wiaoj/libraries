@@ -1,4 +1,4 @@
-﻿using Wiaoj.BloomFilter.Engine;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
@@ -65,6 +65,65 @@ public sealed class BloomMathCalculationTests {
 
             // Assert
             Assert.Equal(expectedShards, actualShards);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-100)]
+        public void Should_ReturnOne_When_ThresholdBytesIsZeroOrNegative(long nonPositiveThreshold) {
+            // Act
+            int shards = BloomMath.CalculateOptimalShardCount(100_000, nonPositiveThreshold);
+
+            // Assert
+            Assert.Equal(1, shards);
+        }
+    }
+
+    public sealed class CalculateOptimalSizingMethod {
+        [Theory]
+        [InlineData(1, 0.5)]
+        [InlineData(1_000_000, 0.000001)]
+        public void Should_CalculateValidBitSize_ForExtremeParameters(long expectedItems, double errorRate) {
+            // Act
+            long bits = BloomMath.CalculateOptimalBits(expectedItems, Percentage.FromDouble(errorRate));
+
+            // Assert
+            Assert.True(bits > 0);
+        }
+
+        [Fact]
+        public void Should_ReturnAtLeastOneHashFunction_When_BitSizeIsExtremelyConstrained() {
+            // Act
+            int hashCount = BloomMath.CalculateOptimalHashCount(sizeInBits: 10, expectedItems: 10_000);
+
+            // Assert
+            Assert.True(hashCount >= 1);
+        }
+    }
+
+    public sealed class BitsToBytesAndWordsConversionMethod {
+        [Theory]
+        [InlineData(0, 0)]
+        [InlineData(-5, 0)]
+        [InlineData(1, 1)]
+        [InlineData(7, 1)]
+        [InlineData(8, 1)]
+        [InlineData(9, 2)]
+        [InlineData(16, 2)]
+        public void Should_ConvertBitsToBytesCorrectly(long bits, long expectedBytes) {
+            Assert.Equal(expectedBytes, BloomMath.BitsToBytes(bits));
+        }
+
+        [Theory]
+        [InlineData(0, 0)]
+        [InlineData(-10, 0)]
+        [InlineData(1, 1)]
+        [InlineData(63, 1)]
+        [InlineData(64, 1)]
+        [InlineData(65, 2)]
+        [InlineData(128, 2)]
+        public void Should_ConvertBitsToWordCountCorrectly(long bits, int expectedWords) {
+            Assert.Equal(expectedWords, BloomMath.BitsToWordCount(bits));
         }
     }
 }

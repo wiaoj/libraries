@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeding;
@@ -88,6 +88,71 @@ public class BloomFilterSeederTests {
             for(int i = 0; i < 500; i++) {
                 Assert.True(filter.Contains(BitConverter.GetBytes(i)));
             }
+        }
+    }
+
+    public sealed class SeedingEdgeCases : BloomFilterSeederTests {
+        [Fact]
+        public async Task Should_AbortAndThrowOperationCanceledException_When_CancellationRequestedDuringSeeding() {
+            // Arrange
+            const string filterName = "seeder-cancel-test";
+            (BloomFilterSeeder seeder, InMemoryBloomFilter filter) = CreateSut(filterName, 10_000);
+            using CancellationTokenSource cts = new();
+
+            async IAsyncEnumerable<string> CancellableStream([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default) {
+                for(int i = 0; i < 1_000; i++) {
+                    if(i == 50) cts.Cancel();
+                    yield return $"item-{i}";
+                }
+                await Task.CompletedTask;
+            }
+
+            // Act & Assert
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                seeder.SeedAsync(FilterName.Parse(filterName), CancellableStream(cts.Token), cts.Token));
+        }
+
+        [Fact]
+        public async Task Should_SkipNullItemsGracefully_When_StreamYieldsNull() {
+            // Arrange
+            const string filterName = "seeder-null-test";
+            (BloomFilterSeeder seeder, InMemoryBloomFilter filter) = CreateSut(filterName, 1_000);
+
+            async IAsyncEnumerable<string?> NullableStream() {
+                yield return "valid-before";
+                yield return null;
+                yield return "valid-middle";
+                yield return null;
+                yield return "valid-after";
+                await Task.CompletedTask;
+            }
+
+            // Act: SeedAsync should filter out null elements without throwing NullReferenceException
+            await seeder.SeedAsync(FilterName.Parse(filterName), NullableStream()!, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.True(filter.Contains("valid-before"));
+            Assert.True(filter.Contains("valid-middle"));
+            Assert.True(filter.Contains("valid-after"));
+        }
+
+        [Fact]
+        public async Task Should_HandleEmptyStream_WithoutErrors() {
+            // Arrange
+            const string filterName = "seeder-empty-test";
+            (BloomFilterSeeder seeder, InMemoryBloomFilter filter) = CreateSut(filterName, 1_000);
+
+            async IAsyncEnumerable<string> EmptyStream() {
+                await Task.CompletedTask;
+                yield break;
+            }
+
+            // Act
+            await seeder.SeedAsync(FilterName.Parse(filterName), EmptyStream(), TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(0, filter.GetPopCount());
+            Assert.False(filter.IsDirty);
         }
     }
 

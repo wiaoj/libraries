@@ -23,11 +23,11 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
         GC.SuppressFinalize(this);
     }
 
-    private FileSystemBloomFilterStorage CreateStorage(bool enableCompression = false) {
+    private FileSystemBloomFilterStorage CreateStorage(bool enableCompression = false, bool ignoreErrors = false) {
         BloomFilterOptions options = new();
         options.Storage.Path = this._tempDirectory;
         options.Storage.EnableCompression = enableCompression;
-        options.Storage.IgnoreErrors = false;
+        options.Storage.IgnoreErrors = ignoreErrors;
 
         IOptions<BloomFilterOptions> optionsWrapper = Options.Create(options);
         return new FileSystemBloomFilterStorage(optionsWrapper, NullLogger<FileSystemBloomFilterStorage>.Instance);
@@ -96,6 +96,36 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
         }
 
         [Fact]
+        public async Task Should_ReturnNull_When_FileExistsButIsEmpty() {
+            // Arrange: create an empty 0-byte file
+            FileSystemBloomFilterStorage storage = CreateStorage();
+            string emptyFilePath = Path.Combine(this._tempDirectory, "empty-filter.wbf");
+            await File.WriteAllBytesAsync(emptyFilePath, [], TestContext.Current.CancellationToken);
+
+            // Act
+            (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await storage.LoadStreamAsync("empty-filter", TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Null(loadResult);
+        }
+
+        [Fact]
+        public async Task Should_ReturnFalseWithoutThrowing_When_IgnoreErrorsIsTrueAndSaveFails() {
+            // Arrange: create storage with ignoreErrors: true and pass an unreadable stream
+            FileSystemBloomFilterStorage storage = CreateStorage(ignoreErrors: true);
+            BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("failing-save"), 1_000, 0.01);
+
+            MemoryStream faultyStream = new();
+            faultyStream.Dispose(); // Disposed stream will throw on CopyToAsync
+
+            // Act
+            bool result = await storage.SaveAsync(config.Name, config, faultyStream, TestContext.Current.CancellationToken);
+
+            // Assert: must return false instead of throwing
+            Assert.False(result);
+        }
+
+        [Fact]
         public async Task Should_DeleteFilterFiles_Successfully() {
             // Arrange
             FileSystemBloomFilterStorage storage = CreateStorage();
@@ -110,6 +140,37 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
 
             // Assert
             Assert.Null(loadResult);
+        }
+
+        [Fact]
+        public async Task Should_DeleteAllShardFiles_MatchingPrefixPattern() {
+            // Arrange
+            FileSystemBloomFilterStorage storage = CreateStorage();
+            BloomFilterConfiguration config0 = this._configFactory.Create(FilterName.Parse("shard-pattern_s0"), 1_000, 0.01);
+            BloomFilterConfiguration config1 = this._configFactory.Create(FilterName.Parse("shard-pattern_s1"), 1_000, 0.01);
+
+            using MemoryStream ms0 = new([0x01]);
+            using MemoryStream ms1 = new([0x02]);
+            await storage.SaveAsync(config0.Name, config0, ms0, TestContext.Current.CancellationToken);
+            await storage.SaveAsync(config1.Name, config1, ms1, TestContext.Current.CancellationToken);
+
+            // Act: delete using base filter name
+            await storage.DeleteAsync(FilterName.Parse("shard-pattern"), TestContext.Current.CancellationToken);
+
+            // Assert: both shard files should be deleted
+            Assert.Null(await storage.LoadStreamAsync(config0.Name, TestContext.Current.CancellationToken));
+            Assert.Null(await storage.LoadStreamAsync(config1.Name, TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task Should_ThrowArgumentException_When_FilterNameIsDefault() {
+            FileSystemBloomFilterStorage storage = CreateStorage();
+            BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("valid"), 1_000, 0.01);
+            using MemoryStream ms = new([0x01]);
+
+            await Assert.ThrowsAnyAsync<ArgumentException>(() => storage.SaveAsync(default, config, ms, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAnyAsync<ArgumentException>(() => storage.LoadStreamAsync(default, TestContext.Current.CancellationToken).AsTask());
+            await Assert.ThrowsAnyAsync<ArgumentException>(() => storage.DeleteAsync(default, TestContext.Current.CancellationToken));
         }
     }
 }
