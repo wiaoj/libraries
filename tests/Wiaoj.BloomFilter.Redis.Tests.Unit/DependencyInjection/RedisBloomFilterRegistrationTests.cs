@@ -242,4 +242,211 @@ public class RedisBloomFilterRegistrationTests {
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() => sp.GetRequiredService<IBloomFilter<UserTag>>());
     }
+
+    [Fact]
+    public void AddMultipleDistributedFilters_WithOptions_Should_HaveIsolatedOptionsPerFilter() {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddSingleton(this._multiplexer);
+        services.AddLogging();
+
+        // Act
+        services.AddBloomFilter(bf => {
+            bf.AddDistributedFilter<UserTag>("users-dist", 10_000, 0.01, opt => {
+                opt.KeyPrefix = "users:";
+                opt.Database = 1;
+            });
+            bf.AddDistributedFilter<OrderTag>("orders-dist", 20_000, 0.005, opt => {
+                opt.KeyPrefix = "orders:";
+                opt.Database = 2;
+            });
+        });
+
+        ServiceProvider sp = services.BuildServiceProvider();
+        _ = sp.GetRequiredService<IBloomFilter<UserTag>>();
+        _ = sp.GetRequiredService<IBloomFilter<OrderTag>>();
+
+        IOptionsMonitor<DistributedBloomFilterOptions> monitor = sp.GetRequiredService<IOptionsMonitor<DistributedBloomFilterOptions>>();
+
+        // Assert - Both filters must have their own isolated options, not overwritten
+        Assert.Equal("users:", monitor.Get("users-dist").KeyPrefix);
+        Assert.Equal(1, monitor.Get("users-dist").Database);
+
+        Assert.Equal("orders:", monitor.Get("orders-dist").KeyPrefix);
+        Assert.Equal(2, monitor.Get("orders-dist").Database);
+    }
+
+    [Fact]
+    public void AddMultipleSynchronizedFilters_WithOptions_Should_HaveIsolatedOptionsPerFilter() {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddSingleton(this._multiplexer);
+        services.AddLogging();
+
+        Guid userNodeId = Guid.NewGuid();
+        Guid orderNodeId = Guid.NewGuid();
+
+        // Act
+        services.AddBloomFilter(bf => {
+            bf.AddSynchronizedFilter<UserTag>("users-sync", 5_000, 0.01, opt => {
+                opt.SyncChannelPrefix = "users:sync:";
+                opt.NodeId = userNodeId;
+            });
+            bf.AddSynchronizedFilter<OrderTag>("orders-sync", 15_000, 0.001, opt => {
+                opt.SyncChannelPrefix = "orders:sync:";
+                opt.NodeId = orderNodeId;
+            });
+        });
+
+        ServiceProvider sp = services.BuildServiceProvider();
+        _ = sp.GetRequiredService<IBloomFilter<UserTag>>();
+        _ = sp.GetRequiredService<IBloomFilter<OrderTag>>();
+
+        IOptionsMonitor<SynchronizedBloomFilterOptions> monitor = sp.GetRequiredService<IOptionsMonitor<SynchronizedBloomFilterOptions>>();
+
+        // Assert - Both filters must have isolated options
+        Assert.Equal("users:sync:", monitor.Get("users-sync").SyncChannelPrefix);
+        Assert.Equal(userNodeId, monitor.Get("users-sync").NodeId);
+
+        Assert.Equal("orders:sync:", monitor.Get("orders-sync").SyncChannelPrefix);
+        Assert.Equal(orderNodeId, monitor.Get("orders-sync").NodeId);
+    }
+
+    [Fact]
+    public void AddDistributedFilter_NonGeneric_Should_RegisterKeyedFilter() {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddSingleton(this._multiplexer);
+        services.AddLogging();
+
+        // Act
+        services.AddBloomFilter(bf => {
+            bf.AddDistributedFilter("non-generic-dist", 5_000, 0.01);
+        });
+
+        ServiceProvider sp = services.BuildServiceProvider();
+        var filter = sp.GetRequiredKeyedService<IBloomFilter>("non-generic-dist");
+        var asyncFilter = sp.GetRequiredKeyedService<IAsyncBloomFilter>("non-generic-dist");
+
+        // Assert
+        Assert.NotNull(filter);
+        Assert.NotNull(asyncFilter);
+        Assert.Same(filter, asyncFilter);
+        Assert.Equal("non-generic-dist", filter.Name.Value);
+    }
+
+    [Fact]
+    public void AddSynchronizedFilter_NonGeneric_Should_RegisterKeyedFilter() {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddSingleton(this._multiplexer);
+        services.AddLogging();
+
+        // Act
+        services.AddBloomFilter(bf => {
+            bf.AddSynchronizedFilter("non-generic-sync", 5_000, 0.01);
+        });
+
+        ServiceProvider sp = services.BuildServiceProvider();
+        var filter = sp.GetRequiredKeyedService<IBloomFilter>("non-generic-sync");
+        var asyncFilter = sp.GetRequiredKeyedService<IAsyncBloomFilter>("non-generic-sync");
+        var persistentFilter = sp.GetRequiredKeyedService<IPersistentBloomFilter>("non-generic-sync");
+
+        // Assert
+        Assert.NotNull(filter);
+        Assert.NotNull(asyncFilter);
+        Assert.NotNull(persistentFilter);
+        Assert.Same(filter, asyncFilter);
+        Assert.Same(filter, persistentFilter);
+        Assert.Equal("non-generic-sync", filter.Name.Value);
+    }
+
+    [Fact]
+    public void AddSynchronizedFilter_Should_RegisterFilterInBloomFilterRegistry() {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddSingleton(this._multiplexer);
+        services.AddLogging();
+
+        // Act
+        services.AddBloomFilter(bf => {
+            bf.AddSynchronizedFilter<UserTag>("registered-user", 1_000, 0.01);
+        });
+
+        ServiceProvider sp = services.BuildServiceProvider();
+        var filter = sp.GetRequiredService<IBloomFilter<UserTag>>();
+        IBloomFilterRegistry registry = sp.GetRequiredService<IBloomFilterRegistry>();
+
+        // Assert - Registry must contain the filter for AutoSaveService to persist it
+        var allFilters = registry.GetAll().ToList();
+        Assert.Contains(allFilters, f => f.Name.Value == "registered-user");
+    }
+
+    [Fact]
+    public void UseRedis_WithConnectionString_Should_RegisterMultiplexerDescriptor() {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddLogging();
+
+        // Act
+        services.AddBloomFilter(bf => {
+            bf.UseRedis("localhost:6379");
+        });
+
+        // Assert - Service descriptor for IConnectionMultiplexer is registered as Singleton
+        ServiceDescriptor? descriptor = services.FirstOrDefault(sd => sd.ServiceType == typeof(IConnectionMultiplexer));
+        Assert.NotNull(descriptor);
+        Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void UseRedis_WithConfigurationOptions_Should_RegisterMultiplexerDescriptor() {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddLogging();
+        ConfigurationOptions redisOptions = new() { EndPoints = { "localhost:6379" } };
+
+        // Act
+        services.AddBloomFilter(bf => {
+            bf.UseRedis(redisOptions);
+        });
+
+        // Assert
+        ServiceDescriptor? descriptor = services.FirstOrDefault(sd => sd.ServiceType == typeof(IConnectionMultiplexer));
+        Assert.NotNull(descriptor);
+        Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void UseRedisStorage_WithConnectionString_Should_RegisterMultiplexerAndStorage() {
+        // Arrange
+        ServiceCollection services = new();
+        services.AddLogging();
+
+        // Act
+        services.AddBloomFilter(bf => {
+            bf.UseRedisStorage("localhost:6379", opt => {
+                opt.KeyPrefix = "custom:storage:";
+            });
+        });
+
+        // Assert
+        Assert.Contains(services, sd => sd.ServiceType == typeof(IConnectionMultiplexer));
+        Assert.Contains(services, sd => sd.ServiceType == typeof(IBloomFilterStorage) && sd.ImplementationType == typeof(RedisBloomFilterStorage));
+    }
+
+    [Fact]
+    public void UseRedis_Should_ThrowOnNullOrInvalidArguments() {
+        ServiceCollection services = new();
+        services.AddBloomFilter(bf => {
+            Assert.ThrowsAny<ArgumentNullException>(() => bf.UseRedis((string)null!));
+            Assert.ThrowsAny<ArgumentException>(() => bf.UseRedis("   "));
+            Assert.ThrowsAny<ArgumentNullException>(() => bf.UseRedis((ConfigurationOptions)null!));
+            Assert.ThrowsAny<ArgumentNullException>(() => bf.UseRedis((IConnectionMultiplexer)null!));
+            Assert.ThrowsAny<ArgumentNullException>(() => bf.UseRedisStorage((string)null!));
+            Assert.ThrowsAny<ArgumentException>(() => bf.UseRedisStorage("   "));
+            Assert.ThrowsAny<ArgumentNullException>(() => bf.UseRedisStorage((IConnectionMultiplexer)null!));
+        });
+    }
 }
+

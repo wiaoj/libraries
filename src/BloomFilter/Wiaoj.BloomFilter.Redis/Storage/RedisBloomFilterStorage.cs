@@ -77,8 +77,8 @@ public sealed class RedisBloomFilterStorage : IBloomFilterStorage {
             cancellationToken.ThrowIfCancellationRequested();
 
             byte[] payload = ms.ToArray();
-            await this.Db.StringSetAsync(GetKey(filterName), payload, expiry: this._options.Ttl, keepTtl: false).ConfigureAwait(false);
-            return true;
+            bool success = await this.Db.StringSetAsync(GetKey(filterName), payload, expiry: this._options.Ttl, keepTtl: false).ConfigureAwait(false);
+            return success;
         }
         catch (OperationCanceledException) {
             throw;
@@ -130,7 +130,20 @@ public sealed class RedisBloomFilterStorage : IBloomFilterStorage {
         cancellationToken.ThrowIfCancellationRequested();
 
         try {
-            await this.Db.KeyDeleteAsync(GetKey(filterName)).ConfigureAwait(false);
+            RedisKey mainKey = GetKey(filterName);
+            await this.Db.KeyDeleteAsync(mainKey).ConfigureAwait(false);
+
+            // Safely delete any sharded snapshot keys matching pattern {KeyPrefix}{FilterName}_s*
+            RedisValue shardPattern = (RedisValue)$"{mainKey}_s*";
+            const string DeleteShardsScript = """
+                local keys = redis.call('KEYS', ARGV[1])
+                if #keys > 0 then
+                    return redis.call('DEL', unpack(keys))
+                else
+                    return 0
+                end
+                """;
+            await this.Db.ScriptEvaluateAsync(DeleteShardsScript, values: [shardPattern]).ConfigureAwait(false);
         }
         catch (OperationCanceledException) {
             throw;

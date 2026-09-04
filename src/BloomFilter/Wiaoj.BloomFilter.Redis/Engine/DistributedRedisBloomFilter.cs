@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 using System.Buffers;
 using System.Text;
+using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Redis.Options;
 using Wiaoj.Preconditions;
@@ -14,6 +15,8 @@ namespace Wiaoj.BloomFilter.Redis.Engine;
 /// bit operations via <see cref="IBatch"/> in a single round-trip.
 /// </summary>
 public class DistributedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter {
+    private const long MaxRedisBitmapBits = 4_294_967_295L; // 2^32 - 1 bits = 512 MB
+
     private readonly IConnectionMultiplexer _redis;
     private readonly BloomFilterConfiguration _configuration;
     private readonly DistributedBloomFilterOptions _options;
@@ -31,6 +34,12 @@ public class DistributedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter {
         Preca.ThrowIfNull(redis);
         Preca.ThrowIfNull(configuration);
         Preca.ThrowIfNull(options);
+
+        if (configuration.SizeInBits > MaxRedisBitmapBits) {
+            throw new ArgumentOutOfRangeException(
+                nameof(configuration),
+                $"Bloom filter bit size ({configuration.SizeInBits:N0}) exceeds the maximum supported Redis bitmap size of {MaxRedisBitmapBits:N0} bits (512 MB).");
+        }
 
         this._redis = redis;
         this._configuration = configuration;
@@ -50,6 +59,10 @@ public class DistributedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter {
     /// <inheritdoc/>
     public async ValueTask<bool> AddAsync(ReadOnlyMemory<byte> item, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (BloomFilterDiagnostics.AddCounter.Enabled) {
+            BloomFilterDiagnostics.AddCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+        }
 
         BloomHasher.ComputeBaseHashes(item.Span, this.Configuration.HashSeed, out ulong h1, out ulong h2);
         IBatch batch = this.Db.CreateBatch();
@@ -101,13 +114,22 @@ public class DistributedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter {
             await Task.WhenAll(bitTasks).ConfigureAwait(false);
         }
 
+        bool contains = true;
         for (int i = 0; i < k; i++) {
             if (!bitTasks[i].Result) {
-                return false;
+                contains = false;
+                break;
             }
         }
 
-        return true;
+        if (BloomFilterDiagnostics.LookupCounter.Enabled) {
+            BloomFilterDiagnostics.LookupCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+            if (contains && BloomFilterDiagnostics.HitCounter.Enabled) {
+                BloomFilterDiagnostics.HitCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+            }
+        }
+
+        return contains;
     }
 
     /// <inheritdoc/>
@@ -115,8 +137,19 @@ public class DistributedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter {
         cancellationToken.ThrowIfCancellationRequested();
         Preca.ThrowIfNull(item, nameof(item));
 
-        byte[] bytes = Encoding.UTF8.GetBytes(item);
-        return await AddAsync(bytes, cancellationToken).ConfigureAwait(false);
+        if (item.Length == 0) {
+            return await AddAsync(ReadOnlyMemory<byte>.Empty, cancellationToken).ConfigureAwait(false);
+        }
+
+        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
+        byte[] array = ArrayPool<byte>.Shared.Rent(maxBytes);
+        try {
+            int bytesWritten = Encoding.UTF8.GetBytes(item, array);
+            return await AddAsync(array.AsMemory(0, bytesWritten), cancellationToken).ConfigureAwait(false);
+        }
+        finally {
+            ArrayPool<byte>.Shared.Return(array);
+        }
     }
 
     /// <inheritdoc/>
@@ -124,8 +157,19 @@ public class DistributedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter {
         cancellationToken.ThrowIfCancellationRequested();
         Preca.ThrowIfNull(item, nameof(item));
 
-        byte[] bytes = Encoding.UTF8.GetBytes(item);
-        return await ContainsAsync(bytes, cancellationToken).ConfigureAwait(false);
+        if (item.Length == 0) {
+            return await ContainsAsync(ReadOnlyMemory<byte>.Empty, cancellationToken).ConfigureAwait(false);
+        }
+
+        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
+        byte[] array = ArrayPool<byte>.Shared.Rent(maxBytes);
+        try {
+            int bytesWritten = Encoding.UTF8.GetBytes(item, array);
+            return await ContainsAsync(array.AsMemory(0, bytesWritten), cancellationToken).ConfigureAwait(false);
+        }
+        finally {
+            ArrayPool<byte>.Shared.Return(array);
+        }
     }
 
     /// <inheritdoc/>
@@ -141,6 +185,10 @@ public class DistributedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter {
 
     /// <inheritdoc/>
     public bool Add(ReadOnlySpan<byte> item) {
+        if (BloomFilterDiagnostics.AddCounter.Enabled) {
+            BloomFilterDiagnostics.AddCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+        }
+
         BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
         IBatch batch = this.Db.CreateBatch();
         int k = this.Configuration.HashFunctionCount;
@@ -179,13 +227,22 @@ public class DistributedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter {
         batch.Execute();
         Task.WaitAll(bitTasks);
 
+        bool contains = true;
         for (int i = 0; i < k; i++) {
             if (!bitTasks[i].Result) {
-                return false;
+                contains = false;
+                break;
             }
         }
 
-        return true;
+        if (BloomFilterDiagnostics.LookupCounter.Enabled) {
+            BloomFilterDiagnostics.LookupCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+            if (contains && BloomFilterDiagnostics.HitCounter.Enabled) {
+                BloomFilterDiagnostics.HitCounter.Add(1, new KeyValuePair<string, object?>(BloomFilterDiagnostics.TagFilterName, this.Name.Value));
+            }
+        }
+
+        return contains;
     }
 
     /// <inheritdoc/>

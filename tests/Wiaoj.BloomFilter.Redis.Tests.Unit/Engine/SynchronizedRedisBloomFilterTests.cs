@@ -51,10 +51,12 @@ public class SynchronizedRedisBloomFilterTests {
 
     private SynchronizedRedisBloomFilter CreateFilter(
         Guid? nodeId = null,
-        string channelPrefix = "bloom:sync:") {
+        string channelPrefix = "bloom:sync:",
+        bool enableSnapshotPersistence = true) {
         SynchronizedBloomFilterOptions options = new() {
             SyncChannelPrefix = channelPrefix,
-            NodeId = nodeId
+            NodeId = nodeId,
+            EnableSnapshotPersistence = enableSnapshotPersistence
         };
 
         InMemoryBloomFilter innerFilter = CreateInMemoryFilter();
@@ -339,6 +341,68 @@ public class SynchronizedRedisBloomFilterTests {
         Assert.Throws<ObjectDisposedException>(() => filter.Add("test".AsSpan()));
         Assert.Throws<ObjectDisposedException>(() => filter.Contains("test".AsSpan()));
         Assert.Throws<ObjectDisposedException>(() => filter.GetPopCount());
+
+        Assert.Throws<ObjectDisposedException>(() => filter.AddAsync(item).AsTask().GetAwaiter().GetResult());
+        Assert.Throws<ObjectDisposedException>(() => filter.ContainsAsync(item).AsTask().GetAwaiter().GetResult());
+        Assert.Throws<ObjectDisposedException>(() => filter.GetPopCountAsync().AsTask().GetAwaiter().GetResult());
+        Assert.Throws<ObjectDisposedException>(() => filter.SaveAsync().AsTask().GetAwaiter().GetResult());
+        Assert.Throws<ObjectDisposedException>(() => filter.ReloadAsync().AsTask().GetAwaiter().GetResult());
+    }
+
+    [Fact]
+    public async Task When_EnableSnapshotPersistenceIsFalse_SaveAsyncAndReloadAsync_Should_BeNoOp_And_IsDirtyShouldBeFalse() {
+        // Arrange
+        using SynchronizedRedisBloomFilter filter = CreateFilter(enableSnapshotPersistence: false);
+        byte[] item = Encoding.UTF8.GetBytes("persisted-item");
+        filter.Add(item);
+
+        // Assert - Even after Add(), IsDirty must be false when persistence is disabled
+        Assert.False(filter.IsDirty);
+
+        // Act - SaveAsync and ReloadAsync should be no-ops and not commit to storage
+        await filter.SaveAsync();
+        Assert.False(this._storage.Exists(filter.Name));
+
+        await filter.ReloadAsync();
+        Assert.False(this._storage.Exists(filter.Name));
+    }
+
+    [Fact]
+    public async Task When_EnableSnapshotPersistenceIsTrue_SaveAsyncAndReloadAsync_Should_DelegateToInnerFilter() {
+        // Arrange
+        using SynchronizedRedisBloomFilter filter = CreateFilter(enableSnapshotPersistence: true);
+        byte[] item = Encoding.UTF8.GetBytes("persisted-item");
+        filter.Add(item);
+
+        // Assert - IsDirty must be true after addition
+        Assert.True(filter.IsDirty);
+
+        // Act - Save snapshot
+        await filter.SaveAsync();
+
+        // Assert - Snapshot committed to storage, IsDirty cleared
+        Assert.True(this._storage.Exists(filter.Name));
+        Assert.False(filter.IsDirty);
+
+        // Act - Reload snapshot
+        await filter.ReloadAsync();
+        Assert.True(filter.Contains(item));
+    }
+
+    [Fact]
+    public async Task AddAsyncAndContainsAsync_MemoryOverloads_Should_OperateCorrectly() {
+        // Arrange
+        using SynchronizedRedisBloomFilter filter = CreateFilter();
+        byte[] item = Encoding.UTF8.GetBytes("memory-item");
+        ReadOnlyMemory<byte> memory = item;
+
+        // Act
+        bool added = await filter.AddAsync(memory);
+        bool contains = await filter.ContainsAsync(memory);
+
+        // Assert
+        Assert.True(added);
+        Assert.True(contains);
     }
 
     [Fact]
@@ -367,3 +431,4 @@ public class SynchronizedRedisBloomFilterTests {
         Assert.True(containsEmpty);
     }
 }
+

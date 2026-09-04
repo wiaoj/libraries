@@ -77,7 +77,7 @@ public class SynchronizedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter, IPe
     public BloomFilterConfiguration Configuration => this._innerFilter.Configuration;
 
     /// <inheritdoc/>
-    public bool IsDirty => this._innerFilter.IsDirty;
+    public bool IsDirty => this._options.EnableSnapshotPersistence && this._innerFilter.IsDirty;
 
     private RedisChannel Channel => RedisChannel.Literal($"{this._options.SyncChannelPrefix}{this.Name.Value}");
 
@@ -87,8 +87,8 @@ public class SynchronizedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter, IPe
         }
 
         try {
-            byte[] bytes = (byte[])value!;
-            if (BloomFilterSyncMessage.TryParse(bytes, out BloomFilterSyncMessage syncMsg)) {
+            ReadOnlyMemory<byte> memory = value;
+            if (BloomFilterSyncMessage.TryParse(memory.Span, out BloomFilterSyncMessage syncMsg)) {
                 if (syncMsg.OriginNodeId != this.NodeId) {
                     this._innerFilter.AddWithHashes(syncMsg.Hash1, syncMsg.Hash2);
                 }
@@ -200,12 +200,20 @@ public class SynchronizedRedisBloomFilter : IBloomFilter, IAsyncBloomFilter, IPe
     /// <inheritdoc/>
     public ValueTask SaveAsync(CancellationToken cancellationToken = default) {
         ThrowIfDisposed();
+        if (!this._options.EnableSnapshotPersistence) {
+            return ValueTask.CompletedTask;
+        }
+
         return this._innerFilter.SaveAsync(cancellationToken);
     }
 
     /// <inheritdoc/>
     public ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
         ThrowIfDisposed();
+        if (!this._options.EnableSnapshotPersistence) {
+            return ValueTask.CompletedTask;
+        }
+
         return this._innerFilter.ReloadAsync(cancellationToken);
     }
 

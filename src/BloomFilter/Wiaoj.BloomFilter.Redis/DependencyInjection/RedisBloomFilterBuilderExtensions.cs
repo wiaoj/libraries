@@ -9,6 +9,7 @@ using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Redis.Engine;
 using Wiaoj.BloomFilter.Redis.Options;
 using Wiaoj.BloomFilter.Redis.Storage;
+using Wiaoj.ObjectPool;
 using Wiaoj.Preconditions;
 
 #pragma warning disable IDE0130
@@ -207,17 +208,19 @@ public static class RedisBloomFilterBuilderExtensions {
         Preca.ThrowIfNull(configure);
 
         builder.Services.Configure(configure);
+        builder.Services.Configure<DistributedBloomFilterOptions>(name, configure);
 
         builder.Services.TryAddSingleton<DistributedRedisBloomFilter<TTag>>(sp => {
             IConnectionMultiplexer redis = sp.GetRequiredService<IConnectionMultiplexer>();
-            IOptions<DistributedBloomFilterOptions> options = sp.GetRequiredService<IOptions<DistributedBloomFilterOptions>>();
+            IOptionsMonitor<DistributedBloomFilterOptions> optionsMonitor = sp.GetRequiredService<IOptionsMonitor<DistributedBloomFilterOptions>>();
+            DistributedBloomFilterOptions options = optionsMonitor.Get(name);
 
             IBloomFilterConfigurationFactory configFactory = sp.GetService<IBloomFilterConfigurationFactory>() ?? new BloomFilterConfigurationFactory();
             IOptions<BloomFilterOptions>? bfOptions = sp.GetService<IOptions<BloomFilterOptions>>();
             long hashSeed = bfOptions?.Value.DefaultHashSeed ?? BloomFilterConfiguration.DefaultHashSeed;
             BloomFilterConfiguration config = configFactory.Create(FilterName.Parse(name), expectedItems, errorRate, hashSeed);
 
-            return new DistributedRedisBloomFilter<TTag>(redis, config, options);
+            return new DistributedRedisBloomFilter<TTag>(redis, config, Options.Create(options));
         });
 
         builder.Services.TryAddSingleton<IBloomFilter<TTag>>(sp => sp.GetRequiredService<DistributedRedisBloomFilter<TTag>>());
@@ -267,21 +270,25 @@ public static class RedisBloomFilterBuilderExtensions {
         Preca.ThrowIfNull(configure);
 
         builder.Services.Configure(configure);
+        builder.Services.Configure<DistributedBloomFilterOptions>(name, configure);
 
-        builder.Services.TryAddKeyedSingleton<IBloomFilter>(name, (sp, _) => {
+        builder.Services.TryAddKeyedSingleton<DistributedRedisBloomFilter>(name, (sp, _) => {
             IConnectionMultiplexer redis = sp.GetRequiredService<IConnectionMultiplexer>();
-            IOptions<DistributedBloomFilterOptions> options = sp.GetRequiredService<IOptions<DistributedBloomFilterOptions>>();
+            IOptionsMonitor<DistributedBloomFilterOptions> optionsMonitor = sp.GetRequiredService<IOptionsMonitor<DistributedBloomFilterOptions>>();
+            DistributedBloomFilterOptions options = optionsMonitor.Get(name);
 
             IBloomFilterConfigurationFactory configFactory = sp.GetService<IBloomFilterConfigurationFactory>() ?? new BloomFilterConfigurationFactory();
             IOptions<BloomFilterOptions>? bfOptions = sp.GetService<IOptions<BloomFilterOptions>>();
             long hashSeed = bfOptions?.Value.DefaultHashSeed ?? BloomFilterConfiguration.DefaultHashSeed;
             BloomFilterConfiguration config = configFactory.Create(FilterName.Parse(name), expectedItems, errorRate, hashSeed);
 
-            return new DistributedRedisBloomFilter(redis, config, options);
+            return new DistributedRedisBloomFilter(redis, config, Options.Create(options));
         });
 
+        builder.Services.TryAddKeyedSingleton<IBloomFilter>(name, (sp, _) =>
+            sp.GetRequiredKeyedService<DistributedRedisBloomFilter>(name));
         builder.Services.TryAddKeyedSingleton<IAsyncBloomFilter>(name, (sp, _) =>
-            (IAsyncBloomFilter)sp.GetRequiredKeyedService<IBloomFilter>(name));
+            sp.GetRequiredKeyedService<DistributedRedisBloomFilter>(name));
 
         return builder;
     }
@@ -332,8 +339,8 @@ public static class RedisBloomFilterBuilderExtensions {
         Preca.ThrowIfNull(configure);
 
         builder.Services.Configure(configure);
+        builder.Services.Configure<SynchronizedBloomFilterOptions>(name, configure);
 
-        // Register filter definition in options so BloomFilterFactory can create and hydrate the in-memory engine
         builder.Services.Configure<BloomFilterOptions>(options => {
             options.Filters[name] = new FilterDefinition {
                 ExpectedItems = expectedItems,
@@ -344,18 +351,19 @@ public static class RedisBloomFilterBuilderExtensions {
 
         builder.Services.TryAddSingleton<SynchronizedRedisBloomFilter<TTag>>(sp => {
             IConnectionMultiplexer redis = sp.GetRequiredService<IConnectionMultiplexer>();
-            IOptions<SynchronizedBloomFilterOptions> options = sp.GetRequiredService<IOptions<SynchronizedBloomFilterOptions>>();
-            BloomFilterFactory factory = sp.GetRequiredService<BloomFilterFactory>();
+            IOptionsMonitor<SynchronizedBloomFilterOptions> optionsMonitor = sp.GetRequiredService<IOptionsMonitor<SynchronizedBloomFilterOptions>>();
+            SynchronizedBloomFilterOptions options = optionsMonitor.Get(name);
 
-            IPersistentBloomFilter leafFilter = factory.Create(FilterName.Parse(name)).GetAwaiter().GetResult();
-            if (leafFilter is not InMemoryBloomFilter inMemory) {
-                throw new InvalidOperationException($"Filter '{name}' must be an {nameof(InMemoryBloomFilter)}.");
-            }
+            InMemoryBloomFilter inMemory = CreateInMemoryFilter(sp, name, expectedItems, errorRate);
 
             ILogger<SynchronizedRedisBloomFilter> logger = sp.GetService<ILogger<SynchronizedRedisBloomFilter>>()
                 ?? NullLogger<SynchronizedRedisBloomFilter>.Instance;
 
-            return new SynchronizedRedisBloomFilter<TTag>(redis, inMemory, options, logger);
+            SynchronizedRedisBloomFilter<TTag> filter = new(redis, inMemory, Options.Create(options), logger);
+
+            sp.GetService<IBloomFilterRegistry>()?.Register(filter);
+
+            return filter;
         });
 
         builder.Services.TryAddSingleton<IBloomFilter<TTag>>(sp => sp.GetRequiredService<SynchronizedRedisBloomFilter<TTag>>());
@@ -366,6 +374,111 @@ public static class RedisBloomFilterBuilderExtensions {
         builder.Services.TryAddKeyedSingleton<IPersistentBloomFilter>(name, (sp, _) => sp.GetRequiredService<SynchronizedRedisBloomFilter<TTag>>());
 
         return builder;
+    }
+
+    /// <summary>
+    /// Registers a hybrid synchronized Bloom Filter combining L1 SIMD in-memory performance
+    /// with Redis Pub/Sub delta replication.
+    /// </summary>
+    /// <param name="builder">The Bloom Filter builder.</param>
+    /// <param name="name">The unique filter identifier name.</param>
+    /// <param name="expectedItems">The expected number of items.</param>
+    /// <param name="errorRate">The target false positive probability.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IBloomFilterBuilder AddSynchronizedFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate) {
+        return builder.AddSynchronizedFilter(name, expectedItems, errorRate, _ => { });
+    }
+
+    /// <summary>
+    /// Registers a hybrid synchronized Bloom Filter combining L1 SIMD in-memory performance
+    /// with Redis Pub/Sub delta replication and custom options.
+    /// </summary>
+    /// <param name="builder">The Bloom Filter builder.</param>
+    /// <param name="name">The unique filter identifier name.</param>
+    /// <param name="expectedItems">The expected number of items.</param>
+    /// <param name="errorRate">The target false positive probability.</param>
+    /// <param name="configure">The options configuration action.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IBloomFilterBuilder AddSynchronizedFilter(
+        this IBloomFilterBuilder builder,
+        string name,
+        long expectedItems,
+        double errorRate,
+        Action<SynchronizedBloomFilterOptions> configure) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNegativeOrZero(expectedItems);
+        Preca.ThrowIfNotBetweenExclusive(errorRate, BloomFilterConfiguration.MinimumErrorRate, BloomFilterConfiguration.MaximumErrorRate);
+        Preca.ThrowIfNull(configure);
+
+        builder.Services.Configure(configure);
+        builder.Services.Configure<SynchronizedBloomFilterOptions>(name, configure);
+
+        builder.Services.Configure<BloomFilterOptions>(options => {
+            options.Filters[name] = new FilterDefinition {
+                ExpectedItems = expectedItems,
+                ErrorRate = errorRate,
+                Type = BloomFilterType.InMemory
+            };
+        });
+
+        builder.Services.TryAddKeyedSingleton<SynchronizedRedisBloomFilter>(name, (sp, _) => {
+            IConnectionMultiplexer redis = sp.GetRequiredService<IConnectionMultiplexer>();
+            IOptionsMonitor<SynchronizedBloomFilterOptions> optionsMonitor = sp.GetRequiredService<IOptionsMonitor<SynchronizedBloomFilterOptions>>();
+            SynchronizedBloomFilterOptions options = optionsMonitor.Get(name);
+
+            InMemoryBloomFilter inMemory = CreateInMemoryFilter(sp, name, expectedItems, errorRate);
+
+            ILogger<SynchronizedRedisBloomFilter> logger = sp.GetService<ILogger<SynchronizedRedisBloomFilter>>()
+                ?? NullLogger<SynchronizedRedisBloomFilter>.Instance;
+
+            SynchronizedRedisBloomFilter filter = new(redis, inMemory, Options.Create(options), logger);
+
+            sp.GetService<IBloomFilterRegistry>()?.Register(filter);
+
+            return filter;
+        });
+
+        builder.Services.TryAddKeyedSingleton<IBloomFilter>(name, (sp, _) =>
+            sp.GetRequiredKeyedService<SynchronizedRedisBloomFilter>(name));
+        builder.Services.TryAddKeyedSingleton<IAsyncBloomFilter>(name, (sp, _) =>
+            sp.GetRequiredKeyedService<SynchronizedRedisBloomFilter>(name));
+        builder.Services.TryAddKeyedSingleton<IPersistentBloomFilter>(name, (sp, _) =>
+            sp.GetRequiredKeyedService<SynchronizedRedisBloomFilter>(name));
+
+        return builder;
+    }
+
+    private static InMemoryBloomFilter CreateInMemoryFilter(
+        IServiceProvider sp,
+        string name,
+        long expectedItems,
+        double errorRate) {
+        IBloomFilterConfigurationFactory configFactory = sp.GetService<IBloomFilterConfigurationFactory>() ?? new BloomFilterConfigurationFactory();
+        IOptions<BloomFilterOptions>? bfOptions = sp.GetService<IOptions<BloomFilterOptions>>();
+        BloomFilterOptions filterOptions = bfOptions?.Value ?? new BloomFilterOptions();
+        long hashSeed = filterOptions.DefaultHashSeed ?? BloomFilterConfiguration.DefaultHashSeed;
+        BloomFilterConfiguration config = configFactory.Create(FilterName.Parse(name), expectedItems, errorRate, hashSeed);
+
+        IBloomFilterStorage? storage = sp.GetService<IBloomFilterStorage>();
+        IObjectPool<MemoryStream> memoryStreamPool = sp.GetRequiredService<IObjectPool<MemoryStream>>();
+        ILoggerFactory? loggerFactory = sp.GetService<ILoggerFactory>();
+        ILogger filterLogger = loggerFactory?.CreateLogger(name) ?? NullLogger.Instance;
+        TimeProvider timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
+
+        BloomFilterContext context = new(
+            storage,
+            memoryStreamPool,
+            filterLogger,
+            filterOptions,
+            timeProvider,
+            configFactory);
+
+        return new InMemoryBloomFilter(config, context);
     }
 
     #endregion

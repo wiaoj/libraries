@@ -411,4 +411,77 @@ public class RedisBloomFilterStorageTests {
         using MemoryStream dest = new();
         await Assert.ThrowsAsync<InvalidDataException>(async () => await loaded.Value.DataStream.CopyToAsync(dest));
     }
+
+    [Fact]
+    public async Task SaveAsync_Should_ReturnFalse_When_StringSetAsyncReturnsFalse() {
+        // Arrange
+        RedisBloomFilterStorage storage = CreateStorage(ignoreErrors: false);
+        FilterName filterName = FilterName.Parse("unsuccessful_save");
+        BloomFilterConfiguration config = CreateConfig();
+        using MemoryStream saveStream = new([1, 2, 3]);
+
+        this._database.StringSetAsync(
+            Arg.Any<RedisKey>(),
+            Arg.Any<RedisValue>(),
+            Arg.Any<TimeSpan?>(),
+            Arg.Any<bool>(),
+            Arg.Any<When>(),
+            Arg.Any<CommandFlags>()).Returns(Task.FromResult(false));
+
+        // Act
+        bool result = await storage.SaveAsync(filterName, config, saveStream);
+
+        // Assert - If Redis StringSetAsync returned false, SaveAsync should return false
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task LoadStreamAsync_And_DeleteAsync_Should_ThrowException_When_IgnoreErrorsIsFalse() {
+        // Arrange
+        RedisBloomFilterStorage storage = CreateStorage(ignoreErrors: false);
+        FilterName filterName = FilterName.Parse("faulty_load_delete");
+
+        this._database.StringGetAsync(Arg.Any<RedisKey>(), Arg.Any<CommandFlags>())
+            .Returns<Task<RedisValue>>(_ => throw new RedisTimeoutException("Load timeout", CommandStatus.Unknown));
+
+        this._database.KeyDeleteAsync(Arg.Any<RedisKey>(), Arg.Any<CommandFlags>())
+            .Returns<Task<bool>>(_ => throw new RedisServerException("Delete failed"));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<RedisTimeoutException>(async () => await storage.LoadStreamAsync(filterName));
+        await Assert.ThrowsAsync<RedisServerException>(async () => await storage.DeleteAsync(filterName));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_Should_DeleteMainKeyAndShardedKeysViaScript() {
+        // Arrange
+        RedisBloomFilterStorage storage = CreateStorage(keyPrefix: "bloom:snapshot:");
+        FilterName filterName = FilterName.Parse("sharded_filter");
+
+        this._database.KeyDeleteAsync(
+            Arg.Any<RedisKey>(),
+            Arg.Any<CommandFlags>()).Returns(Task.FromResult(true));
+
+        this._database.ScriptEvaluateAsync(
+            Arg.Any<string>(),
+            Arg.Any<RedisKey[]>(),
+            Arg.Any<RedisValue[]>(),
+            Arg.Any<CommandFlags>()).Returns(Task.FromResult(RedisResult.Create((RedisValue)1)));
+
+        // Act
+        await storage.DeleteAsync(filterName);
+
+        // Assert - Main key must be deleted directly and shards deleted via server-side script
+        _ = this._database.Received(1).KeyDeleteAsync(
+            (RedisKey)"bloom:snapshot:sharded_filter",
+            Arg.Any<CommandFlags>());
+
+        _ = this._database.Received(1).ScriptEvaluateAsync(
+            Arg.Any<string>(),
+            Arg.Any<RedisKey[]>(),
+            Arg.Is<RedisValue[]>(vals => vals.Length == 1 && (string)vals[0]! == "bloom:snapshot:sharded_filter_s*"),
+            Arg.Any<CommandFlags>());
+    }
 }
+
+

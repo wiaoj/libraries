@@ -9,6 +9,7 @@ using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
 using Wiaoj.BloomFilter.Storage;
+using Wiaoj.ObjectPool;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -66,10 +67,16 @@ public static class BloomFilterServiceCollectionExtensions {
         // Internal engine infrastructure
         services.TryAddSingleton<IBloomFilterConfigurationFactory, BloomFilterConfigurationFactory>();
         services.TryAddSingleton<IBloomFilterRegistry, BloomFilterRegistry>();
-        services.TryAddSingleton<BloomFilterFactory>();
+        services.TryAddSingleton<BloomFilterFactory>(sp => new BloomFilterFactory(
+            sp.GetRequiredService<IBloomFilterConfigurationFactory>(),
+            sp.GetRequiredService<IOptionsMonitor<BloomFilterOptions>>(),
+            sp.GetRequiredService<ILoggerFactory>(),
+            sp.GetServices<IAutoBloomFilterSeeder>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<IObjectPool<MemoryStream>>(),
+            sp.GetService<IBloomFilterStorage>()));
         services.TryAddSingleton<IBloomFilterService, BloomFilterService>();
         services.TryAddSingleton<IBloomFilterSeeder, BloomFilterSeeder>();
-        services.TryAddSingleton<IBloomFilterStorage, FileSystemBloomFilterStorage>();
 
         services.AddObjectPool<MemoryStream>(
             factory: () => new MemoryStream(),

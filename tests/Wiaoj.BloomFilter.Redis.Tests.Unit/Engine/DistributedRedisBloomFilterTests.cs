@@ -69,7 +69,7 @@ public class DistributedRedisBloomFilterTests {
 
         // Assert
         Assert.True(changed);
-        await this._batch.Received(this._config.HashFunctionCount).StringSetBitAsync(
+        _ = this._batch.Received(this._config.HashFunctionCount).StringSetBitAsync(
             (RedisKey)"bloom:live:distributed-filter",
             Arg.Any<long>(),
             true,
@@ -109,7 +109,7 @@ public class DistributedRedisBloomFilterTests {
 
         // Assert
         Assert.True(contains);
-        await this._batch.Received(this._config.HashFunctionCount).StringGetBitAsync(
+        _ = this._batch.Received(this._config.HashFunctionCount).StringGetBitAsync(
             (RedisKey)"bloom:live:distributed-filter",
             Arg.Any<long>(),
             Arg.Any<CommandFlags>());
@@ -214,7 +214,7 @@ public class DistributedRedisBloomFilterTests {
 
         // Assert
         this._multiplexer.Received(1).GetDatabase(targetDb, Arg.Any<object>());
-        await this._batch.Received().StringSetBitAsync(
+        _ = this._batch.Received().StringSetBitAsync(
             (RedisKey)"custom:bf:distributed-filter",
             Arg.Any<long>(),
             true,
@@ -322,4 +322,24 @@ public class DistributedRedisBloomFilterTests {
         // Act & Assert
         await Assert.ThrowsAsync<RedisServerException>(async () => await filter.AddAsync(item));
     }
+
+    [Fact]
+    public void Constructor_Should_ThrowArgumentOutOfRangeException_When_SizeInBitsExceeds512MB() {
+        // Arrange - Redis bitmaps support a maximum offset of 2^32 - 1 bits (512 MB)
+        long overLimitBits = 4_294_967_296L; // 2^32 bits
+        BloomFilterConfiguration oversizedConfig = new(
+            FilterName.Parse("oversized"),
+            expectedItems: 100_000_000,
+            errorRate: 0.001,
+            sizeInBits: overLimitBits,
+            hashFunctionCount: 7,
+            hashSeed: 42);
+
+        IOptions<DistributedBloomFilterOptions> options = Microsoft.Extensions.Options.Options.Create(new DistributedBloomFilterOptions());
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new DistributedRedisBloomFilter(this._multiplexer, oversizedConfig, options));
+    }
 }
+

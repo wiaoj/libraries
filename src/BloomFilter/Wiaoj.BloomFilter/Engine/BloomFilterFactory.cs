@@ -19,7 +19,7 @@ internal sealed class BloomFilterFactory(
     IEnumerable<IAutoBloomFilterSeeder> autoSeeders,
     TimeProvider timeProvider,
     IObjectPool<MemoryStream> memoryStreamPool,
-    IBloomFilterStorage storage) {
+    IBloomFilterStorage? storage = null) {
 
     private readonly ILogger _logger = loggerFactory.CreateLogger<BloomFilterFactory>();
 

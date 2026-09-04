@@ -25,6 +25,9 @@ internal sealed class BloomFilterWarmUpService(
                 if(filter is LazyBloomFilterProxy proxy) {
                     await proxy.EnsureInitializedAsync(stoppingToken);
                 }
+                else {
+                    await filter.ReloadAsync(stoppingToken);
+                }
             }
             catch(Exception ex) {
                 logger.LogWarmUpFilterFailed(ex, key);

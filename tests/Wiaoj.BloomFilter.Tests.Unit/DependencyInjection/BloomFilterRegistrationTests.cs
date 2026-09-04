@@ -98,6 +98,41 @@ public class BloomFilterRegistrationTests {
 
     public sealed class StorageRegistrationMethods {
         [Fact]
+        public void Should_NotRegisterStorage_ByDefault_When_NoStorageConfigured() {
+            ServiceCollection services = new();
+            services.AddBloomFilter(builder => {
+                builder.AddFilter("ephemeral-filter", 10_000, 0.01);
+            });
+
+            using ServiceProvider sp = services.BuildServiceProvider();
+            IBloomFilterStorage? storage = sp.GetService<IBloomFilterStorage>();
+
+            // Assert: Storage is opt-in, null by default
+            Assert.Null(storage);
+        }
+
+        [Fact]
+        public async Task Should_ResolveAndUseFilter_InPureInMemoryMode_When_StorageIsNotRegistered() {
+            ServiceCollection services = new();
+            services.AddBloomFilter(builder => {
+                builder.AddFilter("pure-memory", 10_000, 0.01);
+            });
+
+            using ServiceProvider sp = services.BuildServiceProvider();
+            IBloomFilter filter = sp.GetRequiredKeyedService<IBloomFilter>("pure-memory");
+            IPersistentBloomFilter persistentFilter = sp.GetRequiredKeyedService<IPersistentBloomFilter>("pure-memory");
+
+            Assert.NotNull(filter);
+            Assert.True(filter.Add("test-key"));
+            Assert.True(filter.Contains("test-key"));
+
+            // SaveAsync and ReloadAsync should gracefully no-op without exceptions
+            await persistentFilter.SaveAsync(TestContext.Current.CancellationToken);
+            await persistentFilter.ReloadAsync(TestContext.Current.CancellationToken);
+            Assert.True(filter.Contains("test-key"));
+        }
+
+        [Fact]
         public void Should_RegisterFileSystemStorage_WithDefaultOptions_When_ParameterlessOverloadUsed() {
             ServiceCollection services = new();
             services.AddBloomFilter(builder => {
