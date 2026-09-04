@@ -1,4 +1,4 @@
-﻿#pragma warning disable IDE0130 // Namespace does not match folder structure
+#pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Wiaoj.Webhooks;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
@@ -46,6 +46,12 @@ public sealed class WebhookRecoveryOptions {
     public TimeSpan QueuedJobStaleThreshold { get; set; } = DefaultQueuedJobStaleThreshold;
 
     /// <summary>
+    /// Gets or sets an optional grace period buffer subtracted from the current time when evaluating orphaned retrying jobs.
+    /// Default is <see cref="TimeSpan.Zero"/> (jobs whose <see cref="WebhookJobRecord.NextAttemptAt"/> is at or before the current timestamp are recovered).
+    /// </summary>
+    public TimeSpan RetryingJobGracePeriod { get; set; } = TimeSpan.Zero;
+
+    /// <summary>
     /// Validates the configuration values.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any configuration value is negative or out of bounds.</exception>
@@ -58,6 +64,9 @@ public sealed class WebhookRecoveryOptions {
         }
         if(this.QueuedJobStaleThreshold <= TimeSpan.Zero) {
             throw new ArgumentOutOfRangeException(nameof(this.QueuedJobStaleThreshold), "Queued job stale threshold must be a positive non-zero duration.");
+        }
+        if(this.RetryingJobGracePeriod < TimeSpan.Zero) {
+            throw new ArgumentOutOfRangeException(nameof(this.RetryingJobGracePeriod), "Retrying job grace period cannot be negative.");
         }
         Preca.ThrowIfLessThan(this.BatchSize, 1);
     }

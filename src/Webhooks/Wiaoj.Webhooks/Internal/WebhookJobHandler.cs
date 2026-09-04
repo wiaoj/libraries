@@ -91,9 +91,10 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
 
         if(newStatus == WebhookJobStatus.Retrying) {
             TimeSpan? retryDelay = context.GetScheduledRetryDelay();
-            DateTimeOffset? nextAttemptAt = retryDelay.HasValue
-                ? this._timeProvider.GetUtcNow().Add(retryDelay.Value)
-                : null;
+            TimeSpan delay = retryDelay.HasValue && retryDelay.Value > TimeSpan.Zero
+                ? retryDelay.Value
+                : TimeSpan.FromSeconds(30);
+            DateTimeOffset nextAttemptAt = this._timeProvider.GetUtcNow().Add(delay);
             await this._store.UpdateStatusAsync(job.Id, newStatus, nextAttemptAt, cancellationToken);
         }
         else {

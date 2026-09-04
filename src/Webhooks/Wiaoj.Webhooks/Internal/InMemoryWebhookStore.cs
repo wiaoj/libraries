@@ -84,7 +84,13 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     /// <inheritdoc/>
     public Task UpdateStatusAsync(WebhookJobId jobId, WebhookJobStatus status, CancellationToken cancellationToken = default) {
         if(this._jobs.TryGetValue(jobId, out WebhookJobRecord? job)) {
-            job.Status = status;
+            lock(job) {
+                job.Status = status;
+                if(status == WebhookJobStatus.Retrying) {
+                    job.LockedBy = null;
+                    job.LockExpiresAt = null;
+                }
+            }
         }
         return Task.CompletedTask;
     }
@@ -92,8 +98,14 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     /// <inheritdoc/>
     public Task UpdateStatusAsync(WebhookJobId jobId, WebhookJobStatus status, DateTimeOffset? nextAttemptAt, CancellationToken cancellationToken = default) {
         if(this._jobs.TryGetValue(jobId, out WebhookJobRecord? job)) {
-            job.Status = status;
-            job.NextAttemptAt = nextAttemptAt;
+            lock(job) {
+                job.Status = status;
+                job.NextAttemptAt = nextAttemptAt;
+                if(status == WebhookJobStatus.Retrying) {
+                    job.LockedBy = null;
+                    job.LockExpiresAt = null;
+                }
+            }
         }
         return Task.CompletedTask;
     }
@@ -163,8 +175,7 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
             // 3. Orphaned Retrying job whose NextAttemptAt has passed (Only checked if retryingDueThreshold is provided)
             bool isDueRetrying = retryingDueThreshold.HasValue
                 && job.Status == WebhookJobStatus.Retrying
-                && job.NextAttemptAt.HasValue
-                && job.NextAttemptAt.Value <= retryingDueThreshold.Value
+                && (!job.NextAttemptAt.HasValue || job.NextAttemptAt.Value <= retryingDueThreshold.Value)
                 && (!job.LockExpiresAt.HasValue || (inFlightThreshold.HasValue && job.LockExpiresAt.Value < inFlightThreshold.Value));
 
             if(isExpiredInFlight || isStrandedQueued || isDueRetrying) {

@@ -241,7 +241,7 @@ public sealed class StaleJobRecoveryServiceTests {
     }
 
     [Fact]
-    public async Task SweepAndRecoverAsync_RecoversOrphanedRetryingJobs_WhenNextAttemptAtHasPassed() {
+    public async Task Should_RecoverOrphanedRetryingJob_When_NextAttemptAtHasPassed() {
         // Arrange: Retrying job whose NextAttemptAt is 5 minutes in the past -> Must be recovered
         FakeTimeProvider timeProvider = new();
         DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
@@ -286,10 +286,11 @@ public sealed class StaleJobRecoveryServiceTests {
         WebhookJobRecord? updatedJob = await store.GetJobAsync(retryingJobId, TestContext.Current.CancellationToken);
         Assert.NotNull(updatedJob);
         Assert.Equal(WebhookJobStatus.Queued, updatedJob.Status);
+        Assert.Null(updatedJob.NextAttemptAt);
     }
 
     [Fact]
-    public async Task SweepAndRecoverAsync_DoesNotRecover_RetryingJobsWithFutureNextAttemptAt() {
+    public async Task Should_NotRecoverRetryingJob_When_NextAttemptAtIsInFuture() {
         // Arrange: Retrying job whose NextAttemptAt is 10 minutes in the future -> Must NOT be recovered
         FakeTimeProvider timeProvider = new();
         DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
@@ -336,7 +337,7 @@ public sealed class StaleJobRecoveryServiceTests {
     }
 
     [Fact]
-    public async Task SweepAndRecoverAsync_RecoversRetryingJobs_AfterTimeAdvance() {
+    public async Task Should_RecoverRetryingJob_When_TimeAdvancesPastNextAttemptAt() {
         // Arrange: Retrying job whose NextAttemptAt is 5 minutes from now
         FakeTimeProvider timeProvider = new();
         DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
@@ -389,5 +390,352 @@ public sealed class StaleJobRecoveryServiceTests {
         WebhookJobRecord? updatedJob = await store.GetJobAsync(retryJobId, TestContext.Current.CancellationToken);
         Assert.NotNull(updatedJob);
         Assert.Equal(WebhookJobStatus.Queued, updatedJob.Status);
+        Assert.Null(updatedJob.NextAttemptAt);
     }
+
+    #region Edge Case Tests (Issue #41)
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Edge Case 1: NextAttemptAt == null (Defensive recovery for unset timestamp)
+    // ────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Should_RecoverRetryingJobImmediately_When_NextAttemptAtIsNull() {
+        // Arrange
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookJobId jobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-null-next");
+        WebhookJobRecord record = new(
+            jobId,
+            endpointId,
+            "order.created",
+            "{\"OrderId\":\"ORD-NULL\",\"Amount\":10.00}",
+            now.AddMinutes(-5)) {
+            Status = WebhookJobStatus.Retrying,
+            NextAttemptAt = null // Null timestamp
+        };
+        await store.SaveAsync(record, TestContext.Current.CancellationToken);
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider);
+
+        // Act
+        int recoveredCount = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: Treated as immediately due, recovered, and re-enqueued
+        Assert.Equal(1, recoveredCount);
+        (WebhookDeliveryJob job, TimeSpan? _) = Assert.Single(transport.EnqueuedJobs);
+        Assert.Equal(jobId, job.Id);
+
+        WebhookJobRecord? updated = await store.GetJobAsync(jobId, TestContext.Current.CancellationToken);
+        Assert.NotNull(updated);
+        Assert.Equal(WebhookJobStatus.Queued, updated.Status);
+        Assert.Null(updated.NextAttemptAt);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Edge Case 2: Lease Lock State on Retrying Transitions
+    // ────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Should_RecoverRetryingJob_When_PriorExecutionLockWasReleasedOnRetryTransition() {
+        // Arrange: Worker claims lease (InFlight), then delivery fails and transitions to Retrying
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookJobId jobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-lock-test");
+        WebhookJobRecord record = new(
+            jobId,
+            endpointId,
+            "order.created",
+            "{\"OrderId\":\"ORD-LOCK\",\"Amount\":25.00}",
+            now.AddMinutes(-10));
+        await store.SaveAsync(record, TestContext.Current.CancellationToken);
+
+        // Worker claimed 5-minute lease
+        bool claimed = await store.TryClaimLeaseAsync(jobId, "crashed-worker-pod", TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken);
+        Assert.True(claimed);
+
+        // Delivery failed -> Transitions to Retrying with NextAttemptAt in 15 seconds
+        DateTimeOffset retryAt = now.AddSeconds(15);
+        await store.UpdateStatusAsync(jobId, WebhookJobStatus.Retrying, retryAt, TestContext.Current.CancellationToken);
+
+        // Verify that updating status to Retrying released the execution lock
+        WebhookJobRecord? inStore = await store.GetJobAsync(jobId, TestContext.Current.CancellationToken);
+        Assert.NotNull(inStore);
+        Assert.Null(inStore.LockedBy);
+        Assert.Null(inStore.LockExpiresAt);
+
+        // Advance time past retryAt
+        timeProvider.Advance(TimeSpan.FromSeconds(20));
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider);
+
+        // Act: Recovery sweeps
+        int recovered = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: Job is recovered immediately without being blocked by previous 5-minute lease
+        Assert.Equal(1, recovered);
+        Assert.Single(transport.EnqueuedJobs);
+    }
+
+    [Fact]
+    public async Task Should_NotRecoverRetryingJob_When_ActiveLeaseHeldByAnotherInstance() {
+        // Arrange: Retrying job where another instance is currently claiming lease
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookJobId jobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-active-lease");
+        WebhookJobRecord record = new(
+            jobId,
+            endpointId,
+            "order.created",
+            "{\"OrderId\":\"ORD-ACTIVE\",\"Amount\":55.00}",
+            now.AddMinutes(-10)) {
+            Status = WebhookJobStatus.Retrying,
+            NextAttemptAt = now.AddMinutes(-2),
+            LockedBy = "other-active-recovery-node",
+            LockExpiresAt = now.AddMinutes(2) // Active lease for 2 more minutes
+        };
+        await store.SaveAsync(record, TestContext.Current.CancellationToken);
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider);
+
+        // Act
+        int recovered = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: Skipped because lease is held by another active node
+        Assert.Equal(0, recovered);
+        Assert.Empty(transport.EnqueuedJobs);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Edge Case 3: Concurrent Multi-Node Race on Same Retrying Job
+    // ────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Should_AllowOnlySingleNodeToRecover_When_MultipleNodesRaceConcurrently() {
+        // Arrange: 1 orphaned retrying job, 3 competing recovery instances
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookJobId jobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-race");
+        WebhookJobRecord record = new(
+            jobId,
+            endpointId,
+            "order.created",
+            "{\"OrderId\":\"ORD-RACE\",\"Amount\":99.99}",
+            now.AddMinutes(-10)) {
+            Status = WebhookJobStatus.Retrying,
+            NextAttemptAt = now.AddMinutes(-2)
+        };
+        await store.SaveAsync(record, TestContext.Current.CancellationToken);
+
+        StaleJobRecoveryService node1 = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider,
+            webhookOptions: new WebhookOptions { InstanceId = "node-alpha" });
+
+        StaleJobRecoveryService node2 = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider,
+            webhookOptions: new WebhookOptions { InstanceId = "node-beta" });
+
+        StaleJobRecoveryService node3 = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider,
+            webhookOptions: new WebhookOptions { InstanceId = "node-gamma" });
+
+        // Act: Run sweeps concurrently
+        Task<int> task1 = node1.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+        Task<int> task2 = node2.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+        Task<int> task3 = node3.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        int[] results = await Task.WhenAll(task1, task2, task3);
+
+        // Assert: Exactly 1 node won the lease race and recovered the job
+        int totalRecovered = results.Sum();
+        Assert.Equal(1, totalRecovered);
+        Assert.Single(transport.EnqueuedJobs);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Edge Case 4: Unregistered Event Type or Corrupt Payload During Recovery
+    // ────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Should_TransitionToDeadLettered_When_EventTypeIsUnregistered() {
+        // Arrange
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookJobId jobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-unknown-event");
+        WebhookJobRecord record = new(
+            jobId,
+            endpointId,
+            "deleted.event.schema.v99", // Unregistered event type
+            "{\"OldData\":\"value\"}",
+            now.AddMinutes(-10)) {
+            Status = WebhookJobStatus.Retrying,
+            NextAttemptAt = now.AddMinutes(-1)
+        };
+        await store.SaveAsync(record, TestContext.Current.CancellationToken);
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider);
+
+        // Act
+        int recovered = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: Job was dead-lettered, not re-enqueued, and recovery completed without throwing
+        Assert.Equal(0, recovered);
+        Assert.Empty(transport.EnqueuedJobs);
+
+        WebhookJobRecord? updated = await store.GetJobAsync(jobId, TestContext.Current.CancellationToken);
+        Assert.NotNull(updated);
+        Assert.Equal(WebhookJobStatus.DeadLettered, updated.Status);
+    }
+
+    [Fact]
+    public async Task Should_TransitionToDeadLettered_When_PayloadIsCorrupt() {
+        // Arrange
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookJobId jobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-corrupt-payload");
+        WebhookJobRecord record = new(
+            jobId,
+            endpointId,
+            "order.created",
+            "NOT_VALID_JSON_CORRUPTED_STREAM{{{",
+            now.AddMinutes(-10)) {
+            Status = WebhookJobStatus.Retrying,
+            NextAttemptAt = now.AddMinutes(-1)
+        };
+        await store.SaveAsync(record, TestContext.Current.CancellationToken);
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider);
+
+        // Act
+        int recovered = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: Exception caught, dead-lettered, loop did not crash
+        Assert.Equal(0, recovered);
+        Assert.Empty(transport.EnqueuedJobs);
+
+        WebhookJobRecord? updated = await store.GetJobAsync(jobId, TestContext.Current.CancellationToken);
+        Assert.NotNull(updated);
+        Assert.Equal(WebhookJobStatus.DeadLettered, updated.Status);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Edge Case 5: Batch Size Limits & Pagination
+    // ────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Should_RespectBatchSize_And_RecoverRemainingJobsInSubsequentSweep() {
+        // Arrange: 25 orphaned retrying jobs, BatchSize = 10
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookRecoveryOptions options = new() {
+            BatchSize = 10,
+            RecoveryLeaseDuration = TimeSpan.FromMinutes(1)
+        };
+
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-batch-paging");
+
+        for(int i = 1; i <= 25; i++) {
+            WebhookJobId jobId = WebhookJobId.NewJobId();
+            WebhookJobRecord record = new(
+                jobId,
+                endpointId,
+                "order.created",
+                $"{{\"OrderId\":\"ORD-BATCH-{i}\",\"Amount\":{i}.00}}",
+                now.AddMinutes(-15)) {
+                Status = WebhookJobStatus.Retrying,
+                NextAttemptAt = now.AddMinutes(-5)
+            };
+            await store.SaveAsync(record, TestContext.Current.CancellationToken);
+        }
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider,
+            recoveryOptions: options);
+
+        // Act & Assert - Sweep 1: recovers exactly 10
+        int sweep1 = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(10, sweep1);
+        Assert.Equal(10, transport.EnqueuedJobs.Count);
+
+        // Sweep 2: recovers next 10
+        int sweep2 = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(10, sweep2);
+        Assert.Equal(20, transport.EnqueuedJobs.Count);
+
+        // Sweep 3: recovers remaining 5
+        int sweep3 = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(5, sweep3);
+        Assert.Equal(25, transport.EnqueuedJobs.Count);
+
+        // Sweep 4: no jobs left to recover
+        int sweep4 = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(0, sweep4);
+        Assert.Equal(25, transport.EnqueuedJobs.Count);
+    }
+
+    #endregion
 }

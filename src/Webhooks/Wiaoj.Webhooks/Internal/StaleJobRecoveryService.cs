@@ -81,13 +81,14 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
         long startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
         DateTimeOffset now = this._timeProvider.GetUtcNow();
         DateTimeOffset queuedThreshold = now.Subtract(this._options.QueuedJobStaleThreshold);
+        DateTimeOffset retryingDueThreshold = now.Subtract(this._options.RetryingJobGracePeriod);
 
         this._logger.LogRecoverySweepStarting(now);
 
         IReadOnlyList<WebhookJobRecord> staleJobs = await this._store.GetStaleJobsAsync(
             now,
             queuedThreshold,
-            now,
+            retryingDueThreshold,
             this._options.BatchSize,
             cancellationToken).ConfigureAwait(false);
 
@@ -135,13 +136,14 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
                     job.EventType,
                     domainEvent);
 
-                await this._store.UpdateStatusAsync(job.Id, WebhookJobStatus.Queued, cancellationToken).ConfigureAwait(false);
+                await this._store.UpdateStatusAsync(job.Id, WebhookJobStatus.Queued, null, cancellationToken).ConfigureAwait(false);
                 await this._transport.EnqueueAsync(deliveryJob, cancellationToken).ConfigureAwait(false);
 
                 recoveredCount++;
             }
             catch(Exception ex) {
                 this._logger.LogRecoverySweepFailed(ex);
+                await this._store.UpdateStatusAsync(job.Id, WebhookJobStatus.DeadLettered, cancellationToken).ConfigureAwait(false);
             }
         }
 
