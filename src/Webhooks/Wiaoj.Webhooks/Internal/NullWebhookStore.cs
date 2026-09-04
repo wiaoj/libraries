@@ -35,6 +35,11 @@ public sealed class NullWebhookStore : IWebhookStore {
     }
 
     /// <inheritdoc/>
+    public Task UpdateStatusAsync(WebhookJobId jobId, WebhookJobStatus status, DateTimeOffset? nextAttemptAt, CancellationToken cancellationToken = default) {
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task<bool> TryClaimLeaseAsync(WebhookJobId jobId, string instanceId, TimeSpan duration, CancellationToken cancellationToken = default) {
         return Task.FromResult(true);
     }
@@ -47,6 +52,7 @@ public sealed class NullWebhookStore : IWebhookStore {
     /// <inheritdoc/>
     public Task<IReadOnlyList<WebhookJobRecord>> GetStaleJobsAsync(DateTimeOffset? inFlightThreshold,
                                                                    DateTimeOffset? queuedThreshold,
+                                                                   DateTimeOffset? retryingDueThreshold,
                                                                    int maxCount,
                                                                    CancellationToken cancellationToken = default) {
         return Task.FromResult<IReadOnlyList<WebhookJobRecord>>([]);

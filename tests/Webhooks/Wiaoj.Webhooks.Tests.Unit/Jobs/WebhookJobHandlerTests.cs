@@ -15,13 +15,15 @@ public sealed class WebhookJobHandlerTests {
         IWebhookEndpointResolver? resolver = null,
         ISerializer<WebhookSerializerKey>? serializer = null,
         IWebhookDeliverer? deliverer = null,
-        IReadOnlyList<IWebhookMiddleware>? middleware = null) {
+        IReadOnlyList<IWebhookMiddleware>? middleware = null,
+        TimeProvider? timeProvider = null) {
 
+        timeProvider ??= new FakeTimeProvider();
         deliverer ??= new FakeWebhookDeliverer();
         WebhookPipelineRunner runner = new(
             middleware ?? [],
             deliverer,
-            new FakeTimeProvider(),
+            timeProvider,
             NullLogger<WebhookPipelineRunner>.Instance);
 
         return new WebhookJobHandler(
@@ -29,6 +31,7 @@ public sealed class WebhookJobHandlerTests {
             resolver ?? new FakeWebhookEndpointResolver().Register(WebhookTestFactory.CreateEndpoint()),
             serializer ?? new FakeWebhookSerializer(),
             runner,
+            timeProvider,
             NullLogger<WebhookJobHandler>.Instance);
     }
 
@@ -187,12 +190,14 @@ public sealed class WebhookJobHandlerTests {
         FakeWebhookEndpointResolver resolver = new();
         FakeWebhookSerializer serializer = new();
         WebhookPipelineRunner runner = new([], new FakeWebhookDeliverer(), new FakeTimeProvider(), NullLogger<WebhookPipelineRunner>.Instance);
+        FakeTimeProvider timeProvider = new();
         NullLogger<WebhookJobHandler> logger = NullLogger<WebhookJobHandler>.Instance;
 
-        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(null!, resolver, serializer, runner, logger));
-        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, null!, serializer, runner, logger));
-        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, resolver, null!, runner, logger));
-        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, resolver, serializer, null!, logger));
-        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, resolver, serializer, runner, null!));
+        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(null!, resolver, serializer, runner, timeProvider, logger));
+        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, null!, serializer, runner, timeProvider, logger));
+        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, resolver, null!, runner, timeProvider, logger));
+        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, resolver, serializer, null!, timeProvider, logger));
+        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, resolver, serializer, runner, null!, logger));
+        Assert.ThrowsAny<ArgumentException>(() => new WebhookJobHandler(store, resolver, serializer, runner, timeProvider, null!));
     }
 }

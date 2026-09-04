@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using Wiaoj.Webhooks.Internal;
 using Wiaoj.Webhooks.Tests.Unit.Fakes;
 using Wiaoj.Webhooks.Tests.Unit.TestData;
@@ -238,5 +238,156 @@ public sealed class StaleJobRecoveryServiceTests {
         WebhookJobRecord? updated = await store.GetJobAsync(staleJobId, TestContext.Current.CancellationToken);
         Assert.NotNull(updated);
         Assert.Equal(customPodName, updated.LockedBy);
+    }
+
+    [Fact]
+    public async Task SweepAndRecoverAsync_RecoversOrphanedRetryingJobs_WhenNextAttemptAtHasPassed() {
+        // Arrange: Retrying job whose NextAttemptAt is 5 minutes in the past -> Must be recovered
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookRecoveryOptions options = new() {
+            PollingInterval = TimeSpan.FromSeconds(10),
+            BatchSize = 10,
+            RecoveryLeaseDuration = TimeSpan.FromMinutes(1)
+        };
+
+        WebhookJobId retryingJobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-1");
+        WebhookJobRecord retryingRecord = new(
+            retryingJobId,
+            endpointId,
+            "order.created",
+            "{\"OrderId\":\"ORD-RETRY\",\"Amount\":42.50}",
+            now.AddMinutes(-15)) {
+            Status = WebhookJobStatus.Retrying,
+            NextAttemptAt = now.AddMinutes(-5)
+        };
+        await store.SaveAsync(retryingRecord, TestContext.Current.CancellationToken);
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider,
+            recoveryOptions: options);
+
+        // Act
+        int recoveredCount = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: Orphaned retrying job was recovered and re-enqueued
+        Assert.Equal(1, recoveredCount);
+        (WebhookDeliveryJob job, TimeSpan? _) = Assert.Single(transport.EnqueuedJobs);
+        Assert.Equal(retryingJobId, job.Id);
+
+        WebhookJobRecord? updatedJob = await store.GetJobAsync(retryingJobId, TestContext.Current.CancellationToken);
+        Assert.NotNull(updatedJob);
+        Assert.Equal(WebhookJobStatus.Queued, updatedJob.Status);
+    }
+
+    [Fact]
+    public async Task SweepAndRecoverAsync_DoesNotRecover_RetryingJobsWithFutureNextAttemptAt() {
+        // Arrange: Retrying job whose NextAttemptAt is 10 minutes in the future -> Must NOT be recovered
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookRecoveryOptions options = new() {
+            PollingInterval = TimeSpan.FromSeconds(10),
+            BatchSize = 10,
+            RecoveryLeaseDuration = TimeSpan.FromMinutes(1)
+        };
+
+        WebhookJobId futureRetryJobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-1");
+        WebhookJobRecord futureRetryRecord = new(
+            futureRetryJobId,
+            endpointId,
+            "order.created",
+            "{\"OrderId\":\"ORD-FUTURE\",\"Amount\":99.00}",
+            now.AddMinutes(-5)) {
+            Status = WebhookJobStatus.Retrying,
+            NextAttemptAt = now.AddMinutes(10)
+        };
+        await store.SaveAsync(futureRetryRecord, TestContext.Current.CancellationToken);
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider,
+            recoveryOptions: options);
+
+        // Act
+        int recoveredCount = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: Future retrying job was NOT recovered
+        Assert.Equal(0, recoveredCount);
+        Assert.Empty(transport.EnqueuedJobs);
+
+        WebhookJobRecord? untouchedJob = await store.GetJobAsync(futureRetryJobId, TestContext.Current.CancellationToken);
+        Assert.NotNull(untouchedJob);
+        Assert.Equal(WebhookJobStatus.Retrying, untouchedJob.Status);
+    }
+
+    [Fact]
+    public async Task SweepAndRecoverAsync_RecoversRetryingJobs_AfterTimeAdvance() {
+        // Arrange: Retrying job whose NextAttemptAt is 5 minutes from now
+        FakeTimeProvider timeProvider = new();
+        DateTimeOffset now = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        timeProvider.SetUtcNow(now);
+
+        InMemoryWebhookStore store = new(timeProvider);
+        FakeWebhookTransport transport = new();
+
+        WebhookRecoveryOptions options = new() {
+            PollingInterval = TimeSpan.FromSeconds(10),
+            BatchSize = 10,
+            RecoveryLeaseDuration = TimeSpan.FromMinutes(1)
+        };
+
+        WebhookJobId retryJobId = WebhookJobId.NewJobId();
+        WebhookEndpointId endpointId = WebhookTestFactory.CreateEndpointId("customer-1");
+        WebhookJobRecord retryRecord = new(
+            retryJobId,
+            endpointId,
+            "order.created",
+            "{\"OrderId\":\"ORD-TIME\",\"Amount\":75.00}",
+            now.AddMinutes(-10)) {
+            Status = WebhookJobStatus.Retrying,
+            NextAttemptAt = now.AddMinutes(5)
+        };
+        await store.SaveAsync(retryRecord, TestContext.Current.CancellationToken);
+
+        StaleJobRecoveryService service = WebhookTestFactory.CreateRecoveryService(
+            store: store,
+            transport: transport,
+            timeProvider: timeProvider,
+            recoveryOptions: options);
+
+        // Act - First sweep: Job is not yet due
+        int firstSweepCount = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: No recovery yet
+        Assert.Equal(0, firstSweepCount);
+        Assert.Empty(transport.EnqueuedJobs);
+
+        // Act - Advance time past NextAttemptAt and sweep again
+        timeProvider.Advance(TimeSpan.FromMinutes(6));
+        int secondSweepCount = await service.SweepAndRecoverAsync(TestContext.Current.CancellationToken);
+
+        // Assert: Now the job should be recovered
+        Assert.Equal(1, secondSweepCount);
+        (WebhookDeliveryJob job, TimeSpan? _) = Assert.Single(transport.EnqueuedJobs);
+        Assert.Equal(retryJobId, job.Id);
+
+        WebhookJobRecord? updatedJob = await store.GetJobAsync(retryJobId, TestContext.Current.CancellationToken);
+        Assert.NotNull(updatedJob);
+        Assert.Equal(WebhookJobStatus.Queued, updatedJob.Status);
     }
 }

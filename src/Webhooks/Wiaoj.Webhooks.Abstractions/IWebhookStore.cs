@@ -46,6 +46,16 @@ public interface IWebhookStore {
     Task UpdateStatusAsync(WebhookJobId jobId, WebhookJobStatus status, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Updates the lifecycle status and next scheduled retry timestamp of a webhook job atomically.
+    /// </summary>
+    /// <param name="jobId">The job identifier.</param>
+    /// <param name="status">The new status.</param>
+    /// <param name="nextAttemptAt">The timestamp when the next execution attempt should occur. Pass <see langword="null"/> to clear the scheduled retry.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous update operation.</returns>
+    Task UpdateStatusAsync(WebhookJobId jobId, WebhookJobStatus status, DateTimeOffset? nextAttemptAt, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Attempts to acquire an execution lease lock for a worker instance.
     /// </summary>
     /// <param name="jobId">The job identifier.</param>
@@ -65,16 +75,19 @@ public interface IWebhookStore {
     Task RecordAttemptAsync(WebhookJobId jobId, WebhookDeliveryAttempt attempt, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Retrieves stale jobs eligible for recovery, filtering expired in-flight executions and/or stranded queued jobs.
+    /// Retrieves stale jobs eligible for recovery, filtering expired in-flight executions, stranded queued jobs,
+    /// and orphaned retrying jobs whose scheduled retry time has passed.
     /// </summary>
     /// <param name="inFlightThreshold">The optional cutoff timestamp for in-flight lease expiration. When <see langword="null"/>, in-flight jobs are excluded.</param>
     /// <param name="queuedThreshold">The optional cutoff timestamp for stranded queued jobs. When <see langword="null"/>, queued jobs are excluded.</param>
+    /// <param name="retryingDueThreshold">The optional cutoff timestamp for orphaned retrying jobs whose <see cref="WebhookJobRecord.NextAttemptAt"/> has passed. When <see langword="null"/>, retrying jobs are excluded.</param>
     /// <param name="maxCount">The maximum number of stale jobs to retrieve.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A collection of stale jobs available for recovery.</returns>
     Task<IReadOnlyList<WebhookJobRecord>> GetStaleJobsAsync(
         DateTimeOffset? inFlightThreshold,
         DateTimeOffset? queuedThreshold,
+        DateTimeOffset? retryingDueThreshold,
         int maxCount,
         CancellationToken cancellationToken = default);
 
@@ -102,7 +115,7 @@ public interface IWebhookStore {
 public static class WebhookStoreExtensions {
     /// <summary>
     /// Retrieves in-flight jobs whose execution lease lock has expired before the specified threshold.
-    /// Excludes queued jobs.
+    /// Excludes queued and retrying jobs.
     /// </summary>
     /// <param name="store">The webhook store instance.</param>
     /// <param name="leaseExpirationThreshold">The cutoff timestamp for expired leases.</param>
@@ -116,12 +129,12 @@ public static class WebhookStoreExtensions {
         int maxCount,
         CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(store);
-        return store.GetStaleJobsAsync(leaseExpirationThreshold, null, maxCount, cancellationToken);
+        return store.GetStaleJobsAsync(leaseExpirationThreshold, null, null, maxCount, cancellationToken);
     }
 
     /// <summary>
     /// Retrieves stranded queued jobs that were created before the specified threshold and never picked up by a worker.
-    /// Excludes in-flight jobs.
+    /// Excludes in-flight and retrying jobs.
     /// </summary>
     /// <param name="store">The webhook store instance.</param>
     /// <param name="createdBeforeThreshold">The cutoff timestamp for stranded queued jobs.</param>
@@ -135,6 +148,26 @@ public static class WebhookStoreExtensions {
         int maxCount,
         CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(store);
-        return store.GetStaleJobsAsync(null, createdBeforeThreshold, maxCount, cancellationToken);
+        return store.GetStaleJobsAsync(null, createdBeforeThreshold, null, maxCount, cancellationToken);
+    }
+
+    /// <summary>
+    /// Retrieves orphaned retrying jobs whose scheduled <see cref="WebhookJobRecord.NextAttemptAt"/> has passed
+    /// and are no longer held by an in-memory delayed scheduler (e.g. due to node crash or restart).
+    /// Excludes in-flight and queued jobs.
+    /// </summary>
+    /// <param name="store">The webhook store instance.</param>
+    /// <param name="dueThreshold">The cutoff timestamp. Jobs with <see cref="WebhookJobRecord.NextAttemptAt"/> at or before this value are returned.</param>
+    /// <param name="maxCount">The maximum number of jobs to retrieve.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A read-only collection of orphaned retrying jobs eligible for recovery.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="store"/> is <see langword="null"/>.</exception>
+    public static Task<IReadOnlyList<WebhookJobRecord>> GetOrphanedRetryingJobsAsync(
+        this IWebhookStore store,
+        DateTimeOffset dueThreshold,
+        int maxCount,
+        CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNull(store);
+        return store.GetStaleJobsAsync(null, null, dueThreshold, maxCount, cancellationToken);
     }
 }

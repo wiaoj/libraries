@@ -7,8 +7,8 @@ using Wiaoj.Webhooks.Diagnostics;
 namespace Wiaoj.Webhooks.Internal;
 
 /// <summary>
-/// Resilient background service that periodically sweeps and recovers abandoned in-flight and stranded queued webhook jobs
-/// caused by sudden process termination, OOM kills, or unhandled worker crashes.
+/// Resilient background service that periodically sweeps and recovers abandoned in-flight, stranded queued,
+/// and orphaned retrying webhook jobs caused by sudden process termination, OOM kills, or unhandled worker crashes.
 /// </summary>
 internal sealed class StaleJobRecoveryService : BackgroundService {
     private readonly IWebhookStore _store;
@@ -73,7 +73,7 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
     }
 
     /// <summary>
-    /// Executes a single recovery sweep batch for both expired in-flight and stranded queued jobs.
+    /// Executes a single recovery sweep batch for expired in-flight, stranded queued, and orphaned retrying jobs.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The total number of stale jobs successfully recovered.</returns>
@@ -87,6 +87,7 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
         IReadOnlyList<WebhookJobRecord> staleJobs = await this._store.GetStaleJobsAsync(
             now,
             queuedThreshold,
+            now,
             this._options.BatchSize,
             cancellationToken).ConfigureAwait(false);
 

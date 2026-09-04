@@ -90,6 +90,15 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     }
 
     /// <inheritdoc/>
+    public Task UpdateStatusAsync(WebhookJobId jobId, WebhookJobStatus status, DateTimeOffset? nextAttemptAt, CancellationToken cancellationToken = default) {
+        if(this._jobs.TryGetValue(jobId, out WebhookJobRecord? job)) {
+            job.Status = status;
+            job.NextAttemptAt = nextAttemptAt;
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task<bool> TryClaimLeaseAsync(WebhookJobId jobId, string instanceId, TimeSpan duration, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNullOrWhiteSpace(instanceId);
         Preca.ThrowIfNegative(duration);
@@ -129,6 +138,7 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     public Task<IReadOnlyList<WebhookJobRecord>> GetStaleJobsAsync(
        DateTimeOffset? inFlightThreshold,
        DateTimeOffset? queuedThreshold,
+       DateTimeOffset? retryingDueThreshold,
        int maxCount,
        CancellationToken cancellationToken = default) {
         Preca.ThrowIfLessThan(maxCount, 1);
@@ -150,7 +160,14 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
                 && job.CreatedAt < queuedThreshold.Value
                 && (!job.LockExpiresAt.HasValue || (inFlightThreshold.HasValue && job.LockExpiresAt.Value < inFlightThreshold.Value));
 
-            if(isExpiredInFlight || isStrandedQueued) {
+            // 3. Orphaned Retrying job whose NextAttemptAt has passed (Only checked if retryingDueThreshold is provided)
+            bool isDueRetrying = retryingDueThreshold.HasValue
+                && job.Status == WebhookJobStatus.Retrying
+                && job.NextAttemptAt.HasValue
+                && job.NextAttemptAt.Value <= retryingDueThreshold.Value
+                && (!job.LockExpiresAt.HasValue || (inFlightThreshold.HasValue && job.LockExpiresAt.Value < inFlightThreshold.Value));
+
+            if(isExpiredInFlight || isStrandedQueued || isDueRetrying) {
                 stale.Add(job);
                 if(stale.Count >= maxCount) {
                     break;

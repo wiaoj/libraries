@@ -13,6 +13,7 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
     private readonly IWebhookEndpointResolver _endpointResolver;
     private readonly ISerializer<WebhookSerializerKey> _serializer;
     private readonly WebhookPipelineRunner _pipelineRunner;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<WebhookJobHandler> _logger;
 
     public WebhookJobHandler(
@@ -20,17 +21,20 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
         IWebhookEndpointResolver endpointResolver,
         ISerializer<WebhookSerializerKey> serializer,
         WebhookPipelineRunner pipelineRunner,
+        TimeProvider timeProvider,
         ILogger<WebhookJobHandler> logger) {
         Preca.ThrowIfNull(store);
         Preca.ThrowIfNull(endpointResolver);
         Preca.ThrowIfNull(serializer);
         Preca.ThrowIfNull(pipelineRunner);
+        Preca.ThrowIfNull(timeProvider);
         Preca.ThrowIfNull(logger);
 
         this._store = store;
         this._endpointResolver = endpointResolver;
         this._serializer = serializer;
         this._pipelineRunner = pipelineRunner;
+        this._timeProvider = timeProvider;
         this._logger = logger;
     }
 
@@ -84,8 +88,18 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
             WebhookDeliveryResult.TransientFailure when !isDeadLettered => WebhookJobStatus.Retrying,
             _ => WebhookJobStatus.DeadLettered
         };
-         
-        await this._store.UpdateStatusAsync(job.Id, newStatus, cancellationToken);
+
+        if(newStatus == WebhookJobStatus.Retrying) {
+            TimeSpan? retryDelay = context.GetScheduledRetryDelay();
+            DateTimeOffset? nextAttemptAt = retryDelay.HasValue
+                ? this._timeProvider.GetUtcNow().Add(retryDelay.Value)
+                : null;
+            await this._store.UpdateStatusAsync(job.Id, newStatus, nextAttemptAt, cancellationToken);
+        }
+        else {
+            await this._store.UpdateStatusAsync(job.Id, newStatus, cancellationToken);
+        }
+
         this._logger.LogStoreStatusUpdated(job.Id, newStatus);
 
         int? statusCode = attempt.Result switch {

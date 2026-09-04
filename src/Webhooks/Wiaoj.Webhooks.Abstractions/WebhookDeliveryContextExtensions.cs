@@ -858,6 +858,36 @@ public static class WebhookDeliveryContextExtensions {
         return addValue;
     }
 
+    // ────────────────────────────────────────────────────────────────────────
+    // 11. SCHEDULED RETRY DELAY ACCESSORS
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Records the computed retry delay in the context, enabling the job handler to persist
+    /// <see cref="WebhookJobRecord.NextAttemptAt"/> atomically with the status transition.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="delay">The backoff delay computed by the retry policy.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ScheduleRetry(this WebhookDeliveryContext context, TimeSpan delay) {
+        Preca.ThrowIfNull(context);
+        context.Items[WebhookDeliveryContextItemKeys.ScheduledRetryDelay] = delay;
+    }
+
+    /// <summary>
+    /// Retrieves the scheduled retry delay from the context, or <see langword="null"/> if no retry was scheduled.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <returns>The <see cref="TimeSpan"/> delay if a retry was scheduled; otherwise, <see langword="null"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TimeSpan? GetScheduledRetryDelay(this WebhookDeliveryContext context) {
+        Preca.ThrowIfNull(context);
+        return context.Items.TryGetValue(WebhookDeliveryContextItemKeys.ScheduledRetryDelay, out object? raw)
+            && raw is TimeSpan delay
+                ? delay
+                : null;
+    }
+
     private static class EmptyHeadersDictionary {
         /// <summary>
         /// Truly immutable, zero-allocation empty dictionary that throws NotSupportedException on any mutation attempts.

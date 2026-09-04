@@ -38,4 +38,11 @@ public static class WebhookDeliveryContextItemKeys {
     /// that the active delivery execution was initiated as a manual replay request.
     /// </summary>
     public const string IsReplay = "__wiaoj.webhooks.is_replay";
+
+    /// <summary>
+    /// Key under which the scheduled retry delay (<see cref="TimeSpan"/>) is stored in <see cref="WebhookDeliveryContext.Items"/>,
+    /// enabling the <c>RetryMiddleware</c> to communicate the computed backoff delay to the <c>WebhookJobHandler</c>
+    /// so it can persist <see cref="WebhookJobRecord.NextAttemptAt"/> atomically with the status transition.
+    /// </summary>
+    public const string ScheduledRetryDelay = "__wiaoj.webhooks.scheduled_retry_delay";
 }

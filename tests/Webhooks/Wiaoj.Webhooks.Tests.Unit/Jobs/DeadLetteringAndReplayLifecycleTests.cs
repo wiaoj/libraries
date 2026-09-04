@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Wiaoj.Serialization.SystemTextJson;
 using Wiaoj.Webhooks.Idempotency;
@@ -49,7 +49,7 @@ public sealed class DeadLetteringAndReplayLifecycleTests {
             new FakeTimeProvider(),
             NullLogger<WebhookPipelineRunner>.Instance);
 
-        WebhookJobHandler jobHandler = new(store, resolver, serializer, runner, NullLogger<WebhookJobHandler>.Instance);
+        WebhookJobHandler jobHandler = new(store, resolver, serializer, runner, new FakeTimeProvider(), NullLogger<WebhookJobHandler>.Instance);
 
         WebhookDispatcher dispatcher = WebhookTestFactory.CreateDispatcher(
             store: store,
@@ -148,6 +148,7 @@ public sealed class DeadLetteringAndReplayLifecycleTests {
             resolver,
             new SystemTextJsonSerializer<WebhookSerializerKey>(),
             runner,
+            new FakeTimeProvider(),
             NullLogger<WebhookJobHandler>.Instance);
 
         WebhookDispatcher dispatcher = WebhookTestFactory.CreateDispatcher(

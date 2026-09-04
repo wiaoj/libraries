@@ -52,6 +52,7 @@ public sealed class RetryMiddleware : IWebhookMiddleware {
             case WebhookDeliveryResult.TransientFailure transient:
                 if(this._retryPolicy.ShouldRetry(context, transient, out TimeSpan calculatedDelay)) {
                     TimeSpan nextDelay = transient.RetryAfter ?? calculatedDelay; 
+                    context.ScheduleRetry(nextDelay);
                     WebhookDeliveryJob retryJob = WebhookDeliveryJob.FromContext(context);
                     await this._transport.EnqueueAsync(retryJob, nextDelay, cancellationToken);
 
