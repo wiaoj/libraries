@@ -1,3 +1,4 @@
+using Wiaoj.BloomFilter;
 using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.Samples.BloomFilter;
 
@@ -10,11 +11,10 @@ builder.Services.AddBloomFilter(bf => {
         // Eşiği çok düşür ki 1MB'lık filtre bile "Sharded" olsun
         options.Lifecycle.ShardingThresholdBytes = 50 * 1024; // 50KB
     });
-    bf.AddFilter(
+    bf.AddScalableFilter(
         name: "TestFilter",
-        expectedItems: 1_000_000,
-        errorRate: 0.01,
-        isScalable: true 
+        initialCapacity: 1_000_000,
+        errorRate: 0.01
     );
 });
 

@@ -16,11 +16,6 @@ public class BloomFilterOptions {
     public long? DefaultHashSeed { get; set; }
 
     /// <summary>
-    /// Storage provider configuration.
-    /// </summary>
-    public StorageOptions Storage { get; set; } = new();
-
-    /// <summary>
     /// Lifecycle and background worker options.
     /// </summary>
     public LifecycleOptions Lifecycle { get; set; } = new();
@@ -29,36 +24,6 @@ public class BloomFilterOptions {
     /// Dictionary of configured filter definitions keyed by filter name.
     /// </summary>
     public Dictionary<string, FilterDefinition> Filters { get; set; } = [];
-}
-
-/// <summary>
-/// Configuration for the persistent storage provider.
-/// </summary>
-public class StorageOptions {
-    /// <summary>
-    /// The storage provider name. Default: "FileSystem".
-    /// </summary>
-    public string Provider { get; set; } = "FileSystem";
-
-    /// <summary>
-    /// The base directory path for file persistence.
-    /// </summary>
-    public string Path { get; set; } = "BloomData";
-
-    /// <summary>
-    /// Indicates whether GZip compression is enabled for snapshots.
-    /// </summary>
-    public bool EnableCompression { get; set; } = false;
-
-    /// <summary>
-    /// Buffer size in bytes for storage streams.
-    /// </summary>
-    public int BufferSizeBytes { get; set; } = 81920;
-
-    /// <summary>
-    /// Indicates whether to suppress storage I/O errors and operate in-memory.
-    /// </summary>
-    public bool IgnoreErrors { get; set; } = true;
 }
 
 /// <summary>

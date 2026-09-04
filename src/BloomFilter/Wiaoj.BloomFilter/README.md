@@ -41,7 +41,8 @@ dotnet add package Wiaoj.BloomFilter
 
 ### `FileSystemBloomFilterStorage`
 - Persists snapshots to local disk using atomic file replacements (`File.Move` with temporary files).
-- Supports transparent GZip compression (`options.Storage.EnableCompression = true`).
+- Supports transparent GZip compression (`storage.EnableCompression = true`).
+- Configured via `builder.UseFileSystemStorage(...)` extension overloads.
 - Fail-fast validation prevents data corruption on non-seekable streams.
 
 ---
@@ -58,8 +59,10 @@ dotnet add package Wiaoj.BloomFilter
 
 ```csharp
 builder.Services.AddBloomFilter(builder => {
-    builder.Options.Storage.Path = "BloomData";
-    builder.Options.Storage.EnableCompression = true;
+    builder.UseFileSystemStorage(storage => {
+        storage.Path = "BloomData";
+        storage.EnableCompression = true;
+    });
 
     builder.AddAutoSave();
     builder.AddWarmUp();

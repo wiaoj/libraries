@@ -77,21 +77,22 @@ using Wiaoj.BloomFilter;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddBloomFilter(options => {
-    // Storage configuration for snapshots
-    options.Storage.Provider = "FileSystem";
-    options.Storage.Path = "BloomData";
-    options.Storage.EnableCompression = true;
+builder.Services.AddBloomFilter(builder => {
+    // Storage configuration for snapshots via fluent extension
+    builder.UseFileSystemStorage(storage => {
+        storage.Path = "BloomData";
+        storage.EnableCompression = true;
+    });
 
     // Background lifecycle services
-    options.AddAutoSave(); // Periodic snapshotting
-    options.AddWarmUp();   // Preload filters at startup
+    builder.AddAutoSave(); // Periodic snapshotting
+    builder.AddWarmUp();   // Preload filters at startup
 
     // 1. Fixed capacity in-memory filter
-    options.AddFilter<UserBlacklistTag>("user-blacklist", expectedItems: 500_000, errorRate: 0.01);
+    builder.AddFilter<UserBlacklistTag>("user-blacklist", expectedItems: 500_000, errorRate: 0.01);
 
     // 2. Scalable dynamically-layered filter
-    options.AddScalableFilter<PaymentDeduplicationTag>(
+    builder.AddScalableFilter<PaymentDeduplicationTag>(
         "payment-dedup",
         initialCapacity: 100_000,
         errorRate: 0.001,
@@ -99,7 +100,7 @@ builder.Services.AddBloomFilter(options => {
         saturationThreshold: 0.50);
 
     // 3. Sliding-window rotating filter
-    options.AddRotatingFilter<IpRateLimitTag>(
+    builder.AddRotatingFilter<IpRateLimitTag>(
         "ip-rate-limit",
         capacity: 1_000_000,
         errorRate: 0.01,

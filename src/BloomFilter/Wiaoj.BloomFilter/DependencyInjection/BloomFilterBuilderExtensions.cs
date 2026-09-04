@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wiaoj.BloomFilter.DependencyInjection;
 using Wiaoj.BloomFilter.Engine;
+using Wiaoj.BloomFilter.Storage;
 using Wiaoj.Preconditions;
 
 namespace Wiaoj.BloomFilter;
@@ -264,11 +265,83 @@ public static class BloomFilterBuilderExtensions {
     }
 
     /// <summary>
+    /// Configures the Bloom Filter engine to persist data to the local file system using default options.
+    /// </summary>
+    /// <param name="builder">The Bloom Filter builder.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IBloomFilterBuilder UseFileSystemStorage(this IBloomFilterBuilder builder) {
+        return builder.UseFileSystemStorage(_ => { });
+    }
+
+    /// <summary>
+    /// Configures the Bloom Filter engine to persist data to the local file system with the specified storage directory.
+    /// </summary>
+    /// <param name="builder">The Bloom Filter builder.</param>
+    /// <param name="path">The base directory path for file persistence.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IBloomFilterBuilder UseFileSystemStorage(
+        this IBloomFilterBuilder builder,
+        string path) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNullOrWhiteSpace(path);
+
+        return builder.UseFileSystemStorage(options => options.Path = path);
+    }
+
+    /// <summary>
+    /// Configures the Bloom Filter engine to persist data to the local file system using the specified configuration action.
+    /// </summary>
+    /// <param name="builder">The Bloom Filter builder.</param>
+    /// <param name="configure">The action used to configure <see cref="FileSystemStorageOptions"/>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IBloomFilterBuilder UseFileSystemStorage(
+        this IBloomFilterBuilder builder,
+        Action<FileSystemStorageOptions> configure) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+
+        builder.Services.Configure(configure);
+        builder.Services.RemoveAll<IBloomFilterStorage>();
+        builder.Services.AddSingleton<IBloomFilterStorage, FileSystemBloomFilterStorage>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures the Bloom Filter engine to use a custom persistence storage provider.
+    /// </summary>
+    /// <typeparam name="TStorage">The concrete storage provider type.</typeparam>
+    /// <param name="builder">The Bloom Filter builder.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IBloomFilterBuilder UseStorage<TStorage>(this IBloomFilterBuilder builder)
+        where TStorage : class, IBloomFilterStorage {
+        Preca.ThrowIfNull(builder);
+
+        builder.Services.RemoveAll<IBloomFilterStorage>();
+        builder.Services.AddSingleton<IBloomFilterStorage, TStorage>();
+        return builder;
+    }
+
+    /// <summary>
     /// Registers a custom persistent storage provider.
     /// </summary>
     public static IBloomFilterBuilder AddStorage<TStorage>(this IBloomFilterBuilder builder)
         where TStorage : class, IBloomFilterStorage {
-        builder.Services.Replace(ServiceDescriptor.Singleton<IBloomFilterStorage, TStorage>());
+        return builder.UseStorage<TStorage>();
+    }
+
+    /// <summary>
+    /// Configures global Bloom Filter options using the specified configuration delegate.
+    /// </summary>
+    /// <param name="builder">The Bloom Filter builder.</param>
+    /// <param name="configure">The action used to configure <see cref="BloomFilterOptions"/>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IBloomFilterBuilder Configure(
+        this IBloomFilterBuilder builder,
+        Action<BloomFilterOptions> configure) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+
+        builder.Services.Configure(configure);
         return builder;
     }
 

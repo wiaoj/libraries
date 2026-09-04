@@ -21,10 +21,12 @@ internal sealed class FileSystemBloomFilterStorage : IBloomFilterStorage {
     /// Initializes a new instance of the <see cref="FileSystemBloomFilterStorage"/> class.
     /// </summary>
     public FileSystemBloomFilterStorage(
-        IOptions<BloomFilterOptions> options,
+        IOptions<FileSystemStorageOptions> options,
         ILogger<FileSystemBloomFilterStorage> logger) {
+        Preca.ThrowIfNull(options);
+        Preca.ThrowIfNull(logger);
 
-        StorageOptions opts = options.Value.Storage;
+        FileSystemStorageOptions opts = options.Value;
         this._logger = logger;
         this._enableCompression = opts.EnableCompression;
         this._bufferSize = opts.BufferSizeBytes;

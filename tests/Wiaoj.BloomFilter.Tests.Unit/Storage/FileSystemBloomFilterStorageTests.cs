@@ -24,12 +24,13 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
     }
 
     private FileSystemBloomFilterStorage CreateStorage(bool enableCompression = false, bool ignoreErrors = false) {
-        BloomFilterOptions options = new();
-        options.Storage.Path = this._tempDirectory;
-        options.Storage.EnableCompression = enableCompression;
-        options.Storage.IgnoreErrors = ignoreErrors;
+        FileSystemStorageOptions options = new() {
+            Path = this._tempDirectory,
+            EnableCompression = enableCompression,
+            IgnoreErrors = ignoreErrors
+        };
 
-        IOptions<BloomFilterOptions> optionsWrapper = Options.Create(options);
+        IOptions<FileSystemStorageOptions> optionsWrapper = Options.Create(options);
         return new FileSystemBloomFilterStorage(optionsWrapper, NullLogger<FileSystemBloomFilterStorage>.Instance);
     }
 

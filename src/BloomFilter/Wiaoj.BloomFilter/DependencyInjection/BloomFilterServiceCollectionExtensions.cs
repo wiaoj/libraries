@@ -31,9 +31,11 @@ public static class BloomFilterServiceCollectionExtensions {
         Action<IBloomFilterBuilder> setupAction) {
 
         services.AddOptions<BloomFilterOptions>();
+        services.AddOptions<FileSystemStorageOptions>();
 
         // Safely bind IConfiguration if registered in DI container (Optional Binding)
         services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<BloomFilterOptions>, OptionalConfigurationBinder>());
+        services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<FileSystemStorageOptions>, OptionalFileSystemStorageConfigurationBinder>());
 
         BloomFilterBuilder builder = new(services);
         setupAction(builder);
@@ -64,6 +66,13 @@ public static class BloomFilterServiceCollectionExtensions {
         public void Configure(BloomFilterOptions options) {
             IConfiguration? configuration = serviceProvider.GetService<IConfiguration>();
             configuration?.GetSection(BloomFilterOptions.SectionName).Bind(options);
+        }
+    }
+
+    private sealed class OptionalFileSystemStorageConfigurationBinder(IServiceProvider serviceProvider) : IConfigureOptions<FileSystemStorageOptions> {
+        public void Configure(FileSystemStorageOptions options) {
+            IConfiguration? configuration = serviceProvider.GetService<IConfiguration>();
+            configuration?.GetSection(FileSystemStorageOptions.SectionName).Bind(options);
         }
     }
 }

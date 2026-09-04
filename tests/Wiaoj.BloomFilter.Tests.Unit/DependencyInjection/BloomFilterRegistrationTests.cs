@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter.Engine;
+using Wiaoj.BloomFilter.Storage;
 using Wiaoj.BloomFilter.Testing;
 using Xunit;
 
@@ -71,6 +72,90 @@ public class BloomFilterRegistrationTests {
 
             // Assert: Registry deduplicates by filter name
             Assert.Single(registry.GetAll());
+        }
+    }
+
+    public sealed class StorageRegistrationMethods {
+        [Fact]
+        public void Should_RegisterFileSystemStorage_WithDefaultOptions_When_ParameterlessOverloadUsed() {
+            ServiceCollection services = new();
+            services.AddBloomFilter(builder => {
+                builder.UseFileSystemStorage();
+            });
+
+            using ServiceProvider sp = services.BuildServiceProvider();
+            IBloomFilterStorage storage = sp.GetRequiredService<IBloomFilterStorage>();
+            IOptions<FileSystemStorageOptions> options = sp.GetRequiredService<IOptions<FileSystemStorageOptions>>();
+
+            Assert.IsType<FileSystemBloomFilterStorage>(storage);
+            Assert.Equal("BloomData", options.Value.Path);
+            Assert.False(options.Value.EnableCompression);
+            Assert.Equal(81920, options.Value.BufferSizeBytes);
+            Assert.True(options.Value.IgnoreErrors);
+        }
+
+        [Fact]
+        public void Should_RegisterFileSystemStorage_WithCustomPath_When_PathOverloadUsed() {
+            ServiceCollection services = new();
+            services.AddBloomFilter(builder => {
+                builder.UseFileSystemStorage("/custom/bloom/dir");
+            });
+
+            using ServiceProvider sp = services.BuildServiceProvider();
+            IBloomFilterStorage storage = sp.GetRequiredService<IBloomFilterStorage>();
+            IOptions<FileSystemStorageOptions> options = sp.GetRequiredService<IOptions<FileSystemStorageOptions>>();
+
+            Assert.IsType<FileSystemBloomFilterStorage>(storage);
+            Assert.Equal("/custom/bloom/dir", options.Value.Path);
+        }
+
+        [Fact]
+        public void Should_RegisterFileSystemStorage_WithConfiguredOptions_When_ActionOverloadUsed() {
+            ServiceCollection services = new();
+            services.AddBloomFilter(builder => {
+                builder.UseFileSystemStorage(opt => {
+                    opt.Path = "App_Data/Filters";
+                    opt.EnableCompression = true;
+                    opt.BufferSizeBytes = 16384;
+                    opt.IgnoreErrors = false;
+                });
+            });
+
+            using ServiceProvider sp = services.BuildServiceProvider();
+            IBloomFilterStorage storage = sp.GetRequiredService<IBloomFilterStorage>();
+            IOptions<FileSystemStorageOptions> options = sp.GetRequiredService<IOptions<FileSystemStorageOptions>>();
+
+            Assert.IsType<FileSystemBloomFilterStorage>(storage);
+            Assert.Equal("App_Data/Filters", options.Value.Path);
+            Assert.True(options.Value.EnableCompression);
+            Assert.Equal(16384, options.Value.BufferSizeBytes);
+            Assert.False(options.Value.IgnoreErrors);
+        }
+
+        [Fact]
+        public void Should_RegisterCustomStorage_When_UseStorageGenericMethodUsed() {
+            ServiceCollection services = new();
+            services.AddBloomFilter(builder => {
+                builder.UseStorage<FakeBloomFilterStorage>();
+            });
+
+            using ServiceProvider sp = services.BuildServiceProvider();
+            IBloomFilterStorage storage = sp.GetRequiredService<IBloomFilterStorage>();
+
+            Assert.IsType<FakeBloomFilterStorage>(storage);
+        }
+
+        [Fact]
+        public void Should_ThrowArgumentNullException_When_InvalidArgumentsPassed() {
+            IBloomFilterBuilder builder = null!;
+            ServiceCollection services = new();
+            services.AddBloomFilter(b => builder = b);
+
+            Assert.NotNull(builder);
+            Assert.ThrowsAny<ArgumentNullException>(() => ((IBloomFilterBuilder)null!).UseFileSystemStorage());
+            Assert.ThrowsAny<ArgumentException>(() => { builder.UseFileSystemStorage(""); });
+            Assert.ThrowsAny<ArgumentNullException>(() => { builder.UseFileSystemStorage((Action<FileSystemStorageOptions>)null!); });
+            Assert.ThrowsAny<ArgumentNullException>(() => ((IBloomFilterBuilder)null!).UseStorage<FakeBloomFilterStorage>());
         }
     }
 }
