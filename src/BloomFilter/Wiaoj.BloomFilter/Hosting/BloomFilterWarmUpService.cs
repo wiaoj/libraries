@@ -3,10 +3,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
+using Wiaoj.BloomFilter.Engine;
 
 namespace Wiaoj.BloomFilter.Hosting;
 
-internal class BloomFilterWarmUpService(
+internal sealed class BloomFilterWarmUpService(
     IServiceProvider serviceProvider,
     IOptions<BloomFilterOptions> options,
     ILogger<BloomFilterWarmUpService> logger) : BackgroundService {
@@ -17,9 +18,9 @@ internal class BloomFilterWarmUpService(
         logger.LogInformation("🔥 Warming up Bloom Filters...");
         Stopwatch sw = Stopwatch.StartNew();
 
-        var tasks = options.Value.Filters.Keys.Select(async key => {
+        IEnumerable<Task> tasks = options.Value.Filters.Keys.Select(async key => {
             try {
-                var filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(key);
+                IPersistentBloomFilter filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(key);
                 if(filter is LazyBloomFilterProxy proxy) {
                     await proxy.EnsureInitializedAsync(stoppingToken);
                 }

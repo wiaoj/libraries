@@ -1,29 +1,28 @@
-using System.IO.Hashing;
+
 using System.Numerics;
-using System.Text;
 using Wiaoj.Concurrency;
 using Wiaoj.Preconditions;
+using Wiaoj.Primitives.Hashing;
 
-namespace Wiaoj.BloomFilter;
-
+namespace Wiaoj.BloomFilter.Engine;
 /// <summary>
 /// A partition-based Bloom Filter implementation that shards data across multiple internal filters.
 /// Requires at least 2 shards to partition keys and avoid Large Object Heap (LOH) allocations.
 /// </summary>
-internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
+internal sealed class ShardedBloomFilter : BloomFilterBase {
     private readonly InMemoryBloomFilter[] _shards;
     private readonly int _shardCount;
     private readonly int _shardMask;
     private readonly StripedLock<int> _stripedIoLock = new(stripes: 128);
 
     /// <inheritdoc/>
-    public string Name => this.Configuration.Name.Value;
+    public override string Name => this.Configuration.Name.Value;
 
     /// <inheritdoc/>
-    public bool IsDirty => this._shards.Any(s => s.IsDirty);
+    public override bool IsDirty => this._shards.Any(s => s.IsDirty);
 
     /// <inheritdoc/>
-    public BloomFilterConfiguration Configuration { get; }
+    public override BloomFilterConfiguration Configuration { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShardedBloomFilter"/> class.
@@ -61,43 +60,27 @@ internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
     }
 
     /// <inheritdoc/>
-    public bool Add(ReadOnlySpan<byte> item) {
-        ulong hash = XxHash3.HashToUInt64(item, this.Configuration.HashSeed);
+    public override bool Add(ReadOnlySpan<byte> item) {
+        ThrowIfDisposed();
+
+        ulong hash = XxHash3.Compute(item, this.Configuration.HashSeed).Value;
         uint shardIndex = (uint)(hash & (ulong)this._shardMask);
         return this._shards[shardIndex].Add(item);
     }
 
     /// <inheritdoc/>
-    public bool Contains(ReadOnlySpan<byte> item) {
-        ulong hash = XxHash3.HashToUInt64(item, this.Configuration.HashSeed);
+    public override bool Contains(ReadOnlySpan<byte> item) {
+        ThrowIfDisposed();
+
+        ulong hash = XxHash3.Compute(item, this.Configuration.HashSeed).Value;
         uint shardIndex = (uint)(hash & (ulong)this._shardMask);
         return this._shards[shardIndex].Contains(item);
     }
 
     /// <inheritdoc/>
-    public bool Add(ReadOnlySpan<char> item) {
-        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-        if(maxBytes <= 256) {
-            Span<byte> buffer = stackalloc byte[maxBytes];
-            int written = Encoding.UTF8.GetBytes(item, buffer);
-            return Add(buffer[..written]);
-        }
-        return Add(Encoding.UTF8.GetBytes(item.ToString()));
-    }
+    public override long GetPopCount() {
+        ThrowIfDisposed();
 
-    /// <inheritdoc/>
-    public bool Contains(ReadOnlySpan<char> item) {
-        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-        if(maxBytes <= 256) {
-            Span<byte> buffer = stackalloc byte[maxBytes];
-            int written = Encoding.UTF8.GetBytes(item, buffer);
-            return Contains(buffer[..written]);
-        }
-        return Contains(Encoding.UTF8.GetBytes(item.ToString()));
-    }
-
-    /// <inheritdoc/>
-    public long GetPopCount() {
         long total = 0;
         for(int i = 0; i < this._shards.Length; i++) {
             total += this._shards[i].GetPopCount();
@@ -106,10 +89,12 @@ internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
     }
 
     /// <inheritdoc/>
-    public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
+    public override async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
+
         if(!this.IsDirty) return;
 
-        var dirtyShards = this._shards.Select((s, idx) => (s, idx)).Where(x => x.s.IsDirty);
+        IEnumerable<(InMemoryBloomFilter s, int idx)> dirtyShards = this._shards.Select((s, idx) => (s, idx)).Where(x => x.s.IsDirty);
 
         await Parallel.ForEachAsync(dirtyShards, cancellationToken, async (shard, token) => {
             using(await this._stripedIoLock.LockAsync(shard.idx, token).ConfigureAwait(false)) {
@@ -119,14 +104,16 @@ internal sealed class ShardedBloomFilter : IPersistentBloomFilter, IDisposable {
     }
 
     /// <inheritdoc/>
-    public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
+    public override async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
+
         await Parallel.ForEachAsync(this._shards, cancellationToken, async (shard, token) => {
             await shard.ReloadAsync(token).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public void Dispose() {
+    protected override void DisposeCore() {
         for(int i = 0; i < this._shards.Length; i++) {
             this._shards[i].Dispose();
         }

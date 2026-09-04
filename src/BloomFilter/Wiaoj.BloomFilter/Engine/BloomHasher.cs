@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using Wiaoj.Primitives.Hashing;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 /// <summary>
 /// Mathematical hashing engine for Bloom Filters.

@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
+using Wiaoj.BloomFilter.DependencyInjection;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.BloomFilter.Diagnostics;

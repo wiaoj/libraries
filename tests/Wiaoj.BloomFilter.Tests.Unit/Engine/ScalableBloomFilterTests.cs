@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
 using Wiaoj.Primitives;

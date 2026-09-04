@@ -3,7 +3,7 @@ using System.Diagnostics;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Concurrency;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 internal sealed class LazyBloomFilterProxy : IPersistentBloomFilter, IDisposable {
     private readonly AsyncLazy<IPersistentBloomFilter> _lazyFilter;

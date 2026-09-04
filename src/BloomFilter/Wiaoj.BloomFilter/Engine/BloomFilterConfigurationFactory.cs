@@ -1,7 +1,7 @@
 using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 /// <summary>
 /// Internal implementation of the configuration factory that performs mathematical calculations.

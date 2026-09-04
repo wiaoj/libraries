@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
-using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -34,7 +34,7 @@ public class RotatingBloomFilterPersistenceTests {
         public async Task Should_PreserveActiveShardData_When_ReloadedFromStorage_AfterSave() {
             // Arrange
             FakeBloomFilterStorage storage = new();
-            BloomFilterContext context = this.CreateContext(storage);
+            BloomFilterContext context = CreateContext(storage);
             BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("rotating-reload"), 3_000, 0.01);
 
             using RotatingBloomFilter originalFilter = new(
@@ -46,14 +46,14 @@ public class RotatingBloomFilterPersistenceTests {
             originalFilter.Add("rotating-persisted-event");
 
             // Act
-            await originalFilter.SaveAsync();
+            await originalFilter.SaveAsync(TestContext.Current.CancellationToken);
 
             using RotatingBloomFilter reloadedFilter = new(
                 config,
                 context,
                 windowSize: TimeSpan.FromDays(3),
                 shardCount: 3);
-            await reloadedFilter.ReloadAsync();
+            await reloadedFilter.ReloadAsync(TestContext.Current.CancellationToken);
 
             // Assert
             Assert.True(reloadedFilter.Contains("rotating-persisted-event"));
@@ -64,19 +64,19 @@ public class RotatingBloomFilterPersistenceTests {
         public async Task Should_NotResurrectExpiredShards_When_ReloadedAfterWindowHasPassed() {
             // Arrange
             FakeBloomFilterStorage storage = new();
-            BloomFilterContext context = this.CreateContext(storage);
+            BloomFilterContext context = CreateContext(storage);
             BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("rotating-expired-reload"), 3_000, 0.01);
 
             using(RotatingBloomFilter originalFilter = new(config, context, windowSize: TimeSpan.FromDays(3), shardCount: 3)) {
                 originalFilter.Add("day-1-event");
-                await originalFilter.SaveAsync();
+                await originalFilter.SaveAsync(TestContext.Current.CancellationToken);
             }
 
             // Act: move well past the configured window before reloading
             this._fakeTimeProvider.Advance(TimeSpan.FromDays(10));
 
             using RotatingBloomFilter reloadedFilter = new(config, context, windowSize: TimeSpan.FromDays(3), shardCount: 3);
-            await reloadedFilter.ReloadAsync();
+            await reloadedFilter.ReloadAsync(TestContext.Current.CancellationToken);
 
             // Assert: the previously-saved event should no longer be considered valid
             Assert.False(reloadedFilter.Contains("day-1-event"));

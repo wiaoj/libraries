@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
 
@@ -119,12 +120,12 @@ public class InMemoryBloomFilterTests {
             originalFilter.Add("saved-item-2");
 
             // Act: Save to storage
-            await originalFilter.SaveAsync();
+            await originalFilter.SaveAsync(TestContext.Current.CancellationToken);
             Assert.False(originalFilter.IsDirty);
 
             // Create a second filter instance and reload
             using InMemoryBloomFilter reloadedFilter = new(config, contextWithStorage);
-            await reloadedFilter.ReloadAsync();
+            await reloadedFilter.ReloadAsync(TestContext.Current.CancellationToken);
 
             // Assert
             Assert.True(reloadedFilter.Contains("saved-item-1"));

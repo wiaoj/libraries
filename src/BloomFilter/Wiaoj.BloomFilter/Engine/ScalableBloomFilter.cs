@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Numerics;
 using System.Text;
 using Wiaoj.Concurrency;
@@ -6,19 +5,19 @@ using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
 using Wiaoj.Primitives.Buffers;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 /// <summary>
 /// A scalable, persistent Bloom Filter that automatically layers new filters when the current active layer reaches a saturation threshold.
 /// This implementation allows the filter to grow dynamically while maintaining a target false positive rate.
 /// </summary>
-public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
+internal sealed class ScalableBloomFilter : IPersistentBloomFilter, IDisposable {
     private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
     private readonly BloomFilterContext _context;
     private readonly GrowthRate _growthRate;
     private readonly Percentage _saturationThreshold;
     private readonly DisposeState _disposeState = new();
-     
+
     private IPersistentBloomFilter[] _layers;
 
     /// <inheritdoc/>
@@ -60,8 +59,8 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         this._context = context;
         this._growthRate = growthRate.Value == 0 ? GrowthRate.Double : growthRate;
         this._saturationThreshold = saturationThreshold.IsZero ? Percentage.Half : saturationThreshold;
-         
-        this._layers = [CreateLayer(baseConfig, 0)];
+
+        this._layers = [CreateLayer(baseConfig)];
     }
 
     private long _addCount = 0;
@@ -82,7 +81,7 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
         bool added = activeLayer.Add(item);
 
         // 3. Scaling Check - Periodically check for saturation (every 1000 additions to minimize overhead)
-        if(added && Interlocked.Increment(ref _addCount) % 1000 == 0) {
+        if(added && Interlocked.Increment(ref this._addCount) % 1000 == 0) {
             CheckAndScale(activeLayer);
         }
 
@@ -90,7 +89,7 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
     }
 
     private void CheckAndScale(IPersistentBloomFilter activeLayer) {
-        double fillRatio = (double)activeLayer.GetPopCount() / activeLayer.Configuration.SizeInBits; 
+        double fillRatio = (double)activeLayer.GetPopCount() / activeLayer.Configuration.SizeInBits;
         if(fillRatio >= this._saturationThreshold.Value) {
             ScaleUp();
         }
@@ -118,7 +117,7 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
             // Increase expected items by the growth rate
             long newExpectedItems = (long)(activeLayer.Configuration.ExpectedItems * this._growthRate.Value);
 
-            var newConfig = this._context.ConfigFactory.Create(
+            BloomFilterConfiguration newConfig = this._context.ConfigFactory.Create(
                 FilterName.Parse($"{this.Configuration.Name.Value}_L{currentLayers.Length}"),
                 newExpectedItems,
                 activeLayer.Configuration.ErrorRate,
@@ -126,7 +125,7 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
             );
 
             // Create new layer using the intelligent factory
-            IPersistentBloomFilter newLayer = CreateLayer(newConfig, currentLayers.Length);
+            IPersistentBloomFilter newLayer = CreateLayer(newConfig);
 
             var newLayers = new IPersistentBloomFilter[currentLayers.Length + 1];
             Array.Copy(currentLayers, newLayers, currentLayers.Length);
@@ -143,18 +142,8 @@ public sealed class ScalableBloomFilter: IPersistentBloomFilter, IDisposable {
     /// Intelligent Layer Factory: Similar to BloomFilterProvider, determines whether to 
     /// create a ShardedBloomFilter or InMemoryBloomFilter based on the calculated size.
     /// </summary>
-    private IPersistentBloomFilter CreateLayer(BloomFilterConfiguration config, int layerIndex) {
-        long totalBytes = (config.SizeInBits + 7) / 8;
-
-        if(totalBytes > this._context.Options.Lifecycle.ShardingThresholdBytes) {
-            double ratio = (double)totalBytes / this._context.Options.Lifecycle.ShardingThresholdBytes;
-            int needed = (int)Math.Ceiling(ratio);
-            int calculatedShards = (int)BitOperations.RoundUpToPowerOf2((uint)needed);
-
-            return new ShardedBloomFilter(config.WithShardCount(calculatedShards), this._context);
-        }
-
-        return new InMemoryBloomFilter(config, this._context);
+    private IPersistentBloomFilter CreateLayer(BloomFilterConfiguration config) {
+        return this._context.CreateLeafFilter(config);
     }
 
     /// <inheritdoc/>

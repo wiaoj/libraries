@@ -1,9 +1,11 @@
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Testing;
+using Wiaoj.BloomFilter.Tests.Unit.Fakes;
 using Wiaoj.ObjectPool.Testing;
-using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -19,6 +21,23 @@ public class BloomFilterFactoryTests {
         }
     }
 
+    private static BloomFilterFactory CreateFactory(
+        BloomFilterOptions options,
+        IBloomFilterStorage? storage = null,
+        IEnumerable<IAutoBloomFilterSeeder>? seeders = null,
+        IHostApplicationLifetime? hostLifetime = null) {
+
+        return new BloomFilterFactory(
+            new BloomFilterConfigurationFactory(),
+            new FakeOptionsMonitor<BloomFilterOptions>(options),
+            NullLoggerFactory.Instance,
+            seeders ?? [],
+            TimeProvider.System,
+            new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
+            storage ?? new FakeBloomFilterStorage()
+        );
+    }
+
     public sealed class CreateMethod {
         [Fact]
         public async Task Should_CreateAndInitializeFilter_When_ConfigurationExists() {
@@ -26,19 +45,10 @@ public class BloomFilterFactoryTests {
             BloomFilterOptions options = new();
             options.Filters["test-filter"] = new FilterDefinition { ExpectedItems = 1_000, ErrorRate = 0.01 };
 
-            IOptionsMonitor<BloomFilterOptions> optionsMonitor = new FakeOptionsMonitor<BloomFilterOptions>(options);
-            BloomFilterFactory factory = new(
-                new BloomFilterConfigurationFactory(),
-                optionsMonitor,
-                NullLoggerFactory.Instance,
-                [],
-                TimeProvider.System,
-                new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
-                new FakeBloomFilterStorage()
-            );
+            BloomFilterFactory factory = CreateFactory(options);
 
             // Act
-            IPersistentBloomFilter filter = await factory.Create("test-filter");
+            IPersistentBloomFilter filter = await factory.Create("test-filter", TestContext.Current.CancellationToken);
 
             // Assert
             Assert.NotNull(filter);
@@ -49,18 +59,10 @@ public class BloomFilterFactoryTests {
         public async Task Should_ThrowInvalidOperationException_When_ConfigurationIsMissing() {
             // Arrange
             BloomFilterOptions options = new();
-            IOptionsMonitor<BloomFilterOptions> optionsMonitor = new FakeOptionsMonitor<BloomFilterOptions>(options);
-            BloomFilterFactory factory = new(
-                new BloomFilterConfigurationFactory(),
-                optionsMonitor,
-                NullLoggerFactory.Instance,
-                [],
-                TimeProvider.System,
-                new FakeObjectPool<MemoryStream>(() => new MemoryStream())
-            );
+            BloomFilterFactory factory = CreateFactory(options);
 
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => factory.Create("non-existent-filter"));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => factory.Create("non-existent-filter", TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -77,33 +79,18 @@ public class BloomFilterFactoryTests {
             // Seed a corrupted header into storage to force reload failure
             BloomFilterConfiguration config = new BloomFilterConfigurationFactory().Create(filterName, 1_000, 0.01);
             using MemoryStream corruptedStream = new([0xFF, 0xFF, 0xFF, 0xFF]);
-            await storage.SaveAsync(filterName.Value, config, corruptedStream);
+            await storage.SaveAsync(filterName.Value, config, corruptedStream, TestContext.Current.CancellationToken);
 
-            IOptionsMonitor<BloomFilterOptions> optionsMonitor = new FakeOptionsMonitor<BloomFilterOptions>(options);
-            BloomFilterFactory factory = new(
-                new BloomFilterConfigurationFactory(),
-                optionsMonitor,
-                NullLoggerFactory.Instance,
-                [seeder],
-                TimeProvider.System,
-                new FakeObjectPool<MemoryStream>(() => new MemoryStream()),
-                storage
-            );
+            BloomFilterFactory factory = CreateFactory(options, storage: storage, seeders: [seeder]);
 
             // Act
-            IPersistentBloomFilter filter = await factory.Create(filterName.Value);
+            IPersistentBloomFilter filter = await factory.Create(filterName.Value, TestContext.Current.CancellationToken);
 
             // Allow background Task.Run seeder to execute
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.True(seeder.InvocationCount >= 1);
         }
-    }
-
-    private sealed class FakeOptionsMonitor<T>(T currentValue) : IOptionsMonitor<T> {
-        public T CurrentValue => currentValue;
-        public T Get(string? name) => currentValue;
-        public IDisposable? OnChange(Action<T, string?> listener) => null;
     }
 }

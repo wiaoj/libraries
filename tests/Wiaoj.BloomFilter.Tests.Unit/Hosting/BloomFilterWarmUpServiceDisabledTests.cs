@@ -1,10 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Testing;
+using Wiaoj.BloomFilter.Tests.Unit.Fakes;
 using Wiaoj.ObjectPool.Testing;
-using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Hosting;
 
@@ -48,11 +49,5 @@ public class BloomFilterWarmUpServiceDisabledTests {
             // Assert: filter remains lazily uninitialized since warm-up was turned off
             Assert.Null(proxy.GetInnerIfCreated());
         }
-    }
-
-    private sealed class FakeOptionsMonitor<T>(T currentValue) : IOptionsMonitor<T> {
-        public T CurrentValue => currentValue;
-        public T Get(string? name) => currentValue;
-        public IDisposable? OnChange(Action<T, string?> listener) => null;
     }
 }

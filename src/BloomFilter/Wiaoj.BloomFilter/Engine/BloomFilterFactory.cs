@@ -1,12 +1,11 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Numerics;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.ObjectPool;
 using Wiaoj.Primitives;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 /// <summary>
 /// Internal factory responsible for instantiating, hydrating, and recovering persistent Bloom Filter instances.
@@ -18,8 +17,7 @@ internal sealed class BloomFilterFactory(
     IEnumerable<IAutoBloomFilterSeeder> autoSeeders,
     TimeProvider timeProvider,
     IObjectPool<MemoryStream> memoryStreamPool,
-    IHostApplicationLifetime? hostLifetime = null,
-    IBloomFilterStorage? storage = null) {
+    IBloomFilterStorage storage) {
 
     private readonly ILogger _logger = loggerFactory.CreateLogger<BloomFilterFactory>();
 
@@ -61,7 +59,7 @@ internal sealed class BloomFilterFactory(
                                                                 context,
                                                                 definition.WindowSize,
                                                                 definition.ShardCount),
-            _ => CreateDefaultFilter(config, context, currentOptions)
+            _ => context.CreateLeafFilter(config)
         };
 
         // Hydration and Failure Recovery
@@ -80,38 +78,17 @@ internal sealed class BloomFilterFactory(
                 }
             }
 
-            if(currentOptions.Lifecycle.AutoReseed) {
-                // Execute managed background reseed linked to host shutdown token
-                CancellationToken stoppingToken = hostLifetime?.ApplicationStopping ?? CancellationToken.None;
-                _ = Task.Run(async () => await ExecuteManagedReseedAsync(filter, name, stoppingToken).ConfigureAwait(false), stoppingToken);
+            if(currentOptions.Lifecycle.AutoReseed) { 
+                _ = Task.Run(async () => await ExecuteManagedReseedAsync(filter, name, cancellationToken).ConfigureAwait(false), cancellationToken);
             }
         }
 
         return filter;
     }
 
-    private static IPersistentBloomFilter CreateDefaultFilter(
-        BloomFilterConfiguration config,
-        BloomFilterContext context,
-        BloomFilterOptions options) {
-
-        long totalBytes = (config.SizeInBits + 7) / 8;
-        int calculatedShards = 1;
-
-        if(totalBytes > options.Lifecycle.ShardingThresholdBytes) {
-            double ratio = (double)totalBytes / options.Lifecycle.ShardingThresholdBytes;
-            int needed = (int)Math.Ceiling(ratio);
-            calculatedShards = (int)BitOperations.RoundUpToPowerOf2((uint)needed);
-        }
-
-        return calculatedShards > 1
-            ? new ShardedBloomFilter(config.WithShardCount(calculatedShards), context)
-            : new InMemoryBloomFilter(config, context);
-    }
-
     private async Task ExecuteManagedReseedAsync(IPersistentBloomFilter filter, FilterName name, CancellationToken ct) {
         try {
-            List<IAutoBloomFilterSeeder> matchingSeeders = autoSeeders.Where(s => s.FilterName == name).ToList();
+            List<IAutoBloomFilterSeeder> matchingSeeders = [.. autoSeeders.Where(s => s.FilterName == name)];
             if(matchingSeeders.Count == 0) {
                 return;
             }

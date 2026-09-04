@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter.Diagnostics;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 internal sealed class BloomFilterService(
     IServiceProvider serviceProvider,

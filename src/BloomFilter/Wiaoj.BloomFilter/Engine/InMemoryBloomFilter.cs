@@ -1,20 +1,17 @@
+
 using Microsoft.Extensions.Logging;
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
-using System.Text;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.Concurrency;
 using Wiaoj.ObjectPool;
-using Wiaoj.Primitives;
 
-namespace Wiaoj.BloomFilter;
-
+namespace Wiaoj.BloomFilter.Engine;
 /// <summary>
 /// In-memory implementation of a persistent Bloom Filter.
 /// Uses SIMD vectorization for hash evaluations and atomic operations for concurrency.
 /// </summary>
-internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable {
+internal sealed class InMemoryBloomFilter : BloomFilterBase {
     private volatile bool _isDirty;
     private PooledBitArray _bits;
 
@@ -24,16 +21,15 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     private readonly IObjectPool<MemoryStream> _memoryStreamPool;
     private readonly TimeProvider _timeProvider;
     private readonly AsyncLock _ioLock = new();
-    private readonly DisposeState _disposeState = new();
 
     /// <inheritdoc/>
-    public bool IsDirty => this._isDirty;
+    public override bool IsDirty => this._isDirty;
 
     /// <inheritdoc/>
-    public string Name => this.Configuration.Name.Value;
+    public override string Name => this.Configuration.Name.Value;
 
     /// <inheritdoc/>
-    public BloomFilterConfiguration Configuration { get; }
+    public override BloomFilterConfiguration Configuration { get; }
 
     /// <summary>
     /// Gets the timestamp when this filter was last successfully persisted.
@@ -62,8 +58,8 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public bool Add(ReadOnlySpan<byte> item) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override bool Add(ReadOnlySpan<byte> item) {
+        ThrowIfDisposed();
 
         PooledBitArray bits = Volatile.Read(ref this._bits);
         BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
@@ -132,10 +128,10 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public bool Contains(ReadOnlySpan<byte> item) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override bool Contains(ReadOnlySpan<byte> item) {
+        ThrowIfDisposed();
 
-        PooledBitArray bits = Volatile.Read(ref this._bits);
+        PooledBitArray bits = Atomic.Read(ref this._bits);
         BloomHasher.ComputeBaseHashes(item, this.Configuration.HashSeed, out ulong h1, out ulong h2);
 
         long size = this.Configuration.SizeInBits;
@@ -196,48 +192,8 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public bool Add(ReadOnlySpan<char> item) {
-        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-
-        if(maxBytes <= 256) {
-            Span<byte> buffer = stackalloc byte[maxBytes];
-            int written = Encoding.UTF8.GetBytes(item, buffer);
-            return Add(buffer[..written]);
-        }
-
-        byte[] rented = ArrayPool<byte>.Shared.Rent(maxBytes);
-        try {
-            int written = Encoding.UTF8.GetBytes(item, rented);
-            return Add(rented.AsSpan(0, written));
-        }
-        finally {
-            ArrayPool<byte>.Shared.Return(rented);
-        }
-    }
-
-    /// <inheritdoc/>
-    public bool Contains(ReadOnlySpan<char> item) {
-        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-
-        if(maxBytes <= 256) {
-            Span<byte> buffer = stackalloc byte[maxBytes];
-            int written = Encoding.UTF8.GetBytes(item, buffer);
-            return Contains(buffer[..written]);
-        }
-
-        byte[] rented = ArrayPool<byte>.Shared.Rent(maxBytes);
-        try {
-            int written = Encoding.UTF8.GetBytes(item, rented);
-            return Contains(rented.AsSpan(0, written));
-        }
-        finally {
-            ArrayPool<byte>.Shared.Return(rented);
-        }
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
 
         if(this._storage == null || !this._isDirty) {
             return;
@@ -251,10 +207,10 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
                 MemoryStream snapshotStream = pooledStream.Item;
                 snapshotStream.SetLength(0);
 
-                PooledBitArray bits = Volatile.Read(ref this._bits);
+                PooledBitArray bits = Atomic.Read(ref this._bits);
                 ulong checksum = bits.CalculateChecksum();
 
-                BloomFilterHeader.WriteHeader(snapshotStream, checksum, this.Configuration, Encoding.UTF8);
+                BloomFilterHeader.WriteHeader(snapshotStream, checksum, this.Configuration);
                 await bits.WriteToStreamAsync(snapshotStream, cancellationToken).ConfigureAwait(false);
                 this._isDirty = false;
 
@@ -272,15 +228,15 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
+    public override async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
         if(this._storage == null) {
             return;
         }
 
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+        ThrowIfDisposed();
 
         using(await this._ioLock.LockAsync(cancellationToken).ConfigureAwait(false)) {
-            var loadResult = await this._storage.LoadStreamAsync(this.Name, cancellationToken).ConfigureAwait(false);
+            (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await this._storage.LoadStreamAsync(this.Name, cancellationToken).ConfigureAwait(false);
             if(loadResult == null) {
                 this._logger.LogReloadNotFound(this.Configuration.Name);
                 return;
@@ -295,8 +251,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
                         out ulong expectedChecksum,
                         out long storedSize,
                         out int storedHashCount,
-                        out ulong storedFingerprint,
-                        Encoding.UTF8)) {
+                        out ulong storedFingerprint)) {
 
                         this._logger.LogInvalidHeaderWarning(this.Configuration.Name);
                         if(this._options.Lifecycle.EnableIntegrityCheck) {
@@ -308,8 +263,9 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
                         }
                     }
                     else {
-                        if(storedFingerprint != this.Configuration.GetFingerprint()) {
-                            throw new DataIntegrityException($"Configuration fingerprint mismatch during reload. Disk: {storedFingerprint:X}, Memory: {this.Configuration.GetFingerprint():X}");
+                        ulong currentFingerprint = BloomFilterHeader.ComputeFingerprint(this.Configuration);
+                        if(storedFingerprint != currentFingerprint) {
+                            throw new DataIntegrityException($"Configuration fingerprint mismatch during reload. Disk: {storedFingerprint:X}, Memory: {currentFingerprint:X}");
                         }
 
                         if(storedSize != this.Configuration.SizeInBits) {
@@ -328,7 +284,7 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
                 }
 
                 // Atomic reference swap
-                PooledBitArray oldBits = Interlocked.Exchange(ref this._bits, newBits);
+                PooledBitArray oldBits = Atomic.Exchange(ref this._bits, newBits);
                 newBits = null;
                 this._isDirty = false;
 
@@ -345,18 +301,15 @@ internal sealed class InMemoryBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public long GetPopCount() {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
-        PooledBitArray bits = Volatile.Read(ref this._bits);
+    public override long GetPopCount() {
+        ThrowIfDisposed();
+        PooledBitArray bits = Atomic.Read(ref this._bits);
         return bits.GetPopCount();
     }
 
     /// <inheritdoc/>
-    public void Dispose() {
-        if(this._disposeState.TryBeginDispose()) {
-            PooledBitArray? bits = Interlocked.Exchange(ref this._bits, null!);
-            bits?.Dispose();
-            this._disposeState.SetDisposed();
-        }
+    protected override void DisposeCore() {
+        PooledBitArray? bits = Atomic.Exchange(ref this._bits, null!);
+        bits?.Dispose();
     }
 }

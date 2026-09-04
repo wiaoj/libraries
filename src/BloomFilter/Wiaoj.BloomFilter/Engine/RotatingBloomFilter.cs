@@ -1,32 +1,27 @@
-using System.Numerics;
-using System.Text;
 using Wiaoj.Concurrency;
 using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
-using Wiaoj.Primitives.Buffers;
 
-namespace Wiaoj.BloomFilter;
-
+namespace Wiaoj.BloomFilter.Engine;
 /// <summary>
 /// A sliding-window Bloom Filter that rotates underlying time shards based on a configured Time-To-Live (TTL).
 /// Drops expired time windows while maintaining queryability across active sliding windows.
 /// </summary>
-internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable {
+internal sealed class RotatingBloomFilter : BloomFilterBase {
     private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
     private readonly BloomFilterContext _context;
     private readonly TimeSpan _shardDuration;
-    private readonly DisposeState _disposeState = new();
 
     private Shard[] _shards;
 
     /// <inheritdoc/>
-    public string Name => this.Configuration.Name.Value;
+    public override string Name => this.Configuration.Name.Value;
 
     /// <inheritdoc/>
-    public BloomFilterConfiguration Configuration { get; }
+    public override BloomFilterConfiguration Configuration { get; }
 
     /// <inheritdoc/>
-    public bool IsDirty {
+    public override bool IsDirty {
         get {
             Shard[] currentShards = Atomic.Read(ref this._shards);
             for(int i = 0; i < currentShards.Length; i++) {
@@ -68,8 +63,8 @@ internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public bool Add(ReadOnlySpan<byte> item) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override bool Add(ReadOnlySpan<byte> item) {
+        ThrowIfDisposed();
         EnsureActiveShard();
 
         this._lock.EnterReadLock();
@@ -83,8 +78,8 @@ internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public bool Contains(ReadOnlySpan<byte> item) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override bool Contains(ReadOnlySpan<byte> item) {
+        ThrowIfDisposed();
         EnsureActiveShard();
 
         this._lock.EnterReadLock();
@@ -116,7 +111,7 @@ internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable 
             int shifts = durationMs > 0 ? 1 + (int)(elapsedMs / durationMs) : 1;
             shifts = Math.Min(shifts, currentShards.Length);
 
-            var newShards = new Shard[currentShards.Length];
+            Shard[] newShards = new Shard[currentShards.Length];
             long itemsPerShard = currentShards[0].Filter.Configuration.ExpectedItems;
 
             for(int i = 0; i < shifts; i++) {
@@ -162,10 +157,7 @@ internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable 
             this.Configuration.HashSeed + windowSlot
         );
 
-        long totalBytes = (config.SizeInBits + 7) / 8;
-        IPersistentBloomFilter filter = (totalBytes > this._context.Options.Lifecycle.ShardingThresholdBytes)
-            ? new ShardedBloomFilter(config.WithShardCount((int)BitOperations.RoundUpToPowerOf2((uint)Math.Ceiling((double)totalBytes / this._context.Options.Lifecycle.ShardingThresholdBytes))), this._context)
-            : new InMemoryBloomFilter(config, this._context);
+        IPersistentBloomFilter filter = this._context.CreateLeafFilter(config);
 
         return new Shard(filter, expiration);
     }
@@ -180,8 +172,9 @@ internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override async ValueTask SaveAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
+
         Shard[] currentShards = Atomic.Read(ref this._shards);
 
         IEnumerable<Task> saveTasks = currentShards
@@ -192,8 +185,9 @@ internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
-        this._disposeState.ThrowIfDisposingOrDisposed(this.Name);
+    public override async ValueTask ReloadAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
+
         Shard[] currentShards = Atomic.Read(ref this._shards);
 
         IEnumerable<Task> reloadTasks = currentShards.Select(s => s.Filter.ReloadAsync(cancellationToken).AsTask());
@@ -201,23 +195,9 @@ internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public bool Add(ReadOnlySpan<char> item) {
-        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-        using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
-        int written = Encoding.UTF8.GetBytes(item, buffer.Span);
-        return Add(buffer.Slice(0, written));
-    }
+    public override long GetPopCount() {
+        ThrowIfDisposed();
 
-    /// <inheritdoc/>
-    public bool Contains(ReadOnlySpan<char> item) {
-        int maxBytes = Encoding.UTF8.GetMaxByteCount(item.Length);
-        using ValueBuffer<byte> buffer = new(maxBytes, stackalloc byte[256]);
-        int written = Encoding.UTF8.GetBytes(item, buffer.Span);
-        return Contains(buffer.Slice(0, written));
-    }
-
-    /// <inheritdoc/>
-    public long GetPopCount() {
         this._lock.EnterReadLock();
         try {
             long total = 0;
@@ -233,20 +213,17 @@ internal sealed class RotatingBloomFilter : IPersistentBloomFilter, IDisposable 
     }
 
     /// <inheritdoc/>
-    public void Dispose() {
-        if(this._disposeState.TryBeginDispose()) {
-            this._lock.EnterWriteLock();
-            try {
-                Shard[] currentShards = Atomic.Read(ref this._shards);
-                foreach(Shard shard in currentShards) {
-                    if(shard.Filter is IDisposable d) d.Dispose();
-                }
+    protected override void DisposeCore() {
+        this._lock.EnterWriteLock();
+        try {
+            Shard[] currentShards = Atomic.Read(ref this._shards);
+            foreach(Shard shard in currentShards) {
+                if(shard.Filter is IDisposable d) d.Dispose();
             }
-            finally {
-                this._lock.ExitWriteLock();
-                this._lock.Dispose();
-            }
-            this._disposeState.SetDisposed();
+        }
+        finally {
+            this._lock.ExitWriteLock();
+            this._lock.Dispose();
         }
     }
 }

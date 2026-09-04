@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
-using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -86,7 +86,7 @@ public class ShardedBloomFilterTests {
             originalFilter.Add("test-element"u8);
 
             // Act
-            await originalFilter.SaveAsync();
+            await originalFilter.SaveAsync(TestContext.Current.CancellationToken);
 
             // Assert: Verify that shard files exist in storage (e.g. sharded-persist_s0 or s1)
             Assert.False(originalFilter.IsDirty);

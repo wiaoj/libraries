@@ -1,10 +1,9 @@
+namespace Wiaoj.BloomFilter.Seeding;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Text;
 using Wiaoj.BloomFilter.Diagnostics;
 using Wiaoj.BloomFilter.Seeder;
-
-namespace Wiaoj.BloomFilter.Seeding;
 
 /// <summary>
 /// Default implementation of <see cref="IBloomFilterSeeder"/> for populating Bloom Filters from data sources.
@@ -21,12 +20,16 @@ public class BloomFilterSeeder(IServiceProvider serviceProvider, ILogger<BloomFi
         logger.LogSeedingStarted(filterName);
 
         IPersistentBloomFilter filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(filterName.Value);
-        long count = 0;
+        long count = 0; 
+        long progressStep = Math.Max(1, filter.Configuration.ExpectedItems / 10);
 
         await foreach(T? item in source.WithCancellation(cancellationToken)) {
-            filter.Add(serializer(item));
-            count++;
-            if(count % 100_000 == 0) logger.LogSeedingProgress(filterName, count);
+            if(item is not null) {
+                filter.Add(serializer(item));
+                if(++count % progressStep == 0) {
+                    logger.LogSeedingProgress(filterName, count);
+                }
+            }
         }
 
         logger.LogInformation("Seeding complete. Saving to storage...");
@@ -35,8 +38,25 @@ public class BloomFilterSeeder(IServiceProvider serviceProvider, ILogger<BloomFi
     }
 
     /// <inheritdoc/>
-    public Task SeedAsync(FilterName filterName, IAsyncEnumerable<string> source, CancellationToken cancellationToken = default) {
-        return SeedAsync(filterName, source, (str) => Encoding.UTF8.GetBytes(str), cancellationToken);
+    public async Task SeedAsync(FilterName filterName, IAsyncEnumerable<string> source, CancellationToken cancellationToken = default) {
+        logger.LogSeedingStarted(filterName);
+
+        IPersistentBloomFilter filter = serviceProvider.GetRequiredKeyedService<IPersistentBloomFilter>(filterName.Value);
+        long count = 0;
+        long progressStep = Math.Max(1, filter.Configuration.ExpectedItems / 10);
+
+        await foreach(string? item in source.WithCancellation(cancellationToken)) {
+            if(item is not null) {
+                filter.Add(item.AsSpan());
+                if(++count % progressStep == 0) {
+                    logger.LogSeedingProgress(filterName, count);
+                }
+            }
+        }
+
+        logger.LogInformation("Seeding complete. Saving to storage...");
+        await filter.SaveAsync(cancellationToken);
+        logger.LogSeedingCompleted(filterName, count);
     }
 
     /// <inheritdoc/>

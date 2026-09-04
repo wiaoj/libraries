@@ -1,7 +1,8 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Numerics;
+using System.Runtime.CompilerServices;
 using Wiaoj.Primitives;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 /// <summary>
 /// Provides mathematical calculations for Bloom Filter sizing, capacity, and probability estimations.
@@ -73,5 +74,22 @@ public static class BloomMath {
         double ratio = (double)setBitsCount / sizeInBits;
         double estimated = -((double)sizeInBits / hashFunctionCount) * Math.Log(1.0 - ratio);
         return (long)Math.Round(estimated);
+    }
+
+    /// <summary>
+    /// Calculates the optimal power-of-two shard count required if total bytes exceed the configured threshold.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CalculateOptimalShardCount(long sizeInBits, long thresholdBytes) {
+        if(thresholdBytes <= 0) return 1;
+
+        long totalBytes = (sizeInBits + 7) / 8;
+        if(totalBytes <= thresholdBytes) {
+            return 1;
+        }
+
+        double ratio = (double)totalBytes / thresholdBytes;
+        int needed = (int)Math.Ceiling(ratio);
+        return Math.Max(2, (int)BitOperations.RoundUpToPowerOf2((uint)needed));
     }
 }

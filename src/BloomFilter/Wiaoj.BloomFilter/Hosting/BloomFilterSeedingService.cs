@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeder;
 
-namespace Wiaoj.BloomFilter.Hosting; 
-internal class BloomFilterSeedingService(
+namespace Wiaoj.BloomFilter.Hosting;
+
+internal sealed class BloomFilterSeedingService(
     IBloomFilterRegistry registry,
     IEnumerable<IAutoBloomFilterSeeder> seeders,
     ILogger<BloomFilterSeedingService> logger) : BackgroundService {

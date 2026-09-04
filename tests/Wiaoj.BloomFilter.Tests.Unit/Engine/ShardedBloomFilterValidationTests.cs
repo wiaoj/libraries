@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
-using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 

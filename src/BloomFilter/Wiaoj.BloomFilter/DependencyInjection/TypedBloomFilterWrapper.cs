@@ -1,4 +1,4 @@
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.DependencyInjection;
 
 internal sealed class TypedBloomFilterWrapper<TTag>(IBloomFilter inner) : IBloomFilter<TTag> where TTag : notnull {
     public string Name => inner.Name;

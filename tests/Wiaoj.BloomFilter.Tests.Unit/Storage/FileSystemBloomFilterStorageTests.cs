@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Xunit;
+using Wiaoj.BloomFilter.Engine;
 
-namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
+namespace Wiaoj.BloomFilter.Tests.Unit.Storage;
 
 public class FileSystemBloomFilterStorageTests : IDisposable {
     private readonly string _tempDirectory;
@@ -18,6 +18,8 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
             try { Directory.Delete(this._tempDirectory, recursive: true); }
             catch { /* Best effort cleanup */ }
         }
+
+        GC.SuppressFinalize(this);
     }
 
     private FileSystemBloomFilterStorage CreateStorage(bool enableCompression = false) {
@@ -41,16 +43,16 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
             using MemoryStream sourceStream = new(dummyData);
 
             // Act: Save to file system
-            await storage.SaveAsync(config.Name.Value, config, sourceStream, CancellationToken.None);
+            await storage.SaveAsync(config.Name, config, sourceStream, TestContext.Current.CancellationToken);
 
             // Load back from file system
-            var loadResult = await storage.LoadStreamAsync(config.Name.Value, CancellationToken.None);
+            (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await storage.LoadStreamAsync(config.Name, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.NotNull(loadResult);
             using Stream loadedStream = loadResult.Value.DataStream;
             using MemoryStream ms = new();
-            await loadedStream.CopyToAsync(ms);
+            await loadedStream.CopyToAsync(ms, TestContext.Current.CancellationToken);
 
             Assert.Equal(dummyData, ms.ToArray());
         }
@@ -66,16 +68,16 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
             using MemoryStream sourceStream = new(largeData);
 
             // Act: Save compressed
-            await storage.SaveAsync(config.Name.Value, config, sourceStream, CancellationToken.None);
+            await storage.SaveAsync(config.Name, config, sourceStream, TestContext.Current.CancellationToken);
 
             // Load decompressed
-            var loadResult = await storage.LoadStreamAsync(config.Name.Value, CancellationToken.None);
+            (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await storage.LoadStreamAsync(config.Name, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.NotNull(loadResult);
             using Stream loadedStream = loadResult.Value.DataStream;
             using MemoryStream ms = new();
-            await loadedStream.CopyToAsync(ms);
+            await loadedStream.CopyToAsync(ms, TestContext.Current.CancellationToken);
 
             Assert.Equal(largeData, ms.ToArray());
         }
@@ -86,7 +88,7 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
             FileSystemBloomFilterStorage storage = CreateStorage();
 
             // Act
-            var loadResult = await storage.LoadStreamAsync("non-existent-filter", CancellationToken.None);
+            (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await storage.LoadStreamAsync("non-existent-filter", TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Null(loadResult);
@@ -99,11 +101,11 @@ public class FileSystemBloomFilterStorageTests : IDisposable {
             BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("delete-test"), 1_000, 0.01);
 
             using MemoryStream sourceStream = new([0x01, 0x02, 0x03]);
-            await storage.SaveAsync(config.Name.Value, config, sourceStream);
+            await storage.SaveAsync(config.Name, config, sourceStream, TestContext.Current.CancellationToken);
 
             // Act
-            await storage.DeleteAsync(config.Name.Value);
-            var loadResult = await storage.LoadStreamAsync(config.Name.Value);
+            await storage.DeleteAsync(config.Name, TestContext.Current.CancellationToken);
+            (BloomFilterConfiguration? Config, Stream DataStream)? loadResult = await storage.LoadStreamAsync(config.Name, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Null(loadResult);

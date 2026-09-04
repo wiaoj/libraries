@@ -5,10 +5,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Wiaoj.BloomFilter;
 using Wiaoj.BloomFilter.DependencyInjection;
-using Wiaoj.BloomFilter.Hosting;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
-using Wiaoj.ObjectPool;
 
 namespace Microsoft.Extensions.DependencyInjection;
 

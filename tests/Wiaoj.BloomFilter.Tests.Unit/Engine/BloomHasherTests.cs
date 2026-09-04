@@ -1,4 +1,5 @@
 using System.Text;
+using Wiaoj.BloomFilter.Engine;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 

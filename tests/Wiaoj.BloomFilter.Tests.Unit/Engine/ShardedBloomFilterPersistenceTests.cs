@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
-using Xunit;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
 
@@ -25,7 +25,7 @@ public class ShardedBloomFilterPersistenceTests {
         public async Task Should_RestoreAllShardData_When_ReloadedFromStorage_AfterSave() {
             // Arrange
             FakeBloomFilterStorage storage = new();
-            BloomFilterContext context = this.CreateContext(storage);
+            BloomFilterContext context = CreateContext(storage);
             BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("sharded-reload"), 4_000, 0.01)
                 .WithShardCount(4);
 
@@ -37,10 +37,10 @@ public class ShardedBloomFilterPersistenceTests {
 
             // Act: persist every dirty shard, then rehydrate a brand-new instance from the
             // same storage backend to prove the data actually survives a save/reload cycle.
-            await originalFilter.SaveAsync();
+            await originalFilter.SaveAsync(TestContext.Current.CancellationToken);
 
             using ShardedBloomFilter reloadedFilter = new(config, context);
-            await reloadedFilter.ReloadAsync();
+            await reloadedFilter.ReloadAsync(TestContext.Current.CancellationToken);
 
             // Assert: every item survives the round trip, spread across whichever shard it landed on
             foreach(string item in items) {
@@ -55,14 +55,14 @@ public class ShardedBloomFilterPersistenceTests {
         public async Task Should_LeaveNewInstanceEmpty_When_NoDataWasEverSaved() {
             // Arrange
             FakeBloomFilterStorage storage = new();
-            BloomFilterContext context = this.CreateContext(storage);
+            BloomFilterContext context = CreateContext(storage);
             BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("sharded-never-saved"), 2_000, 0.01)
                 .WithShardCount(2);
 
             using ShardedBloomFilter filter = new(config, context);
 
             // Act
-            await filter.ReloadAsync();
+            await filter.ReloadAsync(TestContext.Current.CancellationToken);
 
             // Assert: reload against empty storage should not throw and should leave the filter empty
             Assert.False(filter.Contains("anything"));

@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 internal interface IBloomFilterRegistry {
     void Register(IPersistentBloomFilter filter);

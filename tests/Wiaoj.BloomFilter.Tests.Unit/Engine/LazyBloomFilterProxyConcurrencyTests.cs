@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Testing;
+using Wiaoj.BloomFilter.Tests.Unit.Fakes;
 using Wiaoj.ObjectPool.Testing;
 
 namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
@@ -51,24 +53,13 @@ public class LazyBloomFilterProxyConcurrencyTests {
             const int taskCount = 32;
 
             // Act
-            Task[] tasks = [.. Enumerable.Range(0, taskCount).Select(_ => proxy.EnsureInitializedAsync(CancellationToken.None).AsTask())];
+            Task[] tasks = [.. Enumerable.Range(0, taskCount).Select(_ => proxy.EnsureInitializedAsync(TestContext.Current.CancellationToken).AsTask())];
 
             await Task.WhenAll(tasks);
 
             // Assert
             Assert.NotNull(proxy.GetInnerIfCreated());
             Assert.Equal("concurrent-lazy-filter", proxy.Configuration.Name.Value);
-        }
-    }
-
-    private sealed class FakeOptionsMonitor<T>(T currentValue) : IOptionsMonitor<T> {
-        public T CurrentValue => currentValue;
-        public T Get(string? name) {
-            return currentValue;
-        }
-
-        public IDisposable? OnChange(Action<T, string?> listener) {
-            return null;
         }
     }
 }

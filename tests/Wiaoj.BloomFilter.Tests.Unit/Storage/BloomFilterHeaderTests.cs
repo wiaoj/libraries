@@ -1,6 +1,6 @@
-using System.Text;
+using System.Buffers.Binary;
 
-namespace Wiaoj.BloomFilter.Tests.Unit.Engine;
+namespace Wiaoj.BloomFilter.Tests.Unit.Storage;
 
 public class BloomFilterHeaderTests {
     private readonly BloomFilterConfiguration _testConfig = new(
@@ -40,8 +40,8 @@ public class BloomFilterHeaderTests {
 
         [Fact]
         public void Should_ReturnFalse_When_StreamIsTooShort() {
-            // Arrange
-            using MemoryStream stream = new([0x57, 0x42, 0x46]); // 3 bytes, less than HeaderSize (36 bytes)
+            // Arrange: 3 bytes, less than HeaderSize (36 bytes)
+            using MemoryStream stream = new([0x57, 0x42, 0x46]);
 
             // Act
             bool success = BloomFilterHeader.TryReadHeader(
@@ -82,14 +82,11 @@ public class BloomFilterHeaderTests {
         public void Should_ReturnFalse_When_VersionIsNotSupported() {
             // Arrange: Header with unsupported Version 2
             using MemoryStream stream = new();
-            using(BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: true)) {
-                writer.Write(BloomFilterHeader.Magic); // "WBF1"
-                writer.Write(2);                       // Version 2 (Unsupported)
-                writer.Write(0UL);                     // Checksum
-                writer.Write(0L);                      // Size
-                writer.Write(0);                       // HashCount
-                writer.Write(0UL);                     // Fingerprint
-            }
+            Span<byte> header = stackalloc byte[BloomFilterHeader.HeaderSize];
+
+            BloomFilterHeader.Magic.CopyTo(header[0..4]);
+            BinaryPrimitives.WriteInt32LittleEndian(header[4..8], 2); // Version 2 (Unsupported)
+            stream.Write(header);
             stream.Position = 0;
 
             // Act

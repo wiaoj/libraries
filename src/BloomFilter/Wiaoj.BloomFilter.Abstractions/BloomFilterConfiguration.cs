@@ -104,20 +104,4 @@ public sealed record BloomFilterConfiguration {
     public BloomFilterConfiguration WithHashSeed(long seed) {
         return this with { HashSeed = seed };
     }
-
-    /// <summary>
-    /// Calculates a unique fingerprint for this configuration.
-    /// Used to detect if a stored filter is compatible with the current settings.
-    /// </summary>
-    /// <returns>A 64-bit fingerprint value.</returns>
-    public ulong GetFingerprint() {
-        // Simple deterministic hash of the structural properties
-        unchecked {
-            ulong hash = 17;
-            hash = hash * 31 + (ulong)this.SizeInBits;
-            hash = hash * 31 + (ulong)this.HashFunctionCount;
-            hash = hash * 31 + (ulong)this.HashSeed;
-            return hash;
-        }
-    }
 }

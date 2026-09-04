@@ -129,7 +129,7 @@ public static class Atomic {
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [return: NotNullIfNotNull(nameof(location))]
-    public static T? Exchange<T>(ref T? location, T? value) where T : class {
+    public static T? Exchange<T>([NotNullIfNotNull(nameof(location))] ref T? location, T? value) where T : class {
         return Interlocked.Exchange(ref location, value);
     }
 
@@ -153,7 +153,7 @@ public static class Atomic {
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [return: NotNullIfNotNull(nameof(location))]
-    public static T CompareExchange<T>(ref T location, T value, T comparand) where T : class? {
+    public static T CompareExchange<T>([NotNullIfNotNull(nameof(location))] ref T location, T value, T comparand) where T : class? {
         return Interlocked.CompareExchange(ref location, value, comparand);
     }
 
@@ -163,7 +163,7 @@ public static class Atomic {
     /// <returns><see langword="true"/> if the exchange succeeded; otherwise, <see langword="false"/>.</returns>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool TryCompareExchange<T>(ref T? location, T? value, T? comparand) where T : class? {
+    public static bool TryCompareExchange<T>([NotNullIfNotNull(nameof(location))] ref T? location, T? value, T? comparand) where T : class? {
         return Interlocked.CompareExchange(ref location, value, comparand) == comparand;
     }
 
@@ -203,7 +203,7 @@ public static class Atomic {
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [return: NotNullIfNotNull(nameof(location))]
-    public static T? Take<T>(ref T? location) where T : class {
+    public static T? Take<T>([NotNullIfNotNull(nameof(location))] ref T? location) where T : class {
         return Interlocked.Exchange(ref location, null);
     }
 

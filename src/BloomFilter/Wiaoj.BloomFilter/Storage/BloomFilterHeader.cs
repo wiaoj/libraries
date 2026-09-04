@@ -1,6 +1,6 @@
-using System.Text;
-using Wiaoj.BloomFilter.Extensions;
+using System.Buffers.Binary;
 using Wiaoj.Primitives;
+using Wiaoj.Primitives.Hashing;
 
 namespace Wiaoj.BloomFilter;
 
@@ -26,11 +26,19 @@ public static class BloomFilterHeader {
     public const int Version = 1;
 
     /// <summary>
-    /// Writes the standard header to the specified stream.
+    /// Computes a unique 64-bit structural fingerprint for the given configuration using XxHash3.
     /// </summary>
-    public static void WriteHeader(Stream stream, ulong checksum, BloomFilterConfiguration config) {
-        WriteHeader(stream, checksum, config, Encoding.UTF8);
+    public static ulong ComputeFingerprint(BloomFilterConfiguration config) {
+        Span<byte> buffer = stackalloc byte[28];
+        BinaryPrimitives.WriteInt64LittleEndian(buffer[0..8], config.SizeInBits);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer[8..12], config.HashFunctionCount);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer[12..16], Version);
+        BinaryPrimitives.WriteInt64LittleEndian(buffer[16..24], config.HashSeed);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer[24..28], config.ShardCount);
+
+        return XxHash3.Compute(buffer).Value;
     }
+
 
     /// <summary>
     /// Writes the standard header to the specified stream using a specific encoding.
@@ -38,34 +46,17 @@ public static class BloomFilterHeader {
     /// <param name="stream">The stream to write to.</param>
     /// <param name="checksum">The data checksum.</param>
     /// <param name="config">The filter configuration.</param>
-    /// <param name="encoding">The encoding for the header (optional).</param>
-    public static void WriteHeader(
-        Stream stream,
-        ulong checksum,
-        BloomFilterConfiguration config,
-        Encoding encoding) {
-        encoding ??= Encoding.UTF8;
+    public static void WriteHeader(Stream stream, ulong checksum, BloomFilterConfiguration config) {
+        Span<byte> header = stackalloc byte[HeaderSize];
 
-        // BinaryWriter'a encoding'i veriyoruz
-        using BinaryWriter writer = new(stream, encoding, leaveOpen: true);
+        Magic.CopyTo(header[0..4]);
+        BinaryPrimitives.WriteInt32LittleEndian(header[4..8], Version);
+        BinaryPrimitives.WriteUInt64LittleEndian(header[8..16], checksum);
+        BinaryPrimitives.WriteInt64LittleEndian(header[16..24], config.SizeInBits);
+        BinaryPrimitives.WriteInt32LittleEndian(header[24..28], config.HashFunctionCount);
+        BinaryPrimitives.WriteUInt64LittleEndian(header[28..36], ComputeFingerprint(config));
 
-        writer.Write(Magic); // 4 bytes
-        writer.Write(Version);     // Version: 1 (4 bytes)
-        writer.Write(checksum); // 8 bytes
-        writer.Write(config.SizeInBits); // Dosyanın kaç bit olduğunu içine yaz
-        writer.Write(config.HashFunctionCount);  // Kaç hash fonksiyonu ile yazıldığını yaz 
-        writer.Write(config.GetFingerprint());
-    }
-
-    /// <summary>
-    /// Attempts to read and validate the header from the stream.
-    /// </summary>
-    public static bool TryReadHeader(Stream stream,
-                                     out ulong checksum,
-                                     out long sizeInBits,
-                                     out int hashCount,
-                                     out ulong fingerprint) {
-        return TryReadHeader(stream, out checksum, out sizeInBits, out hashCount, out fingerprint, Encoding.UTF8);
+        stream.Write(header);
     }
 
     /// <summary>
@@ -76,31 +67,38 @@ public static class BloomFilterHeader {
     /// <param name="sizeInBits">The read bit size.</param>
     /// <param name="hashCount">The read hash function count.</param>
     /// <param name="fingerprint">The read configuration fingerprint.</param>
-    /// <param name="encoding">The encoding to use.</param>
     /// <returns><c>true</c> if the header was read successfully; otherwise, <c>false</c>.</returns>
     public static bool TryReadHeader(Stream stream,
                                      out ulong checksum,
                                      out long sizeInBits,
                                      out int hashCount,
-                                     out ulong fingerprint,
-                                     Encoding encoding) {
-        encoding ??= Encoding.UTF8;
-        checksum = 0; sizeInBits = 0; hashCount = 0; fingerprint = 0;
+                                     out ulong fingerprint) {
+        checksum = 0;
+        sizeInBits = 0;
+        hashCount = 0;
+        fingerprint = 0;
 
-        if(stream.Length < HeaderSize) return false;
+        Span<byte> header = stackalloc byte[HeaderSize];
+        int bytesRead = stream.ReadAtLeast(header, HeaderSize, throwOnEndOfStream: false);
 
-        using BinaryReader reader = new(stream, encoding, leaveOpen: true);
-        byte[] magic = reader.ReadBytes(4);
+        if(bytesRead < HeaderSize) {
+            return false;
+        }
 
-        if(!magic.AsSpan().SequenceEqual(Magic)) return false;
+        if(!header[0..4].SequenceEqual(Magic)) {
+            return false;
+        }
 
-        int version = reader.ReadInt32();
-        if(version != 1) return false;
+        int version = BinaryPrimitives.ReadInt32LittleEndian(header[4..8]);
+        if(version != Version) {
+            return false;
+        }
 
-        checksum = reader.ReadUInt64();
-        sizeInBits = reader.ReadInt64();
-        hashCount = reader.ReadInt32();
-        fingerprint = reader.ReadUInt64();
+        checksum = BinaryPrimitives.ReadUInt64LittleEndian(header[8..16]);
+        sizeInBits = BinaryPrimitives.ReadInt64LittleEndian(header[16..24]);
+        hashCount = BinaryPrimitives.ReadInt32LittleEndian(header[24..28]);
+        fingerprint = BinaryPrimitives.ReadUInt64LittleEndian(header[28..36]);
+
         return true;
     }
 }

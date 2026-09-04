@@ -1,11 +1,12 @@
 using System.Buffers;
-using System.IO.Hashing;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Wiaoj.Concurrency;
 using Wiaoj.Primitives;
+using Wiaoj.Primitives.Hashing;
 
-namespace Wiaoj.BloomFilter;
+namespace Wiaoj.BloomFilter.Engine;
 
 /// <summary>
 /// Thread-safe bit array implementation backed by pooled memory arrays.
@@ -43,7 +44,7 @@ internal sealed class PooledBitArray : IDisposable {
         int bitIndex = (int)(index & 63);
         ulong mask = 1UL << bitIndex;
 
-        ulong current = Volatile.Read(ref this._array[wordIndex]);
+        ulong current = Atomic.Read(ref this._array[wordIndex]);
         if((current & mask) != 0) {
             return false;
         }
@@ -61,7 +62,7 @@ internal sealed class PooledBitArray : IDisposable {
     public bool Get(long index) {
         long wordIndex = index >> 6;
         int bitIndex = (int)(index & 63);
-        ulong word = Volatile.Read(ref this._array[wordIndex]);
+        ulong word = Atomic.Read(ref this._array[wordIndex]);
         return (word & (1UL << bitIndex)) != 0;
     }
 
@@ -85,7 +86,7 @@ internal sealed class PooledBitArray : IDisposable {
     public ulong CalculateChecksum() {
         Span<byte> byteSpan = MemoryMarshal.AsBytes(this._array.AsSpan());
         int byteCount = (int)((this.Length + 7) / 8);
-        return XxHash3.HashToUInt64(byteSpan[..byteCount]);
+        return XxHash3.Compute(byteSpan[..byteCount]).Value;
     }
 
     /// <summary>
@@ -110,7 +111,7 @@ internal sealed class PooledBitArray : IDisposable {
             totalRead += read;
         }
 
-        return XxHash3.HashToUInt64(target.Span);
+        return XxHash3.Compute(target.Span).Value;
     }
 
     /// <summary>
@@ -122,7 +123,7 @@ internal sealed class PooledBitArray : IDisposable {
         long count = 0;
 
         for(int i = 0; i < wordCount; i++) {
-            count += BitOperations.PopCount(Volatile.Read(ref this._array[i]));
+            count += BitOperations.PopCount(Atomic.Read(ref this._array[i]));
         }
 
         return count;
@@ -133,7 +134,7 @@ internal sealed class PooledBitArray : IDisposable {
     /// </summary>
     public void Dispose() {
         if(this._disposeState.TryBeginDispose()) {
-            ulong[]? array = Interlocked.Exchange(ref this._array, null!);
+            ulong[]? array = Atomic.Exchange(ref this._array, null!);
             if(array != null) {
                 ArrayPool<ulong>.Shared.Return(array);
             }

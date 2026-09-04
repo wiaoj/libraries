@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Hosting;
 using Wiaoj.BloomFilter.Testing;
 using Wiaoj.ObjectPool.Testing;
@@ -69,7 +70,7 @@ public class BloomFilterAutoSaveServiceTests {
 
             // Cleanup
             cts.Cancel();
-            await service.StopAsync(CancellationToken.None);
+            await service.StopAsync(TestContext.Current.CancellationToken);
         }
 
         [Fact]
@@ -90,10 +91,10 @@ public class BloomFilterAutoSaveServiceTests {
                 NullLogger<BloomFilterAutoSaveService>.Instance
             );
 
-            await service.StartAsync(CancellationToken.None);
+            await service.StartAsync(TestContext.Current.CancellationToken);
 
             // Act
-            await service.StopAsync(CancellationToken.None);
+            await service.StopAsync(TestContext.Current.CancellationToken);
 
             // Assert
             Assert.False(filter.IsDirty);
