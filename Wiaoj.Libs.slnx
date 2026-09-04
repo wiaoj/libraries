@@ -22,6 +22,7 @@
   <Folder Name="/src/BloomFilter/">
     <File Path="src/BloomFilter/README.md" />
     <Project Path="src/BloomFilter/Wiaoj.BloomFilter.Abstractions/Wiaoj.BloomFilter.Abstractions.csproj" />
+    <Project Path="src/BloomFilter/Wiaoj.BloomFilter.Redis/Wiaoj.BloomFilter.Redis.csproj" />
     <Project Path="src/BloomFilter/Wiaoj.BloomFilter.Testing/Wiaoj.BloomFilter.Testing.csproj" Id="7bfbce92-656b-4154-a8e3-dda841ae4aaa" />
     <Project Path="src/BloomFilter/Wiaoj.BloomFilter/Wiaoj.BloomFilter.csproj" />
   </Folder>
@@ -149,6 +150,7 @@
     <Project Path="src/Webhooks/Wiaoj.Webhooks/Wiaoj.Webhooks.csproj" Id="a57fc1bd-5360-4e7e-bdee-416daf229af5" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Wiaoj.BloomFilter.Redis.Tests.Unit/Wiaoj.BloomFilter.Redis.Tests.Unit.csproj" />
     <Project Path="tests/Wiaoj.BloomFilter.Tests.Unit/Wiaoj.BloomFilter.Tests.Unit.csproj" Id="7e199388-2442-4420-844b-3cc58288d009" />
     <Project Path="tests/Wiaoj.Compensation.Tests.Unit/Wiaoj.Compensation.Tests.Unit.csproj" Id="05d993eb-cdb7-406c-9725-0772cc7ca127" />
     <Project Path="tests/Wiaoj.Concurrency.Tests.Unit/Wiaoj.Concurrency.Tests.Unit.csproj" Id="c5b97f1f-96ca-4a9c-afba-5df78c91a236" />

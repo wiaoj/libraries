@@ -25,6 +25,12 @@ public static class BloomMath {
     public const ulong GoldenRatio64 = 0x9E3779B97F4A7C15UL;
 
     /// <summary>
+    /// Default 64-bit seed constant (0x7769616F6A5F6266 = "wiaoj_bf") used in hash function initialization
+    /// when no custom seed is explicitly provided.
+    /// </summary>
+    public const long DefaultHashSeed = BloomFilterConfiguration.DefaultHashSeed;
+
+    /// <summary>
     /// Calculates the optimal bit array size (m) for a target capacity and error rate.
     /// Formula: m = -(n * ln(p)) / (ln(2)^2)
     /// </summary>

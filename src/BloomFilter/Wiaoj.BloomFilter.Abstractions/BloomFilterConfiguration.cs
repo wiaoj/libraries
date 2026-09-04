@@ -17,6 +17,11 @@ public sealed record BloomFilterConfiguration {
     public const double MaximumErrorRate = 1.0;
 
     /// <summary>
+    /// The default 64-bit seed constant (0x7769616F6A5F6266 = "wiaoj_bf") used for hash generation.
+    /// </summary>
+    public const long DefaultHashSeed = 0x7769616F6A5F6266L;
+
+    /// <summary>
     /// Gets the unique name of the filter.
     /// </summary>
     public FilterName Name { get; init; }

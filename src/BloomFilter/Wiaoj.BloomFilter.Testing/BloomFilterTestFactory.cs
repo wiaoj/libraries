@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.BloomFilter.Testing;
+namespace Wiaoj.BloomFilter.Testing;
 
 /// <summary>
 /// Factory helpers for generating valid Bloom Filter domain models for testing.
@@ -13,7 +13,7 @@ public static class BloomFilterTestFactory {
         double errorRate = 0.01,
         long sizeInBits = 95_851,
         int hashFunctions = 7,
-        long hashSeed = 0x7769616F6A5F6266,
+        long hashSeed = BloomFilterConfiguration.DefaultHashSeed,
         int shardCount = 1) {
         return new BloomFilterConfiguration(
             FilterName.Parse(name),
