@@ -1,5 +1,5 @@
 name: Publish to NuGet
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('Publishing Version: {0} by @{1}', inputs.package_version, github.actor) || format('Publishing Tag: {0}', github.ref_name) }}
+run-name: "Publishing Version: ${{ inputs.package_version || github.ref_name }} by @${{ github.actor }}"
 
 on:
   workflow_dispatch:
