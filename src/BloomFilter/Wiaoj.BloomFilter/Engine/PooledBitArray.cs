@@ -1,8 +1,10 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Wiaoj.Concurrency;
+using Wiaoj.Preconditions;
 using Wiaoj.Primitives;
 using Wiaoj.Primitives.Hashing;
 
@@ -26,6 +28,8 @@ internal sealed class PooledBitArray : IDisposable {
     /// </summary>
     /// <param name="length">The total number of bits required.</param>
     public PooledBitArray(long length) {
+        Preca.ThrowIfNegativeOrZero(length);
+
         this.Length = length;
         int arraySize = BloomMath.BitsToWordCount(length);
         this._array = ArrayPool<ulong>.Shared.Rent(arraySize);
@@ -38,6 +42,9 @@ internal sealed class PooledBitArray : IDisposable {
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(PooledBitArray));
     }
 
+    [DoesNotReturn]
+    private static void ThrowIndexOutOfRange() => throw new IndexOutOfRangeException("Bit index was outside the bounds of the bit array.");
+
     /// <summary>
     /// Atomically sets the bit at the specified index to 1.
     /// </summary>
@@ -46,6 +53,10 @@ internal sealed class PooledBitArray : IDisposable {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Set(long index) {
         ThrowIfDisposed();
+        if((ulong)index >= (ulong)this.Length) {
+            ThrowIndexOutOfRange();
+        }
+
         long wordIndex = index >> 6;
         int bitIndex = (int)(index & 63);
         ulong mask = 1UL << bitIndex;
@@ -67,6 +78,10 @@ internal sealed class PooledBitArray : IDisposable {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Get(long index) {
         ThrowIfDisposed();
+        if((ulong)index >= (ulong)this.Length) {
+            ThrowIndexOutOfRange();
+        }
+
         long wordIndex = index >> 6;
         int bitIndex = (int)(index & 63);
         ulong word = Atomic.Read(ref this._array[wordIndex]);

@@ -174,13 +174,33 @@ public sealed class PooledBitArrayTests {
         [Theory]
         [InlineData(-1)]
         [InlineData(-100)]
-        public void Should_ThrowException_When_AccessingNegativeIndices(long negativeIndex) {
+        [InlineData(1024)]
+        [InlineData(2000)]
+        public void Should_ThrowException_When_AccessingOutOfBoundsIndices(long outOfBoundsIndex) {
             // Arrange
             using PooledBitArray bitArray = new(1024);
 
             // Act & Assert
-            Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Get(negativeIndex));
-            Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Set(negativeIndex));
+            Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Get(outOfBoundsIndex));
+            Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Set(outOfBoundsIndex));
+        }
+
+        [Fact]
+        public void Should_ThrowException_When_AccessingOffByOneWordBoundary() {
+            // Arrange: 1000 bits occupies 16 ulongs (1024 capacity), so index 1000 is inside the 16th ulong but > Length!
+            using PooledBitArray bitArray = new(1000);
+
+            // Act & Assert
+            Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Get(1000));
+            Assert.ThrowsAny<IndexOutOfRangeException>(() => bitArray.Set(1000));
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(-50)]
+        public void Should_ThrowArgumentOutOfRangeException_When_LengthIsZeroOrNegative(long invalidLength) {
+            Assert.ThrowsAny<ArgumentOutOfRangeException>(() => new PooledBitArray(invalidLength));
         }
     }
 

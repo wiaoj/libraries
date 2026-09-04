@@ -80,6 +80,10 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
     internal bool AddWithHashes(ulong h1, ulong h2) {
         ThrowIfDisposed();
 
+        if(h2 == 0) {
+            h2 = BloomMath.GoldenRatio64;
+        }
+
         this._rwLock.EnterReadLock();
         try {
             PooledBitArray bits = this._bits;
@@ -185,6 +189,10 @@ internal sealed class InMemoryBloomFilter : BloomFilterBase {
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
     private bool InternalContains(ulong h1, ulong h2) {
+        if(h2 == 0) {
+            h2 = BloomMath.GoldenRatio64;
+        }
+
         PooledBitArray bits = this._bits;
 
         long size = this.Configuration.SizeInBits;

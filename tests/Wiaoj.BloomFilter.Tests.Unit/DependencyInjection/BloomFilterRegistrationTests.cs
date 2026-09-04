@@ -57,6 +57,27 @@ public class BloomFilterRegistrationTests {
             Assert.Equal(50_000, options.Value.Filters["custom-filter"].ExpectedItems);
             Assert.Equal(0.001, options.Value.Filters["custom-filter"].ErrorRate);
         }
+
+        [Fact]
+        public void Should_PropagateOptions_When_ConfiguredDirectlyViaBuilderOptions() {
+            // Arrange
+            ServiceCollection services = new();
+            services.AddBloomFilter(builder => {
+                builder.Options.Lifecycle.AutoReseed = false;
+                builder.Options.Lifecycle.AutoSaveInterval = TimeSpan.FromMinutes(42);
+                builder.Options.Lifecycle.ShardingThresholdBytes = 100 * 1024;
+            });
+
+            using ServiceProvider sp = services.BuildServiceProvider();
+
+            // Act
+            IOptions<BloomFilterOptions> options = sp.GetRequiredService<IOptions<BloomFilterOptions>>();
+
+            // Assert
+            Assert.False(options.Value.Lifecycle.AutoReseed);
+            Assert.Equal(TimeSpan.FromMinutes(42), options.Value.Lifecycle.AutoSaveInterval);
+            Assert.Equal(100 * 1024, options.Value.Lifecycle.ShardingThresholdBytes);
+        }
     }
 
     public sealed class RegistryMethods {

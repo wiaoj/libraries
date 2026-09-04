@@ -34,6 +34,15 @@ public sealed class BloomMathCalculationTests {
             Assert.Equal(sizeInBits, resultExact);
             Assert.Equal(sizeInBits, resultOverflow);
         }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(-10)]
+        public void Should_ReturnZero_When_HashFunctionCountIsZeroOrNegative(int invalidHashCount) {
+            long result = BloomMath.EstimateInsertedItems(100_000, 50_000, invalidHashCount);
+            Assert.Equal(0, result);
+        }
     }
 
     public sealed class EstimateFalsePositiveProbabilityMethod {
@@ -48,6 +57,16 @@ public sealed class BloomMathCalculationTests {
 
             // Assert: (0.50)^4 = 0.0625 (6.25%)
             Assert.Equal(0.0625, estimatedFp.Value, precision: 4);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(-5)]
+        public void Should_ReturnOne_When_HashCountIsZeroOrNegative(int invalidHashCount) {
+            Percentage fillRatio = Percentage.FromDouble(0.50);
+            Percentage fp = BloomMath.EstimateFalsePositiveProbability(fillRatio, invalidHashCount);
+            Assert.Equal(1.0, fp.Value);
         }
     }
 

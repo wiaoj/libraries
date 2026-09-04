@@ -44,6 +44,19 @@ public static class BloomFilterServiceCollectionExtensions {
         BloomFilterBuilder builder = new(services);
         setupAction(builder);
 
+        services.Configure<BloomFilterOptions>(options => {
+            options.Lifecycle.AutoSaveInterval = builder.Options.Lifecycle.AutoSaveInterval;
+            options.Lifecycle.EnableIntegrityCheck = builder.Options.Lifecycle.EnableIntegrityCheck;
+            options.Lifecycle.EnableWarmUp = builder.Options.Lifecycle.EnableWarmUp;
+            options.Lifecycle.AutoReseed = builder.Options.Lifecycle.AutoReseed;
+            options.Lifecycle.ShardingThresholdBytes = builder.Options.Lifecycle.ShardingThresholdBytes;
+            options.Lifecycle.AutoResetOnMismatch = builder.Options.Lifecycle.AutoResetOnMismatch;
+
+            foreach(var (filterName, filterDef) in builder.Options.Filters) {
+                options.Filters[filterName] = filterDef;
+            }
+        });
+
         services.TryAddSingleton(TimeProvider.System);
 
         // Fallback logging for tests and standalone apps without explicit AddLogging()

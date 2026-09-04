@@ -60,6 +60,7 @@ public static class BloomMath {
     /// <returns>The estimated false positive probability as a <see cref="Percentage"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Percentage EstimateFalsePositiveProbability(Percentage fillRatio, int hashFunctionCount) {
+        if(hashFunctionCount <= 0) return Percentage.Full;
         double prob = Math.Pow(fillRatio.Value, hashFunctionCount);
         return Percentage.FromDouble(prob);
     }
@@ -74,7 +75,7 @@ public static class BloomMath {
     /// <returns>The estimated number of inserted items.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long EstimateInsertedItems(long sizeInBits, long setBitsCount, int hashFunctionCount) {
-        if(setBitsCount <= 0) return 0;
+        if(setBitsCount <= 0 || sizeInBits <= 0 || hashFunctionCount <= 0) return 0;
         if(setBitsCount >= sizeInBits) return sizeInBits;
 
         double ratio = (double)setBitsCount / sizeInBits;
