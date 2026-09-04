@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.Buffers;
 
 namespace Wiaoj.Primitives.Cryptography.Hashing;
 /// <summary>
@@ -251,6 +252,33 @@ public unsafe struct Sha512Hash
     }
 
     /// <summary>
+    /// Computes the SHA512 hash of a character span using UTF-8 encoding.
+    /// </summary>
+    /// <param name="data">The character span to hash.</param>
+    /// <returns>The computed <see cref="Sha512Hash"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Sha512Hash Compute(ReadOnlySpan<char> data) {
+        return Compute(data, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the SHA512 hash of a character span using the specified encoding.
+    /// This method is allocation-free for inputs up to 1024 bytes after encoding.
+    /// </summary>
+    /// <param name="data">The character span to hash.</param>
+    /// <param name="encoding">The character encoding to use when converting the characters to bytes.</param>
+    /// <returns>The computed <see cref="Sha512Hash"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [SkipLocalsInit]
+    public static Sha512Hash Compute(ReadOnlySpan<char> data, Encoding encoding) {
+        Preca.ThrowIfNull(encoding);
+        int maxByteCount = encoding.GetMaxByteCount(data.Length);
+        using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+        int bytesWritten = encoding.GetBytes(data, buffer.Span);
+        return Compute(buffer.Span[..bytesWritten]);
+    }
+
+    /// <summary>
     /// Computes the SHA512 hash for the contents of a <see cref="Secret{T}"/> of <see cref="char"/> using the specified encoding.
     /// This method avoids allocating the secret on the managed heap, performing the entire operation securely.
     /// </summary>
@@ -263,14 +291,10 @@ public unsafe struct Sha512Hash
 
         // secret.Expose provides secure access to the underlying ReadOnlySpan<char>.
         return secret.Expose(chars => {
-            // We avoid creating a byte[] on the heap by using stackalloc.
-            // This is both more secure and more performant.
             int maxByteCount = encoding.GetMaxByteCount(chars.Length);
-            Span<byte> bytesOnStack = stackalloc byte[maxByteCount];
-            int bytesWritten = encoding.GetBytes(chars, bytesOnStack);
-
-            // Compute the hash from the byte span on the stack.
-            return Compute(bytesOnStack[..bytesWritten]);
+            using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+            int bytesWritten = encoding.GetBytes(chars, buffer.Span);
+            return Compute(buffer.Span[..bytesWritten]);
         });
     }
 
@@ -288,8 +312,7 @@ public unsafe struct Sha512Hash
     /// </summary>
     public static Sha512Hash Compute(string text, Encoding encoding) {
         Preca.ThrowIfNull(text);
-        Preca.ThrowIfNull(encoding);
-        return Compute(encoding.GetBytes(text));
+        return Compute(text.AsSpan(), encoding);
     }
 
     /// <summary>

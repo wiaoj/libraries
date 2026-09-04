@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.Buffers;
 using Wiaoj.Primitives.JsonConverters;
 
 namespace Wiaoj.Primitives.Cryptography.Hashing;
@@ -297,6 +298,33 @@ public unsafe struct Md5Hash
     }
 
     /// <summary>
+    /// Computes the MD5 hash of a character span using UTF-8 encoding.
+    /// </summary>
+    /// <param name="data">The character span to hash.</param>
+    /// <returns>A new <see cref="Md5Hash"/> containing the digest.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Md5Hash Compute(ReadOnlySpan<char> data) {
+        return Compute(data, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the MD5 hash of a character span using the specified encoding.
+    /// This method is allocation-free for inputs up to 1024 bytes after encoding.
+    /// </summary>
+    /// <param name="data">The character span to hash.</param>
+    /// <param name="encoding">The character encoding to use when converting the characters to bytes.</param>
+    /// <returns>A new <see cref="Md5Hash"/> containing the digest.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [SkipLocalsInit]
+    public static Md5Hash Compute(ReadOnlySpan<char> data, Encoding encoding) {
+        Preca.ThrowIfNull(encoding);
+        int maxByteCount = encoding.GetMaxByteCount(data.Length);
+        using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+        int bytesWritten = encoding.GetBytes(data, buffer.Span);
+        return Compute(buffer.Span[..bytesWritten]);
+    }
+
+    /// <summary>
     /// Computes the MD5 hash for the contents of a secure <see cref="Secret{Char}"/> using the specified encoding.
     /// </summary>
     /// <param name="secret">The secret character data to hash.</param>
@@ -309,22 +337,20 @@ public unsafe struct Md5Hash
 
         return secret.Expose(chars => {
             int maxByteCount = encoding.GetMaxByteCount(chars.Length);
-            byte[]? rented = null;
-            Span<byte> byteSpan = maxByteCount <= 512
-                ? stackalloc byte[maxByteCount]
-                : (rented = ArrayPool<byte>.Shared.Rent(maxByteCount));
-
-            try {
-                int bytesWritten = encoding.GetBytes(chars, byteSpan);
-                return Compute(byteSpan[..bytesWritten]);
-            }
-            finally {
-                if(rented != null) {
-                    CryptographicOperations.ZeroMemory(rented.AsSpan(0, maxByteCount));
-                    ArrayPool<byte>.Shared.Return(rented);
-                }
-            }
+            using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+            int bytesWritten = encoding.GetBytes(chars, buffer.Span);
+            return Compute(buffer.Span[..bytesWritten]);
         });
+    }
+
+    /// <summary>
+    /// Computes the MD5 hash for the contents of a <see cref="Secret{T}"/> of <see cref="char"/> using UTF-8 encoding.
+    /// </summary>
+    /// <param name="secret">The secret containing the character data to hash.</param>
+    /// <returns>A new <see cref="Md5Hash"/> containing the digest.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="secret"/> is null.</exception>
+    public static Md5Hash Compute(Secret<char> secret) {
+        return Compute(secret, Encoding.UTF8);
     }
 
     /// <summary>
@@ -346,16 +372,7 @@ public unsafe struct Md5Hash
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="text"/> or <paramref name="encoding"/> is null.</exception>
     public static Md5Hash Compute(string text, Encoding encoding) {
         Preca.ThrowIfNull(text);
-        Preca.ThrowIfNull(encoding);
-
-        int maxByteCount = encoding.GetMaxByteCount(text.Length);
-        if(maxByteCount <= 256) {
-            Span<byte> buffer = stackalloc byte[maxByteCount];
-            int written = encoding.GetBytes(text, buffer);
-            return Compute(buffer[..written]);
-        }
-
-        return Compute(encoding.GetBytes(text));
+        return Compute(text.AsSpan(), encoding);
     }
 
     #endregion

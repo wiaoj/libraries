@@ -1,6 +1,18 @@
 name: Publish to NuGet
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Publishing Version: {0} by @{1}', inputs.package_version, github.actor) || format('Publishing Tag: {0}', github.ref_name) }}
 
 on:
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: 'Paket Versiyonu (Örn: 1.0.2 veya 1.0.2-beta)'
+        required: true
+        default: '0.0.1-alpha.1'
+      skip_push:
+        description: 'Sadece build et, NuGet e atma (Dry Run)'
+        type: boolean
+        required: false
+        default: false
   push:
     tags:
       - 'v*'
@@ -18,26 +30,54 @@ jobs:
       with:
         dotnet-version: '10.0.x'
 
-    - name: Get Version from Tag
-      id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
-      
-    - name: Restore dependencies
-      run: dotnet restore
+    - name: Compute Versions
+      id: versioning
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ inputs.package_version }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/v}"
+        fi
+        
+        BASE_VERSION=$(echo "$VERSION" | cut -d'-' -f1)
+        BUILD_NUMBER="${{ github.run_number }}"
+        FILE_VERSION="$BASE_VERSION.$BUILD_NUMBER"
 
-    - name: Build
-      run: dotnet build ./Wiaoj.Publish.slnf --configuration Release --no-restore
+        echo "NuGet Version (Package): $VERSION"
+        echo "Assembly Version (Base): $BASE_VERSION"
+        echo "File Version (Unique):   $FILE_VERSION"
 
-    
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_ENV
+        echo "FILE_VERSION=$FILE_VERSION" >> $GITHUB_ENV
+
+    - name: Restore Filtered Solution
+      run: dotnet restore ./Wiaoj.Publish.slnf
+
+    - name: Build Filtered Solution
+      run: |
+        dotnet build ./Wiaoj.Publish.slnf \
+          --configuration Release \
+          --no-restore \
+          -p:Version=$VERSION \
+          -p:AssemblyVersion=$BASE_VERSION \
+          -p:FileVersion=$FILE_VERSION \
+          -p:InformationalVersion=$VERSION
+
     - name: Pack Filtered Solution
       run: |
         dotnet pack ./Wiaoj.Publish.slnf \
           --configuration Release \
           --no-build \
           --output ./nupkgs \
-          -p:PackageVersion=${{ env.VERSION }}
+          -p:Version=$VERSION \
+          -p:PackageVersion=$VERSION \
+          -p:AssemblyVersion=$BASE_VERSION \
+          -p:FileVersion=$FILE_VERSION \
+          -p:InformationalVersion=$VERSION
 
     - name: Push to NuGet
+      if: ${{ github.event_name == 'push' || inputs.skip_push == false }}
       run: |
         dotnet nuget push "./nupkgs/*.nupkg" \
           --api-key ${{ secrets.NUGET_API_KEY }} \

@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
@@ -161,6 +161,63 @@ public sealed class Sha256HashTests {
         // Assert
         Assert.Equal(expectedBytes, resultStruct.AsSpan().ToArray());
         Assert.Equal(Convert.ToHexString(expectedBytes), resultStruct.ToString());
+    }
+
+    [Fact]
+    public void Compute_ReadOnlySpanChar_ShouldMatchBytesCompute() {
+        // Arrange
+        string text = "test-span-char-data";
+        byte[] expectedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(text));
+
+        // Act
+        Sha256Hash result = Sha256Hash.Compute(text.AsSpan());
+
+        // Assert
+        Assert.Equal(expectedBytes, result.AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void Compute_ReadOnlySpanChar_WithEncoding_ShouldMatchBytesCompute() {
+        // Arrange
+        string text = "encoding-test-data-şüöğçı";
+
+        // Act & Assert - UTF-8
+        byte[] utf8Expected = SHA256.HashData(Encoding.UTF8.GetBytes(text));
+        Assert.Equal(utf8Expected, Sha256Hash.Compute(text.AsSpan(), Encoding.UTF8).AsSpan().ToArray());
+
+        // Act & Assert - Unicode
+        byte[] unicodeExpected = SHA256.HashData(Encoding.Unicode.GetBytes(text));
+        Assert.Equal(unicodeExpected, Sha256Hash.Compute(text.AsSpan(), Encoding.Unicode).AsSpan().ToArray());
+
+        // Act & Assert - ASCII
+        byte[] asciiExpected = SHA256.HashData(Encoding.ASCII.GetBytes(text));
+        Assert.Equal(asciiExpected, Sha256Hash.Compute(text.AsSpan(), Encoding.ASCII).AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void Compute_String_ShouldMatchSpanCompute() {
+        // Arrange
+        string text = "string-vs-span-consistency";
+
+        // Act
+        Sha256Hash fromString = Sha256Hash.Compute(text);
+        Sha256Hash fromSpan = Sha256Hash.Compute(text.AsSpan());
+
+        // Assert
+        Assert.Equal(fromString, fromSpan);
+    }
+
+    [Fact]
+    public void Compute_LargeString_ShouldMatchBytesCompute() {
+        // Arrange - String larger than 1024 bytes to exercise ArrayPool fallback
+        string text = new('A', 2048);
+        byte[] expectedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(text));
+
+        // Act
+        Sha256Hash result = Sha256Hash.Compute(text.AsSpan());
+
+        // Assert
+        Assert.Equal(expectedBytes, result.AsSpan().ToArray());
     }
 
     #endregion

@@ -19,6 +19,9 @@ internal static partial class PrecaMessages {
         public const string ValueCannotBeZeroOrNegative = "Value cannot be zero or negative.";
         public const string ValueCannotBeZeroOrPositive = "Value cannot be zero or positive.";
 
+        // Bit operations validation messages
+        public const string ValueMustBePowerOfTwo = "Value must be a power of 2.";
+
         // Floating point validation messages
         public const string ValueCannotBeNaN = "Value cannot be NaN.";
         public const string ValueCannotBeInfinity = "Value cannot be infinity.";

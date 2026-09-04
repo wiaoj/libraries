@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using Wiaoj.DistributedCounter;
+using Wiaoj.RateLimiting;
 using Wiaoj.RateLimiting.AspNetCore;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -12,14 +13,16 @@ builder.Services.AddDistributedCounter(counter => {
 
 // 2. Wiaoj Rate Limiting Setup with Negative Caching & Fail-Open
 builder.Services.AddWiaojRateLimiting(rl => {
-    // 10 saniyede en fazla 5 istek (Fixed Window)
-    rl.UseFixedWindow(limit: 5, window: TimeSpan.FromSeconds(10));
+    rl.UseDefaultPolicy(policy => {
+        // 10 saniyede en fazla 5 istek (Fixed Window)
+        policy.UseFixedWindow(limit: 5, window: TimeSpan.FromSeconds(10));
 
-    // L1 RAM DDoS kalkanı (Spam istekleri Redis'e gitmeden RAM'de anında keser)
-    rl.WithNegativeCaching();
+        // L1 RAM DDoS kalkanı (Spam istekleri Redis'e gitmeden RAM'de anında keser)
+        policy.WithNegativeCaching();
 
-    // Redis/Storage çökse bile API'yi çökertmeyip istekleri geçiren sigorta
-    rl.WithFailOpen();
+        // Redis/Storage çökse bile API'yi çökertmeyip istekleri geçiren sigorta
+        policy.WithFailOpen();
+    });
 });
 
 WebApplication app = builder.Build();

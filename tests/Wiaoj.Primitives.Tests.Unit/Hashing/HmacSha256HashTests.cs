@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using Wiaoj.Primitives.Cryptography.Hashing;
 
@@ -165,6 +165,76 @@ public sealed class HmacSha256HashTests {
         // Assert
         Assert.Equal(expectedBytes, resultStruct.AsSpan().ToArray());
         Assert.Equal(Convert.ToHexString(expectedBytes), resultStruct.ToString());
+    }
+
+    [Fact]
+    public void Compute_ReadOnlySpanChar_WithByteKey_ShouldMatchBytesCompute() {
+        // Arrange
+        byte[] key = GetRandomBytes(32);
+        string text = "test-span-char-hmac-data";
+        byte[] expectedBytes = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(text));
+
+        // Act
+        HmacSha256Hash result = HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan());
+
+        // Assert
+        Assert.Equal(expectedBytes, result.AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void Compute_ReadOnlySpanChar_WithByteKey_AndEncoding_ShouldMatchBytesCompute() {
+        // Arrange
+        byte[] key = GetRandomBytes(32);
+        string text = "encoding-test-şüöğçı";
+        byte[] utf8Expected = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(text));
+        byte[] unicodeExpected = HMACSHA256.HashData(key, Encoding.Unicode.GetBytes(text));
+
+        // Act & Assert
+        Assert.Equal(utf8Expected, HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan(), Encoding.UTF8).AsSpan().ToArray());
+        Assert.Equal(unicodeExpected, HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan(), Encoding.Unicode).AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void Compute_ReadOnlySpanChar_WithSecretKey_ShouldMatchBytesCompute() {
+        // Arrange
+        byte[] keyBytes = GetRandomBytes(32);
+        using Secret<byte> key = Secret<byte>.From(keyBytes);
+        string text = "test-span-char-secret-key";
+        byte[] expectedBytes = HMACSHA256.HashData(keyBytes, Encoding.UTF8.GetBytes(text));
+
+        // Act
+        HmacSha256Hash result = HmacSha256Hash.Compute(key, text.AsSpan());
+
+        // Assert
+        Assert.Equal(expectedBytes, result.AsSpan().ToArray());
+    }
+
+    [Fact]
+    public void Compute_String_ShouldMatchSpanCompute() {
+        // Arrange
+        byte[] key = GetRandomBytes(32);
+        string text = "string-vs-span-consistency";
+
+        // Act
+        HmacSha256Hash fromString = HmacSha256Hash.Compute(key.AsSpan(), text);
+        HmacSha256Hash fromSpan = HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan());
+
+        // Assert
+        Assert.Equal(fromString, fromSpan);
+    }
+
+    [Fact]
+    public void Compute_LargeString_ShouldMatchBytesCompute() {
+        // Arrange - String larger than 1024 bytes to exercise ArrayPool fallback
+        byte[] key = GetRandomBytes(32);
+        string text = new('B', 2048);
+        byte[] expectedBytes = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(text));
+
+        // Act
+        HmacSha256Hash result = HmacSha256Hash.Compute(key.AsSpan(), text.AsSpan());
+
+        // Assert
+        Assert.Equal(expectedBytes, result.AsSpan().ToArray());
     }
 
     #endregion

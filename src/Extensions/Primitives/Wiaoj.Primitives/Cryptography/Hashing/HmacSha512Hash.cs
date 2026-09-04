@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
+using Wiaoj.Primitives.Buffers;
 using Wiaoj.Primitives.JsonConverters;
 
 namespace Wiaoj.Primitives.Cryptography.Hashing;
@@ -94,11 +95,7 @@ public unsafe struct HmacSha512Hash
     /// </summary>
     public static HmacSha512Hash Compute(Secret<byte> key, string data, Encoding encoding) {
         Preca.ThrowIfNull(data);
-        Preca.ThrowIfNull(encoding);
-
-        // Kurye mantığı burada devreye giriyor. Secret'ı açıyor ve var olan string alan metoduna yönlendiriyor!
-        return key.Expose((data, encoding), static (state, keySpan) =>
-            Compute(keySpan, state.data, state.encoding));
+        return Compute(key, data.AsSpan(), encoding);
     }
 
     /// <summary>
@@ -130,8 +127,7 @@ public unsafe struct HmacSha512Hash
     /// <returns>A <see cref="HmacSha512Hash"/> instance.</returns>
     public static HmacSha512Hash Compute(ReadOnlySpan<byte> key, string data, Encoding encoding) {
         Preca.ThrowIfNull(data);
-        Preca.ThrowIfNull(encoding);
-        return Compute(key, encoding.GetBytes(data));
+        return Compute(key, data.AsSpan(), encoding);
     }
 
     /// <summary>
@@ -142,6 +138,61 @@ public unsafe struct HmacSha512Hash
     /// <returns>A <see cref="HmacSha512Hash"/> instance.</returns>
     public static HmacSha512Hash Compute(ReadOnlySpan<byte> key, string data) {
         return Compute(key, data, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the HMAC-SHA512 hash of a character span using the specified key and UTF-8 encoding.
+    /// </summary>
+    /// <param name="key">The cryptographic key.</param>
+    /// <param name="data">The character span to hash.</param>
+    /// <returns>A <see cref="HmacSha512Hash"/> instance.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static HmacSha512Hash Compute(ReadOnlySpan<byte> key, ReadOnlySpan<char> data) {
+        return Compute(key, data, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the HMAC-SHA512 hash of a character span using the specified key and encoding.
+    /// This method is allocation-free for inputs up to 1024 bytes after encoding.
+    /// </summary>
+    /// <param name="key">The cryptographic key.</param>
+    /// <param name="data">The character span to hash.</param>
+    /// <param name="encoding">The character encoding used to convert the characters to bytes.</param>
+    /// <returns>A <see cref="HmacSha512Hash"/> instance.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [SkipLocalsInit]
+    public static HmacSha512Hash Compute(ReadOnlySpan<byte> key, ReadOnlySpan<char> data, Encoding encoding) {
+        Preca.ThrowIfNull(encoding);
+        int maxByteCount = encoding.GetMaxByteCount(data.Length);
+        using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+        int bytesWritten = encoding.GetBytes(data, buffer.Span);
+        return Compute(key, buffer.Span[..bytesWritten]);
+    }
+
+    /// <summary>
+    /// Computes the HMAC-SHA512 hash of a character span using a secure secret key and UTF-8 encoding.
+    /// </summary>
+    /// <param name="key">The secret key stored in unmanaged memory.</param>
+    /// <param name="data">The character span to hash.</param>
+    /// <returns>A <see cref="HmacSha512Hash"/> instance.</returns>
+    public static HmacSha512Hash Compute(Secret<byte> key, ReadOnlySpan<char> data) {
+        return Compute(key, data, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Computes the HMAC-SHA512 hash of a character span using a secure secret key and the specified encoding.
+    /// </summary>
+    /// <param name="key">The secret key stored in unmanaged memory.</param>
+    /// <param name="data">The character span to hash.</param>
+    /// <param name="encoding">The character encoding used to convert the characters to bytes.</param>
+    /// <returns>A <see cref="HmacSha512Hash"/> instance.</returns>
+    [SkipLocalsInit]
+    public static HmacSha512Hash Compute(Secret<byte> key, ReadOnlySpan<char> data, Encoding encoding) {
+        Preca.ThrowIfNull(encoding);
+        int maxByteCount = encoding.GetMaxByteCount(data.Length);
+        using ValueBuffer<byte> buffer = new(maxByteCount, stackalloc byte[1024]);
+        int bytesWritten = encoding.GetBytes(data, buffer.Span);
+        return Compute(key, buffer.Span[..bytesWritten]);
     }
 
     #endregion
