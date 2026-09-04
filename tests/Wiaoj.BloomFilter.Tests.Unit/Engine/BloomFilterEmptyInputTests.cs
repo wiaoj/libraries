@@ -75,6 +75,24 @@ public class BloomFilterEmptyInputTests {
             Assert.True(containsBytes);
             Assert.True(containsChars);
         }
+
+        [Fact]
+        public void Should_HandleEmptySpan_InRotatingBloomFilter() {
+            // Arrange
+            BloomFilterContext context = CreateContext();
+            BloomFilterConfiguration config = this._configFactory.Create(FilterName.Parse("empty-rotating-test"), 1_000, 0.01);
+            using RotatingBloomFilter filter = new(config, context, windowSize: TimeSpan.FromHours(1), shardCount: 2);
+
+            // Act
+            filter.Add(ReadOnlySpan<byte>.Empty);
+            bool containsBytes = filter.Contains(ReadOnlySpan<byte>.Empty);
+            filter.Add(ReadOnlySpan<char>.Empty);
+            bool containsChars = filter.Contains(ReadOnlySpan<char>.Empty);
+
+            // Assert
+            Assert.True(containsBytes);
+            Assert.True(containsChars);
+        }
     }
 
     public sealed class LargeBufferFallback : BloomFilterEmptyInputTests {

@@ -121,4 +121,72 @@ public sealed class BloomFilterConfigurationValidationTests {
 
         Assert.ThrowsAny<ArgumentException>(() => def.Validate("bad-saturation"));
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void Should_ThrowException_When_FilterNameIsNullOrEmptyOrWhitespace(string? filterName) {
+        FilterDefinition def = new() {
+            ExpectedItems = 10_000,
+            ErrorRate = 0.01,
+            Type = BloomFilterType.InMemory
+        };
+
+        Assert.ThrowsAny<ArgumentException>(() => def.Validate(filterName!));
+    }
+
+    [Fact]
+    public void Should_ThrowArgumentOutOfRangeException_When_AutoSaveIntervalIsZeroOrNegative() {
+        BloomFilterOptions options = new();
+        options.Lifecycle.AutoSaveInterval = TimeSpan.Zero;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.Validate());
+
+        options.Lifecycle.AutoSaveInterval = TimeSpan.FromSeconds(-5);
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.Validate());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-100)]
+    public void Should_ThrowArgumentOutOfRangeException_When_ShardingThresholdBytesIsZeroOrNegative(long threshold) {
+        BloomFilterOptions options = new();
+        options.Lifecycle.ShardingThresholdBytes = threshold;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void Should_CascadeValidationToFilters_When_OptionsValidateIsCalled() {
+        BloomFilterOptions options = new();
+        options.Filters["invalid-filter"] = new FilterDefinition {
+            ExpectedItems = -10,
+            ErrorRate = 0.01,
+            Type = BloomFilterType.InMemory
+        };
+
+        Assert.ThrowsAny<ArgumentException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void Should_PassOptionsValidation_When_AllOptionsAndFiltersAreValid() {
+        BloomFilterOptions options = new();
+        options.Filters["valid-sharded"] = new FilterDefinition {
+            ExpectedItems = 1_000_000,
+            ErrorRate = 0.01,
+            Type = BloomFilterType.Sharded,
+            ShardCount = 8
+        };
+        options.Filters["valid-scalable"] = new FilterDefinition {
+            ExpectedItems = 500_000,
+            ErrorRate = 0.001,
+            Type = BloomFilterType.Scalable,
+            GrowthRate = 2.0,
+            SaturationThreshold = 0.50
+        };
+
+        // Should not throw
+        options.Validate();
+    }
 }

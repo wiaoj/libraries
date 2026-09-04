@@ -53,5 +53,23 @@ public class ShardedBloomFilterValidationTests {
                 using ShardedBloomFilter filter = new(config, this._context);
             });
         }
+
+        [Theory]
+        [InlineData(3)]
+        [InlineData(5)]
+        [InlineData(6)]
+        [InlineData(7)]
+        [InlineData(9)]
+        [InlineData(10)]
+        [InlineData(12)]
+        public void Should_ThrowArgumentException_When_ShardCountIsNotPowerOfTwo(int nonPowerOfTwoShards) {
+            Assert.ThrowsAny<ArgumentException>(() => {
+                BloomFilterConfiguration config = this._configFactory
+                    .Create(FilterName.Parse("non-pow2-shards"), 1_000, 0.01)
+                    .WithShardCount(nonPowerOfTwoShards);
+
+                using ShardedBloomFilter filter = new(config, this._context);
+            });
+        }
     }
 }

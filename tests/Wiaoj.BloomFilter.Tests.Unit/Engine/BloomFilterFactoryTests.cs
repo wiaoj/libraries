@@ -66,6 +66,22 @@ public class BloomFilterFactoryTests {
         }
 
         [Fact]
+        public async Task Should_ThrowValidationException_When_FilterConfigurationIsInvalid() {
+            // Arrange
+            BloomFilterOptions options = new();
+            options.Filters["bad-filter"] = new FilterDefinition {
+                ExpectedItems = 10_000,
+                ErrorRate = 0.01,
+                Type = BloomFilterType.Sharded,
+                ShardCount = 3 // Invalid non-power of 2
+            };
+            BloomFilterFactory factory = CreateFactory(options);
+
+            // Act & Assert: Factory must validate the definition before creating
+            await Assert.ThrowsAnyAsync<ArgumentException>(() => factory.Create("bad-filter", TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
         public async Task Should_TriggerAutoSeeder_When_DataIsCorruptOrEmpty() {
             // Arrange
             FilterName filterName = FilterName.Parse("corrupt-filter");
