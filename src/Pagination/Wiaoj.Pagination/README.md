@@ -151,6 +151,24 @@ bool exists = lookup.TryGetValue("item_99".AsSpan(), out string? cached);
 
 ---
 
+### 6. Standard Query Parameters (`PaginationParameters`)
+
+Central constants defining query string parameter names for offset and keyset pagination:
+
+```csharp
+using Wiaoj.Pagination;
+
+// Available constants:
+// PaginationParameters.Page      => "page"
+// PaginationParameters.Size      => "size"
+// PaginationParameters.Cursor    => "cursor"
+// PaginationParameters.Direction => "direction"
+// PaginationParameters.Limit     => "limit"
+// PaginationParameters.All       => ["page", "size", "cursor", "direction", "limit"]
+```
+
+---
+
 ## JSON Serialization
 
 Pre-configured `System.Text.Json` converters are registered directly on types.

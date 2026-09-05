@@ -117,6 +117,24 @@ if (SignedCursorToken.TryParse(requestCursorString, out var signed) &&
 
 ---
 
+### 4. Standard Query Parameters (`PaginationParameters`)
+
+Central constants defining HTTP query string parameter names across offset and keyset pagination:
+
+```csharp
+using Wiaoj.Pagination;
+
+// Available constants:
+// PaginationParameters.Page      => "page"
+// PaginationParameters.Size      => "size"
+// PaginationParameters.Cursor    => "cursor"
+// PaginationParameters.Direction => "direction"
+// PaginationParameters.Limit     => "limit"
+// PaginationParameters.All       => ["page", "size", "cursor", "direction", "limit"]
+```
+
+---
+
 <!-- ## Repository Structure
 
 ```text

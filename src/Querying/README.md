@@ -144,9 +144,9 @@ Register the query infrastructure, ignored parameters, and schemas using the `IQ
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-// Register querying engine, global ignored parameters (e.g. pagination), and schemas
+// Register querying engine, global ignored parameters (e.g. PaginationParameters.All or custom strings), and schemas
 builder.Services.AddQuerying()
-    .IgnoreParameters("page", "size", "cursor", "direction")
+    .IgnoreParameters(PaginationParameters.All)
     .AddSchema<Product, ProductQuerySchema>();
 
 // Native ASP.NET Core RFC 7807 Problem Details customization
@@ -158,7 +158,7 @@ builder.Services.AddProblemDetails(options => {
 
 // Or scan an assembly:
 // builder.Services.AddQuerying()
-//     .IgnoreParameters("page", "size", "cursor", "direction")
+//     .IgnoreParameters(PaginationParameters.All)
 //     .AddSchemasFromAssemblyContaining<Program>();
 ```
 

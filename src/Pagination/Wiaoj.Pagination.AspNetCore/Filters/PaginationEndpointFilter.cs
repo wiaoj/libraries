@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Primitives;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Wiaoj.Pagination;
 using Wiaoj.Pagination.AspNetCore.Caching;
 using Wiaoj.Pagination.AspNetCore.Linking;
 using Wiaoj.Preconditions;
@@ -130,8 +131,8 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
     }
 
     private static string BuildOffsetUri(PathString path, IQueryCollection query, int pageNumber) {
-        if(query.Count == 0 || (query.Count == 1 && query.ContainsKey("page"))) {
-            return $"{path}?page={pageNumber}";
+        if(query.Count == 0 || (query.Count == 1 && query.ContainsKey(PaginationParameters.Page))) {
+            return $"{path}?{PaginationParameters.Page}={pageNumber}";
         }
 
         StringBuilder sb = new(path.Value?.Length + 32 ?? 32);
@@ -139,14 +140,14 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
         char separator = '?';
 
         foreach(KeyValuePair<string, StringValues> pair in query) {
-            if(string.Equals(pair.Key, "page", StringComparison.OrdinalIgnoreCase))
+            if(string.Equals(pair.Key, PaginationParameters.Page, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             sb.Append(separator).Append(pair.Key).Append('=').Append(pair.Value);
             separator = '&';
         }
 
-        sb.Append(separator).Append("page=").Append(pageNumber);
+        sb.Append(separator).Append(PaginationParameters.Page).Append('=').Append(pageNumber);
         return sb.ToString();
     }
 
@@ -156,16 +157,16 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
         char separator = '?';
 
         foreach(KeyValuePair<string, StringValues> pair in query) {
-            if(string.Equals(pair.Key, "cursor", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(pair.Key, "direction", StringComparison.OrdinalIgnoreCase))
+            if(string.Equals(pair.Key, PaginationParameters.Cursor, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(pair.Key, PaginationParameters.Direction, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             sb.Append(separator).Append(pair.Key).Append('=').Append(pair.Value);
             separator = '&';
         }
 
-        sb.Append(separator).Append("cursor=").Append(cursor.Value)
-          .Append("&direction=").Append(direction);
+        sb.Append(separator).Append(PaginationParameters.Cursor).Append('=').Append(cursor.Value)
+          .Append('&').Append(PaginationParameters.Direction).Append('=').Append(direction);
 
         return sb.ToString();
     }

@@ -148,15 +148,15 @@ Register the engine and schemas using the `IQueryingBuilder` API:
 using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.Querying;
 
-// 1. Standard registration with class-based schema and ignored parameters
+// 1. Standard registration with class-based schema and ignored parameters (e.g. PaginationParameters.All)
 services.AddQuerying()
-    .IgnoreParameters("page", "size", "cursor", "direction")
+    .IgnoreParameters(PaginationParameters.All)
     .Configure(options => options.AllowBodyPayloads = true)
     .AddSchema<Product, ProductQuerySchema>();
 
 // 2. Or scan an assembly for all QuerySchema<T> implementations:
 // services.AddQuerying()
-//     .IgnoreParameters("page", "size", "cursor", "direction")
+//     .IgnoreParameters(PaginationParameters.All)
 //     .AddSchemasFromAssemblyContaining<Program>();
 
 // 3. Or inline configuration:
