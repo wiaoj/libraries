@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -26,6 +26,59 @@ public static class QueryingBuilderExtensions {
         Preca.ThrowIfNull(configure);
 
         builder.Services.Configure(configure);
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures one or more parameter names to be ignored during URL query string binding.
+    /// </summary>
+    /// <param name="builder">The query engine builder.</param>
+    /// <param name="parameters">The parameter names to ignore.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IQueryingBuilder IgnoreParameters(
+        this IQueryingBuilder builder,
+        params ReadOnlySpan<string> parameters) {
+        Preca.ThrowIfNull(builder);
+
+        if(parameters.IsEmpty) {
+            return builder;
+        }
+
+        string[] copy = parameters.ToArray();
+        builder.Services.Configure<QueryOptions>(options => {
+            for(int i = 0; i < copy.Length; i++) {
+                string? param = copy[i];
+                if(!string.IsNullOrWhiteSpace(param)) {
+                    options.IgnoredParameters.Add(param.Trim());
+                }
+            }
+        });
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures parameter names to be ignored during URL query string binding.
+    /// </summary>
+    /// <param name="builder">The query engine builder.</param>
+    /// <param name="parameters">The collection of parameter names to ignore.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public static IQueryingBuilder IgnoreParameters(
+        this IQueryingBuilder builder,
+        IEnumerable<string> parameters) {
+        Preca.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        string[] copy = parameters as string[] ?? [.. parameters];
+        builder.Services.Configure<QueryOptions>(options => {
+            for(int i = 0; i < copy.Length; i++) {
+                string? param = copy[i];
+                if(!string.IsNullOrWhiteSpace(param)) {
+                    options.IgnoredParameters.Add(param.Trim());
+                }
+            }
+        });
+
         return builder;
     }
 

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -68,7 +68,7 @@ internal static class QueryRequestBinder {
             return QueryRequest.Empty;
         }
 
-        return BindFromQueryCollection(query);
+        return BindFromQueryCollection(query, options);
     }
 
     private static bool IsBodyQuerySupported(string method) {
@@ -169,10 +169,11 @@ internal static class QueryRequestBinder {
         return array.Length > 0 ? array : DefaultParsers;
     }
 
-    private static QueryRequest BindFromQueryCollection(IQueryCollection query) {
+    private static QueryRequest BindFromQueryCollection(IQueryCollection query, QueryOptions? options) {
         Q q = default;
         Sort sort = default;
         List<FilterConditionNode>? filters = null;
+        HashSet<string>? ignored = options?.IgnoredParameters;
 
         foreach((string? key, Microsoft.Extensions.Primitives.StringValues stringValues) in query) {
             if(string.IsNullOrWhiteSpace(key)) {
@@ -190,6 +191,10 @@ internal static class QueryRequestBinder {
                 if(Sort.TryParse(stringValues.ToString(), out Sort parsedSort)) {
                     sort = parsedSort;
                 }
+                continue;
+            }
+
+            if(ignored is { Count: > 0 } && IsIgnoredParameter(trimmedKey, ignored)) {
                 continue;
             }
 
@@ -219,5 +224,19 @@ internal static class QueryRequestBinder {
         }
 
         return new QueryRequest(q: q, sort: sort, filters: filters);
+    }
+
+    private static bool IsIgnoredParameter(string key, HashSet<string> ignoredParameters) {
+        if(ignoredParameters.Contains(key)) {
+            return true;
+        }
+
+        int bracketIndex = key.IndexOf(QuerySyntax.OpenBracket);
+        if(bracketIndex > 0) {
+            string baseKey = key[..bracketIndex].Trim();
+            return ignoredParameters.Contains(baseKey);
+        }
+
+        return false;
     }
 }

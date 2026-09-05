@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Primitives;
@@ -808,6 +808,75 @@ public class QueryRequestBinderTests {
             FilterConditionNode filter = Assert.Single(result.Filters);
             Assert.Equal(expectedField, filter.Field);
             Assert.Equal(expectedValue, filter.RawValue);
+        }
+    }
+
+    public sealed class IgnoredQueryParameters : QueryRequestBinderTests {
+        [Fact]
+        public async Task Should_Ignore_Configured_Parameters_From_Query_String() {
+            // Arrange
+            DefaultHttpContext context = CreateContextWithServices(options => {
+                options.IgnoredParameters.Add("page");
+                options.IgnoredParameters.Add("size");
+            });
+            context.Request.QueryString = new QueryString("?name=Laptop&page=1&size=20");
+
+            // Act
+            QueryRequest request = await QueryRequestBinder.BindAsync(context);
+
+            // Assert
+            Assert.Single(request.Filters);
+            Assert.Equal("name", request.Filters[0].Field);
+            Assert.Equal("Laptop", request.Filters[0].RawValue);
+        }
+
+        [Fact]
+        public async Task Should_Ignore_Bracketed_Configured_Parameters() {
+            // Arrange
+            DefaultHttpContext context = CreateContextWithServices(options => {
+                options.IgnoredParameters.Add("page");
+                options.IgnoredParameters.Add("size");
+            });
+            context.Request.QueryString = new QueryString("?name=Laptop&page[eq]=1&size[gte]=20");
+
+            // Act
+            QueryRequest request = await QueryRequestBinder.BindAsync(context);
+
+            // Assert
+            Assert.Single(request.Filters);
+            Assert.Equal("name", request.Filters[0].Field);
+        }
+
+        [Fact]
+        public async Task Should_Bind_Parameter_When_Not_Configured_In_Ignored_Parameters() {
+            // Arrange: No ignored parameters configured
+            DefaultHttpContext context = CreateContextWithServices();
+            context.Request.QueryString = new QueryString("?size=XL");
+
+            // Act
+            QueryRequest request = await QueryRequestBinder.BindAsync(context);
+
+            // Assert
+            Assert.Single(request.Filters);
+            Assert.Equal("size", request.Filters[0].Field);
+            Assert.Equal("XL", request.Filters[0].RawValue);
+        }
+
+        [Fact]
+        public async Task Should_Ignore_Parameters_Case_Insensitively() {
+            // Arrange
+            DefaultHttpContext context = CreateContextWithServices(options => {
+                options.IgnoredParameters.Add("PAGE");
+                options.IgnoredParameters.Add("Size");
+            });
+            context.Request.QueryString = new QueryString("?name=Laptop&page=1&SIZE=20");
+
+            // Act
+            QueryRequest request = await QueryRequestBinder.BindAsync(context);
+
+            // Assert
+            Assert.Single(request.Filters);
+            Assert.Equal("name", request.Filters[0].Field);
         }
     }
 

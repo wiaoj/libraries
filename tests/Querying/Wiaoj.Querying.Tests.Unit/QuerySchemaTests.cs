@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Querying.Tests.Unit;
+namespace Wiaoj.Querying.Tests.Unit;
 
 /// <summary>
 /// Comprehensive unit test suite for <see cref="QuerySchema{T}"/> validating whitelist rules, 
@@ -624,6 +624,45 @@ public class QuerySchemaTests {
 
             // Act & Assert
             Assert.ThrowsAny<ArgumentNullException>(() => schema.DefaultSort<decimal>(null!));
+        }
+    }
+
+    public sealed class IgnoredParametersConfiguration : QuerySchemaTests {
+        [Fact]
+        public void Should_Register_Ignored_Parameters_With_Span_Fluently() {
+            // Arrange & Act
+            var schema = new QuerySchema<ComplexProduct>()
+                .IgnoreParameters("page", "size");
+
+            // Assert
+            Assert.True(schema.IsParameterIgnored("page"));
+            Assert.True(schema.IsParameterIgnored("PAGE"));
+            Assert.True(schema.IsParameterIgnored("size"));
+            Assert.False(schema.IsParameterIgnored("title"));
+        }
+
+        [Fact]
+        public void Should_Register_Ignored_Parameters_With_Enumerable() {
+            // Arrange
+            List<string> list = ["cursor", "limit"];
+
+            // Act
+            var schema = new QuerySchema<ComplexProduct>()
+                .IgnoreParameters(list);
+
+            // Assert
+            Assert.True(schema.IsParameterIgnored("cursor"));
+            Assert.True(schema.IsParameterIgnored("limit"));
+            Assert.False(schema.IsParameterIgnored("offset"));
+        }
+
+        [Fact]
+        public void Should_Throw_ArgumentNullException_When_Enumerable_Is_Null() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act & Assert
+            Assert.ThrowsAny<ArgumentNullException>(() => schema.IgnoreParameters((IEnumerable<string>)null!));
         }
     }
 }

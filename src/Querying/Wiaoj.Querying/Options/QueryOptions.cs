@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Querying;
+namespace Wiaoj.Querying;
 
 /// <summary>
 /// Global configuration options for query processing and payload binding.
@@ -24,4 +24,11 @@ public sealed class QueryOptions {
     /// to allow larger query payloads application-wide.
     /// </remarks>
     public int? MaxPayloadBytes { get; set; }
+
+    /// <summary>
+    /// Gets the collection of query parameter names to ignore during URL query string binding.
+    /// Parameters in this collection will not be bound into <see cref="FilterConditionNode"/> filters.
+    /// Case-insensitive by default.
+    /// </summary>
+    public HashSet<string> IgnoredParameters { get; } = new(StringComparer.OrdinalIgnoreCase);
 }

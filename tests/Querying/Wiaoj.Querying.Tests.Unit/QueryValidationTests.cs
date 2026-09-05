@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Querying.Tests.Unit;
+namespace Wiaoj.Querying.Tests.Unit;
 
 /// <summary>
 /// Unit test suite for <see cref="QuerySchema{T}.Validate"/> verifying structured validation error codes,
@@ -292,6 +292,65 @@ public class QueryValidationTests {
             Assert.True(errorDict.ContainsKey("price"));
             Assert.True(errorDict.ContainsKey("UnregisteredField"));
             Assert.True(errorDict.ContainsKey("UnregisteredSortField"));
+        }
+    }
+
+    public sealed class IgnoredParametersValidation : QueryValidationTests {
+        [Fact]
+        public void Should_Pass_When_Unregistered_Field_Is_In_Ignored_Parameters() {
+            // Arrange
+            var schema = CreateSampleSchema().IgnoreParameters("page", "size", "customParam");
+            var request = new QueryRequest(filters: [
+                FilterConditionNode.Equal("name", "Laptop"),
+                FilterConditionNode.Equal("page", "1"),
+                FilterConditionNode.Equal("size", "20"),
+                FilterConditionNode.Equal("customParam", "abc")
+            ]);
+
+            // Act
+            QueryValidationResult result = schema.Validate(request);
+
+            // Assert
+            Assert.True(result.IsValid);
+            Assert.Empty(result.Errors);
+        }
+
+        [Fact]
+        public void Should_Not_Count_Ignored_Parameters_Towards_MaxFilterCount() {
+            // Arrange: MaxFilters is 3. We provide 2 real filters + 3 ignored filters = 5 total.
+            var schema = CreateSampleSchema().IgnoreParameters("page", "size", "cursor");
+            var request = new QueryRequest(filters: [
+                FilterConditionNode.Equal("name", "Laptop"),
+                FilterConditionNode.GreaterThanOrEqual("price", 1000),
+                FilterConditionNode.Equal("page", "1"),
+                FilterConditionNode.Equal("size", "20"),
+                FilterConditionNode.Equal("cursor", "xyz")
+            ]);
+
+            // Act
+            QueryValidationResult result = schema.Validate(request);
+
+            // Assert: Real filters are 2 <= 3, so validation should pass without MaxFilterCountExceeded.
+            Assert.True(result.IsValid);
+            Assert.Empty(result.Errors);
+        }
+
+        [Fact]
+        public void Should_Match_Ignored_Parameters_Case_Insensitively() {
+            // Arrange
+            var schema = CreateSampleSchema().IgnoreParameters("PAGE", "Size");
+            var request = new QueryRequest(filters: [
+                FilterConditionNode.Equal("name", "Laptop"),
+                FilterConditionNode.Equal("page", "1"),
+                FilterConditionNode.Equal("SIZE", "20")
+            ]);
+
+            // Act
+            QueryValidationResult result = schema.Validate(request);
+
+            // Assert
+            Assert.True(result.IsValid);
+            Assert.Empty(result.Errors);
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -41,6 +41,10 @@ internal static class FilterExpressionBuilder {
             }
 
             FilterConditionNode filter = filters[i];
+            if(schema.IsParameterIgnored(filter.Field)) {
+                continue;
+            }
+
             if(!schema.TryGetProperty(filter.Field, out QueryProperty<T>? prop) || !schema.IsFilterAllowed(filter.Field, filter.Operator)) {
                 continue;
             }

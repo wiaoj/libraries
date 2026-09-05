@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Text;
 using Wiaoj.Querying.Expressions;
@@ -18,6 +18,7 @@ public class QuerySchema<T> {
     private readonly List<Expression<Func<T, bool>>> _requiredFilters = [];
     private readonly List<(string MemberPath, Expression<Func<T, bool>> Predicate)> _defaultFilters = [];
     private readonly List<Func<IQueryable<T>, bool, IQueryable<T>>> _defaultSortAppliers = [];
+    private readonly HashSet<string> _ignoredParameters = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets the maximum allowed number of filters per request. Defaults to 20.
@@ -95,6 +96,50 @@ public class QuerySchema<T> {
     public QuerySchema<T> IgnoreEmptyFilters(bool ignore = true) {
         this.IgnoreEmptyFilterValues = ignore;
         return this;
+    }
+
+    /// <summary>
+    /// Configures one or more parameter names to be ignored during query validation.
+    /// Ignored parameters will not produce validation errors when present in a query request.
+    /// </summary>
+    /// <param name="parameters">The parameter names to ignore.</param>
+    /// <returns>The current schema instance for method chaining.</returns>
+    public QuerySchema<T> IgnoreParameters(params ReadOnlySpan<string> parameters) {
+        for(int i = 0; i < parameters.Length; i++) {
+            string? param = parameters[i];
+            if(!string.IsNullOrWhiteSpace(param)) {
+                this._ignoredParameters.Add(param.Trim());
+            }
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Configures parameter names to be ignored during query validation.
+    /// Ignored parameters will not produce validation errors when present in a query request.
+    /// </summary>
+    /// <param name="parameters">The collection of parameter names to ignore.</param>
+    /// <returns>The current schema instance for method chaining.</returns>
+    public QuerySchema<T> IgnoreParameters(IEnumerable<string> parameters) {
+        ArgumentNullException.ThrowIfNull(parameters);
+        foreach(string? param in parameters) {
+            if(!string.IsNullOrWhiteSpace(param)) {
+                this._ignoredParameters.Add(param.Trim());
+            }
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Determines whether the specified parameter name is configured to be ignored by this schema.
+    /// </summary>
+    /// <param name="parameterName">The parameter name to check.</param>
+    /// <returns><see langword="true"/> if the parameter is ignored; otherwise, <see langword="false"/>.</returns>
+    public bool IsParameterIgnored(string parameterName) {
+        if(string.IsNullOrWhiteSpace(parameterName)) {
+            return false;
+        }
+        return this._ignoredParameters.Contains(parameterName.Trim());
     }
 
     /// <summary>
@@ -257,12 +302,24 @@ public class QuerySchema<T> {
         }
 
         // 2. Security limits: MaxFilterCount
-        if(request.Filters.Count > this.MaxFilterCount) {
+        int activeFilterCount = 0;
+        if(this._ignoredParameters.Count == 0) {
+            activeFilterCount = request.Filters.Count;
+        }
+        else {
+            for(int i = 0; i < request.Filters.Count; i++) {
+                if(!this._ignoredParameters.Contains(request.Filters[i].Field)) {
+                    activeFilterCount++;
+                }
+            }
+        }
+
+        if(activeFilterCount > this.MaxFilterCount) {
             errors ??= [];
             errors.Add(new QueryValidationError(
                 propertyName: null,
                 errorCode: QueryValidationErrorCode.MaxFilterCountExceeded,
-                message: $"The request contains {request.Filters.Count} filters, which exceeds the maximum limit of {this.MaxFilterCount}."));
+                message: $"The request contains {activeFilterCount} filters, which exceeds the maximum limit of {this.MaxFilterCount}."));
         }
 
         // 3. Security limits: MaxSortFieldsCount
@@ -289,6 +346,10 @@ public class QuerySchema<T> {
         // 5. Validate Filters
         for(int i = 0; i < request.Filters.Count; i++) {
             FilterConditionNode filter = request.Filters[i];
+
+            if(this._ignoredParameters.Contains(filter.Field)) {
+                continue;
+            }
 
             if(!TryGetProperty(filter.Field, out QueryProperty<T>? prop) || !prop.IsFilterable) {
                 errors ??= [];
