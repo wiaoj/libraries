@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -46,6 +46,34 @@ public class QueryValidationEndpointFilterTests {
                 ]);
 
             Query<Item> query = new(validRequest);
+
+            DefaultHttpContext httpContext = new();
+            DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
+            bool nextCalled = false;
+
+            // Act
+            object? result = await filter.InvokeAsync(filterContext, _ => {
+                nextCalled = true;
+                return ValueTask.FromResult<object?>(Results.Ok("DataFetched"));
+            });
+
+            // Assert
+            Assert.True(nextCalled);
+            Ok<string> okResult = Assert.IsType<Ok<string>>(result);
+            Assert.Equal("DataFetched", okResult.Value);
+        }
+
+        [Fact]
+        public async Task Should_Invoke_Next_Delegate_When_QueryRequest_Contains_Ignored_Parameters() {
+            // Arrange
+            QuerySchema<Item> schema = CreateSampleSchema().IgnoreParameters("page", "size");
+            QueryValidationEndpointFilter<Item> filter = new(schema);
+            QueryRequest requestWithIgnored = new(filters: [
+                FilterConditionNode.Equal("title", "Workstation"),
+                FilterConditionNode.Equal("page", "1"),
+                FilterConditionNode.Equal("size", "20")
+            ]);
+            Query<Item> query = new(requestWithIgnored);
 
             DefaultHttpContext httpContext = new();
             DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);

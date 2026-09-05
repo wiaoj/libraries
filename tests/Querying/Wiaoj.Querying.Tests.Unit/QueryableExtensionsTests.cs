@@ -1,4 +1,4 @@
-﻿using Wiaoj.Querying.Extensions;
+using Wiaoj.Querying.Extensions;
 
 namespace Wiaoj.Querying.Tests.Unit;
 
@@ -962,6 +962,45 @@ public class QueryableExtensionsTests {
 
             // Assert: items 1 and 2 (Germany), item 5's null Country safely excluded rather than throwing
             Assert.Equal(2, result.Count);
+        }
+    }
+
+    public sealed class IgnoredParametersFilterApplication : QueryableExtensionsTests {
+        [Fact]
+        public void Should_Not_Apply_Ignored_Parameters_And_Not_Consume_MaxFilterCount() {
+            // Arrange: MaxFilterCount is 1. Request has 1 ignored filter ("page") and 1 valid filter ("Name").
+            QuerySchema<Item> schema = CreateDefaultSchema()
+                .IgnoreParameters("page", "size")
+                .ConfigureLimits(maxFilters: 1, maxInValues: 10, maxSortFields: 5);
+
+            QueryRequest request = new(filters: [
+                new("page", QueryOperator.Equal, "1"),
+                new("Name", QueryOperator.Equal, "Alpha Laptop")
+            ]);
+
+            // Act
+            List<Item> result = SeedItems.AsQueryable().ApplyQuery(request, schema).ToList();
+
+            // Assert: "page" was ignored and did not consume the limit, "Name" was applied.
+            Item single = Assert.Single(result);
+            Assert.Equal("Alpha Laptop", single.Name);
+        }
+
+        [Fact]
+        public void Should_Skip_Filtering_When_Existing_Property_Is_Configured_As_Ignored() {
+            // Arrange: Property "Price" exists and is filterable in default schema, but explicitly ignored here.
+            QuerySchema<Item> schema = CreateDefaultSchema()
+                .IgnoreParameters("Price");
+
+            QueryRequest request = new(filters: [
+                new("Price", QueryOperator.Equal, "2500")
+            ]);
+
+            // Act
+            List<Item> result = SeedItems.AsQueryable().ApplyQuery(request, schema).ToList();
+
+            // Assert: Price filter is skipped; all items returned.
+            Assert.Equal(SeedItems.Count, result.Count);
         }
     }
 }

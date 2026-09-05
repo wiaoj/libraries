@@ -878,6 +878,57 @@ public class QueryRequestBinderTests {
             Assert.Single(request.Filters);
             Assert.Equal("name", request.Filters[0].Field);
         }
+
+        [Fact]
+        public async Task Should_Produce_Empty_Request_When_All_Query_Parameters_Are_Ignored() {
+            // Arrange
+            DefaultHttpContext context = CreateContextWithServices(options => {
+                options.IgnoredParameters.Add("page");
+                options.IgnoredParameters.Add("size");
+            });
+            context.Request.QueryString = new QueryString("?page=1&size=20");
+
+            // Act
+            QueryRequest request = await QueryRequestBinder.BindAsync(context);
+
+            // Assert
+            Assert.True(request.IsEmpty);
+            Assert.Empty(request.Filters);
+        }
+
+        [Fact]
+        public async Task Should_Ignore_Unary_And_Empty_Valued_Parameters() {
+            // Arrange
+            DefaultHttpContext context = CreateContextWithServices(options => {
+                options.IgnoredParameters.Add("page");
+                options.IgnoredParameters.Add("cursor");
+            });
+            context.Request.QueryString = new QueryString("?name=Laptop&page&cursor=");
+
+            // Act
+            QueryRequest request = await QueryRequestBinder.BindAsync(context);
+
+            // Assert
+            FilterConditionNode filter = Assert.Single(request.Filters);
+            Assert.Equal("name", filter.Field);
+            Assert.Equal("Laptop", filter.RawValue);
+        }
+
+        [Fact]
+        public async Task Should_Safely_Handle_Bracketed_Ignored_Edge_Cases() {
+            // Arrange
+            DefaultHttpContext context = CreateContextWithServices(options => {
+                options.IgnoredParameters.Add("page");
+            });
+            context.Request.QueryString = new QueryString("?name=Laptop&page[eq]=&[eq]=1");
+
+            // Act
+            QueryRequest request = await QueryRequestBinder.BindAsync(context);
+
+            // Assert
+            Assert.Contains(request.Filters, f => f.Field == "name" && f.RawValue == "Laptop");
+            Assert.DoesNotContain(request.Filters, f => f.Field == "page");
+        }
     }
 
     #endregion

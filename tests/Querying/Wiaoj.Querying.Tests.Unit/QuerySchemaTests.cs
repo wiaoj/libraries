@@ -664,5 +664,25 @@ public class QuerySchemaTests {
             // Act & Assert
             Assert.ThrowsAny<ArgumentNullException>(() => schema.IgnoreParameters((IEnumerable<string>)null!));
         }
+
+        [Fact]
+        public void Should_Safely_Handle_Null_And_Whitespace_Inputs() {
+            // Arrange
+            var schema = new QuerySchema<ComplexProduct>();
+
+            // Act & Assert: checking null or whitespace names returns false safely
+            Assert.False(schema.IsParameterIgnored(null!));
+            Assert.False(schema.IsParameterIgnored(string.Empty));
+            Assert.False(schema.IsParameterIgnored("   "));
+
+            // Act: passing whitespace/null in span overload does not crash
+            schema.IgnoreParameters("   ", string.Empty, null!);
+            Assert.False(schema.IsParameterIgnored(string.Empty));
+
+            // Act: passing dirty enumerable filters out null and whitespace elements
+            schema.IgnoreParameters(["page", null!, "   ", "size"]);
+            Assert.True(schema.IsParameterIgnored("page"));
+            Assert.True(schema.IsParameterIgnored("size"));
+        }
     }
 }

@@ -74,6 +74,23 @@ public class QueryOptionsTests {
     }
 
     [Fact]
+    public void Builder_IgnoreParameters_With_Enumerable_Should_Ignore_Whitespace_Or_Null_Elements() {
+        // Arrange
+        ServiceCollection services = new();
+        IQueryingBuilder builder = services.AddQuerying();
+
+        // Act
+        builder.IgnoreParameters((IEnumerable<string>)["cursor", "   ", null!, "limit"]);
+        ServiceProvider provider = services.BuildServiceProvider();
+        QueryOptions options = provider.GetRequiredService<IOptions<QueryOptions>>().Value;
+
+        // Assert
+        Assert.Equal(2, options.IgnoredParameters.Count);
+        Assert.Contains("cursor", options.IgnoredParameters);
+        Assert.Contains("limit", options.IgnoredParameters);
+    }
+
+    [Fact]
     public void Builder_IgnoreParameters_Should_Throw_When_Builder_Or_Enumerable_Is_Null() {
         // Arrange
         ServiceCollection services = new();
