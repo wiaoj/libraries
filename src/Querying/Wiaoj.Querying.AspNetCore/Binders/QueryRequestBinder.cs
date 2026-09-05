@@ -30,13 +30,23 @@ internal static class QueryRequestBinder {
     /// </summary>
     /// <param name="context">The current HTTP context.</param>
     /// <returns>A value task containing the parsed <see cref="QueryRequest"/>.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
-    /// <exception cref="BadHttpRequestException">
-    /// Thrown with HTTP 415 when the content type is unsupported,
-    /// HTTP 413 when the payload exceeds server limits,
-    /// or HTTP 400 when payload syntax is malformed.
-    /// </exception>
-    public static async ValueTask<QueryRequest> BindAsync(HttpContext context) {
+    public static ValueTask<QueryRequest> BindAsync(HttpContext context) {
+        return BindAsync(context, schema: null, endpointOptions: null);
+    }
+
+    /// <summary>
+    /// Asynchronously binds a <see cref="QueryRequest"/> from the incoming HTTP request with schema and endpoint parameter policies.
+    /// Reads from the request body for HTTP QUERY or POST methods using registered payload parsers,
+    /// falling back to URL query parameters when appropriate.
+    /// </summary>
+    /// <param name="context">The current HTTP context.</param>
+    /// <param name="schema">Optional schema parameter policy.</param>
+    /// <param name="endpointOptions">Optional endpoint parameter policy.</param>
+    /// <returns>A value task containing the parsed <see cref="QueryRequest"/>.</returns>
+    public static async ValueTask<QueryRequest> BindAsync(
+        HttpContext context,
+        IQuerySchemaParameters? schema,
+        QueryValidationEndpointOptions? endpointOptions) {
         Preca.ThrowIfNull(context);
 
         HttpRequest request = context.Request;
@@ -68,7 +78,9 @@ internal static class QueryRequestBinder {
             return QueryRequest.Empty;
         }
 
-        return BindFromQueryCollection(query, options);
+        endpointOptions ??= context.GetEndpoint()?.Metadata.GetMetadata<QueryValidationEndpointOptions>();
+
+        return BindFromQueryCollection(query, options, schema, endpointOptions);
     }
 
     private static bool IsBodyQuerySupported(string method) {
@@ -169,11 +181,14 @@ internal static class QueryRequestBinder {
         return array.Length > 0 ? array : DefaultParsers;
     }
 
-    private static QueryRequest BindFromQueryCollection(IQueryCollection query, QueryOptions? options) {
+    private static QueryRequest BindFromQueryCollection(
+        IQueryCollection query,
+        QueryOptions? options,
+        IQuerySchemaParameters? schema,
+        QueryValidationEndpointOptions? endpointOptions) {
         Q q = default;
         Sort sort = default;
         List<FilterConditionNode>? filters = null;
-        HashSet<string>? ignored = options?.IgnoredParameters;
 
         foreach((string? key, Microsoft.Extensions.Primitives.StringValues stringValues) in query) {
             if(string.IsNullOrWhiteSpace(key)) {
@@ -194,7 +209,7 @@ internal static class QueryRequestBinder {
                 continue;
             }
 
-            if(ignored is { Count: > 0 } && IsIgnoredParameter(trimmedKey, ignored)) {
+            if(IsParameterIgnored(trimmedKey, options, schema, endpointOptions)) {
                 continue;
             }
 
@@ -226,15 +241,53 @@ internal static class QueryRequestBinder {
         return new QueryRequest(q: q, sort: sort, filters: filters);
     }
 
-    private static bool IsIgnoredParameter(string key, HashSet<string> ignoredParameters) {
-        if(ignoredParameters.Contains(key)) {
+    private static bool IsParameterIgnored(
+        string key,
+        QueryOptions? globalOptions,
+        IQuerySchemaParameters? schema,
+        QueryValidationEndpointOptions? endpointOptions) {
+
+        string baseKey = key;
+        int bracketIndex = key.IndexOf(QuerySyntax.OpenBracket);
+        if(bracketIndex > 0) {
+            baseKey = key[..bracketIndex].Trim();
+        }
+
+        // 1. Endpoint Allowed (Most specific un-ignore)
+        if(endpointOptions?.AllowedParameters.Contains(baseKey) == true ||
+           (bracketIndex > 0 && endpointOptions?.AllowedParameters.Contains(key) == true)) {
+            return false;
+        }
+
+        // 2. Endpoint Ignored (Most specific ignore)
+        if(endpointOptions?.IgnoredParameters.Contains(baseKey) == true ||
+           (bracketIndex > 0 && endpointOptions?.IgnoredParameters.Contains(key) == true)) {
             return true;
         }
 
-        int bracketIndex = key.IndexOf(QuerySyntax.OpenBracket);
-        if(bracketIndex > 0) {
-            string baseKey = key[..bracketIndex].Trim();
-            return ignoredParameters.Contains(baseKey);
+        // 3. Schema Allowed (Schema-level un-ignore)
+        if(schema?.IsParameterAllowed(baseKey) == true ||
+           (bracketIndex > 0 && schema?.IsParameterAllowed(key) == true)) {
+            return false;
+        }
+
+        // 4. Schema Ignored (Schema-level ignore)
+        if(schema?.IsParameterIgnored(baseKey) == true ||
+           (bracketIndex > 0 && schema?.IsParameterIgnored(key) == true)) {
+            return true;
+        }
+
+        // 5. Bypass global ignored parameters if endpoint or schema specifies
+        if(endpointOptions?.IgnoresGlobalParameters == true || schema?.IgnoresGlobalParameters == true) {
+            return false;
+        }
+
+        // 6. Global Ignored parameters
+        if(globalOptions?.IgnoredParameters is { Count: > 0 }) {
+            if(globalOptions.IgnoredParameters.Contains(baseKey) ||
+               (bracketIndex > 0 && globalOptions.IgnoredParameters.Contains(key))) {
+                return true;
+            }
         }
 
         return false;

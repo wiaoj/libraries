@@ -9,7 +9,7 @@ namespace Wiaoj.Querying;
 /// Configures filtering, searching, sorting rules, security limits, and validation for a target entity with AOT safety.
 /// </summary>
 /// <typeparam name="T">The entity type.</typeparam>
-public class QuerySchema<T> {
+public class QuerySchema<T> : IQuerySchemaParameters {
     internal const uint AllOperatorsMask = uint.MaxValue;
 
     private readonly Dictionary<string, QueryProperty<T>> _propertiesByExposedName = new(StringComparer.OrdinalIgnoreCase);
@@ -19,6 +19,8 @@ public class QuerySchema<T> {
     private readonly List<(string MemberPath, Expression<Func<T, bool>> Predicate)> _defaultFilters = [];
     private readonly List<Func<IQueryable<T>, bool, IQueryable<T>>> _defaultSortAppliers = [];
     private readonly HashSet<string> _ignoredParameters = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _allowedParameters = new(StringComparer.OrdinalIgnoreCase);
+    private bool _ignoreGlobalParameters;
 
     /// <summary>
     /// Gets the maximum allowed number of filters per request. Defaults to 20.
@@ -99,6 +101,29 @@ public class QuerySchema<T> {
     }
 
     /// <summary>
+    /// Gets a value indicating whether this schema bypasses all globally configured ignored parameters from <see cref="QueryOptions"/>.
+    /// Defaults to <see langword="false"/>.
+    /// </summary>
+    public bool IgnoresGlobalParameters => this._ignoreGlobalParameters;
+
+    /// <summary>
+    /// Configures this schema to bypass all globally configured ignored parameters from <see cref="QueryOptions"/>.
+    /// </summary>
+    /// <returns>The current schema instance for method chaining.</returns>
+    public QuerySchema<T> IgnoreGlobalParameters() => IgnoreGlobalParameters(true);
+
+    /// <summary>
+    /// Configures whether this schema bypasses all globally configured ignored parameters from <see cref="QueryOptions"/>.
+    /// When set to <see langword="true"/>, globally ignored parameters will not be ignored for this schema.
+    /// </summary>
+    /// <param name="ignore"><see langword="true"/> to ignore global parameters; otherwise, <see langword="false"/>.</param>
+    /// <returns>The current schema instance for method chaining.</returns>
+    public QuerySchema<T> IgnoreGlobalParameters(bool ignore) {
+        this._ignoreGlobalParameters = ignore;
+        return this;
+    }
+
+    /// <summary>
     /// Configures one or more parameter names to be ignored during query validation.
     /// Ignored parameters will not produce validation errors when present in a query request.
     /// </summary>
@@ -108,7 +133,9 @@ public class QuerySchema<T> {
         for(int i = 0; i < parameters.Length; i++) {
             string? param = parameters[i];
             if(!string.IsNullOrWhiteSpace(param)) {
-                this._ignoredParameters.Add(param.Trim());
+                string trimmed = param.Trim();
+                this._ignoredParameters.Add(trimmed);
+                this._allowedParameters.Remove(trimmed);
             }
         }
         return this;
@@ -124,10 +151,68 @@ public class QuerySchema<T> {
         ArgumentNullException.ThrowIfNull(parameters);
         foreach(string? param in parameters) {
             if(!string.IsNullOrWhiteSpace(param)) {
-                this._ignoredParameters.Add(param.Trim());
+                string trimmed = param.Trim();
+                this._ignoredParameters.Add(trimmed);
+                this._allowedParameters.Remove(trimmed);
             }
         }
         return this;
+    }
+
+    /// <summary>
+    /// Configures one or more parameter names to be explicitly allowed (un-ignored) for this schema.
+    /// This overrides any global or inherited parameter ignoring rules.
+    /// </summary>
+    /// <param name="parameters">The parameter names to allow.</param>
+    /// <returns>The current schema instance for method chaining.</returns>
+    public QuerySchema<T> AllowParameter(params ReadOnlySpan<string> parameters) => AllowParameters(parameters);
+
+    /// <summary>
+    /// Configures one or more parameter names to be explicitly allowed (un-ignored) for this schema.
+    /// This overrides any global or inherited parameter ignoring rules.
+    /// </summary>
+    /// <param name="parameters">The parameter names to allow.</param>
+    /// <returns>The current schema instance for method chaining.</returns>
+    public QuerySchema<T> AllowParameters(params ReadOnlySpan<string> parameters) {
+        for(int i = 0; i < parameters.Length; i++) {
+            string? param = parameters[i];
+            if(!string.IsNullOrWhiteSpace(param)) {
+                string trimmed = param.Trim();
+                this._allowedParameters.Add(trimmed);
+                this._ignoredParameters.Remove(trimmed);
+            }
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Configures parameter names to be explicitly allowed (un-ignored) for this schema.
+    /// This overrides any global or inherited parameter ignoring rules.
+    /// </summary>
+    /// <param name="parameters">The collection of parameter names to allow.</param>
+    /// <returns>The current schema instance for method chaining.</returns>
+    public QuerySchema<T> AllowParameters(IEnumerable<string> parameters) {
+        ArgumentNullException.ThrowIfNull(parameters);
+        foreach(string? param in parameters) {
+            if(!string.IsNullOrWhiteSpace(param)) {
+                string trimmed = param.Trim();
+                this._allowedParameters.Add(trimmed);
+                this._ignoredParameters.Remove(trimmed);
+            }
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Determines whether the specified parameter name is explicitly allowed (un-ignored) by this schema.
+    /// </summary>
+    /// <param name="parameterName">The parameter name to check.</param>
+    /// <returns><see langword="true"/> if the parameter is explicitly allowed; otherwise, <see langword="false"/>.</returns>
+    public bool IsParameterAllowed(string parameterName) {
+        if(string.IsNullOrWhiteSpace(parameterName)) {
+            return false;
+        }
+        return this._allowedParameters.Contains(parameterName.Trim());
     }
 
     /// <summary>
@@ -139,7 +224,41 @@ public class QuerySchema<T> {
         if(string.IsNullOrWhiteSpace(parameterName)) {
             return false;
         }
-        return this._ignoredParameters.Contains(parameterName.Trim());
+
+        string trimmed = parameterName.Trim();
+        if(this._allowedParameters.Contains(trimmed)) {
+            return false;
+        }
+
+        return this._ignoredParameters.Contains(trimmed);
+    }
+
+    /// <summary>
+    /// Determines whether the specified parameter name is ignored, taking into account schema-level rules
+    /// and optional global options.
+    /// </summary>
+    /// <param name="parameterName">The parameter name to check.</param>
+    /// <param name="globalOptions">Optional global query options.</param>
+    /// <returns><see langword="true"/> if the parameter is ignored; otherwise, <see langword="false"/>.</returns>
+    public bool IsParameterIgnored(string parameterName, QueryOptions? globalOptions) {
+        if(string.IsNullOrWhiteSpace(parameterName)) {
+            return false;
+        }
+
+        string trimmed = parameterName.Trim();
+        if(this._allowedParameters.Contains(trimmed)) {
+            return false;
+        }
+
+        if(this._ignoredParameters.Contains(trimmed)) {
+            return true;
+        }
+
+        if(!this._ignoreGlobalParameters && globalOptions?.IgnoredParameters.Contains(trimmed) == true) {
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -284,7 +403,16 @@ public class QuerySchema<T> {
     /// </summary>
     /// <param name="request">The query request to validate.</param>
     /// <returns>A <see cref="QueryValidationResult"/> detailing whether validation succeeded and any diagnostic errors encountered.</returns>
-    public QueryValidationResult Validate(QueryRequest request) {
+    public QueryValidationResult Validate(QueryRequest request) => Validate(request, null);
+
+    /// <summary>
+    /// Validates a <see cref="QueryRequest"/> against the configured schema rules, permitted operators, security limits,
+    /// and optional global options.
+    /// </summary>
+    /// <param name="request">The query request to validate.</param>
+    /// <param name="options">Optional global query options.</param>
+    /// <returns>A <see cref="QueryValidationResult"/> detailing whether validation succeeded and any diagnostic errors encountered.</returns>
+    public QueryValidationResult Validate(QueryRequest request, QueryOptions? options) {
         if(request.IsEmpty) {
             return QueryValidationResult.Success;
         }
@@ -303,14 +431,9 @@ public class QuerySchema<T> {
 
         // 2. Security limits: MaxFilterCount
         int activeFilterCount = 0;
-        if(this._ignoredParameters.Count == 0) {
-            activeFilterCount = request.Filters.Count;
-        }
-        else {
-            for(int i = 0; i < request.Filters.Count; i++) {
-                if(!this._ignoredParameters.Contains(request.Filters[i].Field)) {
-                    activeFilterCount++;
-                }
+        for(int i = 0; i < request.Filters.Count; i++) {
+            if(!IsParameterIgnored(request.Filters[i].Field, options)) {
+                activeFilterCount++;
             }
         }
 
@@ -347,7 +470,7 @@ public class QuerySchema<T> {
         for(int i = 0; i < request.Filters.Count; i++) {
             FilterConditionNode filter = request.Filters[i];
 
-            if(this._ignoredParameters.Contains(filter.Field)) {
+            if(IsParameterIgnored(filter.Field, options)) {
                 continue;
             }
 

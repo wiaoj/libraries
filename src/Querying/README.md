@@ -118,8 +118,10 @@ public sealed class ProductQuerySchema : QuerySchema<Product>
         // 7. Default sort (applied only when request specifies no sort)
         DefaultSort(x => x.CreatedAt, SortDirection.Descending);
 
-        // 8. Ignored parameters (exempt from whitelist validation & AST filter compilation)
+        // 8. Ignored & Allowed parameters (3-tier hierarchy: Global -> Schema -> Endpoint)
         IgnoreParameters("preview", "export");
+        AllowParameters("limit");           // Un-ignores 'limit' even if ignored globally
+        // IgnoreGlobalParameters();        // Opts out of all global ignored parameters for this schema
 
         // 9. Abuse limits
         ConfigureLimits(
@@ -190,6 +192,24 @@ app.MapMethods("/api/v1/products", ["GET", "QUERY"], async (
     return Results.Ok(products);
 })
 .WithQueryValidation<Product>(); // Automatically resolves schema from DI and validates
+
+// Or configure endpoint-specific parameter policies:
+app.MapGet("/api/v1/products/export", async (Query<Product> query, AppDbContext db) =>
+{
+    // ...
+})
+.WithQueryValidation<Product>(options => {
+    options.IgnoreParameters("format", "delimiter"); // Endpoint-specific ignored params
+    options.AllowParameters("limit");                // Endpoint-specific un-ignore
+    // options.IgnoreGlobalParameters();             // Bypass all global ignored params
+});
+
+// Or using shortcut extension methods:
+// app.MapGet(...)
+//     .WithQueryValidation<Product>()
+//     .IgnoreQueryParameters("format", "delimiter")
+//     .AllowQueryParameters("limit")
+//     .IgnoreGlobalQueryParameters();
 
 app.Run();
 ```

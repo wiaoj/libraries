@@ -1,5 +1,6 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.Preconditions;
 using Wiaoj.Querying.AspNetCore.Binders;
 
@@ -28,7 +29,10 @@ public sealed record Query<TEntity>(QueryRequest Value) : IBindableFromHttpConte
     public static async ValueTask<Query<TEntity>?> BindAsync(HttpContext context, ParameterInfo parameter) {
         Preca.ThrowIfNull(context);
 
-        QueryRequest request = await QueryRequestBinder.BindAsync(context).ConfigureAwait(false);
+        IQuerySchemaParameters? schema = context.RequestServices?.GetService<QuerySchema<TEntity>>();
+        QueryValidationEndpointOptions? endpointOptions = context.GetEndpoint()?.Metadata.GetMetadata<QueryValidationEndpointOptions>();
+
+        QueryRequest request = await QueryRequestBinder.BindAsync(context, schema, endpointOptions).ConfigureAwait(false);
         return new Query<TEntity>(request);
     }
 
