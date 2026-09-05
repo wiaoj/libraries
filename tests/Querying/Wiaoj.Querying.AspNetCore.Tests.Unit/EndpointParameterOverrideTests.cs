@@ -141,6 +141,27 @@ public sealed class EndpointParameterOverrideTests {
     }
 
     [Fact]
+    public async Task Should_Apply_Precedence_EndpointAllowed_Over_SchemaIgnored() {
+        // Arrange: Schema ignores "limit", but this specific endpoint explicitly allows "limit"
+        QuerySchema<Product> schema = CreateProductSchema();
+        schema.IgnoreParameters("limit");
+
+        QueryValidationEndpointOptions endpointOptions = new();
+        endpointOptions.AllowParameters("limit");
+
+        DefaultHttpContext httpContext = new();
+        httpContext.Request.QueryString = new QueryString("?limit=100");
+
+        // Act
+        QueryRequest request = await QueryRequestBinder.BindAsync(httpContext, schema, endpointOptions);
+
+        // Assert: 'limit' is allowed and bound because endpoint-level allow takes precedence over schema-level ignore
+        Assert.Single(request.Filters);
+        Assert.Equal("limit", request.Filters[0].Field);
+        Assert.Equal("100", request.Filters[0].RawValue);
+    }
+
+    [Fact]
     public async Task Should_Handle_Bracketed_Syntax_In_Endpoint_Overrides() {
         // Arrange: Endpoint ignores "format", request has bracket syntax
         QueryValidationEndpointOptions endpointOptions = new();

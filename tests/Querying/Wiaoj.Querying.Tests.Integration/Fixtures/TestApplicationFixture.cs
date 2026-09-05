@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
@@ -68,6 +68,38 @@ public sealed class TestApplicationFixture : IAsyncLifetime {
 
                 return Results.Ok(products);
             }).WithQueryValidation<Product>();
+
+        // 3. Endpoint-level parameter overrides (ignores "format" and "delimiter"):
+        this._app.MapGet("/api/v1/products/export", async (
+            Query<Product> query,
+            QuerySchema<Product> schema,
+            TestDbContext db) => {
+
+                var products = await db.Products
+                    .AsNoTracking()
+                    .ApplyQuery(query, schema)
+                    .ToListAsync();
+
+                return Results.Ok(products);
+            })
+            .WithQueryValidation<Product>(options => options.IgnoreParameters("format", "delimiter"));
+
+        // 4. Route-group level parameter overrides (group ignores "format"):
+        var group = this._app.MapGroup("/api/v1/grouped-products")
+            .WithQueryValidation<Product>(options => options.IgnoreParameters("format"));
+
+        group.MapGet("/", async (
+            Query<Product> query,
+            QuerySchema<Product> schema,
+            TestDbContext db) => {
+
+                var products = await db.Products
+                    .AsNoTracking()
+                    .ApplyQuery(query, schema)
+                    .ToListAsync();
+
+                return Results.Ok(products);
+            });
 
         await this._app.StartAsync();
         this.Client = this._app.GetTestClient();

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -532,6 +532,55 @@ public class ProductQueryEndpointTests(TestApplicationFixture fixture) : IClassF
             // Assert: a clean client error, not a crash or a timeout — now caught early by the binder's
             // own MaxPayloadBytes check (65,536 bytes) rather than late by JsonQueryParser's internal one
             Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        }
+    }
+
+    public sealed class EndpointParameterOverrides(TestApplicationFixture fixture) : ProductQueryEndpointTests(fixture) {
+        [Fact]
+        public async Task Should_Ignore_Endpoint_Specified_Parameters_And_Pass_Validation() {
+            // Arrange: "format" and "delimiter" are ignored on /api/v1/products/export
+            string url = "/api/v1/products/export?category=Electronics&format=csv&delimiter=pipe";
+
+            // Act
+            HttpResponseMessage response = await this.Client.GetAsync(url, TestContext.Current.CancellationToken);
+
+            // Assert: Endpoint-ignored parameters are stripped and pass validation with 200 OK
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            List<Product>? items = await response.Content.ReadFromJsonAsync<List<Product>>(TestContext.Current.CancellationToken);
+            Assert.NotNull(items);
+            Assert.Equal(4, items.Count);
+            Assert.All(items, item => Assert.Equal("Electronics", item.Category));
+        }
+
+        [Fact]
+        public async Task Should_Fail_Validation_On_Default_Endpoint_When_Parameter_Not_Ignored() {
+            // Arrange: /api/v1/products does NOT ignore "format", so "format" causes FieldNotFilterable
+            string url = "/api/v1/products?category=Electronics&format=csv";
+
+            // Act
+            HttpResponseMessage response = await this.Client.GetAsync(url, TestContext.Current.CancellationToken);
+
+            // Assert: ValidationProblemDetails with 400 Bad Request
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            ValidationProblemDetails? problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>(TestContext.Current.CancellationToken);
+            Assert.NotNull(problem);
+            Assert.True(problem.Errors.ContainsKey("format"));
+        }
+
+        [Fact]
+        public async Task Should_Inherit_RouteGroup_Ignored_Parameters_Over_Http() {
+            // Arrange: Route group /api/v1/grouped-products ignores "format"
+            string url = "/api/v1/grouped-products?category=Electronics&format=json";
+
+            // Act
+            HttpResponseMessage response = await this.Client.GetAsync(url, TestContext.Current.CancellationToken);
+
+            // Assert: Route group convention ignores "format", returns 200 OK
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            List<Product>? items = await response.Content.ReadFromJsonAsync<List<Product>>(TestContext.Current.CancellationToken);
+            Assert.NotNull(items);
+            Assert.Equal(4, items.Count);
+            Assert.All(items, item => Assert.Equal("Electronics", item.Category));
         }
     }
 }
