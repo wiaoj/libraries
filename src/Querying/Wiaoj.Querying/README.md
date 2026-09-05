@@ -123,7 +123,10 @@ public sealed class ProductQuerySchema : QuerySchema<Product>
         // 7. Default sort (applied only when request specifies no sort)
         DefaultSort(x => x.CreatedAt, SortDirection.Descending);
 
-        // 8. Security & Abuse Limits
+        // 8. Ignored parameters (exempt from whitelist validation & AST filter compilation)
+        IgnoreParameters("preview", "export");
+
+        // 9. Security & Abuse Limits
         ConfigureLimits(
             maxFilters: 10,
             maxInValues: 20,
@@ -145,13 +148,15 @@ Register the engine and schemas using the `IQueryingBuilder` API:
 using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.Querying;
 
-// 1. Standard registration with class-based schema
+// 1. Standard registration with class-based schema and ignored parameters
 services.AddQuerying()
+    .IgnoreParameters("page", "size", "cursor", "direction")
     .Configure(options => options.AllowBodyPayloads = true)
     .AddSchema<Product, ProductQuerySchema>();
 
 // 2. Or scan an assembly for all QuerySchema<T> implementations:
 // services.AddQuerying()
+//     .IgnoreParameters("page", "size", "cursor", "direction")
 //     .AddSchemasFromAssemblyContaining<Program>();
 
 // 3. Or inline configuration:

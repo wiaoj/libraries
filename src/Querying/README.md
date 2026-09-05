@@ -118,7 +118,10 @@ public sealed class ProductQuerySchema : QuerySchema<Product>
         // 7. Default sort (applied only when request specifies no sort)
         DefaultSort(x => x.CreatedAt, SortDirection.Descending);
 
-        // 8. Abuse limits
+        // 8. Ignored parameters (exempt from whitelist validation & AST filter compilation)
+        IgnoreParameters("preview", "export");
+
+        // 9. Abuse limits
         ConfigureLimits(
             maxFilters: 10,
             maxInValues: 20,
@@ -136,17 +139,26 @@ public sealed class ProductQuerySchema : QuerySchema<Product>
 
 ### 1. Registration (`Program.cs`)
 
-Register the query infrastructure and schemas using the `IQueryingBuilder` API:
+Register the query infrastructure, ignored parameters, and schemas using the `IQueryingBuilder` API:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-// Register querying engine and schemas
+// Register querying engine, global ignored parameters (e.g. pagination), and schemas
 builder.Services.AddQuerying()
+    .IgnoreParameters("page", "size", "cursor", "direction")
     .AddSchema<Product, ProductQuerySchema>();
+
+// Native ASP.NET Core RFC 7807 Problem Details customization
+builder.Services.AddProblemDetails(options => {
+    options.CustomizeProblemDetails = ctx => {
+        ctx.ProblemDetails.Instance = ctx.HttpContext.Request.Path;
+    };
+});
 
 // Or scan an assembly:
 // builder.Services.AddQuerying()
+//     .IgnoreParameters("page", "size", "cursor", "direction")
 //     .AddSchemasFromAssemblyContaining<Program>();
 ```
 

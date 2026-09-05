@@ -68,9 +68,17 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(...));
 
-// Register querying engine and schemas
+// Register querying engine, global ignored parameters (e.g. pagination), and schemas
 builder.Services.AddQuerying()
+    .IgnoreParameters("page", "size", "cursor", "direction")
     .AddSchema<Product, ProductQuerySchema>();
+
+// Native ASP.NET Core RFC 7807 Problem Details customization
+builder.Services.AddProblemDetails(options => {
+    options.CustomizeProblemDetails = ctx => {
+        ctx.ProblemDetails.Instance = ctx.HttpContext.Request.Path;
+    };
+});
 
 var app = builder.Build();
 ```
@@ -174,6 +182,9 @@ GET /api/products?price[between]=invalid..value&unregisteredField=test&sort=-sec
   }
 }
 ```
+
+> **Enriching Problem Details (`instance`, `traceId`, etc.):**
+> `WithQueryValidation` produces standard ASP.NET Core `Results.ValidationProblem` responses that natively route through the platform's `IProblemDetailsService`. Configure `builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = ctx => ctx.ProblemDetails.Instance = ctx.HttpContext.Request.Path)` centrally in `Program.cs` to enrich validation responses without ad-hoc library settings.
 
 ---
 
