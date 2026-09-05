@@ -246,6 +246,55 @@ public sealed class EndpointParameterOverrideTests {
         Assert.False(opts2.IgnoresGlobalParameters);
     }
 
+    [Fact]
+    public async Task Should_Support_RouteGroup_Level_QueryValidationOptions() {
+        // Arrange: Group ignores "format"
+        WebApplicationBuilder builder = WebApplication.CreateBuilder();
+        builder.Services.AddSingleton(CreateProductSchema());
+        WebApplication app = builder.Build();
+
+        RouteGroupBuilder group = app.MapGroup("/group");
+        group.WithQueryValidation<Product>(options => options.IgnoreParameters("format"));
+
+        group.MapGet("/products", (Query<Product> q) => Results.Ok(q.Value));
+
+        Endpoint endpoint = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(ds => ds.Endpoints)
+            .First();
+
+        DefaultHttpContext httpContext = new() {
+            RequestServices = app.Services
+        };
+        httpContext.SetEndpoint(endpoint);
+        httpContext.Request.QueryString = new QueryString("?name=Keyboard&format=json");
+
+        // Act: Bind query via Query<Product>.BindAsync
+        Query<Product>? query = await Query<Product>.BindAsync(httpContext, null!);
+
+        // Assert: format is ignored by group-level option; only name is bound
+        Assert.NotNull(query);
+        Assert.Single(query.Value.Filters);
+        Assert.Equal("name", query.Value.Filters[0].Field);
+        Assert.Equal("Keyboard", query.Value.Filters[0].RawValue);
+
+        // Assert: Endpoint metadata inherits group-level QueryValidationEndpointOptions
+        QueryValidationEndpointOptions? endpointOptions = endpoint.Metadata.GetMetadata<QueryValidationEndpointOptions>();
+        Assert.NotNull(endpointOptions);
+        Assert.Contains("format", endpointOptions.IgnoredParameters);
+
+        // Assert: Endpoint filter execution passes with Ok
+        QueryValidationEndpointFilter<Product> filter = new(CreateProductSchema(), endpointOptions);
+        DefaultEndpointFilterInvocationContext filterContext = new(httpContext, query);
+        bool nextCalled = false;
+        object? filterResult = await filter.InvokeAsync(filterContext, _ => {
+            nextCalled = true;
+            return ValueTask.FromResult<object?>(Results.Ok("Success"));
+        });
+
+        Assert.True(nextCalled);
+        Assert.IsType<Ok<string>>(filterResult);
+    }
+
     private sealed class TestEndpointConventionBuilder : IEndpointConventionBuilder {
         public List<Action<EndpointBuilder>> Conventions { get; } = [];
 
