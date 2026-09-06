@@ -282,7 +282,7 @@ app.MapGet("/health", () => Results.Ok("Healthy"))
 `Wiaoj.RateLimiting` exports standard .NET runtime metrics (`System.Diagnostics.Metrics`) and structured, compile-time logging (`[LoggerMessage]`):
 
 ### OpenTelemetry Metrics (`Wiaoj.RateLimiting`):
-- `ratelimit.decisions` (`Counter<long>`): Total count of rate limit evaluations partitioned by `algorithm` and `decision` (`allowed` / `denied`).
+- `ratelimit.decisions` (`Counter<long>`): Total count of rate limit evaluations partitioned by `policy`, `algorithm` and `decision` (`allowed` / `denied`).
 - `ratelimit.cost.consumed` (`Counter<long>`): Total units consumed by permitted requests.
 - `ratelimit.queue.wait_duration` (`Histogram<double>` in `ms`): Duration requests waited in `LeakyBucketQueueRateLimiter`.
 
