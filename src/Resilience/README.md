@@ -238,7 +238,16 @@ builder.Services.AddSingleton<ICircuitBreaker>(sp =>
 | `circuitbreaker.failures` | Counter | `strategy`, `circuit` | Recorded failures. |
 | `circuitbreaker.state` | ObservableGauge | `circuit` | Current state (0 = Closed, 1 = Open, 2 = HalfOpen). |
 
-**ActivitySource:** `Wiaoj.Resilience` — registered and ready to subscribe to; span emission is not wired up yet.
+**ActivitySource:** `Wiaoj.Resilience`
+
+| Span | Emitted by | Tags |
+|---|---|---|
+| `circuit_breaker.execute` | `ExecuteAsync` / `ExecuteWithFallbackAsync` | `resilience.key`, `resilience.circuit_state`, `resilience.outcome`, `resilience.probe` (half-open only), `resilience.retry_after_ms` (denied only) |
+| `timeout.execute` | `ITimeoutStrategy.ExecuteAsync` | `resilience.key`, `resilience.timeout_ms`, `resilience.outcome` |
+
+`resilience.outcome` is one of `success`, `failure`, `denied`, `timeout` or `cancelled`. Spans are set to `Error` status when the circuit denies execution, the operation throws (the exception is recorded on the span), or the deadline expires. Caller cancellation is tagged `cancelled` and left unset — it is not a fault of the protected target.
+
+Spans cover the delegate-wrapper model. The zero-allocation `TryAcquireAsync` path emits metrics but no span: an acquire is a point-in-time decision rather than a unit of work with a duration, and instrumenting it would add an activity to the hot path it exists to keep clean. `StartActivity` returns `null` when nothing is subscribed, so the instrumentation costs nothing until a listener is attached.
 
 ```csharp
 builder.Services.AddOpenTelemetry()

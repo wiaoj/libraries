@@ -1,5 +1,7 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Wiaoj.Preconditions;
+using Wiaoj.Resilience.Diagnostics;
 
 namespace Wiaoj.Resilience;
 
@@ -31,22 +33,29 @@ public static class CircuitBreakerExecutionExtensions {
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        using Activity? activity = ResilienceTracing.StartExecution(key);
+
         CircuitExecutionDecision decision = await circuitBreaker.TryAcquireAsync(key, cancellationToken).ConfigureAwait(false);
+        ResilienceTracing.RecordDecision(activity, decision);
 
         if(!decision.IsAllowed) {
+            ResilienceTracing.MarkDenied(activity, decision.RetryAfter);
             throw new CircuitBreakerOpenException(key, decision.RetryAfter);
         }
 
         try {
             TResult result = await operation(cancellationToken).ConfigureAwait(false);
             await circuitBreaker.OnSuccessAsync(key, cancellationToken).ConfigureAwait(false);
+            ResilienceTracing.MarkSuccess(activity);
             return result;
         }
         catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested) {
+            ResilienceTracing.MarkCancelled(activity);
             throw;
         }
-        catch {
+        catch(Exception exception) {
             await circuitBreaker.OnFailureAsync(key, cancellationToken).ConfigureAwait(false);
+            ResilienceTracing.MarkFailure(activity, exception);
             throw;
         }
     }
@@ -74,21 +83,28 @@ public static class CircuitBreakerExecutionExtensions {
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        using Activity? activity = ResilienceTracing.StartExecution(key);
+
         CircuitExecutionDecision decision = await circuitBreaker.TryAcquireAsync(key, cancellationToken).ConfigureAwait(false);
+        ResilienceTracing.RecordDecision(activity, decision);
 
         if(!decision.IsAllowed) {
+            ResilienceTracing.MarkDenied(activity, decision.RetryAfter);
             throw new CircuitBreakerOpenException(key, decision.RetryAfter);
         }
 
         try {
             await operation(cancellationToken).ConfigureAwait(false);
             await circuitBreaker.OnSuccessAsync(key, cancellationToken).ConfigureAwait(false);
+            ResilienceTracing.MarkSuccess(activity);
         }
         catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested) {
+            ResilienceTracing.MarkCancelled(activity);
             throw;
         }
-        catch {
+        catch(Exception exception) {
             await circuitBreaker.OnFailureAsync(key, cancellationToken).ConfigureAwait(false);
+            ResilienceTracing.MarkFailure(activity, exception);
             throw;
         }
     }
