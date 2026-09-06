@@ -21,31 +21,31 @@ internal static class ResilienceMetrics {
     private static readonly ConcurrentDictionary<string, int> CircuitStates = new(StringComparer.Ordinal);
 
     private static readonly Counter<long> DecisionCounter = Meter.CreateCounter<long>(
-        name: "circuitbreaker.decisions",
+        name: "circuit_breaker.decisions",
         unit: "{decision}",
         description: "Number of circuit breaker execution decisions made.");
 
     private static readonly Counter<long> TripsCounter = Meter.CreateCounter<long>(
-        name: "circuitbreaker.trips",
+        name: "circuit_breaker.trips",
         unit: "{trip}",
         description: "Total number of times a circuit breaker tripped to the open state.");
 
     private static readonly Counter<long> SuccessCounter = Meter.CreateCounter<long>(
-        name: "circuitbreaker.successes",
+        name: "circuit_breaker.successes",
         unit: "{success}",
         description: "Total number of successful operations recorded.");
 
     private static readonly Counter<long> FailureCounter = Meter.CreateCounter<long>(
-        name: "circuitbreaker.failures",
+        name: "circuit_breaker.failures",
         unit: "{failure}",
         description: "Total number of failed operations recorded.");
 
     private static readonly ObservableGauge<int> StateGauge = Meter.CreateObservableGauge(
-        name: "circuitbreaker.state",
+        name: "circuit_breaker.state",
         observeValues: () => {
             List<Measurement<int>> measurements = new(CircuitStates.Count);
             foreach(var kvp in CircuitStates) {
-                measurements.Add(new Measurement<int>(kvp.Value, new KeyValuePair<string, object?>("circuit", kvp.Key)));
+                measurements.Add(new Measurement<int>(kvp.Value, new KeyValuePair<string, object?>("resilience.key", kvp.Key)));
             }
             return measurements;
         },
@@ -60,16 +60,16 @@ internal static class ResilienceMetrics {
         }
 
         TagList tags = new() {
-            { "strategy", strategy },
-            { "circuit", key },
-            { "state", state.ToString() },
-            { "decision", isAllowed ? "allowed" : "denied" }
+            { "resilience.strategy", strategy },
+            { "resilience.key", key },
+            { "resilience.circuit_state", state.ToString() },
+            { "resilience.decision", isAllowed ? "allowed" : "denied" }
         };
 
         DecisionCounter.Add(1, tags);
     }
 
-    public static void RecordTrip(string strategy, string key) {
+    public static void RecordTrip(string strategy, string key, string reason) {
         CircuitStates[key] = (int)CircuitState.Open;
 
         if(!TripsCounter.Enabled) {
@@ -77,8 +77,9 @@ internal static class ResilienceMetrics {
         }
 
         TagList tags = new() {
-            { "strategy", strategy },
-            { "circuit", key }
+            { "resilience.strategy", strategy },
+            { "resilience.key", key },
+            { "resilience.trip_reason", reason }
         };
 
         TripsCounter.Add(1, tags);
@@ -94,8 +95,9 @@ internal static class ResilienceMetrics {
         }
 
         TagList tags = new() {
-            { "strategy", strategy },
-            { "circuit", key }
+            { "resilience.strategy", strategy },
+            { "resilience.key", key },
+            { "resilience.recovered", wasRecovered }
         };
 
         SuccessCounter.Add(1, tags);
@@ -107,8 +109,8 @@ internal static class ResilienceMetrics {
         }
 
         TagList tags = new() {
-            { "strategy", strategy },
-            { "circuit", key }
+            { "resilience.strategy", strategy },
+            { "resilience.key", key }
         };
 
         FailureCounter.Add(1, tags);

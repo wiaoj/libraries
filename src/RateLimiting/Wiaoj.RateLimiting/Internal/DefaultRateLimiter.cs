@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Wiaoj.Preconditions;
+using Wiaoj.RateLimiting.Diagnostics;
 
 namespace Wiaoj.RateLimiting.Internal;
 
@@ -32,7 +34,7 @@ internal sealed class DefaultRateLimiter : IRateLimiter {
         Preca.ThrowIfNullOrWhiteSpace(policyName);
 
         IRateLimitAlgorithm policy = GetPolicy(policyName);
-        return policy.TryAcquireAsync(key, cost, cancellationToken);
+        return TracedAcquireAsync(policy, policyName, key, cost, cancellationToken);
     }
 
     public ValueTask<RateLimitDecision> TryAcquireAsync(
@@ -44,7 +46,22 @@ internal sealed class DefaultRateLimiter : IRateLimiter {
             throw new InvalidOperationException("No default rate limiting policy is configured. Use UseDefaultPolicy(...) during setup.");
         }
 
-        return defaultAlgorithm.TryAcquireAsync(key, cost, cancellationToken);
+        return TracedAcquireAsync(defaultAlgorithm, RateLimitingTracing.DefaultPolicyName, key, cost, cancellationToken);
+    }
+
+    private static async ValueTask<RateLimitDecision> TracedAcquireAsync(
+        IRateLimitAlgorithm algorithm,
+        string policyName,
+        string key,
+        int cost,
+        CancellationToken cancellationToken) {
+
+        using Activity? activity = RateLimitingTracing.StartAcquire(policyName, key, cost);
+
+        RateLimitDecision decision = await algorithm.TryAcquireAsync(key, cost, cancellationToken).ConfigureAwait(false);
+        RateLimitingTracing.RecordDecision(activity, decision);
+
+        return decision;
     }
 
     public IRateLimitAlgorithm GetPolicy(string policyName) {

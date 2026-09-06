@@ -30,7 +30,7 @@ internal static class ResilienceDiagnostics {
         string reason,
         TimeSpan breakDuration) {
 
-        ResilienceMetrics.RecordTrip(strategy, key);
+        ResilienceMetrics.RecordTrip(strategy, key, reason);
         logger.LogCircuitTripped(strategy, key, reason, breakDuration.TotalMilliseconds);
     }
 

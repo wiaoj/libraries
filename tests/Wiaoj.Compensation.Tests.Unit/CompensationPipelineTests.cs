@@ -12,7 +12,9 @@ public sealed class CompensationPipelineTests {
             CompensationPipeline<PipelineTestContext> pipeline = new();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => pipeline.AddStep(null!));
+            // ThrowsAny, not Throws: Preca raises PrecaArgumentNullException, which derives from
+            // ArgumentNullException and therefore fails an exact-type match.
+            Assert.ThrowsAny<ArgumentNullException>(() => pipeline.AddStep(null!));
         }
 
         [Fact]

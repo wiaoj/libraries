@@ -92,12 +92,12 @@ internal sealed class CounterAutoFlushService : BackgroundService {
         IEnumerable<BufferedDistributedCounter> counters,
         CancellationToken cancellationToken) {
 
-        using Activity? activity = DistributedCounterTracing.Source.StartActivity("FlushBatch");
+        using Activity? activity = DistributedCounterTracing.Source.StartActivity("distributed_counter.flush_batch");
 
         int countEstimate = counters is ICollection<BufferedDistributedCounter> c ? c.Count : 128;
         if(countEstimate == 0) return;
 
-        activity?.SetTag("batch.estimate_count", countEstimate);
+        activity?.SetTag("distributed_counter.batch.estimate_count", countEstimate);
 
         ArrayPool<CounterUpdate> updatesPool = ArrayPool<CounterUpdate>.Shared;
         ArrayPool<(BufferedDistributedCounter Counter, long Delta)> contextPool = ArrayPool<(BufferedDistributedCounter Counter, long Delta)>.Shared;
@@ -126,7 +126,7 @@ internal sealed class CounterAutoFlushService : BackgroundService {
 
             if(actualCount == 0) return;
 
-            activity?.SetTag("batch.actual_count", actualCount);
+            activity?.SetTag("distributed_counter.batch.actual_count", actualCount);
             long startTimestamp = Stopwatch.GetTimestamp();
 
             try {
