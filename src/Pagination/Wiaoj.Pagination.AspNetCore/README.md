@@ -62,6 +62,17 @@ app.MapGet("/api/orders", async (AppDbContext db, [AsParameters] CursorRequest r
 app.Run();
 ```
 
+> **`[AsParameters]` is required, not stylistic.**
+>
+> `PageRequest` and `CursorRequest` also implement `ISpanParsable<T>`, so a handler taking a bare
+> `CursorRequest request` binds from a *single* composite query value — `?request=cursor:limit:direction` —
+> and rejects the `?cursor=…&direction=…` form with **400**.
+>
+> That is exactly the form this package's own `Link` headers emit, so an endpoint written without the
+> attribute serves its first page happily and then returns 400 to any client that follows `rel="next"`.
+> `[AsParameters]` binds each property from its own query parameter, which is what makes the links
+> round-trip.
+
 ---
 
 ### 2. Custom Configuration
@@ -69,7 +80,7 @@ app.Run();
 You can configure headers, disable ETags per endpoint:
 
 ```csharp
-app.MapGet("/api/logs", async (AppDbContext db, CursorRequest request, CancellationToken ct) =>
+app.MapGet("/api/logs", async (AppDbContext db, [AsParameters] CursorRequest request, CancellationToken ct) =>
 {
     return await db.Logs
         .OrderByDescending(l => l.CreatedAt)
