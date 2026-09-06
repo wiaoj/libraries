@@ -215,37 +215,78 @@ public sealed class ToCursorResultAsyncValueConvertedKeyTests {
 }
 
 /// <summary>
-/// A key type whose ordering is reachable neither through operators nor through a public
-/// <c>CompareTo</c> has no shape the provider could translate. The library is expected to fail with a
-/// message naming the problem, rather than emitting a query that silently means something else.
+/// The seek predicate is built from the <c>CompareTo</c> the compiler binds under the
+/// <see cref="IComparable{T}"/> constraint — the interface method. That binds regardless of how the key type
+/// chose to implement the interface, so an <b>explicit</b> implementation, which exposes no public
+/// <c>CompareTo</c> at all, pages exactly like an implicit one.
 /// </summary>
-public sealed class ToCursorResultAsyncUntranslatableKeyTests {
+public sealed class ToCursorResultAsyncExplicitlyComparableKeyTests {
+
+    private static CursorToken Encode(OpaqueRef key) => CursorToken.FromBytes(BitConverter.GetBytes(key.Value));
+
+    private static OpaqueRef Decode(CursorToken token) {
+        Span<byte> buffer = stackalloc byte[8];
+        if(!token.TryDecode(buffer, out int written) || written != 8) {
+            throw new FormatException("Invalid OpaqueRef cursor payload.");
+        }
+
+        return new OpaqueRef(BitConverter.ToInt64(buffer));
+    }
 
     [Fact]
-    public async Task Should_Explain_Itself_When_Key_Exposes_No_Translatable_Comparison() {
+    public async Task Should_Page_When_Key_Implements_IComparable_Explicitly() {
+        (ValueConvertedKeyContext context, SqliteConnection connection) = ValueConvertedKeyContext.CreateInMemoryContext();
+
+        for(int i = 1; i <= 5; i++) {
+            context.OpaqueLogs.Add(new OpaqueLog { RequestId = new OpaqueRef(i * 10), Payload = $"payload-{i}" });
+        }
+
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        try {
+            CursorRequest first = new(CursorToken.Empty, limit: 2, CursorDirection.Forward);
+            CursorResult<OpaqueLog> firstPage = await context.OpaqueLogs
+                .AsNoTracking()
+                .OrderBy(x => x.RequestId)
+                .ToCursorResultAsync(first, x => x.RequestId, Encode, Decode, TestContext.Current.CancellationToken);
+
+            Assert.Equal([10, 20], firstPage.Items.AsSpan().ToArray().Select(x => x.RequestId.Value));
+
+            // The page that actually builds the seek predicate.
+            CursorRequest second = new(firstPage.Metadata.EndCursor, limit: 2, CursorDirection.Forward);
+            CursorResult<OpaqueLog> secondPage = await context.OpaqueLogs
+                .AsNoTracking()
+                .OrderBy(x => x.RequestId)
+                .ToCursorResultAsync(second, x => x.RequestId, Encode, Decode, TestContext.Current.CancellationToken);
+
+            Assert.Equal([30, 40], secondPage.Items.AsSpan().ToArray().Select(x => x.RequestId.Value));
+        }
+        finally {
+            await context.DisposeAsync();
+            await connection.DisposeAsync();
+        }
+    }
+}
+
+/// <summary>
+/// The emitted SQL is the point of the whole exercise: the <c>CompareTo</c> form must reduce to a plain column
+/// comparison, not a client evaluation and not a call the database has to make sense of.
+/// </summary>
+public sealed class ToCursorResultAsyncSeekPredicateSqlTests {
+
+    [Fact]
+    public async Task Should_Reduce_The_CompareTo_Seek_To_A_Plain_Column_Comparison() {
         (ValueConvertedKeyContext context, SqliteConnection connection) = ValueConvertedKeyContext.CreateInMemoryContext();
 
         try {
-            // A non-empty cursor is what triggers the seek predicate.
-            CursorRequest request = new(CursorToken.FromBytes([1, 2, 3, 4, 5, 6, 7, 8]), limit: 2, CursorDirection.Forward);
+            DeliveryRef pivot = new(10);
 
-            InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                context.DeliveryLogs
-                    .AsNoTracking()
-                    .OrderBy(x => x.RequestId)
-                    .ToCursorResultAsync(
-                        request,
-                        x => new OpaqueRef(x.RequestId.Value),
-                        static key => CursorToken.FromBytes(BitConverter.GetBytes(key.Value)),
-                        static token => {
-                            Span<byte> buffer = stackalloc byte[8];
-                            token.TryDecode(buffer, out _);
-                            return new OpaqueRef(BitConverter.ToInt64(buffer));
-                        },
-                        TestContext.Current.CancellationToken));
+            string sql = context.DeliveryLogs
+                .Where(x => x.RequestId.CompareTo(pivot) > 0)
+                .ToQueryString();
 
-            Assert.Contains(nameof(OpaqueRef), exception.Message, StringComparison.Ordinal);
-            Assert.Contains("CompareTo", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("\"RequestId\" > ", sql, StringComparison.Ordinal);
+            Assert.DoesNotContain("CompareTo", sql, StringComparison.Ordinal);
         }
         finally {
             await context.DisposeAsync();

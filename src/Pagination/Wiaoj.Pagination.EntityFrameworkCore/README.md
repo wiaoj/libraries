@@ -186,9 +186,13 @@ return await db.DeliveryLogs
         cancellationToken: ct);
 ```
 
-`TKey` only has to be *ordered*. Relational operators are used when the type declares them; otherwise the seek is built from `IComparable<TKey>.CompareTo`, which providers translate equally well — so an identifier implementing only `IComparable<T>`, the ordinary shape in a DDD codebase, works without declaring `<` and `>`.
+`TKey` only has to satisfy `IComparable<TKey>` — nothing else. The seek is expressed as `key.CompareTo(pivot) > 0`, and EF Core reduces that to the same plain column comparison an operator would produce:
 
-A key exposing neither relational operators nor a public `CompareTo` (an explicit interface implementation, for instance) has no comparison that can reach SQL, and the call fails with a message saying so rather than emitting a query that means something else.
+```sql
+WHERE "d"."RequestId" > @pivot
+```
+
+So relational operators are **not** required, and neither is an implicit implementation — a key implementing `IComparable<T>` explicitly pages exactly the same way. `CompareTo` is never actually invoked for the query; only its shape in the expression tree is read.
 
 ---
 
