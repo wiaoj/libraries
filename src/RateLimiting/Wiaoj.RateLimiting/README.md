@@ -147,7 +147,7 @@ builder.Services.AddOpenTelemetry()
     });
 ```
 
-- `ratelimit.decisions` (`Counter<long>`): Number of decisions evaluated, tagged with `algorithm` and `decision` (`allowed` / `denied`).
+- `ratelimit.decisions` (`Counter<long>`): Number of decisions evaluated, tagged with `policy`, `algorithm` and `decision` (`allowed` / `denied`).
 - `ratelimit.cost.consumed` (`Counter<long>`): Total units consumed by permitted requests.
 - `ratelimit.queue.wait_duration` (`Histogram<double>` in `ms`): Time requests spent suspended in `LeakyBucketQueueRateLimiter`.
 
