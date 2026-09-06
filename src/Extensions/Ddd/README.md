@@ -127,7 +127,7 @@ builder.Services.AddDdd(ddd =>
 Apply the necessary configurations to your `DbContext`.
 
 ```csharp
-public class MyDbContext : DbContext, IOutboxDbContext
+public class MyDbContext : DbContext
 {
     public DbSet<User> Users { get; set; }
 
@@ -135,13 +135,26 @@ public class MyDbContext : DbContext, IOutboxDbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Creates the '_CorvusOutboxMessages' table
-        modelBuilder.ApplyCorvusOutbox(new EfCoreOutboxConfiguration(null!)); 
         base.OnModelCreating(modelBuilder);
-    }
 
+        // Maps the outbox table and the indexes the claim query needs.
+        modelBuilder.ApplyDddOutbox();
+    }
 }
 ```
+
+The table name, schema and index strategy are configurable, because they are fixed when the model is built:
+
+```csharp
+modelBuilder.ApplyDddOutbox(outbox =>
+{
+    outbox.TableName = "outbox_messages";
+    outbox.Schema = "messaging";
+    outbox.UseFilteredIndexes = false;   // partial-index SQL is not portable; opt out if your provider disagrees
+});
+```
+
+Runtime behaviour — polling interval, batch size, retry policy, lock duration — stays in `OutboxOptions`, since it can change under a running process while the schema cannot.
 
 > **Attach the interceptors when registering the DbContext.** EF Core does not
 > reliably auto-discover DI-registered interceptors for every mode (notably
@@ -171,7 +184,61 @@ When you call `SaveChangesAsync()`:
     *   Executes `IPreDomainEventHandler`s immediately.
     *   Serializes events and saves them to the `OutboxMessage` table within the **same transaction**.
 3.  **Commit:** The Aggregate changes and the Outbox messages are committed atomically.
-4.  **Background Processor:** The `OutboxProcessor` background service polls the table, deserializes the events, and executes `IPostDomainEventHandler`s.
+4.  **Background Processor:** The `OutboxProcessor` background service claims a batch, deserializes each event, and runs the one `IPostDomainEventHandler` its row names.
+
+### One row per (event, handler)
+
+An event with five post-commit handlers writes five rows, not one. Each is claimed, retried and dead-lettered on its own.
+
+This is what confines a failure to the handler that failed. With a single row per event, a handler that throws sends the *whole* event back to the queue, so the four handlers that already succeeded run again on every retry — which silently requires every handler to be idempotent, whether or not anyone wrote that down.
+
+The trade-off worth knowing: the handler set is read when the row is written. A handler introduced by a later deployment does not retroactively gain rows for events already enqueued. In practice the queue drains in seconds, so the window is a deployment, and a new handler processing historical events is usually not wanted anyway — that is replay, and replay should be deliberate.
+
+### Aliases, not type names
+
+Rows outlive refactors, so both the event and the handler are named by a stable alias rather than a CLR type name:
+
+```csharp
+[DomainEventAlias("orders.created.v1")]
+public sealed record OrderCreated(...) : IDomainEvent;
+
+[DomainEventHandlerAlias("orders.notify-customer")]
+public sealed class NotifyCustomer : IPostDomainEventHandler<OrderCreated> { ... }
+```
+
+Without an alias the fallback is the type's full name, which survives an assembly rename and every version bump but still breaks when you move the type to another namespace. Give anything that reaches the outbox an alias and version it; renaming the type and hoping is how queued rows become unresolvable.
+
+### Retry, backoff and dead-letter
+
+A failed row is retried after an exponential backoff (`NextAttemptAtTicks`), and once its attempts run out it is **dead-lettered** — an explicit terminal state carrying the last error.
+
+That last part matters: a row whose retries are exhausted must not simply stop matching the claim predicate and vanish. `DeadLetteredAtTicks` is queryable, alertable, and tells you the difference between "done" and "given up on":
+
+```csharp
+var stuck = await db.Set<OutboxMessage>()
+    .Where(m => m.DeadLetteredAtTicks != null)
+    .ToListAsync();
+```
+
+An event type or handler that no longer resolves is dead-lettered immediately rather than retried — no number of attempts brings back a deleted handler.
+
+### Claiming, and why it is the one query written per provider
+
+Everything the outbox does is LINQ except the claim, which is written by hand for each provider:
+
+| Provider | Claim |
+| --- | --- |
+| PostgreSQL | `FOR UPDATE SKIP LOCKED` + `RETURNING *` |
+| SQL Server | `ROWLOCK, UPDLOCK, READPAST` + `OUTPUT INSERTED.*` |
+| SQLite | subquery + `RETURNING *` |
+| In-memory | in-process claim (test provider) |
+| anything else | fails loudly |
+
+`ExecuteUpdate` emits a plain `UPDATE`: there is no way to ask for skip-locked semantics, so concurrent processors either block on each other's row locks or claim overlapping candidate sets and lose the update. It also cannot return what it updated, which costs a second round trip to read back the rows just claimed. Both are avoided by writing that one statement per dialect.
+
+An unrecognised provider throws rather than falling back to a non-atomic claim. A silent fallback would appear to work and would hand the same row to several processors under load, surfacing as duplicated side effects far from the cause.
+
+Timestamps are stored as UTC ticks rather than `DateTimeOffset`, because the claim query does nothing but order and compare on them and not every provider can translate that on a `DateTimeOffset` column — SQLite refuses both. Integers work everywhere and index more cheaply.
 
 ### Serialization flexibility
 Unlike other libraries that force a specific JSON library, **Wiaoj.Ddd** leverages `Wiaoj.Serialization`. You can store your outbox payloads using:
@@ -207,8 +274,10 @@ There is one constraint to be aware of:
 > any registration mode works.
 
 ### ⚠️ Known Limitations
-*   **Outbox Concurrency:** The built-in `OutboxProcessor` in this package uses a simple polling mechanism intended for **single-instance deployments**. If you deploy multiple replicas (e.g., Kubernetes), you may encounter race conditions where the same message is processed twice.
-    *   *Solution:* For high-scale, distributed environments, please upgrade to **[Wiaoj.Corvus.Outbox](https://github.com/wiaoj/corvus)**, which implements `SKIP LOCKED` and distributed locking strategies.
+
+*   **Provider coverage.** PostgreSQL, SQL Server and SQLite have hand-written claim statements; the in-memory provider has a test-grade one. Any other provider throws on the first claim rather than guessing. PostgreSQL and SQL Server are covered by tests that pin the shape of their SQL — skip-locked semantics, single statement, parameters bound rather than interpolated — but are not executed against a live server here.
+*   **Fan-out is fixed at enqueue time.** See *One row per (event, handler)* above.
+*   **Synchronous `SaveChanges()` is not intercepted.** Both interceptors override only the async path, so a synchronous save enqueues nothing and stamps nothing.
 
 ## 📄 License
 

@@ -81,7 +81,7 @@ public sealed class DddEfCoreOptionsBuilder(IServiceCollection services) {
         services.Configure<OutboxOptions>(options => {
             options.BatchSize = this._outboxOptions.BatchSize;
             options.PollingInterval = this._outboxOptions.PollingInterval;
-            options.RetryCount = this._outboxOptions.RetryCount;
+            options.RetryPolicy = this._outboxOptions.RetryPolicy;
             options.MaxDomainEventDispatchAttempts = this._outboxOptions.MaxDomainEventDispatchAttempts;
             options.PartitionKey = this._outboxOptions.PartitionKey;
             options.LockDuration = this._outboxOptions.LockDuration;

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Reflection;
 using Wiaoj.Ddd.EntityFrameworkCore;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
+using Wiaoj.Ddd.EntityFrameworkCore.Internal.Claim;
 using Wiaoj.Ddd.EntityFrameworkCore.Outbox;
 using Wiaoj.Preconditions;
 
@@ -39,7 +40,12 @@ public static class DddEfCoreBuilderExtensions {
             Preca.ThrowIfNull(configure);
 
             builder.Services.TryAddSingleton<TimeProvider>(TimeProvider.System);
-            builder.Services.TryAddSingleton<OutboxChannel<TContext>>();
+
+            // Outbox plumbing shared by every context: alias resolution, the handler fan-out catalog, and the
+            // per-provider claim strategy cache.
+            builder.Services.TryAddSingleton<IOutboxAliasRegistry, OutboxAliasRegistry>();
+            builder.Services.TryAddSingleton<OutboxHandlerCatalog>();
+            builder.Services.TryAddSingleton<OutboxClaimStrategyFactory>();
 
             // Scoped holder seeded by the dispatcher interceptor so pre-commit handlers resolve the live context.
             builder.Services.TryAddScoped<DddAmbientUnitOfWork>();
