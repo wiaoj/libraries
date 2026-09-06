@@ -216,6 +216,15 @@ Metrics are emitted on the `Wiaoj.Resilience` meter and spans on the `Wiaoj.Resi
 | `circuitbreaker.failures` | Counter | Recorded failures. |
 | `circuitbreaker.state` | Observable gauge | Current state per key. |
 
+Spans are emitted on the `Wiaoj.Resilience` activity source for the delegate-wrapper execution model:
+
+| Span | Emitted by | Tags |
+| --- | --- | --- |
+| `circuit_breaker.execute` | `ExecuteAsync` / `ExecuteWithFallbackAsync` | `resilience.key`, `resilience.circuit_state`, `resilience.outcome`, `resilience.probe` (half-open only), `resilience.retry_after_ms` (denied only) |
+| `timeout.execute` | `ITimeoutStrategy.ExecuteAsync` | `resilience.key`, `resilience.timeout_ms`, `resilience.outcome` |
+
+`resilience.outcome` is one of `success`, `failure`, `denied`, `timeout` or `cancelled`; the span carries an `Error` status (and the recorded exception) for the first four. The zero-allocation `TryAcquireAsync` path emits metrics but no span, and `StartActivity` returns `null` when nothing is subscribed, so tracing costs nothing until a listener is attached.
+
 ```csharp
 builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics.AddMeter("Wiaoj.Resilience"))

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
+using Wiaoj.Resilience.Diagnostics;
 
 namespace Wiaoj.Resilience;
 
@@ -62,12 +64,25 @@ public sealed class FixedTimeoutStrategy : ITimeoutStrategy {
             this._timeout,
             Timeout.InfiniteTimeSpan);
 
+        using Activity? activity = ResilienceTracing.StartTimeout(key, this._timeout);
+
         try {
-            return await operation(timeoutCts.Token).ConfigureAwait(false);
+            TResult result = await operation(timeoutCts.Token).ConfigureAwait(false);
+            ResilienceTracing.MarkSuccess(activity);
+            return result;
         }
         catch(OperationCanceledException) when(!cancellationToken.IsCancellationRequested && timeoutCts.IsCancellationRequested) {
             this._logger.LogWarning("Operation for key '{Key}' timed out after {TimeoutMs}ms.", key, this._timeout.TotalMilliseconds);
+            ResilienceTracing.MarkTimeout(activity);
             throw new TimeoutException($"The operation for key '{key}' exceeded the configured timeout of {this._timeout.TotalMilliseconds}ms.");
+        }
+        catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested) {
+            ResilienceTracing.MarkCancelled(activity);
+            throw;
+        }
+        catch(Exception exception) {
+            ResilienceTracing.MarkFailure(activity, exception);
+            throw;
         }
     }
 
@@ -88,12 +103,24 @@ public sealed class FixedTimeoutStrategy : ITimeoutStrategy {
             this._timeout,
             Timeout.InfiniteTimeSpan);
 
+        using Activity? activity = ResilienceTracing.StartTimeout(key, this._timeout);
+
         try {
             await operation(timeoutCts.Token).ConfigureAwait(false);
+            ResilienceTracing.MarkSuccess(activity);
         }
         catch(OperationCanceledException) when(!cancellationToken.IsCancellationRequested && timeoutCts.IsCancellationRequested) {
             this._logger.LogWarning("Operation for key '{Key}' timed out after {TimeoutMs}ms.", key, this._timeout.TotalMilliseconds);
+            ResilienceTracing.MarkTimeout(activity);
             throw new TimeoutException($"The operation for key '{key}' exceeded the configured timeout of {this._timeout.TotalMilliseconds}ms.");
+        }
+        catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested) {
+            ResilienceTracing.MarkCancelled(activity);
+            throw;
+        }
+        catch(Exception exception) {
+            ResilienceTracing.MarkFailure(activity, exception);
+            throw;
         }
     }
 }
