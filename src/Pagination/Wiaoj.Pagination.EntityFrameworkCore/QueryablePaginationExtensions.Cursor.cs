@@ -1869,9 +1869,10 @@ public static partial class QueryablePaginationExtensions {
     /// because there is no member access to the underlying primitive that EF Core could translate; but it does not
     /// need one. The seek predicate compares against the whole value object, which the provider maps to its column,
     /// and <paramref name="cursorEncoder"/> / <paramref name="cursorDecoder"/> handle the token entirely in CLR
-    /// space. <typeparamref name="TKey"/> need only be ordered: relational operators are used when the type declares
-    /// them, otherwise the seek is built from <see cref="IComparable{T}.CompareTo"/>, which providers translate
-    /// equally well.
+    /// space. <typeparamref name="TKey"/> need only satisfy <see cref="IComparable{T}"/> — the seek is expressed as
+    /// <c>key.CompareTo(pivot) &gt; 0</c>, which EF Core reduces to the same plain column comparison an operator
+    /// would produce. Relational operators are not required, and an explicit interface implementation works as
+    /// well as an implicit one.
     /// </para>
     /// <para>
     /// <b>Execution Pipeline:</b>
@@ -1932,15 +1933,7 @@ public static partial class QueryablePaginationExtensions {
             bool seekGreaterThan = (!isDescending && request.Direction == CursorDirection.Forward) ||
                                    (isDescending && request.Direction == CursorDirection.Backward);
 
-            // Routed through the shared builder so that a key type without relational operators — the ordinary
-            // shape of a strongly-typed identifier mapped through a ValueConverter — seeks via its
-            // IComparable<TKey> contract instead of being rejected outright by Expression.GreaterThan.
-            BinaryExpression comparison = BuildComparisonExpression(
-                keySelector.Body,
-                Expression.Constant(pivotKey, typeof(TKey)),
-                seekGreaterThan);
-
-            Expression<Func<TSource, bool>> predicate = Expression.Lambda<Func<TSource, bool>>(comparison, keySelector.Parameters);
+            Expression<Func<TSource, bool>> predicate = BuildSeekPredicate(keySelector, pivotKey, seekGreaterThan);
             query = query.Where(predicate);
 
             if(request.Direction == CursorDirection.Backward) {
@@ -1994,6 +1987,57 @@ public static partial class QueryablePaginationExtensions {
 
         CursorMetadata metadata = new(startCursor, endCursor, hasPrevious, hasNext);
         return new CursorResult<TSource>(new EquatableArray<TSource>(rawItems), metadata);
+    }
+
+    /// <summary>
+    /// Holds the seek comparison templates for <typeparamref name="TKey"/>. The lambdas are written in C#, so the
+    /// <c>CompareTo</c> <see cref="MethodInfo"/> they carry is the one the compiler binds under the
+    /// <see cref="IComparable{T}"/> constraint — no reflection, and nothing to keep in step with a method name.
+    /// Static initialization builds each tree once per closed generic type.
+    /// </summary>
+    private static class SeekTemplate<TKey> where TKey : IComparable<TKey> {
+        internal static readonly Expression<Func<TKey, TKey, bool>> GreaterThan = (key, boundary) => key.CompareTo(boundary) > 0;
+        internal static readonly Expression<Func<TKey, TKey, bool>> LessThan = (key, boundary) => key.CompareTo(boundary) < 0;
+    }
+
+    /// <summary>Substitutes a single parameter within an expression tree.</summary>
+    private sealed class ParameterRebinder(ParameterExpression parameter, Expression replacement) : ExpressionVisitor {
+        protected override Expression VisitParameter(ParameterExpression node) {
+            return node == parameter ? replacement : base.VisitParameter(node);
+        }
+    }
+
+    /// <summary>
+    /// Builds the keyset seek predicate — <c>key &gt; pivot</c> or <c>key &lt; pivot</c> — for a key ordered through
+    /// <see cref="IComparable{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The comparison is expressed as <c>key.CompareTo(pivot) &gt; 0</c> rather than <c>key &gt; pivot</c>, because
+    /// <see cref="Expression.GreaterThan(Expression, Expression)"/> requires the key type to declare the relational
+    /// operators, which <see cref="IComparable{T}"/> does not imply. A strongly-typed identifier mapped through a
+    /// <c>ValueConverter</c> ordinarily implements the interface without declaring <c>&lt;</c> and <c>&gt;</c>, and
+    /// would otherwise be rejected outright.
+    /// </para>
+    /// <para>
+    /// The <c>CompareTo</c> form costs nothing in the emitted SQL: EF Core reduces it to the same plain column
+    /// comparison the operator form produces (<c>WHERE "key" &gt; @pivot</c>), for primitives, <see cref="string"/>
+    /// and value-converted keys alike. The method is never invoked — only its shape in the tree is read.
+    /// </para>
+    /// </remarks>
+    private static Expression<Func<TSource, bool>> BuildSeekPredicate<TSource, TKey>(
+        Expression<Func<TSource, TKey>> keySelector,
+        TKey pivot,
+        bool seekGreaterThan) where TKey : IComparable<TKey> {
+
+        Expression<Func<TKey, TKey, bool>> template = seekGreaterThan
+            ? SeekTemplate<TKey>.GreaterThan
+            : SeekTemplate<TKey>.LessThan;
+
+        Expression body = new ParameterRebinder(template.Parameters[0], keySelector.Body).Visit(template.Body);
+        body = new ParameterRebinder(template.Parameters[1], Expression.Constant(pivot, typeof(TKey))).Visit(body);
+
+        return Expression.Lambda<Func<TSource, bool>>(body, keySelector.Parameters);
     }
 
     private static bool TryGetTieBreaker<TSource, TTieBreaker>(

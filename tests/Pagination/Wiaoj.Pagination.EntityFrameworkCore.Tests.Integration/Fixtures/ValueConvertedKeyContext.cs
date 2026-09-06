@@ -57,6 +57,7 @@ public sealed class ComparableLog {
 public sealed class ValueConvertedKeyContext(DbContextOptions<ValueConvertedKeyContext> options) : DbContext(options) {
     public DbSet<DeliveryLog> DeliveryLogs => Set<DeliveryLog>();
     public DbSet<ComparableLog> ComparableLogs => Set<ComparableLog>();
+    public DbSet<OpaqueLog> OpaqueLogs => Set<OpaqueLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         base.OnModelCreating(modelBuilder);
@@ -65,6 +66,12 @@ public sealed class ValueConvertedKeyContext(DbContextOptions<ValueConvertedKeyC
             entity.HasKey(x => x.RequestId);
             entity.Property(x => x.RequestId)
                 .HasConversion(v => v.Value, v => new DeliveryRef(v));
+        });
+
+        modelBuilder.Entity<OpaqueLog>(entity => {
+            entity.HasKey(x => x.RequestId);
+            entity.Property(x => x.RequestId)
+                .HasConversion(v => v.Value, v => new OpaqueRef(v));
         });
 
         modelBuilder.Entity<ComparableLog>(entity => {
@@ -98,4 +105,9 @@ public readonly struct OpaqueRef(long value) : IComparable<OpaqueRef> {
     public long Value { get; } = value;
 
     int IComparable<OpaqueRef>.CompareTo(OpaqueRef other) => this.Value.CompareTo(other.Value);
+}
+
+public sealed class OpaqueLog {
+    public OpaqueRef RequestId { get; set; }
+    public string Payload { get; set; } = string.Empty;
 }
