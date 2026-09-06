@@ -46,6 +46,7 @@ public static class DddEfCoreBuilderExtensions {
             builder.Services.TryAddSingleton<IOutboxAliasRegistry, OutboxAliasRegistry>();
             builder.Services.TryAddSingleton<OutboxHandlerCatalog>();
             builder.Services.TryAddSingleton<OutboxClaimStrategyFactory>();
+            builder.Services.TryAddSingleton<OutboxSignal<TContext>>();
 
             // Scoped holder seeded by the dispatcher interceptor so pre-commit handlers resolve the live context.
             builder.Services.TryAddScoped<DddAmbientUnitOfWork>();

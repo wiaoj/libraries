@@ -42,9 +42,13 @@ internal sealed class DomainEventDispatcherInterceptor<TContext>(
     TimeProvider timeProvider,
     IOutboxAliasRegistry aliases,
     OutboxHandlerCatalog handlerCatalog,
+    OutboxSignal<TContext> signal,
     ILogger<DomainEventDispatcherInterceptor<TContext>> logger) : SaveChangesInterceptor where TContext : DbContext {
 
     private readonly int _maxIterations = options.Value.MaxDomainEventDispatchAttempts;
+
+    /// <summary>Contexts whose pending save enqueued rows, so the commit can wake the processor.</summary>
+    private static readonly ConditionalWeakTable<DbContext, object> _enqueued = new();
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
        DbContextEventData eventData,
@@ -71,10 +75,34 @@ internal sealed class DomainEventDispatcherInterceptor<TContext>(
 
         if(outboxMessages.Count > 0) {
             await context.Set<OutboxMessage>().AddRangeAsync(outboxMessages, cancellationToken);
+            _enqueued.AddOrUpdate(context, new object());
             logger.LogOutboxMessagesPersisted(outboxMessages.Count);
         }
 
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    /// <summary>The commit succeeded, so the rows are durable: wake the processor rather than making it wait
+    /// out a polling interval for work that is already there.</summary>
+    public override ValueTask<int> SavedChangesAsync(
+        SaveChangesCompletedEventData eventData,
+        int result,
+        CancellationToken cancellationToken = default) {
+
+        if(eventData.Context is { } context && _enqueued.Remove(context)) {
+            signal.Pulse();
+        }
+
+        return base.SavedChangesAsync(eventData, result, cancellationToken);
+    }
+
+    /// <summary>The commit failed, so the rows rolled back with it. Nothing to wake anyone for.</summary>
+    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default) {
+        if(eventData.Context is { } context) {
+            _enqueued.Remove(context);
+        }
+
+        return base.SaveChangesFailedAsync(eventData, cancellationToken);
     }
 
     /// <summary>

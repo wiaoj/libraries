@@ -36,7 +36,8 @@ internal sealed class OutboxProcessor<TContext>(
     OutboxInstanceInfo instanceInfo,
     OutboxClaimStrategyFactory claimStrategyFactory,
     IOutboxAliasRegistry aliases,
-    OutboxHandlerCatalog handlerCatalog)
+    OutboxHandlerCatalog handlerCatalog,
+    OutboxSignal<TContext> signal)
     : BackgroundService where TContext : DbContext {
 
     private readonly string _myInstanceId = instanceInfo.InstanceId;
@@ -72,7 +73,10 @@ internal sealed class OutboxProcessor<TContext>(
                     logger.LogPollingError(ex);
                 }
 
-                await Task.Delay(options.CurrentValue.PollingInterval, stoppingToken);
+                // Woken by a commit that enqueued rows, or by the polling interval elapsing. The signal is what
+                // keeps latency at "as soon as the transaction commits" instead of "up to one poll later";
+                // the interval is the floor that still finds rows this instance never saw committed.
+                await signal.WaitAsync(options.CurrentValue.PollingInterval, stoppingToken);
             }
         }
     }
