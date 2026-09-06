@@ -389,7 +389,9 @@ public class QueryValidationEndpointFilterTests {
 
             // Assert
             Assert.Same(builder, returnedBuilder);
-            Assert.Single(builder.FilterFactories);
+
+            // Two conventions: the endpoint metadata marker, then the validation filter.
+            Assert.Equal(2, builder.FilterFactories.Count);
         }
     }
 
