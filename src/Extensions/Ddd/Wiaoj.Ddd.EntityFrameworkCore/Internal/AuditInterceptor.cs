@@ -13,8 +13,14 @@ public sealed class AuditInterceptor(TimeProvider timeProvider) : SaveChangesInt
         DateTimeOffset utcNow = timeProvider.GetUtcNow();
 
         foreach(EntityEntry entry in context.ChangeTracker.Entries()) {
+            // Stamping is idempotent by design. EF invokes this interceptor once per SaveChanges
+            // *attempt*, and a failed attempt leaves the entity in its pre-save state with the stamp
+            // already applied — so does IExecutionStrategy, which re-runs the whole operation over the
+            // same tracked graph. Re-stamping would raise a domain exception about an invariant no
+            // domain code violated, in place of whatever actually made the first attempt fail.
+            // The strict guards stay where they belong: on the domain methods.
             if(entry.Entity is ICreatable createdAudit) {
-                if(entry.State == EntityState.Added) {
+                if(entry.State == EntityState.Added && createdAudit.CreatedAt == default) {
                     createdAudit.SetCreatedAt(utcNow);
                 }
             }
@@ -27,8 +33,13 @@ public sealed class AuditInterceptor(TimeProvider timeProvider) : SaveChangesInt
 
             if(entry.Entity is IDeletable deletedAudit) {
                 if(entry.State == EntityState.Deleted) {
+                    // The state flip is unconditional: a soft-deletable entity must never reach the
+                    // database as a DELETE, whether or not this attempt is the one that stamped it.
                     entry.State = EntityState.Modified;
-                    deletedAudit.Delete(utcNow);
+
+                    if(!deletedAudit.IsDeleted) {
+                        deletedAudit.Delete(utcNow);
+                    }
                 }
             }
         }

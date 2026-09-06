@@ -158,6 +158,7 @@
   </Folder>
   <Folder Name="/tests/Ddd/">
     <Project Path="tests/Ddd/Wiaoj.Ddd.Tests.Unit/Wiaoj.Ddd.Tests.Unit.csproj" Id="ac985ecb-c629-44c3-b5a7-3ee827cbffe6" />
+    <Project Path="tests/Ddd/Wiaoj.Ddd.EntityFrameworkCore.Tests.Integration/Wiaoj.Ddd.EntityFrameworkCore.Tests.Integration.csproj" />
   </Folder>
   <Folder Name="/tests/DistributedCounter/">
     <Project Path="tests/DistributedCounter/Wiaoj.DistributedCounter.Redis.Tests.Integration/Wiaoj.DistributedCounter.Redis.Tests.Integration.csproj" Id="267e56ef-24da-47b0-98f4-b9b0173c8e68" />
