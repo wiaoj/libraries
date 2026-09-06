@@ -20,8 +20,11 @@ public sealed class OutboxClaimSqlTests {
             _ => new SqliteOutboxClaimStrategy()
         };
 
-        return strategy.BuildClaim("\"OutboxMessages\"", batchSize: 20, workerId: "worker-1",
-            nowTicks: 100, lockExpiresAtTicks: 200, partitionKey);
+        OutboxColumns columns = new("\"Id\"", "\"LockId\"", "\"LockExpiresAtTicks\"", "\"ProcessedAtTicks\"",
+            "\"DeadLetteredAtTicks\"", "\"NextAttemptAtTicks\"", "\"PartitionKey\"");
+
+        return strategy.BuildClaim("\"OutboxMessages\"", columns, batchSize: 20, workerId: "worker-1",
+            nowTicks: 100, lockExpiresAtTicks: 200, partitionKey: partitionKey);
     }
 
     [Fact]

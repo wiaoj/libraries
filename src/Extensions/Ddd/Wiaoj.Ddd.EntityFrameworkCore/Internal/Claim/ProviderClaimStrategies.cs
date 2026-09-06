@@ -30,8 +30,8 @@ internal readonly struct ClaimSqlArguments {
     public const string PartitionKey = "{4}";
 
     /// <summary>Renders the optional partition predicate, or nothing when no partition is configured.</summary>
-    public static string PartitionPredicate(string? partitionKey) {
-        return partitionKey is null ? string.Empty : $@"AND ""PartitionKey"" = {PartitionKey}";
+    public static string PartitionPredicate(string partitionColumn, string? partitionKey) {
+        return partitionKey is null ? string.Empty : $"AND {partitionColumn} = {PartitionKey}";
     }
 
     /// <summary>
@@ -52,19 +52,20 @@ internal readonly struct ClaimSqlArguments {
 /// </summary>
 internal sealed class PostgresOutboxClaimStrategy : RelationalOutboxClaimStrategy {
     internal override FormattableString BuildClaim(
-        string table, int batchSize, string workerId, long nowTicks, long lockExpiresAtTicks, string? partitionKey) {
+        string table, OutboxColumns columns, int batchSize, string workerId, long nowTicks, long lockExpiresAtTicks,
+        string? partitionKey) {
 
         string sql =
             $"""
-            UPDATE {table} SET "LockId" = {ClaimSqlArguments.WorkerId}, "LockExpiresAtTicks" = {ClaimSqlArguments.LockExpiresAt}
-            WHERE "Id" IN (
-                SELECT "Id" FROM {table}
-                WHERE "ProcessedAtTicks" IS NULL
-                  AND "DeadLetteredAtTicks" IS NULL
-                  AND "NextAttemptAtTicks" <= {ClaimSqlArguments.Now}
-                  AND ("LockId" IS NULL OR "LockExpiresAtTicks" < {ClaimSqlArguments.Now})
-                  {ClaimSqlArguments.PartitionPredicate(partitionKey)}
-                ORDER BY "NextAttemptAtTicks"
+            UPDATE {table} SET {columns.LockId} = {ClaimSqlArguments.WorkerId}, {columns.LockExpiresAtTicks} = {ClaimSqlArguments.LockExpiresAt}
+            WHERE {columns.Id} IN (
+                SELECT {columns.Id} FROM {table}
+                WHERE {columns.ProcessedAtTicks} IS NULL
+                  AND {columns.DeadLetteredAtTicks} IS NULL
+                  AND {columns.NextAttemptAtTicks} <= {ClaimSqlArguments.Now}
+                  AND ({columns.LockId} IS NULL OR {columns.LockExpiresAtTicks} < {ClaimSqlArguments.Now})
+                  {ClaimSqlArguments.PartitionPredicate(columns.PartitionKey, partitionKey)}
+                ORDER BY {columns.NextAttemptAtTicks}
                 LIMIT {ClaimSqlArguments.BatchSize}
                 FOR UPDATE SKIP LOCKED
             )
@@ -83,20 +84,21 @@ internal sealed class PostgresOutboxClaimStrategy : RelationalOutboxClaimStrateg
 /// </summary>
 internal sealed class SqlServerOutboxClaimStrategy : RelationalOutboxClaimStrategy {
     internal override FormattableString BuildClaim(
-        string table, int batchSize, string workerId, long nowTicks, long lockExpiresAtTicks, string? partitionKey) {
+        string table, OutboxColumns columns, int batchSize, string workerId, long nowTicks, long lockExpiresAtTicks,
+        string? partitionKey) {
 
         string sql =
             $"""
             WITH claimable AS (
                 SELECT TOP ({ClaimSqlArguments.BatchSize}) * FROM {table} WITH (ROWLOCK, UPDLOCK, READPAST)
-                WHERE "ProcessedAtTicks" IS NULL
-                  AND "DeadLetteredAtTicks" IS NULL
-                  AND "NextAttemptAtTicks" <= {ClaimSqlArguments.Now}
-                  AND ("LockId" IS NULL OR "LockExpiresAtTicks" < {ClaimSqlArguments.Now})
-                  {ClaimSqlArguments.PartitionPredicate(partitionKey)}
-                ORDER BY "NextAttemptAtTicks"
+                WHERE {columns.ProcessedAtTicks} IS NULL
+                  AND {columns.DeadLetteredAtTicks} IS NULL
+                  AND {columns.NextAttemptAtTicks} <= {ClaimSqlArguments.Now}
+                  AND ({columns.LockId} IS NULL OR {columns.LockExpiresAtTicks} < {ClaimSqlArguments.Now})
+                  {ClaimSqlArguments.PartitionPredicate(columns.PartitionKey, partitionKey)}
+                ORDER BY {columns.NextAttemptAtTicks}
             )
-            UPDATE claimable SET "LockId" = {ClaimSqlArguments.WorkerId}, "LockExpiresAtTicks" = {ClaimSqlArguments.LockExpiresAt}
+            UPDATE claimable SET {columns.LockId} = {ClaimSqlArguments.WorkerId}, {columns.LockExpiresAtTicks} = {ClaimSqlArguments.LockExpiresAt}
             OUTPUT INSERTED.*
             """;
 
@@ -111,19 +113,20 @@ internal sealed class SqlServerOutboxClaimStrategy : RelationalOutboxClaimStrate
 /// </summary>
 internal sealed class SqliteOutboxClaimStrategy : RelationalOutboxClaimStrategy {
     internal override FormattableString BuildClaim(
-        string table, int batchSize, string workerId, long nowTicks, long lockExpiresAtTicks, string? partitionKey) {
+        string table, OutboxColumns columns, int batchSize, string workerId, long nowTicks, long lockExpiresAtTicks,
+        string? partitionKey) {
 
         string sql =
             $"""
-            UPDATE {table} SET "LockId" = {ClaimSqlArguments.WorkerId}, "LockExpiresAtTicks" = {ClaimSqlArguments.LockExpiresAt}
-            WHERE "Id" IN (
-                SELECT "Id" FROM {table}
-                WHERE "ProcessedAtTicks" IS NULL
-                  AND "DeadLetteredAtTicks" IS NULL
-                  AND "NextAttemptAtTicks" <= {ClaimSqlArguments.Now}
-                  AND ("LockId" IS NULL OR "LockExpiresAtTicks" < {ClaimSqlArguments.Now})
-                  {ClaimSqlArguments.PartitionPredicate(partitionKey)}
-                ORDER BY "NextAttemptAtTicks"
+            UPDATE {table} SET {columns.LockId} = {ClaimSqlArguments.WorkerId}, {columns.LockExpiresAtTicks} = {ClaimSqlArguments.LockExpiresAt}
+            WHERE {columns.Id} IN (
+                SELECT {columns.Id} FROM {table}
+                WHERE {columns.ProcessedAtTicks} IS NULL
+                  AND {columns.DeadLetteredAtTicks} IS NULL
+                  AND {columns.NextAttemptAtTicks} <= {ClaimSqlArguments.Now}
+                  AND ({columns.LockId} IS NULL OR {columns.LockExpiresAtTicks} < {ClaimSqlArguments.Now})
+                  {ClaimSqlArguments.PartitionPredicate(columns.PartitionKey, partitionKey)}
+                ORDER BY {columns.NextAttemptAtTicks}
                 LIMIT {ClaimSqlArguments.BatchSize}
             )
             RETURNING *

@@ -43,7 +43,25 @@ public static class DddEfCoreBuilderExtensions {
 
             // Outbox plumbing shared by every context: alias resolution, the handler fan-out catalog, and the
             // per-provider claim strategy cache.
-            builder.Services.TryAddSingleton<IOutboxAliasRegistry, OutboxAliasRegistry>();
+            // The registry is seeded from the registered post-commit handlers, because those name exactly the
+            // event types that can have outbox rows. Seeding at enqueue time instead would leave a row written
+            // before a restart unresolvable on the first poll after it — and unresolvable means dead-lettered.
+            // The service collection is captured, not copied: the factory runs after registration is complete,
+            // so it sees handlers added after this call too.
+            IServiceCollection registrations = builder.Services;
+
+            builder.Services.TryAddSingleton<IOutboxAliasRegistry>(_ => {
+                OutboxAliasRegistry registry = new();
+
+                foreach(ServiceDescriptor descriptor in registrations) {
+                    if(descriptor.ServiceType.IsGenericType
+                        && descriptor.ServiceType.GetGenericTypeDefinition() == typeof(IPostDomainEventHandler<>)) {
+                        registry.Register(descriptor.ServiceType.GetGenericArguments()[0]);
+                    }
+                }
+
+                return registry;
+            });
             builder.Services.TryAddSingleton<OutboxHandlerCatalog>();
             builder.Services.TryAddSingleton<OutboxClaimStrategyFactory>();
             builder.Services.TryAddSingleton<OutboxSignal<TContext>>();
