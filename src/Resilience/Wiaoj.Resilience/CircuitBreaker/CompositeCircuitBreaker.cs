@@ -76,6 +76,33 @@ public sealed class CompositeCircuitBreaker : ICircuitBreaker {
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Reports the most restrictive state across the tiers: <see cref="CircuitState.Open"/> if any tier is open
+    /// (remaining tiers are short-circuited), otherwise <see cref="CircuitState.HalfOpen"/> if any tier is recovering,
+    /// otherwise <see cref="CircuitState.Closed"/>. No tier is acquired from, so no trial probe is consumed.
+    /// </remarks>
+    public async ValueTask<CircuitState> GetStateAsync(string key, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNullOrWhiteSpace(key);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CircuitState aggregate = CircuitState.Closed;
+
+        for(int i = 0; i < this._breakers.Count; i++) {
+            CircuitState state = await this._breakers[i].GetStateAsync(key, cancellationToken).ConfigureAwait(false);
+
+            if(state == CircuitState.Open) {
+                return CircuitState.Open;
+            }
+
+            if(state == CircuitState.HalfOpen) {
+                aggregate = CircuitState.HalfOpen;
+            }
+        }
+
+        return aggregate;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask OnSuccessAsync(string key, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNullOrWhiteSpace(key);
 

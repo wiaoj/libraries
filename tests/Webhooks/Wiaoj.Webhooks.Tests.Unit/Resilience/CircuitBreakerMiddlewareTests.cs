@@ -14,6 +14,7 @@ public sealed class CircuitBreakerMiddlewareTests {
     private sealed class SpyCircuitBreaker : ICircuitBreaker {
         public CircuitExecutionDecision DecisionToReturn { get; set; } = CircuitExecutionDecision.Allowed();
         public int TryAcquireCount { get; private set; }
+        public int GetStateCount { get; private set; }
         public int SuccessCount { get; private set; }
         public int FailureCount { get; private set; }
         public string? LastKey { get; private set; }
@@ -22,6 +23,12 @@ public sealed class CircuitBreakerMiddlewareTests {
             this.TryAcquireCount++;
             this.LastKey = key;
             return ValueTask.FromResult(this.DecisionToReturn);
+        }
+
+        public ValueTask<CircuitState> GetStateAsync(string key, CancellationToken cancellationToken = default) {
+            this.GetStateCount++;
+            this.LastKey = key;
+            return ValueTask.FromResult(this.DecisionToReturn.State);
         }
 
         public ValueTask OnSuccessAsync(string key, CancellationToken cancellationToken = default) {

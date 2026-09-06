@@ -51,6 +51,10 @@ internal sealed class TypedCircuitBreakerWrapper<TPolicy>(ICircuitBreakerFactory
         return this._inner.Value.TryAcquireAsync(key, cancellationToken);
     }
 
+    public ValueTask<CircuitState> GetStateAsync(string key, CancellationToken cancellationToken = default) {
+        return this._inner.Value.GetStateAsync(key, cancellationToken);
+    }
+
     public ValueTask OnSuccessAsync(string key, CancellationToken cancellationToken = default) {
         return this._inner.Value.OnSuccessAsync(key, cancellationToken);
     }

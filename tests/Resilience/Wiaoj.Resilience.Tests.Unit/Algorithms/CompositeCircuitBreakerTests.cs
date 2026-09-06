@@ -218,6 +218,10 @@ public sealed class CompositeCircuitBreakerTests {
             return ValueTask.FromResult(decision);
         }
 
+        public ValueTask<CircuitState> GetStateAsync(string key, CancellationToken cancellationToken = default) {
+            return ValueTask.FromResult(decision.State);
+        }
+
         public ValueTask OnSuccessAsync(string key, CancellationToken cancellationToken = default) {
             Interlocked.Increment(ref this._successCount);
             return ValueTask.CompletedTask;
