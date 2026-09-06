@@ -68,6 +68,56 @@ public class QuerySchema<T> : IQuerySchemaParameters {
     public int PropertyCount => this._propertiesByMemberName.Count;
 
     /// <summary>
+    /// Describes every field this schema exposes, under the name callers write in a query.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The schema already knows exactly which fields are filterable, which are sortable, and which operators
+    /// each one permits — it has to, in order to reject anything else. Until now that knowledge could only be
+    /// used to say no. Exposing it lets the same rules be published: an OpenAPI document that lists the real
+    /// fields and operators, a client that discovers them, a test that asserts them.
+    /// </para>
+    /// <para>
+    /// Read-only by construction. Descriptors carry no expressions, parsers or appliers, so nothing here can
+    /// be used to reach around the schema's own validation.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<QueryFieldDescriptor> DescribeFields() {
+        List<QueryFieldDescriptor> descriptors = new(this._propertiesByMemberName.Count);
+
+        foreach(QueryProperty<T> property in this._propertiesByMemberName.Values) {
+            descriptors.Add(new QueryFieldDescriptor(
+                property.ExposedName,
+                property.PropertyType,
+                property.IsFilterable,
+                property.IsSortable,
+                DescribeOperators(property)));
+        }
+
+        descriptors.Sort(static (left, right) => string.CompareOrdinal(left.Name, right.Name));
+        return descriptors;
+    }
+
+    /// <summary>
+    /// Expands a property's operator bitmask into the operators it permits.
+    /// </summary>
+    private static IReadOnlyList<QueryOperator> DescribeOperators(QueryProperty<T> property) {
+        if(!property.IsFilterable || property.AllowedOperatorsMask == 0) {
+            return [];
+        }
+
+        List<QueryOperator> operators = [];
+
+        foreach(QueryOperator candidate in Enum.GetValues<QueryOperator>()) {
+            if((property.AllowedOperatorsMask & (1u << (byte)candidate)) != 0) {
+                operators.Add(candidate);
+            }
+        }
+
+        return operators;
+    }
+
+    /// <summary>
     /// Gets the list of configured search property selectors.
     /// </summary>
     internal IReadOnlyList<Expression<Func<T, string?>>> SearchSelectors => this._searchSelectors;

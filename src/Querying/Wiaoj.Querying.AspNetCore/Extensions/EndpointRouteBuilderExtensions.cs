@@ -23,6 +23,10 @@ public static class EndpointRouteBuilderExtensions {
     public static RouteHandlerBuilder WithQueryValidation<TEntity>(this RouteHandlerBuilder builder) {
         Preca.ThrowIfNull(builder);
 
+        builder.WithMetadata(new QueryValidationEndpointMetadata(typeof(TEntity)));
+
+
+
         builder.AddEndpointFilterFactory((filterFactoryContext, next) => {
             QuerySchema<TEntity> schema = filterFactoryContext.ApplicationServices.GetService<QuerySchema<TEntity>>()
                 ?? throw new InvalidOperationException(
@@ -54,6 +58,10 @@ public static class EndpointRouteBuilderExtensions {
         configure(options);
         ConfigureEndpointOptions(builder, opt => CopyOptions(options, opt));
 
+        builder.WithMetadata(new QueryValidationEndpointMetadata(typeof(TEntity)));
+
+
+
         builder.AddEndpointFilterFactory((filterFactoryContext, next) => {
             QuerySchema<TEntity> schema = filterFactoryContext.ApplicationServices.GetService<QuerySchema<TEntity>>()
                 ?? throw new InvalidOperationException(
@@ -76,6 +84,10 @@ public static class EndpointRouteBuilderExtensions {
     /// <returns>The route group builder for method chaining.</returns>
     public static RouteGroupBuilder WithQueryValidation<TEntity>(this RouteGroupBuilder builder) {
         Preca.ThrowIfNull(builder);
+
+        builder.WithMetadata(new QueryValidationEndpointMetadata(typeof(TEntity)));
+
+
 
         builder.AddEndpointFilterFactory((filterFactoryContext, next) => {
             QuerySchema<TEntity> schema = filterFactoryContext.ApplicationServices.GetService<QuerySchema<TEntity>>()
@@ -108,6 +120,10 @@ public static class EndpointRouteBuilderExtensions {
         configure(options);
         ConfigureEndpointOptions(builder, opt => CopyOptions(options, opt));
 
+        builder.WithMetadata(new QueryValidationEndpointMetadata(typeof(TEntity)));
+
+
+
         builder.AddEndpointFilterFactory((filterFactoryContext, next) => {
             QuerySchema<TEntity> schema = filterFactoryContext.ApplicationServices.GetService<QuerySchema<TEntity>>()
                 ?? throw new InvalidOperationException(
@@ -135,6 +151,9 @@ public static class EndpointRouteBuilderExtensions {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(schema);
 
+        builder.WithMetadata(new QueryValidationEndpointMetadata(typeof(TEntity)));
+
+
         builder.AddEndpointFilter(new QueryValidationEndpointFilter<TEntity>(schema));
         return builder;
     }
@@ -159,6 +178,9 @@ public static class EndpointRouteBuilderExtensions {
         QueryValidationEndpointOptions options = new();
         configure(options);
         ConfigureEndpointOptions(builder, opt => CopyOptions(options, opt));
+
+        builder.WithMetadata(new QueryValidationEndpointMetadata(typeof(TEntity)));
+
 
         builder.AddEndpointFilter(new QueryValidationEndpointFilter<TEntity>(schema, options));
         return builder;

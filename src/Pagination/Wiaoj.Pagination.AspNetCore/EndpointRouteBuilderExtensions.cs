@@ -34,6 +34,9 @@ public static class EndpointRouteBuilderExtensions {
     public static TBuilder WithPagination<TBuilder>(this TBuilder builder) where TBuilder : IEndpointConventionBuilder {
         Preca.ThrowIfNull(builder);
 
+        builder.WithMetadata(new PaginationEndpointMetadata(new PaginationOptions()));
+
+
         builder.AddEndpointFilter(PaginationEndpointFilter.Default);
         return builder;
     }
@@ -65,6 +68,9 @@ public static class EndpointRouteBuilderExtensions {
 
         PaginationOptions options = new();
         configureOptions(options);
+
+        builder.WithMetadata(new PaginationEndpointMetadata(options));
+
 
         builder.AddEndpointFilter(new PaginationEndpointFilter(options));
         return builder;
