@@ -18,17 +18,17 @@ internal static class RateLimitingMetrics {
     public static readonly Meter Meter = new(MeterName, MeterVersion);
 
     private static readonly Counter<long> DecisionsCounter = Meter.CreateCounter<long>(
-        name: "ratelimit.decisions",
+        name: "rate_limit.decisions",
         unit: "{decision}",
         description: "Number of rate limiting decisions made (allowed or denied).");
 
     private static readonly Counter<long> CostCounter = Meter.CreateCounter<long>(
-        name: "ratelimit.cost.consumed",
+        name: "rate_limit.cost.consumed",
         unit: "{unit}",
         description: "Total rate limiting cost/tokens consumed by allowed requests.");
 
     private static readonly Histogram<double> QueueWaitDuration = Meter.CreateHistogram<double>(
-        name: "ratelimit.queue.wait_duration",
+        name: "rate_limit.queue.wait_duration",
         unit: "ms",
         description: "Time in milliseconds requests spent waiting in traffic-shaping queues before execution.");
 
@@ -38,17 +38,17 @@ internal static class RateLimitingMetrics {
         }
 
         TagList tags = new() {
-            { "policy", policy },
-            { "algorithm", algorithm },
-            { "decision", isAllowed ? "allowed" : "denied" }
+            { "rate_limit.policy", policy },
+            { "rate_limit.algorithm", algorithm },
+            { "rate_limit.decision", isAllowed ? "allowed" : "denied" }
         };
 
         DecisionsCounter.Add(1, tags);
 
         if(isAllowed && CostCounter.Enabled) {
             TagList costTags = new() {
-                { "policy", policy },
-                { "algorithm", algorithm }
+                { "rate_limit.policy", policy },
+                { "rate_limit.algorithm", algorithm }
             };
             CostCounter.Add(cost, costTags);
         }
@@ -60,8 +60,8 @@ internal static class RateLimitingMetrics {
         }
 
         TagList tags = new() {
-            { "policy", policy },
-            { "algorithm", algorithm }
+            { "rate_limit.policy", policy },
+            { "rate_limit.algorithm", algorithm }
         };
 
         QueueWaitDuration.Record(milliseconds, tags);

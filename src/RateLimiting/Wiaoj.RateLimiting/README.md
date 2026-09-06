@@ -147,9 +147,20 @@ builder.Services.AddOpenTelemetry()
     });
 ```
 
-- `ratelimit.decisions` (`Counter<long>`): Number of decisions evaluated, tagged with `policy`, `algorithm` and `decision` (`allowed` / `denied`).
-- `ratelimit.cost.consumed` (`Counter<long>`): Total units consumed by permitted requests.
-- `ratelimit.queue.wait_duration` (`Histogram<double>` in `ms`): Time requests spent suspended in `LeakyBucketQueueRateLimiter`.
+- `rate_limit.decisions` (`Counter<long>`): Number of decisions evaluated, tagged with `rate_limit.policy`, `rate_limit.algorithm` and `rate_limit.decision` (`allowed` / `denied`).
+- `rate_limit.cost.consumed` (`Counter<long>`): Total units consumed by permitted requests, tagged with `rate_limit.policy` and `rate_limit.algorithm`.
+- `rate_limit.queue.wait_duration` (`Histogram<double>` in `ms`): Time requests spent suspended in `LeakyBucketQueueRateLimiter`.
+
+### Tracing (`Wiaoj.RateLimiting`)
+
+`IRateLimiter.TryAcquireAsync` emits a `rate_limit.acquire` span tagged with `rate_limit.policy`, `rate_limit.key`, `rate_limit.cost`, `rate_limit.decision`, `rate_limit.remaining`, and `rate_limit.retry_after_ms` when denied.
+
+A denial is deliberately **not** an `Error` status: exceeding a quota is the limiter working as designed and is returned as a value rather than thrown, so the operation did not fail. `StartActivity` returns `null` when nothing is subscribed, so tracing costs nothing until a listener is attached.
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing.AddSource("Wiaoj.RateLimiting"));
+```
 
 ### Logging
 

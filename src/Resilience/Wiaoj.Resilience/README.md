@@ -210,11 +210,11 @@ Metrics are emitted on the `Wiaoj.Resilience` meter and spans on the `Wiaoj.Resi
 
 | Instrument | Kind | Description |
 | --- | --- | --- |
-| `circuitbreaker.decisions` | Counter | Acquire decisions, tagged by outcome and state. |
-| `circuitbreaker.trips` | Counter | Transitions into the open state, tagged by reason. |
-| `circuitbreaker.successes` | Counter | Recorded successes, flagging recoveries. |
-| `circuitbreaker.failures` | Counter | Recorded failures. |
-| `circuitbreaker.state` | Observable gauge | Current state per key. |
+| `circuit_breaker.decisions` | Counter | Acquire decisions, tagged by outcome and state. |
+| `circuit_breaker.trips` | Counter | Transitions into the open state, tagged by reason. |
+| `circuit_breaker.successes` | Counter | Recorded successes, flagging recoveries. |
+| `circuit_breaker.failures` | Counter | Recorded failures. |
+| `circuit_breaker.state` | Observable gauge | Current state per key. |
 
 Spans are emitted on the `Wiaoj.Resilience` activity source for the delegate-wrapper execution model:
 

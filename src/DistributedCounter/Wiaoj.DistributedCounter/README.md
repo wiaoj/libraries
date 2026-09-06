@@ -124,7 +124,7 @@ When enabled via `.AddAutoFlush()`, `CounterAutoFlushService`:
 
 ### OpenTelemetry Metrics (`Wiaoj.DistributedCounter`)
 
-- `distributed_counter.increments` (`Counter<long>`): Total increment calls (tags: `name`, `strategy`).
+- `distributed_counter.increments` (`Counter<long>`): Total increment calls (tags: `distributed_counter.name`, `distributed_counter.strategy`).
 - `distributed_counter.flushes` (`Counter<long>`): Total background flush runs.
 - `distributed_counter.flush_duration` (`Histogram<double>` in `ms`): Batch flush execution duration.
 

@@ -282,9 +282,15 @@ app.MapGet("/health", () => Results.Ok("Healthy"))
 `Wiaoj.RateLimiting` exports standard .NET runtime metrics (`System.Diagnostics.Metrics`) and structured, compile-time logging (`[LoggerMessage]`):
 
 ### OpenTelemetry Metrics (`Wiaoj.RateLimiting`):
-- `ratelimit.decisions` (`Counter<long>`): Total count of rate limit evaluations partitioned by `policy`, `algorithm` and `decision` (`allowed` / `denied`).
-- `ratelimit.cost.consumed` (`Counter<long>`): Total units consumed by permitted requests.
-- `ratelimit.queue.wait_duration` (`Histogram<double>` in `ms`): Duration requests waited in `LeakyBucketQueueRateLimiter`.
+- `rate_limit.decisions` (`Counter<long>`): Total count of rate limit evaluations partitioned by `rate_limit.policy`, `rate_limit.algorithm` and `rate_limit.decision` (`allowed` / `denied`).
+- `rate_limit.cost.consumed` (`Counter<long>`): Total units consumed by permitted requests.
+- `rate_limit.queue.wait_duration` (`Histogram<double>` in `ms`): Duration requests waited in `LeakyBucketQueueRateLimiter`.
+
+### OpenTelemetry Tracing (`Wiaoj.RateLimiting`):
+
+`IRateLimiter.TryAcquireAsync` emits a `rate_limit.acquire` span tagged with `rate_limit.policy`, `rate_limit.key`, `rate_limit.cost`, `rate_limit.decision`, `rate_limit.remaining`, and `rate_limit.retry_after_ms` when denied.
+
+A denial is deliberately **not** an `Error` status: exceeding a quota is the limiter working as designed and is returned as a value rather than thrown, so the operation did not fail.
 
 ---
 
