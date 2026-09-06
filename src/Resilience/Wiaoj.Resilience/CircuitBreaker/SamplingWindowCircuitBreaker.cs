@@ -103,6 +103,26 @@ public sealed class SamplingWindowCircuitBreaker : ICircuitBreaker {
     }
 
     /// <inheritdoc/>
+    public async ValueTask<CircuitState> GetStateAsync(string key, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNullOrWhiteSpace(key);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string trippedKey = FormatTrippedKey(key);
+        IDistributedCounter trippedCounter = this._counterFactory.Create<CircuitBreakerTag, string>(trippedKey);
+
+        CounterValue trippedVal = await trippedCounter.GetValueAsync(cancellationToken).ConfigureAwait(false);
+
+        if(trippedVal.Value <= 0) {
+            return CircuitState.Closed;
+        }
+
+        DateTimeOffset blockedUntil = new(trippedVal.Value, TimeSpan.Zero);
+        return blockedUntil > this._timeProvider.GetUtcNow()
+            ? CircuitState.Open
+            : CircuitState.HalfOpen;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask OnSuccessAsync(string key, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNullOrWhiteSpace(key);
 

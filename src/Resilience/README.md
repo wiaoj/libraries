@@ -22,6 +22,7 @@ Engineered with state-machine-backed circuit breakers, concurrency bulkheads, sp
 - [Dual Invocation Models](#-dual-invocation-models)
   - [1. Zero-Allocation Result Pattern (`TryAcquireAsync`)](#1-zero-allocation-result-pattern)
   - [2. Idiomatic Delegate Wrapper (`ExecuteAsync`)](#2-idiomatic-delegate-wrapper)
+- [State Inspection Without Acquiring (`GetStateAsync`)](#-state-inspection-without-acquiring)
 - [Distributed Storage Integration (`Wiaoj.DistributedCounter`)](#-distributed-storage-integration)
 - [Quick Start](#-quick-start)
 - [Observability & OpenTelemetry](#-observability--opentelemetry)
@@ -153,6 +154,35 @@ string response = await breaker.ExecuteAsync("payment-service", async ct =>
 
 ---
 
+## 🔍 State Inspection Without Acquiring
+
+Neither invocation model above is a way to *look* at a circuit. In the `Half-Open` state `TryAcquireAsync` hands out the trial probe that decides whether the target has recovered — a caller that only wanted to check has consumed the one attempt that was going to answer the question, and will report the target as usable without ever calling it.
+
+`GetStateAsync` performs a read with **no state transition and no probe consumption**, which is what pre-emptive routing needs:
+
+```csharp
+// Provider routing: prefer a gateway whose circuit is closed,
+// without burning the probe that belongs to a real attempt.
+foreach (GatewayDescriptor candidate in candidates)
+{
+    CircuitState state = await breaker.GetStateAsync(candidate.Key, cancellationToken);
+
+    if (state is CircuitState.Closed)
+    {
+        return candidate;
+    }
+
+    // HalfOpen reads as "recovering, prefer someone else" —
+    // the probe is still available to whoever actually dispatches.
+}
+```
+
+> **The result is advisory and may be stale.** Circuit state lives in a distributed counter and can change between this read and a subsequent acquire. A `Closed` result is *not* a guarantee that the next `TryAcquireAsync` will be permitted, so callers must still handle a denial at acquire time.
+
+`CompositeCircuitBreaker` reports the most restrictive tier state — `Open` if any tier is open (short-circuiting the remaining tiers), otherwise `HalfOpen` if any tier is recovering — and acquires from no tier.
+
+---
+
 ## 🗄️ Distributed Storage Integration
 
 `Wiaoj.Resilience` delegates counter state, time-to-live (TTL), and distributed locking to `Wiaoj.DistributedCounter`.
@@ -198,14 +228,23 @@ builder.Services.AddSingleton<ICircuitBreaker>(sp =>
 
 ## 📊 Observability & OpenTelemetry
 
-- **ActivitySource:** `Wiaoj.Resilience`
-  - Spans: `circuit_breaker.execute`, `circuit_breaker.probe`
-  - Tags: `resilience.key`, `resilience.circuit_state`, `resilience.is_allowed`, `resilience.failure_count`
-- **Meter Instruments:** `Wiaoj.Resilience`
-  - `wiaoj.resilience.circuit_breaker.state` (UpDownCounter: 0 = Closed, 1 = Open, 2 = HalfOpen)
-  - `wiaoj.resilience.circuit_breaker.tripped.count` (Counter)
-  - `wiaoj.resilience.circuit_breaker.probe.count` (Counter)
-  - `wiaoj.resilience.circuit_breaker.fast_fail.count` (Counter)
+**Meter:** `Wiaoj.Resilience`
+
+| Instrument | Kind | Tags | Description |
+|---|---|---|---|
+| `circuitbreaker.decisions` | Counter | `strategy`, `circuit`, `state`, `decision` | Acquire decisions, split by allowed/denied. |
+| `circuitbreaker.trips` | Counter | `strategy`, `circuit`, `reason` | Transitions into the `Open` state. |
+| `circuitbreaker.successes` | Counter | `strategy`, `circuit`, `recovered` | Recorded successes, flagging recoveries. |
+| `circuitbreaker.failures` | Counter | `strategy`, `circuit` | Recorded failures. |
+| `circuitbreaker.state` | ObservableGauge | `circuit` | Current state (0 = Closed, 1 = Open, 2 = HalfOpen). |
+
+**ActivitySource:** `Wiaoj.Resilience` — registered and ready to subscribe to; span emission is not wired up yet.
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics => metrics.AddMeter("Wiaoj.Resilience"))
+    .WithTracing(tracing => tracing.AddSource("Wiaoj.Resilience"));
+```
 
 ---
 
