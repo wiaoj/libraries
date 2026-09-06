@@ -413,6 +413,41 @@ public static partial class QueryablePaginationExtensions {
 
     #endregion
 
+    /// <summary>
+    /// Caches, per key type, whether <see cref="Expression.GreaterThan(Expression, Expression)"/> accepts it
+    /// directly. Every primitive and most framework value types declare the relational operators; strongly-typed
+    /// domain identifiers usually do not.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, bool> RelationalOperatorSupportCache = new();
+
+    /// <summary>
+    /// Caches, per key type, the public <c>CompareTo(T)</c> implementation used to build a seek predicate for
+    /// types without relational operators.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, MethodInfo?> CompareToMethodCache = new();
+
+    /// <summary>
+    /// Builds a <c>&gt;</c> / <c>&lt;</c> seek comparison over <paramref name="left"/> and <paramref name="right"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three shapes are handled. <see cref="string"/> orders through <see cref="string.Compare(string, string)"/>.
+    /// Any type declaring relational operators — every primitive, and framework types such as
+    /// <see cref="DateTime"/> or <see cref="decimal"/> — uses them directly.
+    /// </para>
+    /// <para>
+    /// Everything else falls back to the <see cref="IComparable{T}"/> contract that the calling overloads already
+    /// constrain on: <c>key.CompareTo(pivot) &gt; 0</c>. This is what makes a key mapped through a
+    /// <c>ValueConverter</c> work — a strongly-typed identifier ordinarily implements
+    /// <see cref="IComparable{T}"/> without declaring <c>&lt;</c> and <c>&gt;</c>, and
+    /// <see cref="Expression.GreaterThan(Expression, Expression)"/> rejects such a type outright. EF Core
+    /// translates the <c>CompareTo</c> form against the converted column just as it does the operator form.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the key type neither declares relational operators nor exposes a public
+    /// <c>CompareTo</c> accepting its own type, leaving no comparison that could be translated to SQL.
+    /// </exception>
     private static BinaryExpression BuildComparisonExpression(Expression left, Expression right, bool isGreaterThan) {
         if(left.Type == typeof(string)) {
             MethodInfo compareMethod = typeof(string).GetMethod(nameof(string.Compare), [typeof(string), typeof(string)])!;
@@ -423,9 +458,46 @@ public static partial class QueryablePaginationExtensions {
                 : Expression.LessThan(compareCall, zero);
         }
 
+        if(SupportsRelationalOperators(left.Type)) {
+            return isGreaterThan
+                ? Expression.GreaterThan(left, right)
+                : Expression.LessThan(left, right);
+        }
+
+        MethodInfo? compareTo = CompareToMethodCache.GetOrAdd(
+            left.Type,
+            static type => type.GetMethod(nameof(IComparable<>.CompareTo), BindingFlags.Public | BindingFlags.Instance, [type]));
+
+        if(compareTo is null) {
+            throw new InvalidOperationException(
+                $"Cannot build a keyset seek predicate for key type '{left.Type.Name}': it declares neither the " +
+                $"relational operators ('<' and '>') nor a public 'CompareTo({left.Type.Name})'. Add one of the two, " +
+                "or select a key the database can order on directly.");
+        }
+
+        MethodCallExpression comparison = Expression.Call(left, compareTo, right);
         return isGreaterThan
-            ? Expression.GreaterThan(left, right)
-            : Expression.LessThan(left, right);
+            ? Expression.GreaterThan(comparison, Expression.Constant(0))
+            : Expression.LessThan(comparison, Expression.Constant(0));
+    }
+
+    /// <summary>
+    /// Determines whether <see cref="Expression.GreaterThan(Expression, Expression)"/> and
+    /// <see cref="Expression.LessThan(Expression, Expression)"/> accept <paramref name="type"/>, by asking those
+    /// factories directly rather than guessing from a list of known types. Evaluated once per type.
+    /// </summary>
+    private static bool SupportsRelationalOperators(Type type) {
+        return RelationalOperatorSupportCache.GetOrAdd(type, static t => {
+            ParameterExpression probe = Expression.Parameter(t, "probe");
+            try {
+                _ = Expression.GreaterThan(probe, probe);
+                _ = Expression.LessThan(probe, probe);
+                return true;
+            }
+            catch(InvalidOperationException) {
+                return false;
+            }
+        });
     }
 
     /// <summary>

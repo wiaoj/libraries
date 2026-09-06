@@ -163,6 +163,33 @@ public async Task<CursorResult<Account>> GetAccountsAsync(
 }
 ```
 
+#### Strongly-typed identifiers and other value-converted keys
+
+This is also the overload for an entity whose key is a value object reaching the database through a `ValueConverter`:
+
+```csharp
+public sealed class DeliveryLog {
+    public NotificationRequestId RequestId { get; private set; }   // -> bigint via SnowflakeIdValueConverter
+}
+```
+
+Such a key cannot supply a primitive key selector — there is no member access to the underlying `long` that EF Core could translate, so `l => l.RequestId.Value.Value` compiles and then fails at runtime. It does not need one. The seek predicate compares against the whole value object, which the provider already maps to its column, and the codec handles the token entirely in CLR space:
+
+```csharp
+return await db.DeliveryLogs
+    .OrderBy(l => l.RequestId)
+    .ToCursorResultAsync(
+        request: request,
+        keySelector: l => l.RequestId,
+        cursorEncoder: id => CursorToken.FromBytes(BitConverter.GetBytes(id.Value)),
+        cursorDecoder: token => new NotificationRequestId(/* read the 8 bytes back */),
+        cancellationToken: ct);
+```
+
+`TKey` only has to be *ordered*. Relational operators are used when the type declares them; otherwise the seek is built from `IComparable<TKey>.CompareTo`, which providers translate equally well — so an identifier implementing only `IComparable<T>`, the ordinary shape in a DDD codebase, works without declaring `<` and `>`.
+
+A key exposing neither relational operators nor a public `CompareTo` (an explicit interface implementation, for instance) has no comparison that can reach SQL, and the call fails with a message saying so rather than emitting a query that means something else.
+
 ---
 
 ## Architectural Behavior

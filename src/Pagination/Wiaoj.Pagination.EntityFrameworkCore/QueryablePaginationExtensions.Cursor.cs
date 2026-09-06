@@ -1864,6 +1864,16 @@ public static partial class QueryablePaginationExtensions {
     /// that require custom serialization into an opaque <see cref="CursorToken"/>.
     /// </para>
     /// <para>
+    /// <b>Value-converted keys:</b> This is also the overload for an entity keyed by a value object mapped through
+    /// a <c>ValueConverter</c> — a strongly-typed identifier, say. Such a key cannot supply a primitive key selector,
+    /// because there is no member access to the underlying primitive that EF Core could translate; but it does not
+    /// need one. The seek predicate compares against the whole value object, which the provider maps to its column,
+    /// and <paramref name="cursorEncoder"/> / <paramref name="cursorDecoder"/> handle the token entirely in CLR
+    /// space. <typeparamref name="TKey"/> need only be ordered: relational operators are used when the type declares
+    /// them, otherwise the seek is built from <see cref="IComparable{T}.CompareTo"/>, which providers translate
+    /// equally well.
+    /// </para>
+    /// <para>
     /// <b>Execution Pipeline:</b>
     /// <list type="number">
     ///   <item><description>If a cursor is provided, decodes the pivot key using <paramref name="cursorDecoder"/> and injects an index-seek <c>WHERE</c> predicate.</description></item>
@@ -1922,9 +1932,13 @@ public static partial class QueryablePaginationExtensions {
             bool seekGreaterThan = (!isDescending && request.Direction == CursorDirection.Forward) ||
                                    (isDescending && request.Direction == CursorDirection.Backward);
 
-            BinaryExpression comparison = seekGreaterThan
-                ? Expression.GreaterThan(keySelector.Body, Expression.Constant(pivotKey, typeof(TKey)))
-                : Expression.LessThan(keySelector.Body, Expression.Constant(pivotKey, typeof(TKey)));
+            // Routed through the shared builder so that a key type without relational operators — the ordinary
+            // shape of a strongly-typed identifier mapped through a ValueConverter — seeks via its
+            // IComparable<TKey> contract instead of being rejected outright by Expression.GreaterThan.
+            BinaryExpression comparison = BuildComparisonExpression(
+                keySelector.Body,
+                Expression.Constant(pivotKey, typeof(TKey)),
+                seekGreaterThan);
 
             Expression<Func<TSource, bool>> predicate = Expression.Lambda<Func<TSource, bool>>(comparison, keySelector.Parameters);
             query = query.Where(predicate);
