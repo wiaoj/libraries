@@ -3,87 +3,82 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using Wiaoj.Ddd.DomainEvents;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
+using Wiaoj.Ddd.EntityFrameworkCore.Internal.Claim;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal.Loggers;
 using Wiaoj.Ddd.Extensions;
-using Wiaoj.Extensions;
 using Wiaoj.Serialization;
 
 namespace Wiaoj.Ddd.EntityFrameworkCore.Outbox;
+
+/// <summary>
+/// Claims pending outbox rows and runs the single handler each one names.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A row is one (event, handler) pair, so a failure is scoped to the handler that failed: the others already
+/// completed and are not repeated. That is what makes retries safe without demanding that every handler be
+/// idempotent.
+/// </para>
+/// <para>
+/// A row that keeps failing is dead-lettered rather than quietly dropped once its attempts run out — a
+/// terminal state that can be queried and alerted on, instead of a row that simply stops matching the claim
+/// predicate and is never heard from again.
+/// </para>
+/// </remarks>
 internal sealed class OutboxProcessor<TContext>(
     IServiceProvider serviceProvider,
     IOptionsMonitor<OutboxOptions> options,
     ISerializer<DddEfCoreOutboxSerializerKey> serializer,
     ILogger<OutboxProcessor<TContext>> logger,
-    OutboxChannel<TContext> outboxChannel,
-    OutboxInstanceInfo instanceInfo)
+    OutboxInstanceInfo instanceInfo,
+    OutboxClaimStrategyFactory claimStrategyFactory,
+    IOutboxAliasRegistry aliases,
+    OutboxHandlerCatalog handlerCatalog)
     : BackgroundService where TContext : DbContext {
 
-    private static readonly ConcurrentDictionary<string, Type?> _typeCache = new();
-    private readonly ChannelReader<OutboxMessage> _channelReader = outboxChannel.Reader;
     private readonly string _myInstanceId = instanceInfo.InstanceId;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         TimeSpan initialDelay = options.CurrentValue.InitialDelay;
 
-        if(initialDelay > TimeSpan.Zero) { 
-            logger.LogInitialDelayPending(initialDelay); 
-            await initialDelay.Delay(stoppingToken);
+        if(initialDelay > TimeSpan.Zero) {
+            logger.LogInitialDelayPending(initialDelay);
+            await Task.Delay(initialDelay, stoppingToken);
         }
 
         using(logger.BeginScope(new Dictionary<string, object> {
             ["ProcessorInstanceId"] = this._myInstanceId,
             ["PartitionKey"] = options.CurrentValue.PartitionKey ?? "Global"
         })) {
-            // Extension Method Call
             logger.LogServiceStarted(options.CurrentValue.BatchSize, options.CurrentValue.PollingInterval);
 
-            Task channelTask = Task.Run(() => ProcessChannelMessagesAsync(stoppingToken), stoppingToken);
-            Task pollingTask = Task.Run(() => ProcessDbPollingAsync(stoppingToken), stoppingToken);
+            while(!stoppingToken.IsCancellationRequested) {
+                try {
+                    int processed = await ProcessBatchAsync(stoppingToken);
 
-            await Task.WhenAll(channelTask, pollingTask);
-        }
-    }
-
-    private async Task ProcessChannelMessagesAsync(CancellationToken stoppingToken) {
-        logger.LogFastPathStarted();
-
-        try {
-            await foreach(OutboxMessage message in this._channelReader.ReadAllAsync(stoppingToken)) {
-                if(message.LockId == this._myInstanceId) {
-                    await ProcessSingleMessageSafeAsync(message, processingMode: "FastPath", stoppingToken);
+                    // A full batch means there is probably more waiting; go straight round again rather than
+                    // sleeping through a backlog.
+                    if(processed >= options.CurrentValue.BatchSize) {
+                        continue;
+                    }
                 }
+                catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
+                    break;
+                }
+                catch(Exception ex) {
+                    logger.LogPollingError(ex);
+                }
+
+                await Task.Delay(options.CurrentValue.PollingInterval, stoppingToken);
             }
-        }
-        catch(OperationCanceledException) {
-            logger.LogFastPathStopped();
-        }
-        catch(Exception ex) {
-            logger.LogFastPathCriticalError(ex);
         }
     }
 
-    private async Task ProcessDbPollingAsync(CancellationToken stoppingToken) {
-        logger.LogSlowPathStarted();
-
-        while(!stoppingToken.IsCancellationRequested) {
-            try {
-                await RecoverAndProcessZombiesAsync(stoppingToken);
-            }
-            catch(Exception ex) {
-                logger.LogPollingError(ex);
-            }
-
-            await Task.Delay(options.CurrentValue.PollingInterval, stoppingToken);
-        }
-    }
-
-    private async Task RecoverAndProcessZombiesAsync(CancellationToken stoppingToken) {
+    /// <summary>Claims one batch and runs it. Returns how many rows were claimed.</summary>
+    internal async Task<int> ProcessBatchAsync(CancellationToken cancellationToken) {
         OutboxOptions currentOptions = options.CurrentValue;
 
         await using AsyncServiceScope scope = serviceProvider.CreateAsyncScope();
@@ -92,164 +87,132 @@ internal sealed class OutboxProcessor<TContext>(
 
         DateTimeOffset now = timeProvider.GetUtcNow();
 
-        IQueryable<OutboxMessage> query = dbContext.Set<OutboxMessage>()
-            .Where(m => m.ProcessedAt == null)
-            .Where(m => m.LockId == null || m.LockExpiration < now)
-            .Where(m => m.RetryCount < currentOptions.RetryCount);
+        IOutboxClaimStrategy claimStrategy = claimStrategyFactory.Create(dbContext);
 
-        if(!string.IsNullOrEmpty(currentOptions.PartitionKey)) {
-            query = query.Where(m => m.PartitionKey == currentOptions.PartitionKey);
+        IReadOnlyList<OutboxMessage> claimed = await claimStrategy.ClaimAsync(
+            dbContext,
+            currentOptions.BatchSize,
+            this._myInstanceId,
+            now.UtcTicks,
+            now.Add(currentOptions.LockDuration).UtcTicks,
+            currentOptions.PartitionKey,
+            cancellationToken).ConfigureAwait(false);
+
+        if(claimed.Count == 0) {
+            return 0;
         }
 
-        int claimedCount = await query
-            .OrderBy(m => m.OccurredAt)
-            .Take(currentOptions.BatchSize)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(m => m.LockId, this._myInstanceId)
-                .SetProperty(m => m.LockExpiration, now.Add(currentOptions.LockDuration)),
-                stoppingToken);
+        logger.LogZombieMessagesClaimed(claimed.Count);
 
-        if(claimedCount == 0) {
-            return;
+        foreach(OutboxMessage message in claimed) {
+            if(cancellationToken.IsCancellationRequested) {
+                break;
+            }
+
+            await ProcessSingleAsync(scope.ServiceProvider, dbContext, message, currentOptions, timeProvider, cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        logger.LogZombieMessagesClaimed(claimedCount);
-
-        List<OutboxMessage> messages = await dbContext.Set<OutboxMessage>()
-            .Where(m => m.LockId == this._myInstanceId && m.ProcessedAt == null)
-            .ToListAsync(stoppingToken);
-
-        foreach(OutboxMessage? message in messages) {
-            await ProcessSingleMessageSafeAsync(message, processingMode: "SlowPath", stoppingToken);
-        }
+        return claimed.Count;
     }
 
-    private async Task ProcessSingleMessageSafeAsync(OutboxMessage message, string processingMode, CancellationToken stoppingToken) {
+    private async Task ProcessSingleAsync(
+        IServiceProvider scopedProvider,
+        TContext dbContext,
+        OutboxMessage message,
+        OutboxOptions currentOptions,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken) {
+
         using IDisposable? logScope = logger.BeginScope(new Dictionary<string, object> {
             ["OutboxMessageId"] = message.Id,
-            ["MessageType"] = message.Type,
-            ["ProcessingMode"] = processingMode
+            ["EventAlias"] = message.EventAlias,
+            ["HandlerAlias"] = message.HandlerAlias
         });
 
         logger.LogProcessingStarted();
-
-        await using AsyncServiceScope scope = serviceProvider.CreateAsyncScope();
-        TContext dbContext = scope.ServiceProvider.GetRequiredService<TContext>();
-        IDomainEventDispatcher dispatcher = scope.ServiceProvider.GetRequiredService<IDomainEventDispatcher>();
-        TimeProvider timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
-
         Stopwatch stopwatch = Stopwatch.StartNew();
 
         try {
-            IDomainEvent? domainEvent = DeserializeEvent(message);
+            Type? eventType = aliases.ResolveEventType(message.EventAlias);
 
-            if(domainEvent is null) {
+            if(eventType is null) {
+                // The event type is gone. No number of retries brings it back.
+                await FinalizeAsync(dbContext, message, m => m.MarkDeadLettered(
+                    timeProvider.GetUtcNow(), $"Event type '{message.EventAlias}' could not be resolved."), cancellationToken);
                 logger.LogDeserializationFailed();
-                await MarkAsFailedDbAsync(dbContext, message.Id, $"Type resolution failed: {message.Type}", stoppingToken);
+                return;
+            }
+
+            if(serializer.DeserializeFromString(message.Payload, eventType) is not IDomainEvent domainEvent) {
+                await FinalizeAsync(dbContext, message, m => m.MarkDeadLettered(
+                    timeProvider.GetUtcNow(), $"Payload for '{message.EventAlias}' did not deserialize into a domain event."), cancellationToken);
+                logger.LogDeserializationFailed();
                 return;
             }
 
             logger.LogDispatchingHandlers();
-            await dispatcher.DispatchPostCommitCompiledAsync(domainEvent, stoppingToken);
+
+            bool dispatched = await handlerCatalog
+                .TryDispatchAsync(scopedProvider, domainEvent, message.HandlerAlias, cancellationToken)
+                .ConfigureAwait(false);
+
+            if(!dispatched) {
+                // The handler this row was written for no longer exists. Also terminal.
+                await FinalizeAsync(dbContext, message, m => m.MarkDeadLettered(
+                    timeProvider.GetUtcNow(), $"Handler '{message.HandlerAlias}' is no longer registered."), cancellationToken);
+                return;
+            }
 
             stopwatch.Stop();
-            logger.LogHandlersExecuted(stopwatch.ElapsedMilliseconds);
 
-            int rowsAffected = await dbContext.Set<OutboxMessage>()
-                .Where(m => m.Id == message.Id && m.LockId == this._myInstanceId)
-                .Where(m => m.ProcessedAt == null)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(m => m.ProcessedAt, timeProvider.GetUtcNow())
-                    .SetProperty(m => m.ProcessedBy, this._myInstanceId)
-                    .SetProperty(m => m.Error, (string?)null)
-                    .SetProperty(m => m.LockId, (string?)null)
-                    .SetProperty(m => m.LockExpiration, (DateTimeOffset?)null),
-                    stoppingToken);
-
-            if(rowsAffected > 0) {
-                logger.LogMessageProcessedSuccessfully(stopwatch.ElapsedMilliseconds);
-            }
-            else {
-                await RunDiagnosticsForMissingUpdateAsync(dbContext, message.Id, stopwatch.ElapsedMilliseconds, stoppingToken);
-            }
+            await FinalizeAsync(dbContext, message, m => m.MarkProcessed(timeProvider.GetUtcNow(), this._myInstanceId), cancellationToken);
+            logger.LogMessageProcessedSuccessfully(stopwatch.ElapsedMilliseconds);
+        }
+        catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested) {
+            throw;
         }
         catch(Exception ex) {
             stopwatch.Stop();
             logger.LogProcessingFailed(ex, stopwatch.ElapsedMilliseconds);
-            await MarkAsFailedDbAsync(dbContext, message.Id, ex.ToString(), stoppingToken);
-        }
-    }
 
-    private async Task RunDiagnosticsForMissingUpdateAsync(TContext dbContext, Guid messageId, long durationMs, CancellationToken stoppingToken) {
-        OutboxMessage? actualState = await dbContext.Set<OutboxMessage>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(m => m.Id == messageId, stoppingToken);
+            DateTimeOffset failedAt = timeProvider.GetUtcNow();
+            OutboxRetryPolicy policy = currentOptions.RetryPolicy;
 
-        if(actualState is null) {
-            logger.LogDiagRecordNotFound();
-            return;
-        }
+            // Attempts is incremented by whichever branch runs, so compare against the count before it.
+            bool exhausted = message.Attempts + 1 >= policy.MaxAttempts;
 
-        if(actualState.ProcessedAt.HasValue) {
-            logger.LogDiagAlreadyProcessed(actualState.ProcessedAt);
-            return;
-        }
-
-        if(actualState.LockId != this._myInstanceId) {
-            logger.LogDiagLockLost(actualState.LockId ?? "NULL", durationMs);
-            return;
-        }
-
-        logger.LogDiagRaceCondition(actualState.LockId, actualState.LockExpiration);
-    }
-
-    private async Task MarkAsFailedDbAsync(TContext dbContext, Guid id, string error, CancellationToken token) {
-        try {
-            int rows = await dbContext.Set<OutboxMessage>()
-                .Where(m => m.Id == id && m.LockId == this._myInstanceId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(m => m.Error, error)
-                    .SetProperty(m => m.RetryCount, c => c.RetryCount + 1)
-                    .SetProperty(m => m.LockId, (string?)null)
-                    .SetProperty(m => m.LockExpiration, (DateTimeOffset?)null),
-                    token);
-
-            if(rows > 0) {
+            if(exhausted) {
+                await FinalizeAsync(dbContext, message, m => m.MarkDeadLettered(failedAt, ex.ToString()), CancellationToken.None);
                 logger.LogMarkedAsFailed();
             }
             else {
-                logger.LogMarkFailedStatusUpdateLost();
+                TimeSpan delay = policy.DelayFor(message.Attempts);
+                await FinalizeAsync(dbContext, message, m => m.ScheduleRetry(failedAt, delay, ex.ToString()), CancellationToken.None);
             }
-        }
-        catch(Exception ex) {
-            logger.LogCriticalMarkFailedError(ex);
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private IDomainEvent? DeserializeEvent(OutboxMessage message) {
-        if(!_typeCache.TryGetValue(message.Type, out Type? eventType)) {
-            try {
-                eventType = Type.GetType(message.Type);
-                _typeCache.TryAdd(message.Type, eventType);
-            }
-            catch(Exception ex) {
-                logger.LogTypeResolutionError(ex, message.Type);
-                return null;
-            }
-        }
+    /// <summary>
+    /// Applies a terminal or retry transition and persists it.
+    /// </summary>
+    /// <remarks>
+    /// The claim returned untracked instances, so the row is attached before saving. The lock this instance
+    /// holds is what makes the write safe: no other processor can be acting on this row.
+    /// </remarks>
+    private static async Task FinalizeAsync(
+        DbContext dbContext,
+        OutboxMessage message,
+        Action<OutboxMessage> transition,
+        CancellationToken cancellationToken) {
 
-        if(eventType is null) {
-            logger.LogTypeResolutionNull(message.Type);
-            return null;
-        }
+        transition(message);
 
-        try {
-            return serializer.DeserializeFromString(message.Content, eventType) as IDomainEvent;
-        }
-        catch(Exception ex) {
-            logger.LogDeserializationError(ex, message.Type);
-            return null;
-        }
+        dbContext.Attach(message);
+        dbContext.Entry(message).State = EntityState.Modified;
+
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        dbContext.Entry(message).State = EntityState.Detached;
     }
 }

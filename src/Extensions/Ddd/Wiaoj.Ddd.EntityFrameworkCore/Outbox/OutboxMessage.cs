@@ -1,159 +1,182 @@
-﻿using System.ComponentModel.DataAnnotations;
+using Wiaoj.Preconditions;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Diagnostics;
 
-namespace Wiaoj.Ddd.EntityFrameworkCore.Outbox; 
+namespace Wiaoj.Ddd.EntityFrameworkCore.Outbox;
+
 /// <summary>
-/// Represents a message stored in the database as part of the Transactional Outbox pattern.
-/// This ensures exactly-once or at-least-once delivery of domain events by saving them
-/// within the same database transaction as the business state changes.
+/// One durable unit of post-commit work: a single domain event destined for a single handler.
 /// </summary>
-public sealed class OutboxMessage { 
-    /// <summary>
-    /// Gets the unique identifier of the outbox message.
-    /// </summary>
+/// <remarks>
+/// <para>
+/// <b>One row per (event, handler).</b> An event with five handlers produces five rows. Each is claimed,
+/// retried and dead-lettered independently, so a handler that fails cannot force the four that already
+/// succeeded to run again. The alternative — one row per event — makes the retry unit the event, which
+/// silently requires every handler to be idempotent.
+/// </para>
+/// <para>
+/// <b>Timestamps are UTC ticks.</b> <see cref="DateTimeOffset"/> columns are not orderable or comparable
+/// on every provider (SQLite refuses both), and the claim query does nothing but order and compare on
+/// them. Integer ticks are translatable everywhere and cheaper to index.
+/// </para>
+/// </remarks>
+[DebuggerDisplay("{EventAlias,nq} -> {HandlerAlias,nq} (attempts={Attempts})")]
+public sealed class OutboxMessage {
+    /// <summary>Gets the unique identifier of this delivery.</summary>
     public Guid Id { get; private set; }
 
-    /// <summary>
-    /// Gets the fully qualified assembly name or a custom identifier for the event type.
-    /// Used to deserialize the <see cref="Content"/> back into the correct CLR object.
-    /// </summary>
-    public string Type { get; private set; }
+    /// <summary>Gets the stable logical name of the event type, used to resolve the CLR type on dispatch.</summary>
+    public string EventAlias { get; private set; }
 
-    /// <summary>
-    /// Gets the serialized payload of the domain event, typically in JSON format.
-    /// </summary>
-    public string Content { get; private set; }
+    /// <summary>Gets the stable logical name of the handler this row is destined for.</summary>
+    public string HandlerAlias { get; private set; }
 
-    /// <summary>
-    /// Gets the timestamp indicating when the domain event originally occurred.
-    /// Used for ordering and chronologically processing messages.
-    /// </summary>
-    public DateTimeOffset OccurredAt { get; private set; }
+    /// <summary>Gets the serialized event payload.</summary>
+    public string Payload { get; private set; }
 
-    /// <summary>
-    /// Gets the timestamp indicating when the message was successfully processed.
-    /// If this property is null, the message is pending or has failed and needs to be retried.
-    /// </summary>
-    public DateTimeOffset? ProcessedAt { get; private set; }
-
-    /// <summary>
-    /// Gets the identifier of the processor instance (e.g., Pod Name, Machine Name, or a Guid) 
-    /// that successfully processed this message. Useful for auditing and debugging.
-    /// </summary>
-    public string? ProcessedBy { get; private set; }
-
-    /// <summary>
-    /// Gets the error message or exception details if the message processing failed.
-    /// This is reset to null if a subsequent retry is successful.
-    /// </summary>
-    public string? Error { get; private set; }
-
-    /// <summary>
-    /// Gets the number of times the system has attempted to process this message and failed.
-    /// Used to stop processing after a certain threshold (e.g., dead-lettering).
-    /// </summary>
-    public int RetryCount { get; private set; }
-
-    /// <summary>
-    /// Gets an optional key used to group related messages. 
-    /// Messages with the same partition key can be routed to the same processor instance 
-    /// to guarantee strict sequential ordering.
-    /// </summary>
+    /// <summary>Gets the optional key restricting which processor instance may claim this row.</summary>
     public string? PartitionKey { get; private set; }
 
+    /// <summary>Gets the UTC ticks at which the event occurred.</summary>
+    public long OccurredAtTicks { get; private set; }
+
+    /// <summary>Gets the UTC ticks before which this row must not be claimed. Drives retry backoff.</summary>
+    public long NextAttemptAtTicks { get; private set; }
+
+    /// <summary>Gets the UTC ticks at which the handler completed successfully, or <see langword="null"/>.</summary>
+    public long? ProcessedAtTicks { get; private set; }
+
     /// <summary>
-    /// Gets the identifier of the processor instance currently holding a pessimistic lock on this message.
-    /// If null, the message is available to be picked up by any polling instance.
+    /// Gets the UTC ticks at which this row was given up on, or <see langword="null"/>. A dead-lettered row
+    /// is terminal: it is never claimed again, and unlike an exhausted retry it says so.
     /// </summary>
+    public long? DeadLetteredAtTicks { get; private set; }
+
+    /// <summary>Gets the identifier of the processor instance that completed this row.</summary>
+    public string? ProcessedBy { get; private set; }
+
+    /// <summary>Gets the number of dispatch attempts made so far.</summary>
+    public int Attempts { get; private set; }
+
+    /// <summary>Gets the error recorded by the most recent failed attempt.</summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>Gets the identifier of the processor instance currently holding this row.</summary>
     public string? LockId { get; private set; }
 
-    /// <summary>
-    /// Gets the timestamp when the current pessimistic lock expires. 
-    /// If this time has passed and the message is still not processed, it is considered a "zombie" 
-    /// and can be reclaimed by another processor.
-    /// </summary>
-    public DateTimeOffset? LockExpiration { get; private set; }
+    /// <summary>Gets the UTC ticks at which the current lock expires.</summary>
+    public long? LockExpiresAtTicks { get; private set; }
 
-    /// <summary>
-    /// Gets the optimistic concurrency token used by Entity Framework Core.
-    /// Ensures that two different instances do not update the same message simultaneously.
-    /// </summary>
-    [ConcurrencyCheck]
-    public Guid Version { get; private set; }
+    /// <summary>Gets the moment the event occurred.</summary>
+    [NotMapped]
+    public DateTimeOffset OccurredAt => new(this.OccurredAtTicks, TimeSpan.Zero);
 
-#pragma warning disable CS8618
-    /// <summary>
-    /// Parameterless constructor required by Entity Framework Core for materialization.
-    /// </summary>
+    /// <summary>Gets the moment this row completed successfully, if it has.</summary>
+    [NotMapped]
+    public DateTimeOffset? ProcessedAt => ToOffset(this.ProcessedAtTicks);
+
+    /// <summary>Gets the moment this row was dead-lettered, if it was.</summary>
+    [NotMapped]
+    public DateTimeOffset? DeadLetteredAt => ToOffset(this.DeadLetteredAtTicks);
+
+    /// <summary>Gets a value indicating whether this row will never be claimed again.</summary>
+    [NotMapped]
+    public bool IsTerminal => this.ProcessedAtTicks.HasValue || this.DeadLetteredAtTicks.HasValue;
+
+#pragma warning disable CS8618 // Materialization constructor.
     private OutboxMessage() { }
 #pragma warning restore CS8618
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="OutboxMessage"/> class.
-    /// </summary>
-    /// <param name="id">The unique identifier for the message.</param>
-    /// <param name="type">The type name of the serialized event.</param>
-    /// <param name="content">The serialized event payload.</param>
-    /// <param name="occurredAt">The timestamp when the event occurred.</param>
-    /// <param name="partitionKey">The partition key for sequential processing routing.</param>
-    /// <param name="lockId">The initial processor instance acquiring the lock.</param>
-    /// <param name="lockExpiration">The initial lock expiration timestamp.</param>
-    public OutboxMessage(
+    private OutboxMessage(
         Guid id,
-        string type,
-        string content,
-        DateTimeOffset occurredAt,
+        string eventAlias,
+        string handlerAlias,
+        string payload,
         string? partitionKey,
-        string lockId,
-        DateTimeOffset lockExpiration) {
+        long occurredAtTicks,
+        long nextAttemptAtTicks) {
 
         this.Id = id;
-        this.Type = type;
-        this.Content = content;
-        this.OccurredAt = occurredAt;
+        this.EventAlias = eventAlias;
+        this.HandlerAlias = handlerAlias;
+        this.Payload = payload;
         this.PartitionKey = partitionKey;
-
-        // Initial Lock Ownership via Fast-Path (In-Memory Channel)
-        this.LockId = lockId;
-        this.LockExpiration = lockExpiration;
-
-        this.Version = Guid.NewGuid();
+        this.OccurredAtTicks = occurredAtTicks;
+        this.NextAttemptAtTicks = nextAttemptAtTicks;
     }
 
     /// <summary>
-    /// Marks the outbox message as successfully processed. 
-    /// Sets the completion timestamp, records the processing instance, clears any errors, 
-    /// and releases the pessimistic lock.
+    /// Creates a pending delivery of <paramref name="eventAlias"/> to <paramref name="handlerAlias"/>,
+    /// eligible for claiming immediately.
     /// </summary>
-    /// <param name="processedAt">The timestamp when the processing completed.</param>
-    /// <param name="processedBy">The identifier of the instance that completed the processing.</param>
-    public void MarkAsProcessed(DateTimeOffset processedAt, string processedBy) {
-        this.ProcessedAt = processedAt;
+    public static OutboxMessage Pending(
+        string eventAlias,
+        string handlerAlias,
+        string payload,
+        string? partitionKey,
+        DateTimeOffset occurredAt) {
+
+        Preca.ThrowIfNullOrWhiteSpace(eventAlias);
+        Preca.ThrowIfNullOrWhiteSpace(handlerAlias);
+        Preca.ThrowIfNull(payload);
+
+        long occurredAtTicks = occurredAt.UtcTicks;
+
+        return new OutboxMessage(
+            Guid.CreateVersion7(),
+            eventAlias,
+            handlerAlias,
+            payload,
+            partitionKey,
+            occurredAtTicks,
+            nextAttemptAtTicks: occurredAtTicks);
+    }
+
+    /// <summary>
+    /// Takes ownership of this row. Only the in-memory claim path calls this; the relational strategies
+    /// perform the same assignment inside their claim statement, where it is atomic.
+    /// </summary>
+    internal void AcquireLock(string workerId, long lockExpiresAtTicks) {
+        this.LockId = workerId;
+        this.LockExpiresAtTicks = lockExpiresAtTicks;
+    }
+
+    /// <summary>Records a successful dispatch and releases the lock.</summary>
+    public void MarkProcessed(DateTimeOffset processedAt, string processedBy) {
+        this.ProcessedAtTicks = processedAt.UtcTicks;
         this.ProcessedBy = processedBy;
-        this.Error = null;
-
-        // Release the lock
-        this.LockId = null;
-        this.LockExpiration = null;
-
-        // Update concurrency token
-        this.Version = Guid.NewGuid();
+        this.LastError = null;
+        ReleaseLock();
     }
 
     /// <summary>
-    /// Marks the outbox message as failed. 
-    /// Increments the retry count, records the error details, and releases the pessimistic lock 
-    /// so the message can be picked up again in the next polling cycle.
+    /// Records a failed dispatch and schedules the next attempt after an exponential backoff, releasing the
+    /// lock so the row is not held for the remainder of its lock duration.
     /// </summary>
-    /// <param name="error">The exception message or error details.</param>
-    public void MarkAsFailed(string error) {
-        this.Error = error;
-        this.RetryCount++;
+    public void ScheduleRetry(DateTimeOffset now, TimeSpan delay, string error) {
+        this.Attempts++;
+        this.LastError = error;
+        this.NextAttemptAtTicks = now.Add(delay).UtcTicks;
+        ReleaseLock();
+    }
 
-        // Release the lock so it can be retried by other workers without waiting for expiration
+    /// <summary>
+    /// Gives up on this row permanently. Unlike an exhausted retry count, this is an explicit terminal state
+    /// that can be queried, alerted on and replayed deliberately.
+    /// </summary>
+    public void MarkDeadLettered(DateTimeOffset now, string error) {
+        this.Attempts++;
+        this.LastError = error;
+        this.DeadLetteredAtTicks = now.UtcTicks;
+        ReleaseLock();
+    }
+
+    private void ReleaseLock() {
         this.LockId = null;
-        this.LockExpiration = null;
+        this.LockExpiresAtTicks = null;
+    }
 
-        // Update concurrency token
-        this.Version = Guid.NewGuid();
+    private static DateTimeOffset? ToOffset(long? ticks) {
+        return ticks.HasValue ? new DateTimeOffset(ticks.Value, TimeSpan.Zero) : null;
     }
 }
