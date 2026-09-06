@@ -150,7 +150,7 @@ modelBuilder.ApplyDddOutbox(outbox =>
 {
     outbox.TableName = "outbox_messages";
     outbox.Schema = "messaging";
-    outbox.UseFilteredIndexes = false;   // partial-index SQL is not portable; opt out if your provider disagrees
+    outbox.PendingIndexFilter = null;    // partial-index SQL names columns and dialects; supply your own if wanted
 });
 ```
 
@@ -237,6 +237,28 @@ Everything the outbox does is LINQ except the claim, which is written by hand fo
 `ExecuteUpdate` emits a plain `UPDATE`: there is no way to ask for skip-locked semantics, so concurrent processors either block on each other's row locks or claim overlapping candidate sets and lose the update. It also cannot return what it updated, which costs a second round trip to read back the rows just claimed. Both are avoided by writing that one statement per dialect.
 
 An unrecognised provider throws rather than falling back to a non-atomic claim. A silent fallback would appear to work and would hand the same row to several processors under load, surfacing as duplicated side effects far from the cause.
+
+### Naming conventions
+
+Every identifier the claim statement writes — the table, the schema and each column — is read from the EF model, so a context using a naming convention works unchanged:
+
+```csharp
+optionsBuilder.UseNpgsql(cs).UseSnakeCaseNamingConvention();
+```
+
+The one thing the library cannot write for you is the partial-index filter, because raw SQL has to name columns rather than properties. `PendingIndexFilter` is therefore null by default; set it if you want one, spelled the way your own model maps:
+
+```csharp
+outbox.PendingIndexFilter = "\"processed_at_ticks\" IS NULL AND \"dead_lettered_at_ticks\" IS NULL";
+```
+
+### Aliases and the fallback
+
+Without an attribute the alias is a compact, stable form of the type name: namespace, type name, and generic arguments by the same rule. It deliberately carries no assembly, version or culture — `Type.FullName` embeds all three for a closed generic, which both blows past any sane column width (400+ characters for a two-argument type) and changes on a version bump, orphaning rows already written.
+
+It still changes if a type moves namespace, which is what the attribute is for.
+
+### Timestamps
 
 Timestamps are stored as UTC ticks rather than `DateTimeOffset`, because the claim query does nothing but order and compare on them and not every provider can translate that on a `DateTimeOffset` column — SQLite refuses both. Integers work everywhere and index more cheaply.
 

@@ -182,3 +182,33 @@ public sealed class NoOpPreCommitDispatcher : IDomainEventDispatcher {
     public ValueTask DispatchPostCommitAsync<TDomainEvent>(TDomainEvent @event, CancellationToken cancellationToken = default)
         where TDomainEvent : IDomainEvent => ValueTask.CompletedTask;
 }
+
+/// <summary>
+/// The same model, but with every column renamed the way a snake_case naming convention would rename it.
+/// The claim statement must read those names from the model instead of assuming a column is called after its
+/// property.
+/// </summary>
+public sealed class SnakeCaseOutboxContext(DbContextOptions<SnakeCaseOutboxContext> options) : DbContext(options) {
+    protected override void OnModelCreating(ModelBuilder modelBuilder) {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.ApplyDddOutbox(o => o.TableName = "outbox_messages");
+
+        modelBuilder.Entity<OutboxMessage>(entity => {
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.EventAlias).HasColumnName("event_alias");
+            entity.Property(x => x.HandlerAlias).HasColumnName("handler_alias");
+            entity.Property(x => x.Payload).HasColumnName("payload");
+            entity.Property(x => x.PartitionKey).HasColumnName("partition_key");
+            entity.Property(x => x.OccurredAtTicks).HasColumnName("occurred_at_ticks");
+            entity.Property(x => x.NextAttemptAtTicks).HasColumnName("next_attempt_at_ticks");
+            entity.Property(x => x.ProcessedAtTicks).HasColumnName("processed_at_ticks");
+            entity.Property(x => x.DeadLetteredAtTicks).HasColumnName("dead_lettered_at_ticks");
+            entity.Property(x => x.ProcessedBy).HasColumnName("processed_by");
+            entity.Property(x => x.Attempts).HasColumnName("attempts");
+            entity.Property(x => x.LastError).HasColumnName("last_error");
+            entity.Property(x => x.LockId).HasColumnName("lock_id");
+            entity.Property(x => x.LockExpiresAtTicks).HasColumnName("lock_expires_at_ticks");
+        });
+    }
+}

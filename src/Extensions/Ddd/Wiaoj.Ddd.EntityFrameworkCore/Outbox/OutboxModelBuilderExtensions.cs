@@ -20,16 +20,28 @@ public sealed class OutboxModelOptions {
     public string? Schema { get; set; }
 
     /// <summary>
-    /// Gets or sets whether the claim indexes are declared as filtered (partial) indexes.
+    /// Gets or sets the raw SQL predicate restricting the claim indexes to pending rows, or
+    /// <see langword="null"/> for unfiltered indexes. Default is <see langword="null"/>.
     /// </summary>
     /// <remarks>
-    /// A filter is expressed as raw SQL and is not portable, so it is opt-out. Turning it off costs index
-    /// size, not correctness — the indexes still cover the claim query.
+    /// <para>
+    /// A partial index filter is raw SQL and must name <b>columns</b>, not properties — so a library cannot
+    /// write it for you: a context using a naming convention maps <c>ProcessedAtTicks</c> to
+    /// <c>processed_at_ticks</c>, and a built-in filter naming the property would make schema creation itself
+    /// fail. Quoting differs by provider on top of that.
+    /// </para>
+    /// <para>
+    /// Leaving it null costs index size, never correctness — the indexes still cover the claim query. Set it
+    /// when you know your own column names and dialect:
+    /// </para>
+    /// <code>
+    /// outbox.PendingIndexFilter = "\"processed_at_ticks\" IS NULL AND \"dead_lettered_at_ticks\" IS NULL";
+    /// </code>
     /// </remarks>
-    public bool UseFilteredIndexes { get; set; } = true;
+    public string? PendingIndexFilter { get; set; }
 
-    /// <summary>Gets or sets the maximum length of the alias columns. Default is 256.</summary>
-    public int AliasMaxLength { get; set; } = 256;
+    /// <summary>Gets or sets the maximum length of the alias columns. Default is 512.</summary>
+    public int AliasMaxLength { get; set; } = 512;
 }
 
 /// <summary>
@@ -76,10 +88,7 @@ public static class OutboxModelBuilderExtensions {
                 .HasIndex(x => new { x.PartitionKey, x.ProcessedAtTicks, x.DeadLetteredAtTicks, x.NextAttemptAtTicks })
                 .HasDatabaseName($"IX_{options.TableName}_Claim_Partition");
 
-            if(options.UseFilteredIndexes) {
-                // Pending rows only. Quoting differs by provider, so this is the one place a dialect leaks —
-                // hence UseFilteredIndexes, which turns it off for providers that disagree.
-                const string pendingFilter = @"""ProcessedAtTicks"" IS NULL AND ""DeadLetteredAtTicks"" IS NULL";
+            if(options.PendingIndexFilter is { Length: > 0 } pendingFilter) {
                 claimIndex.HasFilter(pendingFilter);
                 partitionIndex.HasFilter(pendingFilter);
             }

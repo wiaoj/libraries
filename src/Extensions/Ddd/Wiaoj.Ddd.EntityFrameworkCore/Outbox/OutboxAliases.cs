@@ -55,6 +55,13 @@ public interface IOutboxAliasRegistry {
     /// Resolves the event type an alias refers to, or <see langword="null"/> when nothing registered claims
     /// it — a row whose event type has been deleted or renamed without an alias.
     /// </summary>
+    /// <remarks>
+    /// Resolution is a lookup over types registered at startup, not a reflective search. A row written by a
+    /// previous process must resolve on the very first poll after a restart, and
+    /// <see cref="Type.GetType(string)"/> cannot do that: given a bare namespace-qualified name it searches
+    /// only the calling assembly and the core library, so an event living in the application's own assembly
+    /// would come back null and its row would be dead-lettered as unresolvable.
+    /// </remarks>
     Type? ResolveEventType(string alias);
 
     /// <summary>Registers an event type so its alias can be resolved on the way back.</summary>
@@ -79,32 +86,52 @@ internal sealed class OutboxAliasRegistry : IOutboxAliasRegistry {
         Preca.ThrowIfNull(eventType);
 
         return this._eventAliases.GetOrAdd(eventType, static type =>
-            type.GetCustomAttribute<DomainEventAliasAttribute>()?.Alias ?? type.FullName!);
+            type.GetCustomAttribute<DomainEventAliasAttribute>()?.Alias ?? BuildStableName(type));
     }
 
     public string GetHandlerAlias(Type handlerType) {
         Preca.ThrowIfNull(handlerType);
 
         return this._handlerAliases.GetOrAdd(handlerType, static type =>
-            type.GetCustomAttribute<DomainEventHandlerAliasAttribute>()?.Alias ?? type.FullName!);
+            type.GetCustomAttribute<DomainEventHandlerAliasAttribute>()?.Alias ?? BuildStableName(type));
     }
 
     public Type? ResolveEventType(string alias) {
         Preca.ThrowIfNullOrWhiteSpace(alias);
 
-        if(this._typesByAlias.TryGetValue(alias, out Type? known)) {
-            return known;
+        return this._typesByAlias.TryGetValue(alias, out Type? known) ? known : null;
+    }
+
+    /// <summary>
+    /// Builds the fallback alias for a type that carries no attribute.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Deliberately not <see cref="Type.FullName"/>. For a closed generic that returns the assembly-qualified
+    /// form of every type argument — <c>Handler`2[[Payload, Asm, Version=1.0.0.0, Culture=neutral,
+    /// PublicKeyToken=null],[…]]</c> — which is both enormous (460 characters for a two-argument handler, past
+    /// any sane column width) and unstable: it embeds the assembly version, so a version bump changes the
+    /// alias and orphans every row already written under the old one.
+    /// </para>
+    /// <para>
+    /// This form keeps the namespace and the type name, recurses into type arguments by the same rule, and
+    /// carries no assembly, version or culture. It is stable across every rebuild. It still changes if the
+    /// type moves namespace, which is what <see cref="DomainEventAliasAttribute"/> exists to prevent.
+    /// </para>
+    /// </remarks>
+    private static string BuildStableName(Type type) {
+        if(!type.IsGenericType) {
+            return type.FullName ?? type.Name;
         }
 
-        // Not seen in this process yet — a row written before a restart, or by another instance. Fall back to
-        // the CLR name, which is what an unannotated type's alias is.
-        Type? resolved = Type.GetType(alias, throwOnError: false);
+        string definition = type.GetGenericTypeDefinition().FullName ?? type.Name;
+        int arity = definition.IndexOf('`', StringComparison.Ordinal);
 
-        if(resolved is not null) {
-            Register(resolved);
+        if(arity >= 0) {
+            definition = definition[..arity];
         }
 
-        return resolved;
+        return $"{definition}<{string.Join(',', type.GetGenericArguments().Select(BuildStableName))}>";
     }
 
     public void Register(Type eventType) {
