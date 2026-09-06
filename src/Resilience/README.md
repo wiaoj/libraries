@@ -232,11 +232,11 @@ builder.Services.AddSingleton<ICircuitBreaker>(sp =>
 
 | Instrument | Kind | Tags | Description |
 |---|---|---|---|
-| `circuitbreaker.decisions` | Counter | `strategy`, `circuit`, `state`, `decision` | Acquire decisions, split by allowed/denied. |
-| `circuitbreaker.trips` | Counter | `strategy`, `circuit`, `reason` | Transitions into the `Open` state. |
-| `circuitbreaker.successes` | Counter | `strategy`, `circuit`, `recovered` | Recorded successes, flagging recoveries. |
-| `circuitbreaker.failures` | Counter | `strategy`, `circuit` | Recorded failures. |
-| `circuitbreaker.state` | ObservableGauge | `circuit` | Current state (0 = Closed, 1 = Open, 2 = HalfOpen). |
+| `circuit_breaker.decisions` | Counter | `resilience.strategy`, `resilience.key`, `resilience.circuit_state`, `resilience.decision` | Acquire decisions, split by allowed/denied. |
+| `circuit_breaker.trips` | Counter | `resilience.strategy`, `resilience.key`, `resilience.trip_reason` | Transitions into the `Open` state. |
+| `circuit_breaker.successes` | Counter | `resilience.strategy`, `resilience.key`, `resilience.recovered` | Recorded successes, flagging recoveries. |
+| `circuit_breaker.failures` | Counter | `resilience.strategy`, `resilience.key` | Recorded failures. |
+| `circuit_breaker.state` | ObservableGauge | `resilience.key` | Current state (0 = Closed, 1 = Open, 2 = HalfOpen). |
 
 **ActivitySource:** `Wiaoj.Resilience`
 

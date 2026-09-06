@@ -17,11 +17,11 @@ internal static class BloomFilterDiagnostics {
     public static readonly ActivitySource ActivitySource = new(ActivitySourceName, Version);
 
     // Standart Span İsimleri
-    public const string ActivitySave = "BloomFilter.Save";
-    public const string ActivityReload = "BloomFilter.Reload";
-    public const string ActivitySeeding = "BloomFilter.Seeding";
-    public const string ActivityWarmUp = "BloomFilter.WarmUp";
-    public const string ActivityScaleUp = "BloomFilter.ScaleUp";
+    public const string ActivitySave = "bloom_filter.save";
+    public const string ActivityReload = "bloom_filter.reload";
+    public const string ActivitySeeding = "bloom_filter.seed";
+    public const string ActivityWarmUp = "bloom_filter.warm_up";
+    public const string ActivityScaleUp = "bloom_filter.scale_up";
 
     // Standart Tag / Attribute İsimleri (Semantic Conventions)
     public const string TagFilterName = "bloom_filter.name";
@@ -43,7 +43,7 @@ internal static class BloomFilterDiagnostics {
     /// Tracks the total number of membership queries performed.
     /// </summary>
     public static readonly Counter<long> LookupCounter = Meter.CreateCounter<long>(
-        "bloom_filter.lookups.total",
+        "bloom_filter.lookups",
         unit: "{lookup}",
         description: "Total number of Contains lookups performed.");
 
@@ -51,7 +51,7 @@ internal static class BloomFilterDiagnostics {
     /// Tracks the number of lookups that returned true (potential match).
     /// </summary>
     public static readonly Counter<long> HitCounter = Meter.CreateCounter<long>(
-        "bloom_filter.hits.total",
+        "bloom_filter.hits",
         unit: "{hit}",
         description: "Total number of positive (might contain) lookup results.");
 
@@ -59,7 +59,7 @@ internal static class BloomFilterDiagnostics {
     /// Tracks the total number of items inserted across all filters.
     /// </summary>
     public static readonly Counter<long> AddCounter = Meter.CreateCounter<long>(
-        "bloom_filter.items_added.total",
+        "bloom_filter.items_added",
         unit: "{item}",
         description: "Total number of Add operations performed.");
 
@@ -67,7 +67,7 @@ internal static class BloomFilterDiagnostics {
     /// Tracks the total persistent bytes written to disk/storage.
     /// </summary>
     public static readonly Counter<long> BytesWrittenCounter = Meter.CreateCounter<long>(
-        "bloom_filter.storage.bytes_written.total",
+        "bloom_filter.storage.bytes_written",
         unit: "By",
         description: "Total volume of serialized snapshot data written to storage.");
 
@@ -75,7 +75,7 @@ internal static class BloomFilterDiagnostics {
     /// Tracks the total number of layer scale-ups in Scalable Bloom Filters.
     /// </summary>
     public static readonly Counter<long> ScalableLayerSpawnCounter = Meter.CreateCounter<long>(
-        "bloom_filter.scalable.layers_spawned.total",
+        "bloom_filter.scalable.layers_spawned",
         unit: "{layer}",
         description: "Number of dynamic layers spawned due to saturation.");
 
@@ -101,7 +101,7 @@ internal static class BloomFilterDiagnostics {
     /// Tracks the total seeding duration in milliseconds.
     /// </summary>
     public static readonly Histogram<double> SeedingDuration = Meter.CreateHistogram<double>(
-        "bloom_filter.seeding.duration",
+        "bloom_filter.seed.duration",
         unit: "ms",
         description: "Duration of populating filters via external data seeders.");
 

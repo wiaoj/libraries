@@ -239,7 +239,7 @@ public sealed class DashboardService(IDistributedCounterService counterService) 
 The library exports OpenTelemetry-compatible diagnostics under the name `Wiaoj.DistributedCounter`:
 
 - **Metrics (`Meter`):**
-  - `distributed_counter.increments`: Total increments requested (tags: `name`, `strategy`).
+  - `distributed_counter.increments`: Total increments requested (tags: `distributed_counter.name`, `distributed_counter.strategy`).
   - `distributed_counter.flushes`: Total background batch flushes executed.
   - `distributed_counter.flush_duration`: Latency histogram of storage batch sync operations in milliseconds.
 - **Traces (`ActivitySource`):**

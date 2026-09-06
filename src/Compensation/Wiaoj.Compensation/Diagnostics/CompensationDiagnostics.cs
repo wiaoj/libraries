@@ -33,7 +33,7 @@ public static class CompensationDiagnostics {
     }
 
     internal static class Activities {
-        public const string PipelineRun = "Compensation.Pipeline.Run";
-        public const string PipelineRollback = "Compensation.Pipeline.Rollback";
+        public const string PipelineRun = "compensation.pipeline.run";
+        public const string PipelineRollback = "compensation.pipeline.rollback";
     }
 }

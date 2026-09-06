@@ -75,6 +75,7 @@ public sealed class ResilienceTracingTests {
             => ValueTask.CompletedTask;
     }
 
+    [Collection(ResilienceTracingCollection.Name)]
     public sealed class TheCircuitBreakerExecutionSpan {
         [Fact]
         public async Task ExecuteAsync_WhenOperationSucceeds_EmitsSpanTaggedWithTheClosedOutcome() {
@@ -190,6 +191,7 @@ public sealed class ResilienceTracingTests {
         }
     }
 
+    [Collection(ResilienceTracingCollection.Name)]
     public sealed class TheTimeoutExecutionSpan {
         [Fact]
         public async Task ExecuteAsync_WhenOperationCompletesInTime_EmitsSpanWithTheConfiguredDeadline() {
