@@ -144,6 +144,7 @@ public sealed class OutboxHarness : IAsyncDisposable {
 
         services.AddScoped<DddAmbientUnitOfWork>();
         services.AddSingleton<IDomainEventDispatcher, NoOpPreCommitDispatcher>();
+        services.AddSingleton<OutboxSignal<OutboxTestContext>>();
         services.AddSingleton<DomainEventDispatcherInterceptor<OutboxTestContext>>();
 
         services.AddDbContext<OutboxTestContext>((sp, options) => {

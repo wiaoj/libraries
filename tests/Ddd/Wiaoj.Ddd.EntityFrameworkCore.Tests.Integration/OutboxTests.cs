@@ -38,7 +38,8 @@ public sealed class OutboxTests {
             new OutboxInstanceInfo("worker-1"),
             new OutboxClaimStrategyFactory(),
             harness.Services.GetRequiredService<IOutboxAliasRegistry>(),
-            harness.Services.GetRequiredService<OutboxHandlerCatalog>());
+            harness.Services.GetRequiredService<OutboxHandlerCatalog>(),
+            harness.Services.GetRequiredService<OutboxSignal<OutboxTestContext>>());
     }
 
     private static async Task RaiseInvoiceAsync(OutboxHarness harness, long id) {
