@@ -49,7 +49,7 @@ A cursor is described as a nullable **string**, not as the struct it is. A calle
 
 The parameter set is chosen from the endpoint's **declared response type** rather than guessed: `PagedResult<T>` means offset paging, `CursorResult<T>` means keyset. An endpoint returning neither gets headers documented and no parameters invented for it.
 
-Parameters the document already carries are left alone. A handler taking `[AsParameters] CursorRequest` already has `cursor`, `limit` and `direction` described by ASP.NET Core, and adding them twice produces an invalid document.
+Parameters the document already carries are left alone. A handler taking `[AsParameters] PageRequest` already has `page` and `size` described by ASP.NET Core, and adding them twice produces an invalid document. A handler taking `CursorParameters` has *nothing* described — a type that binds itself contributes no parameters to the document — so this is where `cursor`, `limit` and `direction` come from.
 
 A handler taking a bare `CursorRequest` or `PageRequest` — without `[AsParameters]` — is a different endpoint: it binds the whole request from **one** query value, in the compact format `cursor:limit:direction` or `page:size`. The document is given that grammar, and the separate parameters are *not* added, because that endpoint does not accept them.
 
