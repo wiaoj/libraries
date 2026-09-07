@@ -10,8 +10,9 @@ namespace Microsoft.AspNetCore.OpenApi;
 /// </summary>
 public static class PaginationOpenApiExtensions {
     /// <summary>
-    /// Documents, on every endpoint marked with <c>WithPagination()</c>, the paging query parameters and the
-    /// <c>Link</c> / <c>ETag</c> headers and <c>304</c> response the pagination filter produces.
+    /// Documents the pagination result types, and — on every endpoint marked with <c>WithPagination()</c> —
+    /// the paging query parameters and the <c>Link</c> / <c>ETag</c> headers and <c>304</c> response the
+    /// pagination filter produces.
     /// </summary>
     /// <param name="options">The OpenAPI options to add the transformer to.</param>
     /// <returns>The same options, for chaining.</returns>
@@ -20,6 +21,12 @@ public static class PaginationOpenApiExtensions {
     /// None of what the pagination filter does is visible in a handler's signature, so a document generated
     /// without this describes an endpoint that answers only 200 and sets no headers — which is not the
     /// endpoint that exists.
+    /// </para>
+    /// <para>
+    /// Neither is the shape of what it returns. <c>PagedResult&lt;T&gt;</c> and <c>CursorResult&lt;T&gt;</c>
+    /// serialise through hand-written converters, and a schema generator reading their properties finds
+    /// nothing it recognises — so both arrive in the document as an empty schema, and a generated client
+    /// types the response as <c>unknown</c>. The schema transformer added here writes their real shape.
     /// </para>
     /// <para>
     /// Endpoints without the marker are left untouched, so this is safe to add once for the whole document.
@@ -33,6 +40,7 @@ public static class PaginationOpenApiExtensions {
     public static OpenApiOptions AddWiaojPagination(this OpenApiOptions options) {
         Preca.ThrowIfNull(options);
 
+        options.AddSchemaTransformer<PaginationSchemaTransformer>();
         options.AddOperationTransformer<PaginationOperationTransformer>();
         return options;
     }
