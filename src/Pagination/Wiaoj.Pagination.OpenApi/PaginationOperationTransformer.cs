@@ -16,9 +16,11 @@ namespace Wiaoj.Pagination.OpenApi;
 /// </para>
 /// <para>
 /// It also documents the paging query parameters, but only those the document does not already carry — a
-/// handler taking <c>[AsParameters] CursorRequest</c> has them described already, and duplicating a
-/// parameter produces an invalid document. Which set applies is decided by the declared response type, not
-/// guessed: <c>PagedResult&lt;T&gt;</c> means offset paging, <c>CursorResult&lt;T&gt;</c> means keyset.
+/// handler taking <c>[AsParameters] PageRequest</c> has them described already, and duplicating a parameter
+/// produces an invalid document. A handler taking <c>CursorParameters</c> has none of them described,
+/// because a type that binds itself contributes nothing to the document. Which set applies is decided by the
+/// declared response type, not guessed: <c>PagedResult&lt;T&gt;</c> means offset paging,
+/// <c>CursorResult&lt;T&gt;</c> means keyset.
 /// </para>
 /// <para>
 /// A handler taking a bare <c>CursorRequest</c> or <c>PageRequest</c> is a third case: it binds the whole

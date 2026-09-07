@@ -50,28 +50,36 @@ app.MapGet("/api/products", async (AppDbContext db, [AsParameters] PageRequest r
 .WithPagination();
 
 // Keyset pagination with automatic headers and ETag
-app.MapGet("/api/orders", async (AppDbContext db, [AsParameters] CursorRequest request, CancellationToken ct) =>
+app.MapGet("/api/orders", async (AppDbContext db, CursorParameters paging, CancellationToken ct) =>
 {
     return await db.Orders
         .AsNoTracking()
         .OrderByDescending(o => o.Id)
-        .ToCursorResultAsync(request, o => o.Id, ct);
+        .ToCursorResultAsync(paging, o => o.Id, ct);
 })
 .WithPagination();
 
 app.Run();
 ```
 
-> **`[AsParameters]` is required, not stylistic.**
+> **How the paging parameters are bound is not stylistic.**
 >
-> `PageRequest` and `CursorRequest` also implement `ISpanParsable<T>`, so a handler taking a bare
-> `CursorRequest request` binds from a *single* composite query value — `?request=cursor:limit:direction` —
-> and rejects the `?cursor=…&direction=…` form with **400**.
+> For keyset, take **`CursorParameters`**. It binds `cursor`, `limit` and `direction` from the query string
+> and converts implicitly to `CursorRequest`, so it goes straight into `ToCursorResultAsync`.
 >
-> That is exactly the form this package's own `Link` headers emit, so an endpoint written without the
-> attribute serves its first page happily and then returns 400 to any client that follows `rel="next"`.
-> `[AsParameters]` binds each property from its own query parameter, which is what makes the links
-> round-trip.
+> Neither alternative works, in opposite directions:
+>
+> - A bare `CursorRequest request` binds from a *single* composite value — `?request=cursor:limit:direction` —
+>   because the type is `ISpanParsable<T>`. It rejects the `?cursor=…&direction=…` form with **400**, which is
+>   exactly the form this package's own `Link` headers emit. The first page works, then `rel="next"` returns
+>   400.
+> - `[AsParameters] CursorRequest` binds through the record's constructor, where the cursor has no default —
+>   so the cursor becomes a **required** query value and the request for the *first* page, the one that
+>   carries no cursor yet, returns 400. Giving it a default does not fix it: minimal APIs cannot express an
+>   optional parameter of a custom struct type, and the endpoint fails to build at all.
+>
+> `PageRequest` has no such trap — every one of its constructor parameters has a default — so
+> `[AsParameters] PageRequest` is correct for offset paging.
 
 ---
 
@@ -80,11 +88,11 @@ app.Run();
 You can configure headers, disable ETags per endpoint:
 
 ```csharp
-app.MapGet("/api/logs", async (AppDbContext db, [AsParameters] CursorRequest request, CancellationToken ct) =>
+app.MapGet("/api/logs", async (AppDbContext db, CursorParameters paging, CancellationToken ct) =>
 {
     return await db.Logs
         .OrderByDescending(l => l.CreatedAt)
-        .ToCursorResultAsync(request, l => l.CreatedAt, ct);
+        .ToCursorResultAsync(paging, l => l.CreatedAt, ct);
 })
 .WithPagination(options =>
 {

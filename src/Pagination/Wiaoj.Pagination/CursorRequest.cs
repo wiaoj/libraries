@@ -65,9 +65,17 @@ public readonly record struct CursorRequest :
     /// <summary>
     /// Initializes a new instance of the <see cref="CursorRequest"/> struct with boundary clamping.
     /// </summary>
-    /// <param name="cursor">The cursor token.</param>
+    /// <param name="cursor">The cursor token. <see cref="CursorToken.Empty"/> means the first window.</param>
     /// <param name="limit">The item limit. Clamped between 1 and <see cref="MaxLimit"/>.</param>
     /// <param name="direction">The traversal direction.</param>
+    /// <remarks>
+    /// Do not bind this type with <c>[AsParameters]</c> in a minimal API. That reads this constructor, and
+    /// <paramref name="cursor"/> has no default, so the cursor becomes a <b>required</b> query value and the
+    /// request for the first page — the one that carries no cursor — is the only one that cannot be made.
+    /// Giving it a default does not help either: minimal APIs cannot express an optional parameter of a
+    /// custom struct type. Take <c>CursorParameters</c> from <c>Wiaoj.Pagination.AspNetCore</c> instead;
+    /// it converts to this.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public CursorRequest(CursorToken cursor, int limit = DefaultLimit, CursorDirection direction = CursorDirection.Forward) {
         this.Cursor = cursor;

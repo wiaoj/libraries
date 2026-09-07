@@ -42,7 +42,7 @@ public sealed class DocumentFixture : IAsyncLifetime {
         this._app = builder.Build();
 
         this._app.MapGet("/offset", () => Page()).WithPagination();
-        this._app.MapGet("/keyset", () => Window()).WithPagination();
+        this._app.MapGet("/keyset", (CursorParameters paging) => Window()).WithPagination();
         this._app.MapGet("/compact", (CursorRequest paging) => Window()).WithPagination();
         this._app.MapOpenApi();
 
