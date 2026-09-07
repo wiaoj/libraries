@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 using Wiaoj.Pagination.AspNetCore;
@@ -18,6 +19,11 @@ namespace Wiaoj.Pagination.OpenApi;
 /// handler taking <c>[AsParameters] CursorRequest</c> has them described already, and duplicating a
 /// parameter produces an invalid document. Which set applies is decided by the declared response type, not
 /// guessed: <c>PagedResult&lt;T&gt;</c> means offset paging, <c>CursorResult&lt;T&gt;</c> means keyset.
+/// </para>
+/// <para>
+/// A handler taking a bare <c>CursorRequest</c> or <c>PageRequest</c> is a third case: it binds the whole
+/// request from one query value in a compact format, and accepts none of the separate parameters. That one
+/// gets its grammar written down instead.
 /// </para>
 /// </remarks>
 internal sealed class PaginationOperationTransformer : IOpenApiOperationTransformer {
@@ -48,6 +54,10 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
     /// already describes.
     /// </summary>
     private static void DescribeParameters(OpenApiOperation operation, OpenApiOperationTransformerContext context) {
+        if(DescribeCompactRequest(operation, context)) {
+            return;
+        }
+
         PagingStyle style = DetectStyle(context);
 
         if(style == PagingStyle.Unknown) {
@@ -70,6 +80,61 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
             $"Items per page. Defaults to {CursorRequest.DefaultLimit}, capped at {CursorRequest.MaxLimit}.");
         AddIfMissing(operation, PaginationParameters.Direction, "string", format: null,
             "Seek direction relative to the cursor: Forward or Backward. Defaults to Forward.");
+    }
+
+    /// <summary>
+    /// Describes a request record bound as one value, and reports whether it found one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="CursorRequest"/> and <see cref="PageRequest"/> are both <c>ISpanParsable</c>, so a handler
+    /// can take one directly and receive it from a single query value. The document then carries a bare
+    /// <c>string</c> with nothing to say what belongs in it, and a caller finds the grammar by trial.
+    /// </para>
+    /// <para>
+    /// An endpoint bound this way also does <b>not</b> accept the separate paging parameters, so finding one
+    /// is what stops this transformer from adding them — documenting a <c>cursor</c> query parameter the
+    /// endpoint ignores is worse than documenting nothing.
+    /// </para>
+    /// </remarks>
+    private static bool DescribeCompactRequest(OpenApiOperation operation, OpenApiOperationTransformerContext context) {
+        bool found = false;
+
+        foreach(ApiParameterDescription parameter in context.Description.ParameterDescriptions) {
+            string? grammar = Grammar(parameter.Type);
+
+            if(grammar is null) {
+                continue;
+            }
+
+            found = true;
+
+            OpenApiParameter? documented = operation.Parameters?
+                .OfType<OpenApiParameter>()
+                .FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.Ordinal));
+
+            if(documented is not null && string.IsNullOrEmpty(documented.Description)) {
+                documented.Description = grammar;
+            }
+        }
+
+        return found;
+    }
+
+    private static string? Grammar(Type? type) {
+        if(type == typeof(CursorRequest)) {
+            return "Keyset paging request, as cursor:limit:direction. The limit and direction may be omitted, "
+                + "so a bare cursor and cursor:limit both parse. Limit defaults to "
+                + $"{CursorRequest.DefaultLimit} and is capped at {CursorRequest.MaxLimit}; direction is "
+                + "Forward or Backward, and defaults to Forward.";
+        }
+
+        if(type == typeof(PageRequest)) {
+            return "Offset paging request, as page:size. Page is 1-based; size defaults to "
+                + $"{PageRequest.DefaultSize} and is capped at {PageRequest.MaxSize}.";
+        }
+
+        return null;
     }
 
     /// <summary>
