@@ -92,6 +92,11 @@ public async Task<CursorResult<OrderDto>> GetOrdersAsync(
 }
 ```
 
+> Taking `CursorRequest` is right for a **service** method, as above. In a minimal API **endpoint**, take
+> `CursorParameters` from `Wiaoj.Pagination.AspNetCore` instead and pass it here — it converts implicitly.
+> A `CursorRequest` bound directly from a request either rejects the first page or rejects `rel="next"`,
+> depending on how it is bound; that package's README explains both.
+
 ---
 
 ### 3. Cryptographic Cursor Signing (HMAC-SHA256)

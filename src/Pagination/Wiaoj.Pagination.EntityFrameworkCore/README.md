@@ -61,6 +61,10 @@ var result = await db.Products
 
 Built-in overloads handle binary cursor serialization for `SnowflakeId`, `long`, `int`, `Guid`, and `DateTimeOffset` without requiring manual codecs:
 
+> The examples below are service methods, where `CursorRequest` is the right parameter to take. If the caller
+> is a minimal API endpoint, bind `CursorParameters` from `Wiaoj.Pagination.AspNetCore` there and pass it in —
+> it converts implicitly. Binding `CursorRequest` from a request directly does not work in either form.
+
 #### Distributed Unique Key (`SnowflakeId`)
 
 ```csharp
