@@ -16,10 +16,12 @@ namespace Wiaoj.Pagination.AspNetCore.Tests.Unit;
 /// own, but not the contract between them.
 /// </summary>
 /// <remarks>
-/// That gap hid a real trap. <see cref="CursorRequest"/> implements <see cref="ISpanParsable{T}"/>, so a
-/// handler taking a bare <c>CursorRequest</c> binds from a single composite value — and rejects the
-/// <c>?cursor=…&amp;direction=…</c> form the Link header actually contains. Following <c>rel="next"</c>
-/// returns 400, after the first page worked.
+/// That gap hid two traps, in opposite directions. <see cref="CursorRequest"/> implements
+/// <see cref="ISpanParsable{T}"/>, so a handler taking a bare <c>CursorRequest</c> binds from a single
+/// composite value and rejects the <c>?cursor=…&amp;direction=…</c> form the Link header contains: the first
+/// page works and <c>rel="next"</c> returns 400. Binding it with <c>[AsParameters]</c> instead makes the
+/// cursor a required query value, so the links round-trip and the <b>first</b> page returns 400. Only
+/// <c>CursorParameters</c> serves both.
 /// </remarks>
 [Trait("Category", "Unit")]
 [Trait("Feature", "Pagination")]
@@ -70,26 +72,37 @@ public sealed partial class LinkHeaderRoundTripTests {
     }
 
     [Fact]
-    public async Task An_AsParameters_Endpoint_Should_Accept_The_Link_It_Emitted() {
+    public async Task A_CursorParameters_Endpoint_Should_Accept_The_Link_It_Emitted() {
         string next = await EmitNextLinkAsync();
 
-        int status = await SendAsync(([AsParameters] CursorRequest request) => Results.Ok(), next);
+        int status = await SendAsync((CursorParameters paging) => Results.Ok(), next);
 
         Assert.Equal(StatusCodes.Status200OK, status);
     }
 
     [Fact]
-    public async Task An_AsParameters_Endpoint_Should_Bind_The_Cursor_And_Direction_From_The_Link() {
+    public async Task A_CursorParameters_Endpoint_Should_Bind_The_Cursor_And_Direction_From_The_Link() {
         string next = await EmitNextLinkAsync();
         CursorRequest bound = default;
 
-        await SendAsync(([AsParameters] CursorRequest request) => {
-            bound = request;
+        await SendAsync((CursorParameters paging) => {
+            bound = paging;
             return Results.Ok();
         }, next);
 
         Assert.False(bound.Cursor.IsEmpty);
         Assert.Equal(CursorDirection.Forward, bound.Direction);
+    }
+
+    [Fact]
+    public async Task An_AsParameters_Endpoint_Should_Reject_The_First_Page() {
+        // Pinning the second trap, and the reason CursorParameters exists. [AsParameters] binds through the
+        // record's constructor, where the cursor has no default and so is required — and the request for the
+        // first page is the one with no cursor. The link round-trip above passes either way, because every
+        // link the filter emits carries a cursor; only the entry point breaks.
+        int status = await SendAsync(([AsParameters] CursorRequest request) => Results.Ok(), "/api/orders");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, status);
     }
 
     [Fact]

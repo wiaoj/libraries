@@ -124,7 +124,8 @@ public sealed class PaginationOperationTransformerTests {
 
         [Fact]
         public void Should_Not_Duplicate_A_Parameter_The_Document_Already_Describes() {
-            // [AsParameters] CursorRequest already describes these; adding them twice is an invalid document.
+            // A parameter ASP.NET Core has already described must not be added again; two parameters with the
+            // same name and location make the document invalid.
             OpenApiParameter existing = new() { Name = "cursor", In = ParameterLocation.Query };
 
             OpenApiOperation operation = Transform(
