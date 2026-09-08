@@ -11,6 +11,22 @@ using Wiaoj.Primitives.Collections;
 namespace Wiaoj.Pagination;
 
 /// <summary>
+/// Exposes a keyset window's metadata without knowing what it holds.
+/// </summary>
+/// <remarks>
+/// A component handling pages generically — an endpoint filter writing <c>Link</c> headers, say — receives
+/// one as <see cref="object"/> and has no element type to close the generic over. Reaching the metadata
+/// through <c>dynamic</c> looks equivalent and is not: the runtime binder resolves members against the
+/// <b>calling</b> assembly's view, so a result whose element type is <c>internal</c> to the application
+/// binds against <see cref="ValueType"/> and throws. Internal DTOs are the normal case, so this interface
+/// is the supported way in.
+/// </remarks>
+public interface ICursorResult {
+    /// <summary>Gets the boundary cursors and navigation flags for this window.</summary>
+    CursorMetadata Metadata { get; }
+}
+
+/// <summary>
 /// Represents an immutable container combining keyset paginated items with their corresponding cursor metadata.
 /// </summary>
 /// <typeparam name="T">The type of elements in the paginated collection.</typeparam>
@@ -30,7 +46,8 @@ namespace Wiaoj.Pagination;
 public readonly record struct CursorResult<T> :
     IEquatable<CursorResult<T>>,
     IEqualityOperators<CursorResult<T>, CursorResult<T>, bool>,
-    IReadOnlyList<T> {
+    IReadOnlyList<T>,
+    ICursorResult {
 
     /// <summary>
     /// Gets an empty <see cref="CursorResult{T}"/> instance.

@@ -130,6 +130,47 @@ public sealed class NestedResultUnwrappingTests {
         }
     }
 
+    /// <summary>
+    /// A page whose element type the pagination assembly cannot see.
+    /// </summary>
+    /// <remarks>
+    /// This is the ordinary case, not an exotic one: response DTOs are usually <c>internal</c>, often nested
+    /// inside an internal endpoint class. Reading the metadata through <c>dynamic</c> resolved members
+    /// against the calling assembly's view, so such a result bound against <see cref="ValueType"/> — which
+    /// has no <c>Metadata</c> — and threw at run time.
+    /// <para>
+    /// Every test above uses a public element type, which is exactly why they did not catch it. The type
+    /// below is internal to this assembly and invisible to <c>Wiaoj.Pagination.AspNetCore</c>.
+    /// </para>
+    /// </remarks>
+    public sealed class TheInternalElementType {
+        [Fact]
+        public async Task Should_Still_Have_Its_Metadata_Read() {
+            CursorResult<Hidden> window = new(
+                new EquatableArray<Hidden>([new Hidden(1)]),
+                new CursorMetadata(CursorToken.FromUtf8("a"), CursorToken.FromUtf8("b"), false, true));
+
+            (HttpResponse response, _) = await InvokeAsync(
+                (Results<Ok<CursorResult<Hidden>>, ProblemHttpResult>)TypedResults.Ok(window));
+
+            Assert.False(StringValues.IsNullOrEmpty(response.Headers[HeaderNames.Link]));
+            Assert.False(StringValues.IsNullOrEmpty(response.Headers.ETag));
+        }
+
+        [Fact]
+        public async Task Should_Work_For_An_Offset_Page_Too() {
+            PagedResult<Hidden> page = new(
+                new EquatableArray<Hidden>([new Hidden(1)]),
+                new PageMetadata(totalCount: 30, page: 2, size: 1));
+
+            (HttpResponse response, _) = await InvokeAsync(TypedResults.Ok(page));
+
+            Assert.False(StringValues.IsNullOrEmpty(response.Headers[HeaderNames.Link]));
+        }
+
+        internal sealed record Hidden(int Id);
+    }
+
     private sealed class FilterContext(HttpContext httpContext) : EndpointFilterInvocationContext {
         public override HttpContext HttpContext { get; } = httpContext;
         public override IList<object?> Arguments { get; } = [];

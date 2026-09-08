@@ -85,28 +85,26 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
     /// <param name="httpContext">The request being answered.</param>
     /// <param name="value">The handler's unwrapped return value.</param>
     /// <returns><see langword="true"/> when the value was a page; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// Matched through the non-generic interfaces rather than reached through <c>dynamic</c>. The runtime
+    /// binder resolves members against the calling assembly's view of the type, so a
+    /// <c>CursorResult&lt;T&gt;</c> whose <c>T</c> is <c>internal</c> to the application binds against
+    /// <see cref="ValueType"/> — which has no <c>Metadata</c> — and throws at run time. An internal response
+    /// DTO is the ordinary case, so that was every such endpoint.
+    /// </remarks>
     private bool TryApplyPageHeaders(HttpContext httpContext, object value) {
-        Type valueType = value.GetType();
+        switch(value) {
+            case IPagedResult page:
+                ApplyOffsetHeaders(httpContext, page.Metadata);
+                return true;
 
-        if(!valueType.IsGenericType) {
-            return false;
+            case ICursorResult window:
+                ApplyCursorHeaders(httpContext, window.Metadata);
+                return true;
+
+            default:
+                return false;
         }
-
-        Type definition = valueType.GetGenericTypeDefinition();
-
-        if(definition == typeof(PagedResult<>)) {
-            dynamic pagedResult = value;
-            ApplyOffsetHeaders(httpContext, (PageMetadata)pagedResult.Metadata);
-            return true;
-        }
-
-        if(definition == typeof(CursorResult<>)) {
-            dynamic cursorResult = value;
-            ApplyCursorHeaders(httpContext, (CursorMetadata)cursorResult.Metadata);
-            return true;
-        }
-
-        return false;
     }
 
     /// <summary>
