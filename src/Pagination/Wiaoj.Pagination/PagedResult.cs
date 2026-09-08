@@ -10,6 +10,17 @@ using Wiaoj.Primitives.Collections;
 namespace Wiaoj.Pagination;
 
 /// <summary>
+/// Exposes a page's metadata without knowing what it holds.
+/// </summary>
+/// <remarks>
+/// See <see cref="ICursorResult"/> for why this exists rather than <c>dynamic</c>.
+/// </remarks>
+public interface IPagedResult {
+    /// <summary>Gets the counts and navigation flags for this page.</summary>
+    PageMetadata Metadata { get; }
+}
+
+/// <summary>
 /// Represents an immutable container combining paginated items with their corresponding metadata.
 /// </summary>
 /// <typeparam name="T">The type of elements in the paginated collection.</typeparam>
@@ -22,7 +33,8 @@ namespace Wiaoj.Pagination;
 [JsonConverter(typeof(PagedResultJsonConverterFactory))]
 public readonly record struct PagedResult<T> :
     IEquatable<PagedResult<T>>,
-    IEqualityOperators<PagedResult<T>, PagedResult<T>, bool> {
+    IEqualityOperators<PagedResult<T>, PagedResult<T>, bool>,
+    IPagedResult {
 
     /// <summary>
     /// Gets an empty <see cref="PagedResult{T}"/> instance.
