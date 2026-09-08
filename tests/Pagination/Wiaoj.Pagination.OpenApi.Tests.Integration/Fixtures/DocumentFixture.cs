@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +46,11 @@ public sealed class DocumentFixture : IAsyncLifetime {
         this._app.MapGet("/offset", () => Page()).WithPagination();
         this._app.MapGet("/keyset", (CursorParameters paging) => Window()).WithPagination();
         this._app.MapGet("/compact", (CursorRequest paging) => Window()).WithPagination();
+
+        // The shape a handler returning a union declares. Its page sits two wrappers in, and the transformer
+        // has to see through both to know this endpoint pages at all.
+        this._app.MapGet("/union", Results<Ok<CursorResult<Product>>, ProblemHttpResult> () =>
+            TypedResults.Ok(Window())).WithPagination();
         this._app.MapOpenApi();
 
         await this._app.StartAsync();

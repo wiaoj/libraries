@@ -51,28 +51,13 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
         HttpContext httpContext = context.HttpContext;
         object? value = GetValueFromResult(result);
 
-        if(value is null) {
+        // Everything below this line is about a page. A result that is not one leaves untouched — including
+        // its ETag, which is what made the unwrapping defect silent: an unreadable result still got an ETag,
+        // computed over a serialisation carrying none of its data, identical on every response.
+        if(value is null || !TryApplyPageHeaders(httpContext, value)) {
             return result;
         }
 
-        Type valueType = value.GetType();
-
-        // 1. Handle Offset-based PagedResult<T>
-        if(valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(PagedResult<>)) {
-            dynamic pagedResult = value;
-            PageMetadata metadata = pagedResult.Metadata;
-
-            ApplyOffsetHeaders(httpContext, metadata);
-        }
-        // 2. Handle Keyset-based CursorResult<T>
-        else if(valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(CursorResult<>)) {
-            dynamic cursorResult = value;
-            CursorMetadata metadata = cursorResult.Metadata;
-
-            ApplyCursorHeaders(httpContext, metadata);
-        }
-
-        // 3. Handle ETag & 304 Not Modified
         if(this._options.EnableETag && httpContext.Response.StatusCode is 0 or 200) {
             JsonSerializerOptions? jsonOptions = httpContext.RequestServices?
                 .GetService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions>>()?
@@ -94,11 +79,69 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
         return result;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static object? GetValueFromResult(object result) {
-        if(result is IValueHttpResult valueResult) {
-            return valueResult.Value;
+    /// <summary>
+    /// Writes the <c>Link</c> headers for whichever page shape this is, and reports whether it was one.
+    /// </summary>
+    /// <param name="httpContext">The request being answered.</param>
+    /// <param name="value">The handler's unwrapped return value.</param>
+    /// <returns><see langword="true"/> when the value was a page; otherwise <see langword="false"/>.</returns>
+    private bool TryApplyPageHeaders(HttpContext httpContext, object value) {
+        Type valueType = value.GetType();
+
+        if(!valueType.IsGenericType) {
+            return false;
         }
+
+        Type definition = valueType.GetGenericTypeDefinition();
+
+        if(definition == typeof(PagedResult<>)) {
+            dynamic pagedResult = value;
+            ApplyOffsetHeaders(httpContext, (PageMetadata)pagedResult.Metadata);
+            return true;
+        }
+
+        if(definition == typeof(CursorResult<>)) {
+            dynamic cursorResult = value;
+            ApplyCursorHeaders(httpContext, (CursorMetadata)cursorResult.Metadata);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Digs the handler's return value out of the result it was wrapped in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A handler declaring <c>Results&lt;Ok&lt;CursorResult&lt;T&gt;&gt;, ProblemHttpResult&gt;</c> returns a
+    /// <see cref="INestedHttpResult"/>, not an <see cref="IValueHttpResult"/> — the value sits one level
+    /// further in. Unwrapping only the latter left this filter holding the union wrapper, which is neither a
+    /// page nor null, so it wrote no <c>Link</c> header and computed the ETag over a serialisation of the
+    /// wrapper: the same handful of bytes for every response, on every endpoint written that way.
+    /// </para>
+    /// <para>
+    /// A constant ETag matches every <c>If-None-Match</c>, so the second request for a page that had changed
+    /// was answered <c>304</c> with the client's stale copy left in place.
+    /// </para>
+    /// </remarks>
+    private static object? GetValueFromResult(object result) {
+        // Bounded rather than while(true): the nesting is a handful of levels in practice, and a result type
+        // that returned itself would otherwise spin here.
+        for(int depth = 0; depth < 8; depth++) {
+            switch(result) {
+                case IValueHttpResult valueResult:
+                    return valueResult.Value;
+
+                case INestedHttpResult nested when nested.Result is not null:
+                    result = nested.Result;
+                    continue;
+
+                default:
+                    return result;
+            }
+        }
+
         return result;
     }
 

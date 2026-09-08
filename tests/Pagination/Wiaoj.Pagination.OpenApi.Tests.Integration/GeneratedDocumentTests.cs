@@ -140,6 +140,16 @@ public static class GeneratedDocumentTests {
         }
 
         [Fact]
+        public void Should_Describe_A_Union_Returning_Endpoint_As_Paging() {
+            IReadOnlyList<string> names = [.. fixture.Parameters("/union")
+                .EnumerateArray()
+                .Select(p => p.GetProperty("name").GetString()!)];
+
+            Assert.Contains(PaginationParameters.Cursor, names);
+            Assert.Contains(PaginationParameters.Limit, names);
+        }
+
+        [Fact]
         public void Should_Leave_The_Expanded_Form_Alone() {
             IReadOnlyList<string> names = [.. fixture.Parameters("/keyset")
                 .EnumerateArray()
