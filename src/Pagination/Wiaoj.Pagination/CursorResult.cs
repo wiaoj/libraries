@@ -93,11 +93,16 @@ public readonly record struct CursorResult<T> :
     /// <typeparam name="TResult">The target element type.</typeparam>
     /// <param name="selector">A transform function to apply to each element.</param>
     /// <returns>A new <see cref="CursorResult{TResult}"/> containing the mapped elements.</returns>
+    /// <remarks>
+    /// An empty window keeps its metadata. Returning <c>[]</c> would build one with a default
+    /// <see cref="CursorMetadata"/> instead, dropping the boundary cursors and the navigation flags — so a
+    /// client that had a previous page would be told there is none.
+    /// </remarks>
     public CursorResult<TResult> Select<TResult>(Func<T, TResult> selector) {
         Preca.ThrowIfNull(selector);
 
         if(this.IsEmpty) {
-            return [];
+            return new CursorResult<TResult>(EquatableArray<TResult>.Empty, this.Metadata);
         }
 
         ReadOnlySpan<T> span = this.Items.AsSpan();

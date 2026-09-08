@@ -74,11 +74,17 @@ public readonly record struct PagedResult<T> :
     /// <typeparam name="TResult">The target element type.</typeparam>
     /// <param name="selector">A transform function to apply to each element.</param>
     /// <returns>A new <see cref="PagedResult{TResult}"/> containing the mapped elements.</returns>
+    /// <remarks>
+    /// An empty page keeps its metadata. It is not the same thing as <see cref="Empty"/>: a request for a
+    /// page past the end of the data returns no items alongside a real <see cref="PageMetadata"/> — the total
+    /// count, the page asked for, the size — and answering with a default one would tell the client the
+    /// collection is empty when it has a thousand rows.
+    /// </remarks>
     public PagedResult<TResult> Select<TResult>(Func<T, TResult> selector) {
         Preca.ThrowIfNull(selector);
 
         if(this.IsEmpty) {
-            return PagedResult<TResult>.Empty;
+            return new PagedResult<TResult>(EquatableArray<TResult>.Empty, this.Metadata);
         }
 
         ReadOnlySpan<T> span = this.Items.AsSpan();
