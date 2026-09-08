@@ -137,15 +137,18 @@ public sealed class PaginationOperationTransformerTests {
         }
 
         [Fact]
-        public void Should_Invent_No_Parameters_For_An_Endpoint_Returning_Neither_Shape() {
+        public void Should_Describe_Nothing_For_An_Endpoint_Returning_Neither_Shape() {
             OpenApiOperation operation = Transform(
                 new PaginationEndpointMetadata(new PaginationOptions()),
                 typeof(Product));
 
             Assert.Empty(operation.Parameters!);
 
-            // The headers still apply: the filter runs regardless of what the handler returns.
-            Assert.NotNull(Header(operation, "200", "Link"));
+            // Nor the headers. The filter acts on a page and leaves anything else untouched, so this endpoint
+            // sends no Link, no ETag and no 304 — and the document has no business claiming otherwise.
+            Assert.Null(Header(operation, "200", "Link"));
+            Assert.Null(Header(operation, "200", "ETag"));
+            Assert.False(operation.Responses!.ContainsKey("304"));
         }
 
         [Fact]

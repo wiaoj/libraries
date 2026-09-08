@@ -45,7 +45,16 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
             return Task.CompletedTask;
         }
 
-        DescribeParameters(operation, context);
+        PagingStyle style = DetectStyle(context);
+
+        // The filter acts on a page and leaves anything else alone, so an endpoint carrying the marker but
+        // returning neither shape gets no Link header, no ETag and no 304. Describing them anyway would put
+        // headers in the document that the endpoint never sends.
+        if(style == PagingStyle.Unknown) {
+            return Task.CompletedTask;
+        }
+
+        DescribeParameters(operation, context, style);
         DescribeResponseHeaders(operation, metadata);
 
         return Task.CompletedTask;
@@ -55,14 +64,12 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
     /// Adds the paging query parameters for whichever style the endpoint returns, skipping any the document
     /// already describes.
     /// </summary>
-    private static void DescribeParameters(OpenApiOperation operation, OpenApiOperationTransformerContext context) {
+    private static void DescribeParameters(
+        OpenApiOperation operation,
+        OpenApiOperationTransformerContext context,
+        PagingStyle style) {
+
         if(DescribeCompactRequest(operation, context)) {
-            return;
-        }
-
-        PagingStyle style = DetectStyle(context);
-
-        if(style == PagingStyle.Unknown) {
             return;
         }
 
