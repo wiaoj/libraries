@@ -162,7 +162,7 @@ public async Task<CursorResult<Account>> GetAccountsAsync(
             request: request,
             keySelector: a => a.AccountNumber,
             cursorEncoder: accNo => CursorToken.FromUtf8(accNo),
-            cursorDecoder: token => token.Value,
+            cursorDecoder: token => token.ToUtf8String(),
             cancellationToken: ct);
 }
 ```
@@ -186,9 +186,15 @@ return await db.DeliveryLogs
         request: request,
         keySelector: l => l.RequestId,
         cursorEncoder: id => CursorToken.FromBytes(BitConverter.GetBytes(id.Value)),
-        cursorDecoder: token => new NotificationRequestId(/* read the 8 bytes back */),
+        cursorDecoder: token => new NotificationRequestId(BitConverter.ToInt64(token.ToBytes())),
         cancellationToken: ct);
 ```
+
+> **`Value` is the wire form, not the payload.** `CursorToken.FromUtf8("ACC-4471").Value` is
+> `"QUNDLTQ0NzE"` — the Base64Url text that travels in the URL. Decoding through it produces the encoded
+> string, or a `FormatException` if you parse it as a number, and it fails on the *second* page, after the
+> first one looked fine. `ToUtf8String()` and `ToBytes()` are the counterparts of `FromUtf8` and
+> `FromBytes`; `TryDecode` remains the allocation-free path.
 
 `TKey` only has to satisfy `IComparable<TKey>` — nothing else. The seek is expressed as `key.CompareTo(pivot) > 0`, and EF Core reduces that to the same plain column comparison an operator would produce:
 
