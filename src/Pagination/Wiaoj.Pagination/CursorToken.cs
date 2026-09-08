@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Text;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
@@ -42,6 +43,9 @@ public readonly record struct CursorToken :
     /// </summary>
     public static readonly CursorToken Empty = default;
 
+    /// <summary>Payloads at or below this size decode on the stack.</summary>
+    private const int StackAllocThreshold = 256;
+
     /// <summary>
     /// Gets a value indicating whether this cursor token is empty or uninitialized.
     /// </summary>
@@ -53,8 +57,14 @@ public readonly record struct CursorToken :
     public int Length => this._value.Length;
 
     /// <summary>
-    /// Gets the underlying Base64Url-encoded string representation.
+    /// Gets the Base64Url-encoded wire form — the text that travels in a URL or a JSON body.
     /// </summary>
+    /// <remarks>
+    /// This is <b>not</b> what was encoded. <c>FromUtf8("order_42").Value</c> is <c>"b3JkZXJfNDI"</c>, not
+    /// <c>"order_42"</c>. To read the payload back, use <see cref="ToUtf8String"/> or
+    /// <see cref="ToBytes"/> — a decoder written against this property compiles, reads plausibly, and is
+    /// wrong.
+    /// </remarks>
     public string Value => this._value.Value;
 
     private CursorToken(Base64UrlString value) {
@@ -128,6 +138,62 @@ public readonly record struct CursorToken :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetDecodedLength() {
         return this._value.GetDecodedLength();
+    }
+
+    /// <summary>
+    /// Decodes the payload back to the text it was built from.
+    /// </summary>
+    /// <returns>The original text, or <see cref="string.Empty"/> for <see cref="Empty"/>.</returns>
+    /// <remarks>
+    /// The counterpart of <see cref="FromUtf8(string)"/>, and the one a <c>cursorDecoder</c> wants:
+    /// <code>
+    /// cursorEncoder: id => CursorToken.FromUtf8(id.Encode()),
+    /// cursorDecoder: token => AssetId.Decode(token.ToUtf8String())
+    /// </code>
+    /// <para>
+    /// It allocates a string, which is the right trade for a cursor: once per request, against eight lines
+    /// of buffer arithmetic at every call site. <see cref="TryDecode"/> remains the allocation-free path.
+    /// </para>
+    /// </remarks>
+    public string ToUtf8String() {
+        int length = GetDecodedLength();
+
+        if(length == 0) {
+            return string.Empty;
+        }
+
+        byte[]? rented = length > StackAllocThreshold ? ArrayPool<byte>.Shared.Rent(length) : null;
+
+        try {
+            Span<byte> buffer = rented is null ? stackalloc byte[length] : rented.AsSpan(0, length);
+
+            return TryDecode(buffer, out int written)
+                ? Encoding.UTF8.GetString(buffer[..written])
+                : string.Empty;
+        }
+        finally {
+            if(rented is not null) {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Decodes the payload back to the bytes it was built from.
+    /// </summary>
+    /// <returns>The original bytes, or an empty array for <see cref="Empty"/>.</returns>
+    /// <remarks>
+    /// The counterpart of <see cref="FromBytes"/>. <see cref="TryDecode"/> remains the allocation-free path.
+    /// </remarks>
+    public byte[] ToBytes() {
+        int length = GetDecodedLength();
+
+        if(length == 0) {
+            return [];
+        }
+
+        byte[] decoded = new byte[length];
+        return TryDecode(decoded, out int written) && written == length ? decoded : decoded[..written];
     }
 
     #endregion

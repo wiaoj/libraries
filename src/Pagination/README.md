@@ -87,7 +87,7 @@ public async Task<CursorResult<OrderDto>> GetOrdersAsync(
             request: request,
             keySelector: o => o.Id,
             cursorEncoder: id => CursorToken.FromUtf8(id.ToString()),
-            cursorDecoder: token => long.Parse(token.Value),
+            cursorDecoder: token => long.Parse(token.ToUtf8String()),
             cancellationToken: ct);
 }
 ```
