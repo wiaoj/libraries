@@ -65,6 +65,47 @@ public static class QueryableExtensions {
         return query;
     }
 
+    /// <summary>
+    /// Validates <paramref name="request"/> against <paramref name="schema"/> and applies it, throwing instead
+    /// of skipping anything the schema does not permit.
+    /// </summary>
+    /// <typeparam name="T">The entity type.</typeparam>
+    /// <param name="query">The source query.</param>
+    /// <param name="request">The request to apply.</param>
+    /// <param name="schema">The schema that decides what is allowed.</param>
+    /// <returns>The filtered and sorted query.</returns>
+    /// <exception cref="QueryValidationException">The request does not satisfy the schema.</exception>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ApplyQuery{T}(IQueryable{T}, QueryRequest, QuerySchema{T})"/> does not validate. It skips a
+    /// filter on an unknown field or with a disallowed operator, stops after the maximum filter count, and
+    /// truncates an in-list past its limit — all silently. Behind an HTTP endpoint that is covered, because
+    /// the validation filter rejects the request first. Anywhere else nothing is, and every one of those skips
+    /// widens the result: a misspelt field name in a request from another service returns every row instead of
+    /// an error.
+    /// </para>
+    /// <para>
+    /// Use this at any boundary the HTTP validation filter does not stand in front of — an RPC handler, a
+    /// message consumer, a background job applying a stored query.
+    /// </para>
+    /// </remarks>
+    public static IQueryable<T> ApplyValidatedQuery<T>(
+        this IQueryable<T> query,
+        QueryRequest request,
+        QuerySchema<T> schema) {
+
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(schema);
+
+        QueryValidationResult validation = schema.Validate(request);
+
+        if(!validation.IsValid) {
+            throw new QueryValidationException(validation);
+        }
+
+        return query.ApplyQuery(request, schema);
+    }
+
     private static IQueryable<T> ApplyRequiredFilters<T>(IQueryable<T> query, QuerySchema<T> schema) {
         IReadOnlyList<Expression<Func<T, bool>>> required = schema.RequiredFilters;
         for(int i = 0; i < required.Count; i++) {
