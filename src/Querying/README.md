@@ -10,8 +10,9 @@ Translates URL bracket-syntax query strings and RFC 10008 HTTP `QUERY` body payl
 
 | Package | Target | Description |
 | :--- | :--- | :--- |
-| `Wiaoj.Querying` | `.NET 10+` | Core query AST (`QueryRequest`, `Sort`, `Q`), schema engine (`QuerySchema<T>`), payload parser strategies (`IQueryPayloadParser`), and `IQueryable<T>` LINQ expression compiler (`ApplyQuery`). Zero external dependencies. |
-| `Wiaoj.Querying.AspNetCore` | `ASP.NET Core 8+` | ASP.NET Core parameter binding (`Query<TEntity>`), RFC 10008 payload binder (`QueryRequestBinder`), DI registration (`AddQuerying`), and endpoint validation filters (`WithQueryValidation`). |
+| `Wiaoj.Querying.Abstractions` | `.NET 10+` | The query language alone: `QueryRequest`, filter and sort nodes, the bracket and JSON parsers, `QueryRequestBuilder`, validation results. No dependency injection — reference it from **contract** assemblies. |
+| `Wiaoj.Querying` | `.NET 10+` | Schema engine (`QuerySchema<T>`), `ApplyQuery` / `ApplyValidatedQuery`, `Partition`, and registration (`AddQuerying`). |
+| `Wiaoj.Querying.AspNetCore` | `ASP.NET Core 8+` | ASP.NET Core parameter binding (`Query<TEntity>`), RFC 10008 payload binder (`QueryRequestBinder`), `UseJsonNamingPolicy`, and endpoint validation filters (`WithQueryValidation`). |
 
 ---
 
@@ -213,6 +214,56 @@ app.MapGet("/api/v1/products/export", async (Query<Product> query, AppDbContext 
 
 app.Run();
 ```
+
+### 3. Field names that follow the application
+
+A field's name defaults to its CLR member path — `ContentType` — while the bodies are usually camelCase or snake_case. Make the query string follow the application's JSON settings:
+
+```csharp
+builder.Services.AddQuerying(querying => querying
+    .UseJsonNamingPolicy()          // or .UseFieldNamingPolicy(JsonNamingPolicy.SnakeCaseLower)
+    .AddSchema<Asset, AssetQuerySchema>());
+```
+
+Rendered names are added as **aliases** — `content_type` and `ContentType` both work — and are what `DescribeFields` and the OpenAPI document publish. Fields named with `HasName` are left as written. It is opt-in because it renames parameters in a published document, which regenerates clients.
+
+### 4. Filters that are not columns
+
+Declare them on the schema instead of binding them beside it and hiding them with `IgnoreParameters`. They are validated like any field, described in the document, and read back typed:
+
+```csharp
+CustomFilter<bool>("hasScreenshot").AllowFilter(QueryOperator.Equal).Describe("Keys with at least one screenshot.");
+CustomFilter<EntryStatus>("statuses").AllowFilter(QueryOperator.In);
+
+// handler
+if(schema.TryGetFilterValue(query.Value, "hasScreenshot", out bool hasScreenshot)) { ... }
+IReadOnlyList<EntryStatus> statuses = schema.GetFilterValues<EntryStatus>(query.Value, "statuses");
+```
+
+`ApplyQuery` leaves these to the endpoint. Pass a predicate — `CustomFilter<bool>("hasScreenshot", (key, has) => key.Screenshots.Any() == has)` — to have the engine apply it.
+
+---
+
+## Crossing a service boundary
+
+A contract references `Wiaoj.Querying.Abstractions` and carries a `QueryRequest`. It serialises through System.Text.Json as the same body a `QUERY` request sends, so any JSON transport can carry it.
+
+Build one from values rather than strings — the builder renders values as the parser reads them and refuses what the language cannot express (a comma inside an `in` value, an empty `in` list, which would match every row):
+
+```csharp
+QueryRequest query = QueryRequest.CreateBuilder()
+    .In("keyId", pageKeyIds.Select(id => id.Encode()))
+    .In("locale", requestedLocales)
+    .Build();
+```
+
+On the receiving side, apply it with **`ApplyValidatedQuery`**. `ApplyQuery` does not validate: it silently skips an unknown field or a refused operator, which widens the result — behind an HTTP endpoint the validation filter covers that, but in an RPC handler a misspelt field returns every row.
+
+```csharp
+dbContext.Entries.ApplyValidatedQuery(request.Query, schema);   // throws QueryValidationException
+```
+
+When one request carries filters for more than one owner, split it instead of ignoring parameters: `(QueryRequest owned, QueryRequest remainder) = incoming.Partition(schema);`. `Only`, `Without` and `QueryRequest.Merge` cover the rest.
 
 ---
 

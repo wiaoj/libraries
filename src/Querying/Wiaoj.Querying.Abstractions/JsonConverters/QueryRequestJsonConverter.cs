@@ -82,7 +82,7 @@ public sealed class QueryRequestJsonConverter : JsonConverter<QueryRequest> {
 
                 writer.WriteStartObject();
                 writer.WriteString(FieldName, filter.Field);
-                writer.WriteString(OpName, FilterConditionNode.GetOperatorString(filter.Operator));
+                writer.WriteString(OpName, QuerySyntax.GetOperatorToken(filter.Operator));
 
                 if(!filter.IsUnary && filter.RawValue is not null) {
                     writer.WriteString(ValueName, filter.RawValue);

@@ -434,7 +434,7 @@ public readonly record struct FilterConditionNode :
         return Utf8.FromUtf16(charBuf[..charsWritten], utf8Destination, out _, out bytesWritten) == OperationStatus.Done;
     }
 
-    internal static string GetOperatorString(QueryOperator op) {
+    private static string GetOperatorString(QueryOperator op) {
         return op switch {
             QueryOperator.Equal => QuerySyntax.Operators.Equal,
             QueryOperator.NotEqual => QuerySyntax.Operators.NotEqual,

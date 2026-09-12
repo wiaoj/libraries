@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Text;
+using System.Text.Json;
 using Wiaoj.Querying.Expressions;
 
 namespace Wiaoj.Querying;
@@ -9,7 +10,7 @@ namespace Wiaoj.Querying;
 /// Configures filtering, searching, sorting rules, security limits, and validation for a target entity with AOT safety.
 /// </summary>
 /// <typeparam name="T">The entity type.</typeparam>
-public class QuerySchema<T> : IQuerySchemaParameters {
+public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuerySchemaNaming {
     internal const uint AllOperatorsMask = uint.MaxValue;
 
     private readonly Dictionary<string, QueryProperty<T>> _propertiesByExposedName = new(StringComparer.OrdinalIgnoreCase);
@@ -21,6 +22,8 @@ public class QuerySchema<T> : IQuerySchemaParameters {
     private readonly HashSet<string> _ignoredParameters = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _allowedParameters = new(StringComparer.OrdinalIgnoreCase);
     private bool _ignoreGlobalParameters;
+    private readonly Dictionary<string, string> _aliasesToMember = new(StringComparer.OrdinalIgnoreCase);
+    private JsonNamingPolicy? _fieldNamingPolicy;
 
     /// <summary>
     /// Gets the maximum allowed number of filters per request. Defaults to 20.
@@ -87,11 +90,14 @@ public class QuerySchema<T> : IQuerySchemaParameters {
 
         foreach(QueryProperty<T> property in this._propertiesByMemberName.Values) {
             descriptors.Add(new QueryFieldDescriptor(
-                property.ExposedName,
+                PublicName(property),
                 property.PropertyType,
                 property.IsFilterable,
                 property.IsSortable,
-                DescribeOperators(property)));
+                DescribeOperators(property)) {
+                Description = property.Description,
+                IsCustom = property.IsCustom
+            });
         }
 
         descriptors.Sort(static (left, right) => string.CompareOrdinal(left.Name, right.Name));
@@ -704,6 +710,11 @@ public class QuerySchema<T> : IQuerySchemaParameters {
 
         string memberPath = ExtractMemberPath(propertySelector.Body);
 
+        if(this._propertiesByMemberName.TryGetValue(memberPath, out QueryProperty<T>? existing) && existing.IsCustom) {
+            throw new InvalidOperationException(
+                $"'{memberPath}' is already declared as a custom filter; a property cannot share its name.");
+        }
+
         if(!this._propertiesByMemberName.TryGetValue(memberPath, out QueryProperty<T>? rule)) {
             rule = new QueryProperty<T>(
                 MemberName: memberPath,
@@ -717,6 +728,172 @@ public class QuerySchema<T> : IQuerySchemaParameters {
         }
 
         return new PropertyRuleBuilder<T, TProperty>(this, rule);
+    }
+
+    /// <summary>
+    /// Declares a filter that is not an entity member — computed through a subquery, answered by another
+    /// service, or otherwise applied by the endpoint itself.
+    /// </summary>
+    /// <typeparam name="TValue">The type its value parses to.</typeparam>
+    /// <param name="name">The name callers write, used exactly as given.</param>
+    /// <returns>A builder to allow operators, set a parser and describe the filter.</returns>
+    /// <remarks>
+    /// <para>
+    /// Filters like <c>hasScreenshot</c> or <c>statuses</c> used to live beside the schema — bound with
+    /// <c>[AsParameters]</c> and hidden from validation with <c>IgnoreParameters</c> — so they were neither
+    /// validated nor described, and a generated client could not send them. Declared here, they are validated
+    /// like any field (operator, value type, limits), described in the document, kept on this side by
+    /// <c>Partition</c>, and read back typed with <see cref="TryGetFilterValue{TValue}"/> and
+    /// <see cref="GetFilterValues{TValue}"/>.
+    /// </para>
+    /// <para>
+    /// <c>ApplyQuery</c> does not apply a filter declared this way; the endpoint does, with the value it reads.
+    /// To have the engine apply it, use the overload taking a predicate.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// CustomFilter&lt;bool&gt;("hasScreenshot").AllowFilter(QueryOperator.Equal);
+    /// CustomFilter&lt;EntryStatus&gt;("statuses").AllowFilter(QueryOperator.In);
+    ///
+    /// // in the handler
+    /// if(schema.TryGetFilterValue&lt;bool&gt;(query.Value, "hasScreenshot", out bool hasScreenshot)) { ... }
+    /// IReadOnlyList&lt;EntryStatus&gt; statuses = schema.GetFilterValues&lt;EntryStatus&gt;(query.Value, "statuses");
+    /// </code>
+    /// </example>
+    public PropertyRuleBuilder<T, TValue> CustomFilter<TValue>(string name) {
+        return DeclareCustomFilter<TValue>(name, predicate: null);
+    }
+
+    /// <summary>
+    /// Declares a filter that is not an entity member, applied by the query engine through
+    /// <paramref name="predicate"/>.
+    /// </summary>
+    /// <typeparam name="TValue">The type its value parses to.</typeparam>
+    /// <param name="name">The name callers write, used exactly as given.</param>
+    /// <param name="predicate">Given an entity and the parsed value, whether the entity matches.</param>
+    /// <returns>A builder to allow operators, set a parser and describe the filter.</returns>
+    /// <remarks>
+    /// Supports <see cref="QueryOperator.Equal"/>, <see cref="QueryOperator.NotEqual"/>,
+    /// <see cref="QueryOperator.In"/> and <see cref="QueryOperator.NotIn"/>: the predicate is evaluated per
+    /// value and combined. The predicate must be translatable by the query provider.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// CustomFilter&lt;bool&gt;("hasScreenshot", (key, has) => key.Screenshots.Any() == has);
+    /// </code>
+    /// </example>
+    public PropertyRuleBuilder<T, TValue> CustomFilter<TValue>(string name, Expression<Func<T, TValue, bool>> predicate) {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return DeclareCustomFilter<TValue>(name, predicate);
+    }
+
+    private PropertyRuleBuilder<T, TValue> DeclareCustomFilter<TValue>(string name, LambdaExpression? predicate) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        string trimmed = name.Trim();
+
+        if(TryGetProperty(trimmed, out QueryProperty<T>? existing)) {
+            throw new InvalidOperationException(
+                $"'{trimmed}' already names '{existing.MemberName}' on this schema; a custom filter needs its own name.");
+        }
+
+        ParameterExpression entity = Expression.Parameter(typeof(T), "x");
+
+        QueryProperty<T> rule = new(
+            MemberName: trimmed,
+            ExposedName: trimmed,
+            PropertyType: typeof(TValue),
+            SelectorBody: Expression.Default(typeof(TValue)),
+            Parameter: entity,
+            IsExplicitlyNamed: true,
+            IsCustom: true,
+            CustomPredicate: predicate);
+
+        this._propertiesByMemberName[trimmed] = rule;
+        this._propertiesByExposedName[trimmed] = rule;
+
+        return new PropertyRuleBuilder<T, TValue>(this, rule);
+    }
+
+    /// <summary>
+    /// Reads the value of an equality filter from <paramref name="request"/>, parsed as the schema declares it.
+    /// </summary>
+    /// <typeparam name="TValue">The declared value type.</typeparam>
+    /// <param name="request">The request carrying the filter.</param>
+    /// <param name="name">The filter name, or any alias the schema accepts for it.</param>
+    /// <param name="value">The parsed value, when present.</param>
+    /// <returns><see langword="true"/> when the request carries a parseable equality filter on the field.</returns>
+    /// <exception cref="InvalidOperationException">The schema declares no such field, or declares it with a different type.</exception>
+    public bool TryGetFilterValue<TValue>(QueryRequest request, string name, [MaybeNullWhen(false)] out TValue value) {
+        QueryProperty<T> property = RequireReadable<TValue>(name);
+        Type underlying = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+
+        foreach(FilterConditionNode filter in request.Filters) {
+            if(filter.Operator == QueryOperator.Equal && Refers(filter.Field, property) &&
+               TryResolveValidationValue(filter.RawValue, property, underlying, out object? parsed) && parsed is TValue typed) {
+                value = typed;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Reads every value the request filters a field on — from equality and <c>in</c> filters — parsed as the
+    /// schema declares it.
+    /// </summary>
+    /// <typeparam name="TValue">The declared value type.</typeparam>
+    /// <param name="request">The request carrying the filters.</param>
+    /// <param name="name">The filter name, or any alias the schema accepts for it.</param>
+    /// <returns>The parsed values, in order; empty when the request does not filter the field.</returns>
+    /// <exception cref="InvalidOperationException">The schema declares no such field, or declares it with a different type.</exception>
+    public IReadOnlyList<TValue> GetFilterValues<TValue>(QueryRequest request, string name) {
+        QueryProperty<T> property = RequireReadable<TValue>(name);
+        Type underlying = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+        List<TValue> values = [];
+
+        foreach(FilterConditionNode filter in request.Filters) {
+            if(!Refers(filter.Field, property) || string.IsNullOrEmpty(filter.RawValue)) {
+                continue;
+            }
+
+            IEnumerable<string> raw = filter.Operator switch {
+                QueryOperator.Equal => [filter.RawValue],
+                QueryOperator.In => filter.RawValue.Split(QuerySyntax.Comma, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+                _ => []
+            };
+
+            foreach(string item in raw) {
+                if(TryResolveValidationValue(item, property, underlying, out object? parsed) && parsed is TValue typed) {
+                    values.Add(typed);
+                }
+            }
+        }
+
+        return values;
+    }
+
+    private QueryProperty<T> RequireReadable<TValue>(string name) {
+        if(!TryGetProperty(name, out QueryProperty<T>? property)) {
+            throw new InvalidOperationException($"The schema declares no field named '{name}'.");
+        }
+
+        Type declared = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+        Type requested = Nullable.GetUnderlyingType(typeof(TValue)) ?? typeof(TValue);
+
+        if(declared != requested) {
+            throw new InvalidOperationException(
+                $"'{name}' is declared as {property.PropertyType.Name}, not {typeof(TValue).Name}.");
+        }
+
+        return property;
+    }
+
+    private bool Refers(string field, QueryProperty<T> property) {
+        return TryGetProperty(field, out QueryProperty<T>? resolved)
+            && string.Equals(resolved.MemberName, property.MemberName, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -811,7 +988,7 @@ public class QuerySchema<T> : IQuerySchemaParameters {
     /// </summary>
     public bool IsFilterAllowed(string fieldName) {
         if(string.IsNullOrWhiteSpace(fieldName)) return false;
-        return this._propertiesByExposedName.TryGetValue(fieldName, out QueryProperty<T>? prop) && prop.IsFilterable;
+        return TryGetProperty(fieldName, out QueryProperty<T>? prop) && prop.IsFilterable;
     }
 
     /// <summary>
@@ -819,7 +996,7 @@ public class QuerySchema<T> : IQuerySchemaParameters {
     /// </summary>
     public bool IsFilterAllowed(string fieldName, QueryOperator queryOperator) {
         if(string.IsNullOrWhiteSpace(fieldName)) return false;
-        if(!this._propertiesByExposedName.TryGetValue(fieldName, out QueryProperty<T>? prop) || !prop.IsFilterable) {
+        if(!TryGetProperty(fieldName, out QueryProperty<T>? prop) || !prop.IsFilterable) {
             return false;
         }
 
@@ -831,7 +1008,7 @@ public class QuerySchema<T> : IQuerySchemaParameters {
     /// </summary>
     public bool IsSortAllowed(string fieldName) {
         if(string.IsNullOrWhiteSpace(fieldName)) return false;
-        return this._propertiesByExposedName.TryGetValue(fieldName, out QueryProperty<T>? prop) && prop.IsSortable;
+        return TryGetProperty(fieldName, out QueryProperty<T>? prop) && prop.IsSortable;
     }
 
     /// <summary>
@@ -842,7 +1019,15 @@ public class QuerySchema<T> : IQuerySchemaParameters {
             property = null;
             return false;
         }
-        return this._propertiesByExposedName.TryGetValue(fieldName, out property);
+
+        if(this._propertiesByExposedName.TryGetValue(fieldName, out property)) {
+            return true;
+        }
+
+        // A naming-policy alias maps to the member, not to a property record: records are replaced on every
+        // builder call, so an alias holding one would go stale the moment a rule was added after it.
+        return this._aliasesToMember.TryGetValue(fieldName, out string? member)
+            && this._propertiesByMemberName.TryGetValue(member, out property);
     }
 
     internal void UpdateProperty(string previousExposedName, QueryProperty<T> updated) {
@@ -854,6 +1039,89 @@ public class QuerySchema<T> : IQuerySchemaParameters {
         this._propertiesByExposedName.Remove(previousExposedName);
         this._propertiesByExposedName[updated.ExposedName] = updated;
         this._propertiesByMemberName[updated.MemberName] = updated;
+
+        if(this._fieldNamingPolicy is not null) {
+            RebuildNamingAliases();
+        }
+    }
+
+    /// <summary>
+    /// Gets the naming policy applied to field names that were not named explicitly, if any.
+    /// </summary>
+    public JsonNamingPolicy? FieldNamingPolicy => this._fieldNamingPolicy;
+
+    /// <summary>
+    /// Accepts, and publishes, field names rendered through <paramref name="policy"/>.
+    /// </summary>
+    /// <param name="policy">The policy to apply; <see langword="null"/> removes a previously applied one.</param>
+    /// <returns>The schema, for chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A field's exposed name defaults to its CLR member path — <c>ContentType</c> — while the application's
+    /// bodies are usually written through a naming policy — <c>contentType</c>. The response then says one thing
+    /// and the filter parameter another. This makes the schema accept the policy's rendering and report it from
+    /// <see cref="DescribeFields"/>, so a generated document names fields the way the rest of the API does.
+    /// </para>
+    /// <para>
+    /// The rendering is added as an alias; the original name keeps working, so applying a policy breaks no
+    /// existing caller. It is also what makes a non-case-only policy safe: <c>content_type</c> would not match
+    /// <c>ContentType</c> case-insensitively, and a document advertising it without the alias would describe a
+    /// parameter the server rejects.
+    /// </para>
+    /// <para>
+    /// Fields named with <see cref="PropertyRuleBuilder{T, TProperty}.HasName"/> are left exactly as written.
+    /// Nested member paths are rendered segment by segment.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The policy renders two fields to the same name, or a field to another field's existing name.
+    /// </exception>
+    public QuerySchema<T> UseFieldNamingPolicy(JsonNamingPolicy? policy) {
+        this._fieldNamingPolicy = policy;
+        RebuildNamingAliases();
+        return this;
+    }
+
+    void DependencyInjection.IQuerySchemaNaming.ApplyFieldNamingPolicy(JsonNamingPolicy policy) => UseFieldNamingPolicy(policy);
+
+    private void RebuildNamingAliases() {
+        this._aliasesToMember.Clear();
+
+        if(this._fieldNamingPolicy is null) {
+            return;
+        }
+
+        foreach(QueryProperty<T> property in this._propertiesByMemberName.Values) {
+            string rendered = PublicName(property);
+
+            if(string.Equals(rendered, property.ExposedName, StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
+            bool takenByField = this._propertiesByExposedName.TryGetValue(rendered, out QueryProperty<T>? owner)
+                && !string.Equals(owner.MemberName, property.MemberName, StringComparison.OrdinalIgnoreCase);
+
+            bool takenByAlias = this._aliasesToMember.TryGetValue(rendered, out string? aliasOwner)
+                && !string.Equals(aliasOwner, property.MemberName, StringComparison.OrdinalIgnoreCase);
+
+            if(takenByField || takenByAlias) {
+                throw new InvalidOperationException(
+                    $"The naming policy renders '{property.ExposedName}' as '{rendered}', which already names another " +
+                    $"field. Give one of them an explicit name with HasName.");
+            }
+
+            this._aliasesToMember[rendered] = property.MemberName;
+        }
+    }
+
+    /// <summary>The name a field is published under: its explicit name, or its policy rendering.</summary>
+    private string PublicName(QueryProperty<T> property) {
+        if(property.IsExplicitlyNamed || this._fieldNamingPolicy is null) {
+            return property.ExposedName;
+        }
+
+        JsonNamingPolicy policy = this._fieldNamingPolicy;
+        return string.Join('.', property.ExposedName.Split('.').Select(policy.ConvertName));
     }
 
     internal static uint CreateOperatorMask(ReadOnlySpan<QueryOperator> operators) {
@@ -914,7 +1182,11 @@ internal sealed record QueryProperty<T>(
     uint AllowedOperatorsMask = 0,
     Func<IQueryable<T>, bool, bool, IQueryable<T>>? SortApplier = null,
     Func<string, object?>? CustomParser = null,
-    bool AllowEmptyString = false);
+    bool AllowEmptyString = false,
+    bool IsExplicitlyNamed = false,
+    string? Description = null,
+    bool IsCustom = false,
+    LambdaExpression? CustomPredicate = null);
 
 /// <summary>
 /// Fluent builder for configuring fine-grained rules on a specific property.
@@ -934,7 +1206,7 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     public PropertyRuleBuilder<T, TProperty> HasName(string alias) {
         ArgumentException.ThrowIfNullOrWhiteSpace(alias);
         string oldName = this._property.ExposedName;
-        this._property = this._property with { ExposedName = alias.Trim() };
+        this._property = this._property with { ExposedName = alias.Trim(), IsExplicitlyNamed = true };
         this._schema.UpdateProperty(oldName, this._property);
         return this;
     }
@@ -968,6 +1240,21 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     /// Marks the property as allowed for filtering with all or specific operators.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> AllowFilter(params QueryOperator[] operators) {
+        if(this._property.CustomPredicate is not null) {
+            // A predicate is evaluated against one value at a time, so only the operators that combine single
+            // values — equality and set membership — have a meaning for it.
+            QueryOperator[] supported = [QueryOperator.Equal, QueryOperator.NotEqual, QueryOperator.In, QueryOperator.NotIn];
+
+            if(operators.Length == 0) {
+                operators = supported;
+            }
+            else if(operators.Any(op => !supported.Contains(op))) {
+                throw new InvalidOperationException(
+                    $"The custom filter '{this._property.ExposedName}' is applied through a predicate, which supports " +
+                    "only Equal, NotEqual, In and NotIn.");
+            }
+        }
+
         uint newMask = QuerySchema<T>.CreateOperatorMask(operators);
         uint combinedMask = this._property.AllowedOperatorsMask | newMask;
 
@@ -981,9 +1268,27 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     }
 
     /// <summary>
+    /// Describes the field for callers. Published alongside it in a generated document; has no effect on
+    /// validation or application.
+    /// </summary>
+    /// <param name="description">What the field means, in the terms a caller uses.</param>
+    public PropertyRuleBuilder<T, TProperty> Describe(string description) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+
+        this._property = this._property with { Description = description.Trim() };
+        this._schema.UpdateProperty(this._property.ExposedName, this._property);
+        return this;
+    }
+
+    /// <summary>
     /// Marks the property as allowed for sorting.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> AllowSort() {
+        if(this._property.IsCustom) {
+            throw new InvalidOperationException(
+                $"'{this._property.ExposedName}' is a custom filter and has no column to sort by.");
+        }
+
         Expression<Func<T, TProperty>> lambda = Expression.Lambda<Func<T, TProperty>>(
             this._property.SelectorBody,
             this._property.Parameter);
