@@ -30,10 +30,29 @@ public static class QueryingOpenApiExtensions {
     /// builder.Services.AddOpenApi(options => options.AddWiaojQuerying());
     /// </code>
     /// </example>
-    public static OpenApiOptions AddWiaojQuerying(this OpenApiOptions options) {
+    public static OpenApiOptions AddWiaojQuerying(this OpenApiOptions options) => options.AddWiaojQuerying(configure: null);
+
+    /// <summary>
+    /// Documents query-validated endpoints, shaped by <paramref name="configure"/>.
+    /// </summary>
+    /// <param name="options">The OpenAPI options to add the transformer to.</param>
+    /// <param name="configure">Shapes how fields are described; see <see cref="QueryOpenApiOptions"/>.</param>
+    /// <returns>The same options, for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// builder.Services.AddOpenApi(options => options.AddWiaojQuerying(querying => {
+    ///     querying.FilterStyle = QueryFilterStyle.DeepObject;
+    ///     querying.ConfigureFilter = (field, parameter) => parameter.Example = ...;
+    /// }));
+    /// </code>
+    /// </example>
+    public static OpenApiOptions AddWiaojQuerying(this OpenApiOptions options, Action<QueryOpenApiOptions>? configure) {
         Preca.ThrowIfNull(options);
 
-        options.AddOperationTransformer<QueryValidationOperationTransformer>();
+        QueryOpenApiOptions querying = new();
+        configure?.Invoke(querying);
+
+        options.AddOperationTransformer(new QueryValidationOperationTransformer(querying));
         return options;
     }
 }
