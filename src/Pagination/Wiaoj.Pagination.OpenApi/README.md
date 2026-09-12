@@ -47,7 +47,11 @@ The responses are correct; only the document is silent about them. It surfaces o
 
 A cursor is described as a nullable **string**, not as the struct it is. A caller sends back what it was given; the inside of a cursor is not part of the contract, and describing it would invite clients to read it.
 
-The parameter set is chosen from the endpoint's **declared response type** rather than guessed: `PagedResult<T>` means offset paging, `CursorResult<T>` means keyset. An endpoint returning neither gets headers documented and no parameters invented for it.
+The parameter set is chosen from the endpoint's **declared response type** rather than guessed: `PagedResult<T>` means offset paging, `CursorResult<T>` means keyset. An endpoint returning neither gets **nothing** documented — no parameters, no `Link`, no `ETag`, no `304` — because the pagination filter only acts on a result it recognises as a page, and a document claiming those headers would describe an endpoint that does not send them.
+
+An endpoint whose response carries the page inside an envelope says so with `WithPagination<TResponse>(response => response.Metadata)`. That declares its style, so it is documented as offset or keyset from the declaration rather than inferred.
+
+Whether `Link` and `ETag` are documented follows the settings actually in effect — `services.AddPagination(...)`, refined by the endpoint's own `WithPagination(options => ...)`. The document resolves them through the same method, on the same metadata, the filter uses at run time, so it cannot advertise an ETag the application turned off.
 
 Parameters the document already carries are left alone. A handler taking `[AsParameters] PageRequest` already has `page` and `size` described by ASP.NET Core, and adding them twice produces an invalid document. A handler taking `CursorParameters` has *nothing* described — a type that binds itself contributes no parameters to the document — so this is where `cursor`, `limit` and `direction` come from.
 

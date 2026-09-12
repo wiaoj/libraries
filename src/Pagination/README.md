@@ -10,7 +10,8 @@ A modular, high-performance pagination toolkit for .NET applications supporting 
 | :--- | :--- | :--- |
 | **`Wiaoj.Pagination`** | Core primitives, request/response records, cursor tokens, HMAC signing, and JSON converters. Zero external dependencies. | Domain, Application, Contracts |
 | **`Wiaoj.Pagination.EntityFrameworkCore`** | Asynchronous LINQ query extensions (`ToPagedResultAsync`, `ToCursorResultAsync`) optimized for relational databases. | Infrastructure, Persistence |
-| **`Wiaoj.Pagination.AspNetCore`** | RFC 8288 Link headers, RFC 6648 metadata, and XxHash3 ETag evaluation (304 Not Modified) for Minimal APIs. | Web API, Presentation |
+| **`Wiaoj.Pagination.AspNetCore`** | RFC 8288 Link headers, RFC 6648 metadata, and XxHash3 ETag evaluation (304 Not Modified) for Minimal APIs. Application-wide settings with `AddPagination`, and envelope responses with `WithPagination<TResponse>(r => r.Metadata)`. | Web API, Presentation |
+| **`Wiaoj.Pagination.OpenApi`** | Documents what `WithPagination()` does — paging parameters, `Link` / `ETag` headers, `304` — and the real shape of `PagedResult<T>` / `CursorResult<T>`. | Web API, Presentation |
 
 ---
 

@@ -107,6 +107,38 @@ app.MapMethods("/api/products", ["GET", "QUERY"], async (
 app.Run();
 ```
 
+### 4. Field names that follow your JSON settings
+
+```csharp
+builder.Services.AddQuerying(querying => querying
+    .UseJsonNamingPolicy()
+    .AddSchema<Product, ProductQuerySchema>());
+```
+
+Takes `JsonOptions.SerializerOptions.PropertyNamingPolicy` — camelCase by default in a minimal API — and applies it to every schema's field names not set with `HasName`. A response that says `contentType` is then filtered with `?contentType=...`, and a generated OpenAPI document says so. Rendered names are accepted as aliases; the original names keep working. It is opt-in because it renames parameters in a published document, which regenerates clients. An explicit `UseFieldNamingPolicy(...)` takes precedence.
+
+### 5. Filters that are not columns
+
+Declare them on the schema with `CustomFilter<TValue>` instead of binding a separate `[AsParameters]` record and hiding its names with `IgnoreParameters`. The validation filter then checks them, the document describes them, and the handler reads them typed:
+
+```csharp
+// schema
+CustomFilter<bool>("hasScreenshot").AllowFilter(QueryOperator.Equal);
+
+// handler
+app.MapGet("/api/keys", (Query<TranslationKey> query, QuerySchema<TranslationKey> schema, AppDbContext db) => {
+    IQueryable<TranslationKey> keys = db.Keys.ApplyQuery(query, schema);
+
+    if(schema.TryGetFilterValue(query.Value, "hasScreenshot", out bool hasScreenshot)) {
+        keys = keys.Where(k => db.KeyScreenshots.Any(s => s.KeyId == k.Id) == hasScreenshot);
+    }
+
+    return keys.ToListAsync();
+}).WithQueryValidation<TranslationKey>();
+```
+
+`?hasScreenshot=sometimes` is a 400, like any other invalid filter.
+
 ---
 
 ## How It Works

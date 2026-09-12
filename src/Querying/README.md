@@ -13,6 +13,7 @@ Translates URL bracket-syntax query strings and RFC 10008 HTTP `QUERY` body payl
 | `Wiaoj.Querying.Abstractions` | `.NET 10+` | The query language alone: `QueryRequest`, filter and sort nodes, the bracket and JSON parsers, `QueryRequestBuilder`, validation results. No dependency injection — reference it from **contract** assemblies. |
 | `Wiaoj.Querying` | `.NET 10+` | Schema engine (`QuerySchema<T>`), `ApplyQuery` / `ApplyValidatedQuery`, `Partition`, and registration (`AddQuerying`). |
 | `Wiaoj.Querying.AspNetCore` | `ASP.NET Core 8+` | ASP.NET Core parameter binding (`Query<TEntity>`), RFC 10008 payload binder (`QueryRequestBinder`), `UseJsonNamingPolicy`, and endpoint validation filters (`WithQueryValidation`). |
+| `Wiaoj.Querying.OpenApi` | `ASP.NET Core 10+` | Publishes each schema's filter, sort and search surface into OpenAPI documents — named, typed and ignored the way the application enforces it. |
 
 ---
 
