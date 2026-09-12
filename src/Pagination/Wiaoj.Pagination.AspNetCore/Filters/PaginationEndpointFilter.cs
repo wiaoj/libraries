@@ -19,26 +19,27 @@ namespace Wiaoj.Pagination.AspNetCore.Filters;
 internal sealed class PaginationEndpointFilter : IEndpointFilter {
 
     /// <summary>
-    /// A shared, pre-allocated default instance of <see cref="PaginationEndpointFilter"/> with default options.
+    /// A shared instance for endpoints with no configuration of their own. It carries no settings, so sharing
+    /// it across endpoints and applications is safe: every request resolves the application's options.
     /// </summary>
-    public static readonly PaginationEndpointFilter Default = new();
+    public static readonly PaginationEndpointFilter Default = new(new PaginationEndpointMetadata(configure: null));
 
-    private readonly PaginationOptions _options;
+    private readonly PaginationEndpointMetadata _metadata;
+
+    /// <summary>Gets the metadata this filter reads its settings from.</summary>
+    internal PaginationEndpointMetadata Metadata => this._metadata;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="PaginationEndpointFilter"/> class with default options.
+    /// Initializes a filter that reads its settings from <paramref name="metadata"/> — the same instance the
+    /// OpenAPI transformer reads, so the document and the behaviour cannot disagree.
     /// </summary>
-    public PaginationEndpointFilter() : this(new PaginationOptions()) { }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="PaginationEndpointFilter"/> class with specified options.
-    /// </summary>
-    /// <param name="options">The custom pagination options.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
-    public PaginationEndpointFilter(PaginationOptions options) {
-        Preca.ThrowIfNull(options);
-        this._options = options;
+    public PaginationEndpointFilter(PaginationEndpointMetadata metadata) {
+        Preca.ThrowIfNull(metadata);
+        this._metadata = metadata;
     }
+
+    /// <summary>Initializes a filter fixed to <paramref name="options"/>.</summary>
+    public PaginationEndpointFilter(PaginationOptions options) : this(new PaginationEndpointMetadata(options)) { }
 
     /// <inheritdoc/>
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next) {
@@ -51,14 +52,20 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
         HttpContext httpContext = context.HttpContext;
         object? value = GetValueFromResult(result);
 
-        // Everything below this line is about a page. A result that is not one leaves untouched — including
-        // its ETag, which is what made the unwrapping defect silent: an unreadable result still got an ETag,
-        // computed over a serialisation carrying none of its data, identical on every response.
-        if(value is null || !TryApplyPageHeaders(httpContext, value)) {
+        if(value is null) {
             return result;
         }
 
-        if(this._options.EnableETag && httpContext.Response.StatusCode is 0 or 200) {
+        PaginationOptions options = this._metadata.Resolve(httpContext.RequestServices);
+
+        // Everything below this line is about a page. A result that is not one leaves untouched — including
+        // its ETag, which is what made the unwrapping defect silent: an unreadable result still got an ETag,
+        // computed over a serialisation carrying none of its data, identical on every response.
+        if(!TryApplyPageHeaders(httpContext, value, options)) {
+            return result;
+        }
+
+        if(options.EnableETag && httpContext.Response.StatusCode is 0 or 200) {
             JsonSerializerOptions? jsonOptions = httpContext.RequestServices?
                 .GetService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions>>()?
                 .Value.SerializerOptions;
@@ -84,6 +91,7 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
     /// </summary>
     /// <param name="httpContext">The request being answered.</param>
     /// <param name="value">The handler's unwrapped return value.</param>
+    /// <param name="options">The options in effect for this request.</param>
     /// <returns><see langword="true"/> when the value was a page; otherwise <see langword="false"/>.</returns>
     /// <remarks>
     /// Matched through the non-generic interfaces rather than reached through <c>dynamic</c>. The runtime
@@ -91,15 +99,26 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
     /// <c>CursorResult&lt;T&gt;</c> whose <c>T</c> is <c>internal</c> to the application binds against
     /// <see cref="ValueType"/> — which has no <c>Metadata</c> — and throws at run time. An internal response
     /// DTO is the ordinary case, so that was every such endpoint.
+    /// <para>
+    /// An envelope — a response carrying a page alongside other data — is read through the accessor the
+    /// endpoint declared with <c>WithPagination&lt;TResponse&gt;(r =&gt; r.Metadata)</c>, so the response type
+    /// does not have to know this library exists.
+    /// </para>
     /// </remarks>
-    private bool TryApplyPageHeaders(HttpContext httpContext, object value) {
-        switch(value) {
-            case IPagedResult page:
-                ApplyOffsetHeaders(httpContext, page.Metadata);
+    private bool TryApplyPageHeaders(HttpContext httpContext, object value, PaginationOptions options) {
+        object? metadata = value switch {
+            IPagedResult page => page.Metadata,
+            ICursorResult window => window.Metadata,
+            _ => this._metadata.ReadMetadata?.Invoke(value)
+        };
+
+        switch(metadata) {
+            case PageMetadata page:
+                ApplyOffsetHeaders(httpContext, page, options);
                 return true;
 
-            case ICursorResult window:
-                ApplyCursorHeaders(httpContext, window.Metadata);
+            case CursorMetadata window:
+                ApplyCursorHeaders(httpContext, window, options);
                 return true;
 
             default:
@@ -143,8 +162,8 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
         return result;
     }
 
-    private void ApplyOffsetHeaders(HttpContext httpContext, PageMetadata metadata) {
-        if(metadata.IsEmpty || !this._options.EnableLinkHeaders) return;
+    private static void ApplyOffsetHeaders(HttpContext httpContext, PageMetadata metadata, PaginationOptions options) {
+        if(metadata.IsEmpty || !options.EnableLinkHeaders) return;
 
         PathString path = httpContext.Request.Path;
         IQueryCollection query = httpContext.Request.Query;
@@ -157,8 +176,8 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
         }
     }
 
-    private void ApplyCursorHeaders(HttpContext httpContext, CursorMetadata metadata) {
-        if(metadata.IsEmpty || !this._options.EnableLinkHeaders) return;
+    private static void ApplyCursorHeaders(HttpContext httpContext, CursorMetadata metadata, PaginationOptions options) {
+        if(metadata.IsEmpty || !options.EnableLinkHeaders) return;
 
         PathString path = httpContext.Request.Path;
         IQueryCollection query = httpContext.Request.Query;

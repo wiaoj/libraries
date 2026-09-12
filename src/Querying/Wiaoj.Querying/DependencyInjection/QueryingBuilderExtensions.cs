@@ -30,6 +30,26 @@ public static class QueryingBuilderExtensions {
     }
 
     /// <summary>
+    /// Renders every registered schema's field names through <paramref name="policy"/>, unless named explicitly.
+    /// </summary>
+    /// <param name="builder">The query engine builder.</param>
+    /// <param name="policy">The naming policy, e.g. <see cref="System.Text.Json.JsonNamingPolicy.CamelCase"/>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    /// <remarks>
+    /// The rendered names are accepted as aliases and reported by <c>DescribeFields</c>, so a generated document
+    /// uses them; the original names keep working. See <see cref="QuerySchema{T}.UseFieldNamingPolicy"/>. In an
+    /// ASP.NET Core application, <c>UseJsonNamingPolicy()</c> takes the policy from the JSON options instead of
+    /// restating it here.
+    /// </remarks>
+    public static IQueryingBuilder UseFieldNamingPolicy(this IQueryingBuilder builder, System.Text.Json.JsonNamingPolicy policy) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(policy);
+
+        builder.Services.Configure<QueryOptions>(options => options.FieldNamingPolicy = policy);
+        return builder;
+    }
+
+    /// <summary>
     /// Configures one or more parameter names to be ignored during URL query string binding.
     /// </summary>
     /// <param name="builder">The query engine builder.</param>
@@ -92,7 +112,8 @@ public static class QueryingBuilderExtensions {
         where TSchema : QuerySchema<TEntity> {
         Preca.ThrowIfNull(builder);
 
-        builder.Services.TryAddSingleton<TSchema>();
+        builder.Services.TryAddSingleton<TSchema>(static sp =>
+            DependencyInjection.QuerySchemaInitializer.Initialize(ActivatorUtilities.CreateInstance<TSchema>(sp), sp));
         builder.Services.TryAddSingleton<QuerySchema<TEntity>>(static sp => sp.GetRequiredService<TSchema>());
         return builder;
     }
@@ -108,7 +129,7 @@ public static class QueryingBuilderExtensions {
 
         QuerySchema<TEntity> schema = new();
         configure(schema);
-        builder.Services.TryAddSingleton(schema);
+        builder.Services.TryAddSingleton(sp => DependencyInjection.QuerySchemaInitializer.Initialize(schema, sp));
         return builder;
     }
 
@@ -121,7 +142,7 @@ public static class QueryingBuilderExtensions {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(schema);
 
-        builder.Services.TryAddSingleton(schema);
+        builder.Services.TryAddSingleton(sp => DependencyInjection.QuerySchemaInitializer.Initialize(schema, sp));
         return builder;
     }
 
@@ -180,7 +201,9 @@ public static class QueryingBuilderExtensions {
                     if(baseType.IsGenericType && baseType.GetGenericTypeDefinition() == typeof(QuerySchema<>)) {
                         Type serviceType = baseType;
 
-                        builder.Services.TryAddSingleton(type);
+                        Type schemaType = type;
+                        builder.Services.TryAddSingleton(schemaType, sp =>
+                            DependencyInjection.QuerySchemaInitializer.Initialize(ActivatorUtilities.CreateInstance(sp, schemaType), sp));
                         builder.Services.TryAddSingleton(serviceType, sp => sp.GetRequiredService(type));
                         break;
                     }

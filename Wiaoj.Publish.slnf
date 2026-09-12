@@ -39,6 +39,7 @@
       "src\\Pagination\\Wiaoj.Pagination.AspNetCore\\Wiaoj.Pagination.AspNetCore.csproj",
       "src\\Pagination\\Wiaoj.Pagination.EntityFrameworkCore\\Wiaoj.Pagination.EntityFrameworkCore.csproj",
       "src\\Pagination\\Wiaoj.Pagination.OpenApi\\Wiaoj.Pagination.OpenApi.csproj",
+      "src\\Querying\\Wiaoj.Querying.Abstractions\\Wiaoj.Querying.Abstractions.csproj",
       "src\\Querying\\Wiaoj.Querying\\Wiaoj.Querying.csproj",
       "src\\Querying\\Wiaoj.Querying.AspNetCore\\Wiaoj.Querying.AspNetCore.csproj",
       "src\\Querying\\Wiaoj.Querying.OpenApi\\Wiaoj.Querying.OpenApi.csproj",

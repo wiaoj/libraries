@@ -63,6 +63,21 @@ internal static class FilterExpressionBuilder {
                 continue;
             }
 
+            if(prop.IsCustom) {
+                // Declared without a predicate, a custom filter is the endpoint's to apply with the value it reads;
+                // the engine validates and describes it but has no expression for it.
+                Expression? customCondition = prop.CustomPredicate is null
+                    ? null
+                    : BuildCustomCondition(prop, filter, parameter, schema.MaxInValuesCount);
+
+                if(customCondition is not null) {
+                    combined = combined == null ? customCondition : Expression.AndAlso(combined, customCondition);
+                    appliedCount++;
+                }
+
+                continue;
+            }
+
             Expression memberExpr = ReplaceParameter(prop.SelectorBody, prop.Parameter, parameter);
             Expression? condition = BuildConditionExpression(
                 memberExpr,
@@ -324,6 +339,62 @@ internal static class FilterExpressionBuilder {
     private sealed class ParameterReplacer(ParameterExpression source, ParameterExpression target) : ExpressionVisitor {
         protected override Expression VisitParameter(ParameterExpression node) {
             return node == source ? target : base.VisitParameter(node);
+        }
+    }
+
+    /// <summary>
+    /// Builds the condition for a custom filter declared with a predicate: the predicate is bound to the shared
+    /// entity parameter and evaluated once per parsed value, combined the way the operator combines values.
+    /// </summary>
+    private static Expression? BuildCustomCondition<T>(
+        QueryProperty<T> prop,
+        FilterConditionNode filter,
+        ParameterExpression parameter,
+        int maxInValuesCount) {
+
+        LambdaExpression predicate = prop.CustomPredicate!;
+        Type valueType = prop.PropertyType;
+        Type underlying = Nullable.GetUnderlyingType(valueType) ?? valueType;
+
+        if(string.IsNullOrEmpty(filter.RawValue)) {
+            return null;
+        }
+
+        string[] raw = filter.Operator is QueryOperator.In or QueryOperator.NotIn
+            ? [.. filter.RawValue.Split(QuerySyntax.Comma, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Take(maxInValuesCount)]
+            : [filter.RawValue];
+
+        Expression? combined = null;
+
+        foreach(string item in raw) {
+            if(!TryResolveValue(item, prop, underlying, out object? value)) {
+                continue;
+            }
+
+            Expression body = new ValueBinder(predicate.Parameters[0], parameter, predicate.Parameters[1], Expression.Constant(value, valueType))
+                .Visit(predicate.Body);
+
+            // Values combine with OR for both In and NotIn — "matches any of them" — and NotIn negates the whole at
+            // the end. Rewriting a combined AND chain instead would also rewrite any && inside the predicate itself.
+            combined = combined is null ? body : Expression.OrElse(combined, body);
+        }
+
+        if(combined is null) {
+            return null;
+        }
+
+        return filter.Operator switch {
+            QueryOperator.Equal or QueryOperator.In => combined,
+            QueryOperator.NotEqual or QueryOperator.NotIn => Expression.Not(combined),
+            _ => null
+        };
+    }
+
+    private sealed class ValueBinder(ParameterExpression entity, ParameterExpression target, ParameterExpression value, Expression constant) : ExpressionVisitor {
+        protected override Expression VisitParameter(ParameterExpression node) {
+            if(node == entity) return target;
+            if(node == value) return constant;
+            return base.VisitParameter(node);
         }
     }
 }

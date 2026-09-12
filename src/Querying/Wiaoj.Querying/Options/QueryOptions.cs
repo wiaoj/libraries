@@ -31,4 +31,16 @@ public sealed class QueryOptions {
     /// Case-insensitive by default.
     /// </summary>
     public HashSet<string> IgnoredParameters { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets or sets the naming policy applied to every registered schema's field names that were not named
+    /// explicitly with <c>HasName</c>. Defaults to <see langword="null"/>, which leaves names as written.
+    /// </summary>
+    /// <remarks>
+    /// Applied to a schema when it is resolved from the container, as an alias: the original names keep working.
+    /// A schema that set its own policy with <c>UseFieldNamingPolicy</c> keeps it. In an ASP.NET Core
+    /// application, <c>UseJsonNamingPolicy()</c> sets this from the application's JSON options, so query field
+    /// names follow the same convention as the bodies.
+    /// </remarks>
+    public System.Text.Json.JsonNamingPolicy? FieldNamingPolicy { get; set; }
 }

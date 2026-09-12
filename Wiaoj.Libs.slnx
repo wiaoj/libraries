@@ -97,6 +97,7 @@
   </Folder>
   <Folder Name="/src/Querying/">
     <File Path="src/Querying/README.md" />
+    <Project Path="src/Querying/Wiaoj.Querying.Abstractions/Wiaoj.Querying.Abstractions.csproj" />
     <Project Path="src/Querying/Wiaoj.Querying.AspNetCore/Wiaoj.Querying.AspNetCore.csproj" Id="6a48f363-f483-4338-b76e-a0d765352991" />
     <Project Path="src/Querying/Wiaoj.Querying.OpenApi/Wiaoj.Querying.OpenApi.csproj" />
     <Project Path="src/Querying/Wiaoj.Querying/Wiaoj.Querying.csproj" Id="e6109869-8592-4b25-aa38-1e394e98392f" />

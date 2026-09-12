@@ -4,6 +4,8 @@ A type-safe, Native AOT–ready query parsing, validation, and LINQ execution en
 
 Parses URL bracket-syntax strings and JSON query payloads into strongly typed AST structures (`QueryRequest`, `Sort`, `Q`, `FilterConditionNode`) and compiles them into validated `IQueryable<T>` expressions without runtime code generation (`Reflection.Emit`).
 
+> The query language itself — `QueryRequest` and its nodes, the parsers, `QueryRequestBuilder`, validation results — lives in **`Wiaoj.Querying.Abstractions`**, which this package depends on. A contract assembly that only *carries* a query references the abstractions and takes no dependency injection with it. Namespaces are the same in both.
+
 ---
 
 ## Features
@@ -193,6 +195,79 @@ if (QueryRequest.TryParse(rawQuery, out QueryRequest request))
     List<Product> results = await query.ToListAsync();
 }
 ```
+
+Steps 2 and 3 in one call, throwing `QueryValidationException` when the request is not valid:
+
+```csharp
+IQueryable<Product> query = dbContext.Products.ApplyValidatedQuery(request, schema);
+```
+
+> **`ApplyQuery` does not validate.** It silently skips a filter on an unknown field or with a refused operator, stops at the filter limit, and truncates an `in` list past its limit — and every skip *widens* the result. Behind an HTTP endpoint with `WithQueryValidation` that is covered. Anywhere else — an RPC handler, a message consumer, a stored query — use `ApplyValidatedQuery`, or a misspelt field name returns every row.
+
+---
+
+## Field Names That Follow a Naming Policy
+
+A field's name defaults to its CLR member path — `ContentType` — while an application's bodies are usually camelCase or snake_case:
+
+```csharp
+builder.Services.AddQuerying(querying => querying
+    .UseFieldNamingPolicy(JsonNamingPolicy.SnakeCaseLower)   // or UseJsonNamingPolicy() in ASP.NET Core
+    .AddSchema<Product, ProductQuerySchema>());
+```
+
+The rendered name is accepted as an **alias** — `content_type` and `ContentType` both work — and is what `DescribeFields()` reports, so a generated document uses it. That is what makes a non-case-only policy safe: `content_type` does not match `ContentType` case-insensitively, so publishing it without accepting it would describe a parameter the server rejects. Fields named with `HasName` are left as written. The policy is applied on every registration path, including a schema injected into a constructor. A schema can also set its own: `schema.UseFieldNamingPolicy(...)`.
+
+---
+
+## Custom Filters
+
+A filter that is not an entity member — computed through a subquery, answered by another service — belongs on the schema, not beside it:
+
+```csharp
+public sealed class KeyQuerySchema : QuerySchema<TranslationKey> {
+    public KeyQuerySchema() {
+        Property(k => k.Namespace).AllowFilter(QueryOperator.Equal, QueryOperator.In).Describe("Logical grouping of keys.");
+
+        CustomFilter<bool>("hasScreenshot").AllowFilter(QueryOperator.Equal);
+        CustomFilter<EntryStatus>("statuses")
+            .AllowFilter(QueryOperator.In)
+            .WithParser(raw => Enum.Parse<EntryStatus>(raw.Replace("-", ""), ignoreCase: true));
+    }
+}
+```
+
+Declared this way it is validated like any field (operator, value type, limits), described in the document, kept on this side by `Partition`, and read back typed:
+
+```csharp
+if(schema.TryGetFilterValue(request, "hasScreenshot", out bool hasScreenshot)) { /* apply it */ }
+IReadOnlyList<EntryStatus> statuses = schema.GetFilterValues<EntryStatus>(request, "statuses");
+```
+
+`ApplyQuery` does not apply such a filter — the endpoint does, with the value it reads. To have the engine apply it, give a predicate: `CustomFilter<bool>("hasScreenshot", (key, has) => key.Screenshots.Any() == has)`. Predicates support `eq`, `neq`, `in` and `notIn`. Custom filters cannot be sorted.
+
+---
+
+## Building and Composing Requests
+
+```csharp
+QueryRequest query = QueryRequest.CreateBuilder()
+    .In("keyId", pageKeyIds.Select(id => id.Encode()))
+    .In("locale", requestedLocales)
+    .OrderBy("locale")
+    .Build();
+```
+
+The builder renders values the way the parser reads them (invariant culture, round-trip dates) and refuses what the language cannot express rather than producing a different query: a comma inside an `in` value, an **empty `in` list — ignored when applied, so it would match every row** — and a range bound containing `..`.
+
+| | |
+| --- | --- |
+| `request.Partition(schema)` | `(Owned, Remainder)` — the filters a schema declares, and the rest. Split by ownership: a declared field with a refused operator stays owned and fails validation here, instead of being forwarded as a different query. |
+| `request.Only("locale")` | only the named fields; the search term is dropped |
+| `request.Without("statuses")` | everything but the named fields; the search term is kept |
+| `QueryRequest.Merge(a, b)` | filters AND; `a`'s sort wins and `b` refines it; two different search terms throw |
+
+A `QueryRequest` serialises through System.Text.Json as the same body a `QUERY` request sends, so it can cross any JSON transport inside a contract. A malformed payload throws rather than reading as an empty — unfiltered — request.
 
 ---
 

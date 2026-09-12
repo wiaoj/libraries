@@ -1,4 +1,6 @@
 ﻿using System.Buffers;
+using System.Text.Json.Serialization;
+using Wiaoj.Querying.JsonConverters;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -16,8 +18,9 @@ namespace Wiaoj.Querying;
 /// Represents a query request containing a search term, filter conditions, sort criteria, and query fingerprint.
 /// </summary>
 [DebuggerDisplay("Q: {Q.Value}, Sort: {Sort}, Filters: {Filters.Count}, Hash: {QueryHash}")]
+[JsonConverter(typeof(QueryRequestJsonConverter))]
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct QueryRequest :
+public readonly partial record struct QueryRequest :
     IEquatable<QueryRequest>,
     ISpanParsable<QueryRequest>,
     IUtf8SpanParsable<QueryRequest>,
