@@ -45,7 +45,13 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
             return Task.CompletedTask;
         }
 
-        PagingStyle style = DetectStyle(context);
+        // An endpoint that declared where its metadata is — an envelope response — has stated its style;
+        // otherwise it is read from the declared response type.
+        PagingStyle style = metadata.Style switch {
+            PaginationStyle.Offset => PagingStyle.Offset,
+            PaginationStyle.Cursor => PagingStyle.Cursor,
+            _ => DetectStyle(context)
+        };
 
         // The filter acts on a page and leaves anything else alone, so an endpoint carrying the marker but
         // returning neither shape gets no Link header, no ETag and no 304. Describing them anyway would put
@@ -54,8 +60,12 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
             return Task.CompletedTask;
         }
 
+        // Resolved by the same method, from the same instance, the filter uses at run time — so the document
+        // cannot claim an ETag the application configured off.
+        PaginationOptions options = metadata.Resolve(context.ApplicationServices);
+
         DescribeParameters(operation, context, style);
-        DescribeResponseHeaders(operation, metadata);
+        DescribeResponseHeaders(operation, options);
 
         return Task.CompletedTask;
     }
@@ -149,7 +159,7 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
     /// <summary>
     /// Records the headers the filter writes, and the 304 it can answer.
     /// </summary>
-    private static void DescribeResponseHeaders(OpenApiOperation operation, PaginationEndpointMetadata metadata) {
+    private static void DescribeResponseHeaders(OpenApiOperation operation, PaginationOptions options) {
         if(operation.Responses is null) {
             return;
         }
@@ -161,14 +171,14 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
 
             response.Headers ??= new Dictionary<string, IOpenApiHeader>(StringComparer.Ordinal);
 
-            if(metadata.EmitsLinkHeaders) {
+            if(options.EnableLinkHeaders) {
                 response.Headers.TryAdd(LinkHeader, new OpenApiHeader {
                     Description = "RFC 8288 links to the first, previous, next and last pages, as applicable.",
                     Schema = new OpenApiSchema { Type = JsonSchemaType.String }
                 });
             }
 
-            if(metadata.EvaluatesETag) {
+            if(options.EnableETag) {
                 response.Headers.TryAdd(ETagHeader, new OpenApiHeader {
                     Description = "Entity tag for the page. Send it back as If-None-Match to receive 304.",
                     Schema = new OpenApiSchema { Type = JsonSchemaType.String }
@@ -176,7 +186,7 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
             }
         }
 
-        if(metadata.EvaluatesETag) {
+        if(options.EnableETag) {
             operation.Responses.TryAdd("304", new OpenApiResponse {
                 Description = "The page is unchanged since the ETag supplied in If-None-Match."
             });
@@ -208,6 +218,16 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
     private static PagingStyle DetectStyle(OpenApiOperationTransformerContext context) {
         foreach(var responseType in context.Description.SupportedResponseTypes) {
             Type? type = responseType.Type;
+
+            // The runtime filter matches on these interfaces, so the document has to as well: a response type
+            // implementing one is paginated whether or not it is one of the library's own generic results.
+            if(type is not null && typeof(IPagedResult).IsAssignableFrom(type)) {
+                return PagingStyle.Offset;
+            }
+
+            if(type is not null && typeof(ICursorResult).IsAssignableFrom(type)) {
+                return PagingStyle.Cursor;
+            }
 
             while(type is not null) {
                 if(type.IsGenericType) {

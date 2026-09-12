@@ -83,27 +83,48 @@ app.Run();
 
 ---
 
-### 2. Custom Configuration
+### 2. Configuration
 
-You can configure headers, disable ETags per endpoint:
+Set the defaults once for the application:
 
 ```csharp
-app.MapGet("/api/logs", async (AppDbContext db, CursorParameters paging, CancellationToken ct) =>
-{
-    return await db.Logs
-        .OrderByDescending(l => l.CreatedAt)
-        .ToCursorResultAsync(paging, l => l.CreatedAt, ct);
-})
-.WithPagination(options =>
-{
-    options.EnableETag = false;                  // Disable ETag calculation
-    options.EnableLinkHeaders = true;            // Enable RFC 8288 Link header
-});
+builder.Services.AddPagination(options => options.EnableETag = false);
 ```
+
+Every `.WithPagination()` endpoint then uses them. An endpoint that differs states only the difference — its callback applies **on top of** the application's settings, not on top of fresh defaults:
+
+```csharp
+app.MapGet("/api/logs", ...)
+   .WithPagination(options => options.EnableLinkHeaders = false);   // ETag stays off, from the application
+```
+
+Settings layer: library defaults → `AddPagination` → the endpoint. `AddPagination` is optional; an application that never calls it keeps the library defaults. The OpenAPI document is resolved the same way from the same metadata, so it never advertises an ETag the application turned off.
 
 ---
 
-### 3. Standalone RFC 8288 Link Header Generation
+### 3. Responses that carry more than the page
+
+A paged response is often an envelope — a workspace view with summaries beside the rows — so it cannot be a `PagedResult<T>`. Say at the endpoint where its metadata is:
+
+```csharp
+internal sealed record WorkspaceResponse(
+    ProjectSummary Project,
+    IReadOnlyList<KeyRow> Items,
+    PageMetadata Metadata);
+
+app.MapGet("api/v1/applications/{applicationId}/workspace", Handle)
+   .WithPagination<WorkspaceResponse>(response => response.Metadata);
+```
+
+The response stays a plain record and implements nothing from this library — how an endpoint is paginated is a fact about the endpoint, not about the contract type. Use a `CursorMetadata` accessor for a keyset envelope.
+
+The declaration is checked when the endpoint is built: a `TResponse` that does not appear in the handler's return type throws there, rather than leaving an endpoint that silently sends no `Link` header. Union return types (`Results<Ok<WorkspaceResponse>, ProblemHttpResult>`) are seen through, and the problem branch is left alone.
+
+> Without this, `.WithPagination()` on an envelope endpoint does **nothing** — the filter only acts on a result it recognises as a page.
+
+---
+
+### 4. Standalone RFC 8288 Link Header Generation
 
 Use `Rfc8288LinkHeaderBuilder` directly in custom middlewares or controllers:
 
@@ -127,7 +148,7 @@ httpContext.Response.Headers.Link = offsetLinkHeader;
 
 ---
 
-### 4. Standalone ETag Generation & Verification
+### 5. Standalone ETag Generation & Verification
 
 ```csharp
 using Wiaoj.Pagination.AspNetCore.Caching;
