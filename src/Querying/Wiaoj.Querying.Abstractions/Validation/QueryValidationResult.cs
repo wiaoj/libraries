@@ -1,7 +1,7 @@
 ﻿namespace Wiaoj.Querying;
 
 /// <summary>
-/// Represents the outcome of validating a <see cref="QueryRequest"/> against a <see cref="QuerySchema{T}"/>.
+/// Represents the outcome of validating a <see cref="QueryRequest"/> against a query schema.
 /// </summary>
 public readonly record struct QueryValidationResult {
     /// <summary>

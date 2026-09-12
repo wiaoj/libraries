@@ -18,4 +18,17 @@ public readonly record struct QueryFieldDescriptor(
     Type Type,
     bool IsFilterable,
     bool IsSortable,
-    IReadOnlyList<QueryOperator> AllowedOperators);
+    IReadOnlyList<QueryOperator> AllowedOperators) {
+
+    /// <summary>
+    /// Gets a human-readable description of the field, set with <c>Describe</c> on the schema, for publishing
+    /// alongside the field in a generated document.
+    /// </summary>
+    public string? Description { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether the field is a custom filter rather than an entity member — declared on
+    /// the schema so it is validated and described, but not necessarily applied by the query engine.
+    /// </summary>
+    public bool IsCustom { get; init; }
+}

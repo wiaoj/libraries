@@ -173,4 +173,36 @@ public static class QuerySyntax {
         /// </summary>
         public const string IsNotNull = "isNotNull";
     }
+
+    /// <summary>
+    /// Gets the token callers write for <paramref name="queryOperator"/> — the one the parsers read.
+    /// </summary>
+    /// <remarks>
+    /// The single mapping from operator to token. The OpenAPI transformer kept its own copy, which lacked
+    /// <c>notBetween</c>, <c>isNull</c> and <c>isNotNull</c> and fell back to the enum name for them, so a
+    /// generated document advertised <c>NotBetween</c> beside <c>between</c>.
+    /// </remarks>
+    public static string GetOperatorToken(QueryOperator queryOperator) {
+        return queryOperator switch {
+            QueryOperator.Equal => Operators.Equal,
+            QueryOperator.NotEqual => Operators.NotEqual,
+            QueryOperator.GreaterThan => Operators.GreaterThan,
+            QueryOperator.GreaterThanOrEqual => Operators.GreaterThanOrEqual,
+            QueryOperator.LessThan => Operators.LessThan,
+            QueryOperator.LessThanOrEqual => Operators.LessThanOrEqual,
+            QueryOperator.Contains => Operators.Contains,
+            QueryOperator.NotContains => Operators.NotContains,
+            QueryOperator.StartsWith => Operators.StartsWith,
+            QueryOperator.NotStartsWith => Operators.NotStartsWith,
+            QueryOperator.EndsWith => Operators.EndsWith,
+            QueryOperator.NotEndsWith => Operators.NotEndsWith,
+            QueryOperator.In => Operators.In,
+            QueryOperator.NotIn => Operators.NotIn,
+            QueryOperator.Between => Operators.Between,
+            QueryOperator.NotBetween => Operators.NotBetween,
+            QueryOperator.IsNull => Operators.IsNull,
+            QueryOperator.IsNotNull => Operators.IsNotNull,
+            _ => throw new ArgumentOutOfRangeException(nameof(queryOperator), queryOperator, "Unknown query operator.")
+        };
+    }
 }

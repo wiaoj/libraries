@@ -37,9 +37,33 @@ For each endpoint marked with `WithQueryValidation<T>()`, resolved from that ent
 | `q` | free-text search |
 | `400` response | with a note that the body is a `ProblemDetails` carrying the validation errors |
 
-Fields the endpoint ignores via `IgnoreQueryParameters(...)` are left out, because the endpoint does not accept them.
+Fields the endpoint ignores via `IgnoreQueryParameters(...)` — or that are ignored globally with `AddQuerying(q => q.IgnoreParameters(...))`, unless the schema or endpoint opts out of global rules — are left out, because the validator does not accept them. The rule is the same one the validation filter applies.
 
 The field list, the sortable set and the operator list all come from `QuerySchema<T>.DescribeFields()` — the same rules the validator enforces. What is published and what is enforced have one source, so the document cannot describe a filter the endpoint would reject.
+
+### It follows the application's configuration
+
+- **Names** — as the schema publishes them. With `UseJsonNamingPolicy()` (or `UseFieldNamingPolicy`) that is `contentType` / `content_type`, matching the bodies; the schema accepts those names, so the document never advertises one the server rejects.
+- **Types** — from the field's CLR type: `bool` is `boolean`, `long` is `integer/int64`, dates are `date-time`, an enum lists the names the engine parses.
+- **Operator tokens** — exactly what the parser reads (`isNull`, `notBetween`).
+- **Descriptions** — from `.Describe("...")` on the schema.
+- **Custom filters** declared with `CustomFilter<TValue>` are described like any field.
+
+---
+
+## Shaping the output
+
+```csharp
+builder.Services.AddOpenApi(options => options.AddWiaojQuerying(querying => {
+    querying.FilterStyle = QueryFilterStyle.DeepObject;
+    querying.ConfigureFilter = (field, parameter) => parameter.Deprecated = field.Name == "legacyCode";
+    querying.ConfigureOperation = (operation, fields) => { /* anything else */ };
+}));
+```
+
+**`QueryFilterStyle.DeepObject`** describes `field[op]=value` as OpenAPI's `deepObject`, so a generated client gets `ContentType?: { eq?: string; contains?: string }` and cannot name an operator the field refuses. Generator support varies — check yours before switching. The bare `field=value` shorthand keeps working on the wire but is not described. The default, `Prose`, types the parameter as the equality value and lists the operators in its description; every generator renders it.
+
+The hooks receive the full field descriptors, so output can be extended with complete information instead of patched by a transformer that runs afterwards and depends on this one's output staying the same.
 
 ---
 
