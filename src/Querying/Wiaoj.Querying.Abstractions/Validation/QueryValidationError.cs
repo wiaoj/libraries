@@ -6,7 +6,7 @@ using Wiaoj.Preconditions;
 namespace Wiaoj.Querying;
 
 /// <summary>
-/// Represents an individual diagnostic validation error encountered while evaluating a <see cref="QueryRequest"/> against a <see cref="QuerySchema{T}"/>.
+/// Represents an individual diagnostic validation error encountered while evaluating a <see cref="QueryRequest"/> against a query schema.
 /// </summary>
 [DebuggerDisplay("[{ErrorCode}] {PropertyName ?? \"$\"}: {Message}")]
 [StructLayout(LayoutKind.Auto)]
