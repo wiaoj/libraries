@@ -24,6 +24,37 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     private bool _ignoreGlobalParameters;
     private readonly Dictionary<string, string> _aliasesToMember = new(StringComparer.OrdinalIgnoreCase);
     private JsonNamingPolicy? _fieldNamingPolicy;
+    private LambdaExpression? _tieBreaker;
+
+    /// <summary>
+    /// Gets the unique key paging orders by last, so rows that tie on every requested sort field keep one order across
+    /// pages; <see langword="null"/> when none was declared.
+    /// </summary>
+    public LambdaExpression? TieBreakerSelector => this._tieBreaker;
+
+    /// <summary>
+    /// Declares the unique key that paging appends to every ordering.
+    /// </summary>
+    /// <typeparam name="TKey">The key type.</typeparam>
+    /// <param name="selector">A unique member of the entity, usually its primary key.</param>
+    /// <returns>The current schema instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A client may sort by a column with repeated values. The database then returns tied rows in no particular order,
+    /// and may return them in a different order for the next page: an offset page repeats some rows and skips others,
+    /// and a keyset page cannot say where it stopped. Ordering by a unique key last makes the order total.
+    /// </para>
+    /// <para>
+    /// Declared once, here, rather than found by naming convention — a property called <c>Id</c> is not necessarily
+    /// unique, and a projection does not have one at all.
+    /// </para>
+    /// </remarks>
+    public QuerySchema<T> TieBreaker<TKey>(Expression<Func<T, TKey>> selector) {
+        ArgumentNullException.ThrowIfNull(selector);
+        ExtractMemberPath(selector.Body);
+        this._tieBreaker = selector;
+        return this;
+    }
 
     /// <summary>
     /// Gets the maximum allowed number of filters per request. Defaults to 20.
