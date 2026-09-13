@@ -20,7 +20,9 @@ namespace Wiaoj.Pagination.OpenApi;
 /// produces an invalid document. A handler taking <c>CursorParameters</c> has none of them described,
 /// because a type that binds itself contributes nothing to the document. Which set applies is decided by the
 /// declared response type, not guessed: <c>PagedResult&lt;T&gt;</c> means offset paging,
-/// <c>CursorResult&lt;T&gt;</c> means keyset.
+/// <c>CursorResult&lt;T&gt;</c> means keyset. Only an endpoint whose response type cannot say — one returning
+/// <c>IResult</c> — states it with <c>WithPagination(PaginationStyle)</c>, and that statement is checked against
+/// any response type the document does know.
 /// </para>
 /// <para>
 /// A handler taking a bare <c>CursorRequest</c> or <c>PageRequest</c> is a third case: it binds the whole
@@ -45,13 +47,24 @@ internal sealed class PaginationOperationTransformer : IOpenApiOperationTransfor
             return Task.CompletedTask;
         }
 
-        // An endpoint that declared where its metadata is — an envelope response — has stated its style;
-        // otherwise it is read from the declared response type.
+        // An endpoint that stated its style — an envelope, or a handler returning IResult — is documented as
+        // that style; otherwise it is read from the declared response type.
+        PagingStyle detected = DetectStyle(context);
         PagingStyle style = metadata.Style switch {
             PaginationStyle.Offset => PagingStyle.Offset,
             PaginationStyle.Cursor => PagingStyle.Cursor,
-            _ => DetectStyle(context)
+            _ => detected
         };
+
+        // A statement is checked against whatever response type is known, so it cannot be silently preferred.
+        // The endpoint build catches this for a typed handler; this catches Task<IResult> plus Produces<T>().
+        if(detected != PagingStyle.Unknown && detected != style) {
+            throw new InvalidOperationException(
+                $"The endpoint '{context.Description.RelativePath}' declared {nameof(PaginationStyle)}.{style} " +
+                $"pagination, but its response type is documented as {detected} pagination. The document would " +
+                "describe parameters the endpoint does not accept. Correct the declared style or the Produces<T>() " +
+                "response type so the two agree.");
+        }
 
         // The filter acts on a page and leaves anything else alone, so an endpoint carrying the marker but
         // returning neither shape gets no Link header, no ETag and no 304. Describing them anyway would put
