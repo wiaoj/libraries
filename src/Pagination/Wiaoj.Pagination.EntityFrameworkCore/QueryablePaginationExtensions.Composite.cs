@@ -340,12 +340,9 @@ public static partial class QueryablePaginationExtensions {
             ParameterExpression parameter = primaryKeySelector.Parameters[0];
             Expression remappedTieBreakerBody = ParameterReplacer.Replace(tieBreakerSelector.Body, tieBreakerSelector.Parameters[0], parameter);
 
-            ConstantExpression primaryConst = Expression.Constant(pivotPrimary, typeof(TPrimary));
-            ConstantExpression tieConst = Expression.Constant(pivotTieBreaker, typeof(TTieBreaker));
-
-            BinaryExpression primaryComp = BuildComparisonExpression(primaryKeySelector.Body, primaryConst, primarySeekGreater);
-            BinaryExpression primaryEqual = Expression.Equal(primaryKeySelector.Body, primaryConst);
-            BinaryExpression tieComp = BuildComparisonExpression(remappedTieBreakerBody, tieConst, tieSeekGreater);
+            Expression primaryComp = BuildSeekComparison(primaryKeySelector.Body, pivotPrimary, primarySeekGreater);
+            Expression primaryEqual = BuildSeekEquality(primaryKeySelector.Body, pivotPrimary);
+            Expression tieComp = BuildSeekComparison(remappedTieBreakerBody, pivotTieBreaker, tieSeekGreater);
 
             // Logic: (Primary seek condition) OR (Primary == pivotPrimary AND TieBreaker seek condition)
             BinaryExpression compositePredicate = Expression.OrElse(primaryComp, Expression.AndAlso(primaryEqual, tieComp));
@@ -406,19 +403,69 @@ public static partial class QueryablePaginationExtensions {
 
     #endregion
 
-    private static BinaryExpression BuildComparisonExpression(Expression left, Expression right, bool isGreaterThan) {
-        if(left.Type == typeof(string)) {
-            MethodInfo compareMethod = typeof(string).GetMethod(nameof(string.Compare), [typeof(string), typeof(string)])!;
-            MethodCallExpression compareCall = Expression.Call(compareMethod, left, right);
+    /// <summary>
+    /// Builds <c>key &gt; pivot</c> or <c>key &lt; pivot</c> for one level of a composite seek, through
+    /// <see cref="IComparable{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A key type declaring relational operators, and <see cref="string"/>, are compared exactly as before. Providers
+    /// translate those forms specially — SQLite stores <see cref="decimal"/> as text and compares it through a function
+    /// for the operator form, while <c>CompareTo</c> on it becomes a plain text comparison, ordering <c>"100"</c> before
+    /// <c>"50"</c>.
+    /// </para>
+    /// <para>
+    /// Any other key is compared as <c>key.CompareTo(pivot)</c>, as the single-key seek is
+    /// (<see cref="BuildSeekPredicate"/>). Those previously failed here outright: a strongly-typed identifier — a
+    /// <c>readonly record struct</c> has <c>==</c> but no <c>&lt;</c> — could not be a tie-breaker, which is the key a
+    /// composite exists to carry.
+    /// </para>
+    /// </remarks>
+    private static Expression BuildSeekComparison<TKey>(Expression keyBody, TKey pivot, bool seekGreaterThan)
+        where TKey : IComparable<TKey> {
+
+        Type type = typeof(TKey);
+        ConstantExpression constant = Expression.Constant(pivot, type);
+
+        if(type == typeof(string)) {
+            MethodInfo compare = typeof(string).GetMethod(nameof(string.Compare), [typeof(string), typeof(string)])!;
+            MethodCallExpression call = Expression.Call(compare, keyBody, constant);
             ConstantExpression zero = Expression.Constant(0);
-            return isGreaterThan
-                ? Expression.GreaterThan(compareCall, zero)
-                : Expression.LessThan(compareCall, zero);
+            return seekGreaterThan ? Expression.GreaterThan(call, zero) : Expression.LessThan(call, zero);
         }
 
-        return isGreaterThan
-            ? Expression.GreaterThan(left, right)
-            : Expression.LessThan(left, right);
+        if(type.IsPrimitive || type.IsEnum || DeclaresOperator(type, seekGreaterThan ? "op_GreaterThan" : "op_LessThan")) {
+            return seekGreaterThan ? Expression.GreaterThan(keyBody, constant) : Expression.LessThan(keyBody, constant);
+        }
+
+        Expression<Func<TKey, TKey, bool>> template = seekGreaterThan
+            ? SeekTemplate<TKey>.GreaterThan
+            : SeekTemplate<TKey>.LessThan;
+
+        return Instantiate(template, keyBody, pivot);
+    }
+
+    private static bool DeclaresOperator(Type type, string name) {
+        return type.GetMethod(name, BindingFlags.Public | BindingFlags.Static, [type, type]) is not null;
+    }
+
+    /// <summary>Builds <c>key == pivot</c> for the levels above the one a composite seek is deciding.</summary>
+    /// <remarks>
+    /// The <c>==</c> operator where the type has one, since every provider translates it as a plain column equality;
+    /// otherwise <c>key.CompareTo(pivot) == 0</c>, for a key that is comparable but declares no equality operator.
+    /// </remarks>
+    private static Expression BuildSeekEquality<TKey>(Expression keyBody, TKey pivot) where TKey : IComparable<TKey> {
+        Type type = typeof(TKey);
+        bool hasEqualityOperator = type.IsPrimitive || type.IsEnum || DeclaresOperator(type, "op_Equality");
+
+        return hasEqualityOperator
+            ? Expression.Equal(keyBody, Expression.Constant(pivot, type))
+            : Instantiate(SeekTemplate<TKey>.EqualTo, keyBody, pivot);
+    }
+
+    private static Expression Instantiate<TKey>(Expression<Func<TKey, TKey, bool>> template, Expression keyBody, TKey pivot) {
+        Expression body = new ParameterRebinder(template.Parameters[0], keyBody).Visit(template.Body);
+        return new ParameterRebinder(template.Parameters[1], Expression.Constant(pivot, typeof(TKey))).Visit(body);
     }
 
     private sealed class ParameterReplacer : ExpressionVisitor {
