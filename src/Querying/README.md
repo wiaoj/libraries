@@ -243,6 +243,56 @@ IReadOnlyList<EntryStatus> statuses = schema.GetFilterValues<EntryStatus>(query.
 
 `ApplyQuery` leaves these to the endpoint. Pass a predicate — `CustomFilter<bool>("hasScreenshot", (key, has) => key.Screenshots.Any() == has)` — to have the engine apply it.
 
+### 5. One contract per endpoint
+
+What a caller may filter by is part of the endpoint's contract. For example, an admin listing may filter by owner, and a public listing over the same entity must not. Declare each contract as its own schema class, and select one per endpoint:
+
+```csharp
+builder.Services.AddQuerying(q => q
+    .AddSchema<Asset, AdminAssetSchema>()
+    .AddSchema<Asset, PublicAssetSchema>());
+
+app.MapGet("/admin/assets", ...).WithQueryValidation<Asset, AdminAssetSchema>();
+app.MapGet("/assets", ...).WithQueryValidation<Asset, PublicAssetSchema>();
+```
+
+The selected schema is used in three places: validation, `Query<T>` binding, and the OpenAPI document. Put shared rules in a base class.
+
+Once an entity has more than one schema, injecting `QuerySchema<Asset>` or calling `WithQueryValidation<Asset>()` **throws** instead of picking one. Before this change, the second registration was silently dropped, and every endpoint accepted the first schema's filters. An inline schema has no type to select it by, so it must be the entity's only schema.
+
+A schema can also carry the response shape, which makes it the endpoint's whole contract:
+
+```csharp
+public sealed class PublicAssetSchema : QuerySchema<Asset, AssetSummaryResponse> {
+    public PublicAssetSchema() {
+        Project(a => new AssetSummaryResponse(a.Id.Encode(), a.FileName, a.FileSize));
+        AllowFilter(a => a.FileName);
+        Property(a => a.IsArchived).AllowFilter(QueryOperator.Equal).NotInResponse();
+    }
+}
+```
+
+It is checked when the container first hands it out. Two things throw:
+
+- a missing projection;
+- a filterable or sortable field the projection never returns, unless it is marked `NotInResponse()`.
+
+The second rule exists because filtering on data the caller cannot see can reveal that data, one narrowed result at a time.
+
+### 6. Paging a contract
+
+`Wiaoj.Querying.Pagination.EntityFrameworkCore` pages a `QuerySchema<TEntity, TResponse>` in one call:
+
+- `ToPagedResultAsync(query, schema, page)` returns offset pages;
+- `ToCursorResultAsync(query, schema, cursor)` returns keyset pages that seek on the sort the caller chose.
+
+Declare two things on the schema:
+
+- `TieBreaker(e => e.Id)`, the unique key that is always ordered last;
+- `Property(e => e.CreatedAt).AsCursor()` for every field a cursor endpoint may sort by.
+
+A cursor records the sort it was issued for, and it is refused with a 400 under a different sort. See that package's README.
+
 ---
 
 ## Crossing a service boundary

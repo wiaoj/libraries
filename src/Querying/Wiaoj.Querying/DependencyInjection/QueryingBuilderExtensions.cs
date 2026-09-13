@@ -105,6 +105,13 @@ public static class QueryingBuilderExtensions {
     /// <summary>
     /// Registers a custom <see cref="QuerySchema{TEntity}"/> class as a singleton.
     /// </summary>
+    /// <remarks>
+    /// Several schema classes may be registered for one entity — one per query contract, such as an admin and a public
+    /// listing. Select one per endpoint with <c>WithQueryValidation&lt;TEntity, TSchema&gt;()</c>, or inject the class.
+    /// <see cref="QuerySchema{TEntity}"/> itself resolves to the schema only while it is the entity's only one, and
+    /// throws once there are more, rather than picking one.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The entity already has an inline or instance schema.</exception>
     public static IQueryingBuilder AddSchema<
         TEntity,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSchema>(
@@ -112,37 +119,45 @@ public static class QueryingBuilderExtensions {
         where TSchema : QuerySchema<TEntity> {
         Preca.ThrowIfNull(builder);
 
+        DependencyInjection.QuerySchemaRegistry.For(builder.Services)
+            .AddTyped(builder.Services, typeof(TEntity), typeof(QuerySchema<TEntity>), typeof(TSchema));
+
         builder.Services.TryAddSingleton<TSchema>(static sp =>
             DependencyInjection.QuerySchemaInitializer.Initialize(ActivatorUtilities.CreateInstance<TSchema>(sp), sp));
-        builder.Services.TryAddSingleton<QuerySchema<TEntity>>(static sp => sp.GetRequiredService<TSchema>());
         return builder;
     }
 
     /// <summary>
     /// Registers an inline configured <see cref="QuerySchema{TEntity}"/> as a singleton.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The entity already has a schema, of any kind.</exception>
     public static IQueryingBuilder AddSchema<TEntity>(
         this IQueryingBuilder builder,
         Action<QuerySchema<TEntity>> configure) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(configure);
 
+        DependencyInjection.QuerySchemaRegistry.For(builder.Services).AddUntyped(typeof(TEntity));
+
         QuerySchema<TEntity> schema = new();
         configure(schema);
-        builder.Services.TryAddSingleton(sp => DependencyInjection.QuerySchemaInitializer.Initialize(schema, sp));
+        builder.Services.AddSingleton(sp => DependencyInjection.QuerySchemaInitializer.Initialize(schema, sp));
         return builder;
     }
 
     /// <summary>
     /// Registers an existing <see cref="QuerySchema{TEntity}"/> instance as a singleton.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The entity already has a schema, of any kind.</exception>
     public static IQueryingBuilder AddSchema<TEntity>(
         this IQueryingBuilder builder,
         QuerySchema<TEntity> schema) {
         Preca.ThrowIfNull(builder);
         Preca.ThrowIfNull(schema);
 
-        builder.Services.TryAddSingleton(sp => DependencyInjection.QuerySchemaInitializer.Initialize(schema, sp));
+        DependencyInjection.QuerySchemaRegistry.For(builder.Services).AddUntyped(typeof(TEntity));
+
+        builder.Services.AddSingleton(sp => DependencyInjection.QuerySchemaInitializer.Initialize(schema, sp));
         return builder;
     }
 
@@ -199,12 +214,13 @@ public static class QueryingBuilderExtensions {
                 Type? baseType = type.BaseType;
                 while(baseType != null) {
                     if(baseType.IsGenericType && baseType.GetGenericTypeDefinition() == typeof(QuerySchema<>)) {
-                        Type serviceType = baseType;
-
                         Type schemaType = type;
+
+                        DependencyInjection.QuerySchemaRegistry.For(builder.Services)
+                            .AddTyped(builder.Services, baseType.GetGenericArguments()[0], baseType, schemaType);
+
                         builder.Services.TryAddSingleton(schemaType, sp =>
                             DependencyInjection.QuerySchemaInitializer.Initialize(ActivatorUtilities.CreateInstance(sp, schemaType), sp));
-                        builder.Services.TryAddSingleton(serviceType, sp => sp.GetRequiredService(type));
                         break;
                     }
                     baseType = baseType.BaseType;

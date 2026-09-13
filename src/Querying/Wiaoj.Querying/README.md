@@ -166,6 +166,38 @@ services.AddQuerying()
 //     .AddSchema<Product>(schema => schema.AllowFilter(x => x.Price));
 ```
 
+### Several schemas for one entity
+
+A schema is a query contract, and one entity can have several: an admin surface and a public surface, for example. Register each one as a class, and inject the class you mean:
+
+```csharp
+services.AddQuerying()
+    .AddSchema<Asset, AdminAssetSchema>()
+    .AddSchema<Asset, PublicAssetSchema>();
+
+public sealed class ListAssetsHandler(PublicAssetSchema schema) { ... }
+```
+
+`QuerySchema<Asset>` resolves only while the entity has a single schema. With two or more, resolving it throws and names the schemas, so nothing silently picks one. Registering a second inline or instance schema for the same entity, or mixing one with a class schema, throws at registration.
+
+### Binding a response: `QuerySchema<TEntity, TResponse>`
+
+```csharp
+public sealed class PublicAssetSchema : QuerySchema<Asset, AssetSummaryResponse> {
+    public PublicAssetSchema() {
+        Project(a => new AssetSummaryResponse(a.Id.Encode(), a.FileName, a.FileSize));
+        AllowFilter(a => a.FileName);
+    }
+}
+```
+
+It is still a `QuerySchema<Asset>`. `VerifyContract()` runs when the container hands the schema out, and you can call it yourself on a schema built by hand. It throws in two cases:
+
+- no projection was set;
+- a filterable or sortable field is never read by the projection, and is not marked `NotInResponse()`.
+
+A field counts as read when its member path appears anywhere in the projection. For example, `a.Id.Encode()` reads `Id`, `a.Id.Value` reads `Id`, and `a.Owner` reads `Owner.Name`. Custom filters are exempt from the check.
+
 ---
 
 ## Programmatic Usage & LINQ Execution

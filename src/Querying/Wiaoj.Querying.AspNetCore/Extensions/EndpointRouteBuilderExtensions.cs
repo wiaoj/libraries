@@ -138,6 +138,105 @@ public static class EndpointRouteBuilderExtensions {
     }
 
     /// <summary>
+    /// Validates the endpoint's query against the schema class <typeparamref name="TSchema"/>, resolved from the container.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type queried.</typeparam>
+    /// <typeparam name="TSchema">The schema class that is this endpoint's query contract.</typeparam>
+    /// <param name="builder">The route handler builder.</param>
+    /// <returns>The route handler builder for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A filter surface is part of what an endpoint promises, so two endpoints over one entity can need different
+    /// schemas — an admin listing filtering by owner, a public one that must not. Register both with
+    /// <c>AddSchema&lt;TEntity, TSchema&gt;()</c> and select one here. Validation, <c>Query&lt;TEntity&gt;</c> binding and
+    /// the OpenAPI document all use the schema selected, so they cannot describe different contracts.
+    /// </para>
+    /// <para>
+    /// <c>WithQueryValidation&lt;TEntity&gt;()</c> keeps working while the entity has one schema, and throws once it has
+    /// more instead of picking one.
+    /// </para>
+    /// </remarks>
+    public static RouteHandlerBuilder WithQueryValidation<TEntity, TSchema>(this RouteHandlerBuilder builder)
+        where TSchema : QuerySchema<TEntity> {
+        Preca.ThrowIfNull(builder);
+        return AddSelectedSchemaValidation<RouteHandlerBuilder, TEntity, TSchema>(builder, configure: null);
+    }
+
+    /// <summary>
+    /// Validates the endpoint's query against the schema class <typeparamref name="TSchema"/>, with endpoint options.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type queried.</typeparam>
+    /// <typeparam name="TSchema">The schema class that is this endpoint's query contract.</typeparam>
+    /// <param name="builder">The route handler builder.</param>
+    /// <param name="configure">Configures endpoint query validation and parameter options.</param>
+    /// <returns>The route handler builder for method chaining.</returns>
+    public static RouteHandlerBuilder WithQueryValidation<TEntity, TSchema>(
+        this RouteHandlerBuilder builder,
+        Action<QueryValidationEndpointOptions> configure) where TSchema : QuerySchema<TEntity> {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+        return AddSelectedSchemaValidation<RouteHandlerBuilder, TEntity, TSchema>(builder, configure);
+    }
+
+    /// <summary>
+    /// Validates every endpoint in the group against the schema class <typeparamref name="TSchema"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type queried.</typeparam>
+    /// <typeparam name="TSchema">The schema class that is the group's query contract.</typeparam>
+    /// <param name="builder">The route group builder.</param>
+    /// <returns>The route group builder for method chaining.</returns>
+    public static RouteGroupBuilder WithQueryValidation<TEntity, TSchema>(this RouteGroupBuilder builder)
+        where TSchema : QuerySchema<TEntity> {
+        Preca.ThrowIfNull(builder);
+        return AddSelectedSchemaValidation<RouteGroupBuilder, TEntity, TSchema>(builder, configure: null);
+    }
+
+    /// <summary>
+    /// Validates every endpoint in the group against the schema class <typeparamref name="TSchema"/>, with endpoint options.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type queried.</typeparam>
+    /// <typeparam name="TSchema">The schema class that is the group's query contract.</typeparam>
+    /// <param name="builder">The route group builder.</param>
+    /// <param name="configure">Configures endpoint query validation and parameter options.</param>
+    /// <returns>The route group builder for method chaining.</returns>
+    public static RouteGroupBuilder WithQueryValidation<TEntity, TSchema>(
+        this RouteGroupBuilder builder,
+        Action<QueryValidationEndpointOptions> configure) where TSchema : QuerySchema<TEntity> {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(configure);
+        return AddSelectedSchemaValidation<RouteGroupBuilder, TEntity, TSchema>(builder, configure);
+    }
+
+    private static TBuilder AddSelectedSchemaValidation<TBuilder, TEntity, TSchema>(
+        TBuilder builder,
+        Action<QueryValidationEndpointOptions>? configure)
+        where TBuilder : IEndpointConventionBuilder
+        where TSchema : QuerySchema<TEntity> {
+
+        QueryValidationEndpointOptions? options = null;
+        if(configure is not null) {
+            options = new QueryValidationEndpointOptions();
+            configure(options);
+            QueryValidationEndpointOptions captured = options;
+            ConfigureEndpointOptions(builder, opt => CopyOptions(captured, opt));
+        }
+
+        builder.WithMetadata(new QueryValidationEndpointMetadata(typeof(TEntity), typeof(TSchema)));
+
+        builder.AddEndpointFilterFactory((filterFactoryContext, next) => {
+            TSchema schema = filterFactoryContext.ApplicationServices.GetService<TSchema>()
+                ?? throw new InvalidOperationException(
+                    $"No {typeof(TSchema).Name} was registered in the dependency injection container. " +
+                    $"Register it with services.AddQuerying().AddSchema<{typeof(TEntity).Name}, {typeof(TSchema).Name}>().");
+
+            QueryValidationEndpointFilter<TEntity> filter = new(schema, options);
+            return context => filter.InvokeAsync(context, next);
+        });
+
+        return builder;
+    }
+
+    /// <summary>
     /// Adds automatic query schema validation to the endpoint using an explicitly specified <see cref="QuerySchema{T}"/>.
     /// </summary>
     /// <typeparam name="TBuilder">The endpoint convention builder type.</typeparam>

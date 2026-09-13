@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Wiaoj.Querying.Pagination.EntityFrameworkCore</RootNamespace>
+		<AssemblyName>Wiaoj.Querying.Pagination.EntityFrameworkCore</AssemblyName>
+		<PackageId>Wiaoj.Querying.Pagination.EntityFrameworkCore</PackageId>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Wiaoj.Querying\Wiaoj.Querying.csproj" />
+		<ProjectReference Include="..\..\Pagination\Wiaoj.Pagination.EntityFrameworkCore\Wiaoj.Pagination.EntityFrameworkCore.csproj" />
+		<ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+	</ItemGroup>
+
+</Project>

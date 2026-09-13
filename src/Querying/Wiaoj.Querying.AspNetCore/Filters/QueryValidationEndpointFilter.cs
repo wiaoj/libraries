@@ -77,12 +77,34 @@ internal sealed class QueryValidationEndpointFilter<T> : IEndpointFilter {
         }
 
         if(!validation.IsValid) {
-            return ValueTask.FromResult<object?>(Results.ValidationProblem(
-                errors: validation.ToDictionary(),
-                title: "One or more query validation errors occurred.",
-                statusCode: StatusCodes.Status400BadRequest));
+            return ValueTask.FromResult<object?>(Problem(validation));
         }
 
-        return next(context);
+        return InvokeHandlerAsync(context, next);
+    }
+
+    /// <summary>
+    /// Runs the handler, answering a <see cref="QueryValidationException"/> it throws the way an invalid query string is
+    /// answered.
+    /// </summary>
+    /// <remarks>
+    /// Some of what makes a query invalid is only known once the handler applies it — a cursor issued for a different
+    /// sort, or a sort on a field the endpoint cannot page by. Those are the caller's to fix, like any other invalid
+    /// query, and deserve the same 400 with the same error shape rather than a 500.
+    /// </remarks>
+    private static async ValueTask<object?> InvokeHandlerAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next) {
+        try {
+            return await next(context).ConfigureAwait(false);
+        }
+        catch(QueryValidationException error) {
+            return Problem(error.Result);
+        }
+    }
+
+    private static IResult Problem(QueryValidationResult validation) {
+        return Results.ValidationProblem(
+            errors: validation.ToDictionary(),
+            title: "One or more query validation errors occurred.",
+            statusCode: StatusCodes.Status400BadRequest);
     }
 }
