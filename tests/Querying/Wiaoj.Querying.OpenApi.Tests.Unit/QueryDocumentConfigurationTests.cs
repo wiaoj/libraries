@@ -31,12 +31,13 @@ public sealed class QueryDocumentConfigurationTests {
     private static OpenApiOperation Transform(
         Action<IQueryingBuilder> querying,
         Action<QueryOpenApiOptions>? document = null,
-        QueryValidationEndpointOptions? endpointOptions = null) {
+        QueryValidationEndpointOptions? endpointOptions = null,
+        Type? schemaType = null) {
 
         ServiceCollection services = new();
         services.AddQuerying(querying);
 
-        List<object> metadata = [new QueryValidationEndpointMetadata(typeof(Key))];
+        List<object> metadata = [new QueryValidationEndpointMetadata(typeof(Key), schemaType)];
         if(endpointOptions is not null) {
             metadata.Add(endpointOptions);
         }
@@ -227,6 +228,46 @@ public sealed class QueryDocumentConfigurationTests {
 
             Assert.Equal(JsonSchemaType.Boolean, parameter.Schema!.Type);
             Assert.StartsWith("Keys with at least one screenshot.", parameter.Description, StringComparison.Ordinal);
+        }
+    }
+
+    public sealed class AdminKeySchema : QuerySchema<Key> {
+        public AdminKeySchema() {
+            AllowFilter(k => k.ContentType, QueryOperator.Equal);
+            AllowFilter(k => k.Revision, QueryOperator.GreaterThan);
+        }
+    }
+
+    public sealed class PublicKeySchema : QuerySchema<Key> {
+        public PublicKeySchema() {
+            AllowFilter(k => k.ContentType, QueryOperator.Equal);
+        }
+    }
+
+    /// <summary>
+    /// An endpoint that selected a schema is documented from that schema — the one its validation filter applies —
+    /// and not from whichever schema happens to be registered for the entity.
+    /// </summary>
+    public sealed class ASelectedSchema {
+        private static void BothSchemas(IQueryingBuilder q) {
+            q.AddSchema<Key, AdminKeySchema>().AddSchema<Key, PublicKeySchema>();
+        }
+
+        [Fact]
+        public void Should_Document_Only_The_Fields_Of_The_Schema_The_Endpoint_Selected() {
+            OpenApiOperation publicOperation = Transform(BothSchemas, schemaType: typeof(PublicKeySchema));
+            OpenApiOperation adminOperation = Transform(BothSchemas, schemaType: typeof(AdminKeySchema));
+
+            Assert.NotNull(Parameter(publicOperation, "ContentType"));
+            Assert.DoesNotContain(publicOperation.Parameters!.OfType<OpenApiParameter>(), p => p.Name!.StartsWith("Revision", StringComparison.Ordinal));
+            Assert.Contains(adminOperation.Parameters!.OfType<OpenApiParameter>(), p => p.Name!.StartsWith("Revision", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void An_Endpoint_Selecting_None_Should_Fail_Rather_Than_Document_An_Arbitrary_Schema() {
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => Transform(BothSchemas));
+
+            Assert.Contains("2 query schemas are registered for Key", error.Message, StringComparison.Ordinal);
         }
     }
 }

@@ -48,7 +48,7 @@ internal sealed class QueryValidationOperationTransformer(QueryOpenApiOptions op
             return Task.CompletedTask;
         }
 
-        object? schema = ResolveSchema(context, metadata.EntityType);
+        object? schema = ResolveSchema(context, metadata);
         IReadOnlyList<QueryFieldDescriptor> fields = schema is null ? [] : DescribeFields(schema);
 
         if(fields.Count == 0) {
@@ -269,8 +269,13 @@ internal sealed class QueryValidationOperationTransformer(QueryOpenApiOptions op
             (bool)isIgnored.Invoke(schema, [name, effectiveGlobal])!;
     }
 
-    private static object? ResolveSchema(OpenApiOperationTransformerContext context, Type entityType) {
-        return context.ApplicationServices?.GetService(typeof(QuerySchema<>).MakeGenericType(entityType));
+    /// <summary>
+    /// The schema the endpoint selected, or the entity's only schema — the same one its validation filter applies.
+    /// </summary>
+    private static object? ResolveSchema(OpenApiOperationTransformerContext context, QueryValidationEndpointMetadata metadata) {
+        return metadata.SchemaType is { } schemaType
+            ? context.ApplicationServices?.GetService(schemaType)
+            : context.ApplicationServices?.GetService(typeof(QuerySchema<>).MakeGenericType(metadata.EntityType));
     }
 
     /// <summary>

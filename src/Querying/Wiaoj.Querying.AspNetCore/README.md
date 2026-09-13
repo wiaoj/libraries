@@ -139,6 +139,29 @@ app.MapGet("/api/keys", (Query<TranslationKey> query, QuerySchema<TranslationKey
 
 `?hasScreenshot=sometimes` is a 400, like any other invalid filter.
 
+### 6. A different schema per endpoint
+
+Two endpoints over one entity can expose different query surfaces. Select the schema class for each endpoint:
+
+```csharp
+app.MapGet("/admin/assets", (Query<Asset> query, AdminAssetSchema schema, AppDbContext db) => ...)
+   .WithQueryValidation<Asset, AdminAssetSchema>();
+
+app.MapGet("/assets", (Query<Asset> query, PublicAssetSchema schema, AppDbContext db) => ...)
+   .WithQueryValidation<Asset, PublicAssetSchema>();
+
+// or for a whole group
+app.MapGroup("/public").WithQueryValidation<Asset, PublicAssetSchema>();
+```
+
+The endpoint metadata records the selected schema, and everything that reads the endpoint's schema uses it:
+
+- the validation filter;
+- `Query<Asset>` binding, including the schema's parameter rules and naming aliases;
+- the OpenAPI document.
+
+The three therefore cannot apply different contracts. Inject the schema class in the handler as well. Once `Asset` has more than one schema, `QuerySchema<Asset>` and `WithQueryValidation<Asset>()` throw instead of picking one.
+
 ---
 
 ## How It Works

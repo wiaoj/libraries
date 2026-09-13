@@ -123,6 +123,9 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
         return operators;
     }
 
+    /// <summary>Gets every configured property, including custom filters.</summary>
+    internal IEnumerable<QueryProperty<T>> Properties => this._propertiesByMemberName.Values;
+
     /// <summary>
     /// Gets the list of configured search property selectors.
     /// </summary>
@@ -1186,7 +1189,8 @@ internal sealed record QueryProperty<T>(
     bool IsExplicitlyNamed = false,
     string? Description = null,
     bool IsCustom = false,
-    LambdaExpression? CustomPredicate = null);
+    LambdaExpression? CustomPredicate = null,
+    bool IsNotInResponse = false);
 
 /// <summary>
 /// Fluent builder for configuring fine-grained rules on a specific property.
@@ -1276,6 +1280,21 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
 
         this._property = this._property with { Description = description.Trim() };
+        this._schema.UpdateProperty(this._property.ExposedName, this._property);
+        return this;
+    }
+
+    /// <summary>
+    /// States that the field may be filtered or sorted by although the response does not return it.
+    /// </summary>
+    /// <returns>The property rule builder for method chaining.</returns>
+    /// <remarks>
+    /// Only meaningful on a <see cref="QuerySchema{TEntity, TResponse}"/>, which otherwise refuses such a field: filtering
+    /// on data the caller cannot see can reveal it one narrowed result at a time. Use it where that is the intent — a
+    /// status every caller may narrow by but that the response leaves out, say.
+    /// </remarks>
+    public PropertyRuleBuilder<T, TProperty> NotInResponse() {
+        this._property = this._property with { IsNotInResponse = true };
         this._schema.UpdateProperty(this._property.ExposedName, this._property);
         return this;
     }

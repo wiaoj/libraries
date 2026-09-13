@@ -29,8 +29,17 @@ public sealed record Query<TEntity>(QueryRequest Value) : IBindableFromHttpConte
     public static async ValueTask<Query<TEntity>?> BindAsync(HttpContext context, ParameterInfo parameter) {
         Preca.ThrowIfNull(context);
 
-        IQuerySchemaParameters? schema = context.RequestServices?.GetService<QuerySchema<TEntity>>();
-        QueryValidationEndpointOptions? endpointOptions = context.GetEndpoint()?.Metadata.GetMetadata<QueryValidationEndpointOptions>();
+        Endpoint? endpoint = context.GetEndpoint();
+
+        // The schema the endpoint selected, when it selected one: its parameter policies and naming aliases are the
+        // ones the validation filter will judge this request by. Resolving by entity would bind with another
+        // contract's rules, or throw when the entity has several schemas.
+        Type? selected = endpoint?.Metadata.GetMetadata<QueryValidationEndpointMetadata>()?.SchemaType;
+        IQuerySchemaParameters? schema = selected is not null
+            ? context.RequestServices?.GetService(selected) as IQuerySchemaParameters
+            : context.RequestServices?.GetService<QuerySchema<TEntity>>();
+
+        QueryValidationEndpointOptions? endpointOptions = endpoint?.Metadata.GetMetadata<QueryValidationEndpointOptions>();
 
         QueryRequest request = await QueryRequestBinder.BindAsync(context, schema, endpointOptions).ConfigureAwait(false);
         return new Query<TEntity>(request);

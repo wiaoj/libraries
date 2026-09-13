@@ -27,6 +27,12 @@ internal static class QuerySchemaInitializer {
             naming.ApplyFieldNamingPolicy(policy);
         }
 
+        // A contract that contradicts itself fails here, when the application first asks for it, instead of on the
+        // request that happens to use the field.
+        if(schema is IQuerySchemaContract contract) {
+            contract.VerifyContract();
+        }
+
         return schema;
     }
 }
