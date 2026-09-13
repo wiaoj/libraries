@@ -1,4 +1,7 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using Wiaoj.Resilience.DependencyInjection;
 
@@ -18,7 +21,9 @@ internal sealed class DefaultCircuitBreakerFactory : ICircuitBreakerFactory {
 
         this._serviceProvider = serviceProvider;
         this._options = options.Value;
-        this._defaultBreaker = new Lazy<ICircuitBreaker?>(() => this._options.DefaultPolicy?.Invoke(this._serviceProvider));
+        this._defaultBreaker = new Lazy<ICircuitBreaker?>(() => this._options.DefaultPolicy?.Invoke(this._serviceProvider) is { } breaker
+            ? this.Guard(breaker)
+            : null);
     }
 
     public ICircuitBreaker Create(string policyName) {
@@ -26,7 +31,7 @@ internal sealed class DefaultCircuitBreakerFactory : ICircuitBreakerFactory {
 
         return this._resolvedBreakers.GetOrAdd(policyName, name => {
             if(this._options.Policies.TryGetValue(name, out Func<IServiceProvider, ICircuitBreaker>? factory)) {
-                return factory(this._serviceProvider);
+                return this.Guard(factory(this._serviceProvider));
             }
 
             throw new KeyNotFoundException($"Circuit breaker policy '{name}' was not found. Ensure it is registered via AddWiaojResilience.");
@@ -39,6 +44,18 @@ internal sealed class DefaultCircuitBreakerFactory : ICircuitBreakerFactory {
             throw new InvalidOperationException("No default circuit breaker policy is configured. Use UseDefault... during setup.");
         }
         return breaker;
+    }
+
+    /// <summary>Wraps a breaker so it fails open on store failure, when the application asked for that.</summary>
+    private ICircuitBreaker Guard(ICircuitBreaker breaker) {
+        if(this._options.FailOpenOnStorageFailure is not { } resilient || breaker is ResilientCircuitBreaker) {
+            return breaker;
+        }
+
+        ILogger<ResilientCircuitBreaker> logger = this._serviceProvider.GetService<ILogger<ResilientCircuitBreaker>>()
+            ?? NullLogger<ResilientCircuitBreaker>.Instance;
+
+        return new ResilientCircuitBreaker(breaker, resilient, logger);
     }
 }
 

@@ -124,4 +124,23 @@ internal static class ResilienceTracing {
     public static void MarkCancelled(Activity? activity) {
         activity?.SetTag(Tags.Outcome, Outcomes.Cancelled);
     }
+
+    /// <summary>Event recorded when an outcome could not be written to the circuit's store.</summary>
+    public const string RecordFailedEventName = "circuit_breaker.record_failed";
+
+    /// <summary>
+    /// Records that the outcome of an operation that already ran could not be written to the circuit's store. The
+    /// activity's outcome is left as the operation's own; only the bookkeeping failed.
+    /// </summary>
+    public static void RecordBookkeepingFailure(Activity? activity, string outcome, Exception exception) {
+        if(activity is null) {
+            return;
+        }
+
+        activity.AddEvent(new ActivityEvent(RecordFailedEventName, tags: new ActivityTagsCollection {
+            [Tags.Outcome] = outcome,
+            ["exception.type"] = exception.GetType().FullName,
+            ["exception.message"] = exception.Message
+        }));
+    }
 }

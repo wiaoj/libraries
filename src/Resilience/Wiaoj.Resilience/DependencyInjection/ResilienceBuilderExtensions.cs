@@ -111,6 +111,31 @@ public static class ResilienceBuilderExtensions {
         });
     }
 
+    // ── Storage failure ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Wraps every circuit breaker the factory hands out in a <see cref="ResilientCircuitBreaker"/>, so an unreachable
+    /// store lets calls through instead of refusing them.
+    /// </summary>
+    /// <param name="builder">The resilience builder.</param>
+    /// <param name="configure">Optionally changes what <c>GetStateAsync</c> reports when the store cannot be read.</param>
+    /// <returns>The builder for chaining.</returns>
+    /// <remarks>
+    /// Applies to named, typed and default policies alike, including each child of a composite. Without it, a store
+    /// outage makes <c>TryAcquireAsync</c> throw, which refuses every protected call.
+    /// </remarks>
+    public static IResilienceBuilder FailOpenOnStorageFailure(
+        this IResilienceBuilder builder,
+        Action<ResilientCircuitBreakerOptions>? configure = null) {
+        Preca.ThrowIfNull(builder);
+
+        ResilientCircuitBreakerOptions options = new();
+        configure?.Invoke(options);
+
+        builder.Services.Configure<ResilienceOptions>(resilience => resilience.FailOpenOnStorageFailure = options);
+        return builder;
+    }
+
     // ── Composite Circuit Breaker ─────────────────────────────────────────────
 
     /// <summary>Registers a multi-tier composite circuit breaker policy evaluating multiple child breaker configurations in sequence.</summary>
