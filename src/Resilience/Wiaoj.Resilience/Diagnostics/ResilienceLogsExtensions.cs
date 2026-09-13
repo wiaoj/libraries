@@ -40,4 +40,25 @@ internal static partial class ResilienceLogsExtensions {
         Message = "[{Strategy}] Transient failure recorded for key '{Key}'. Current Failure Count / Rate: {Metric:F2}")]
     public static partial void LogTransientFailure(
         this ILogger logger, string strategy, string key, double metric);
+
+    [LoggerMessage(
+        EventId = 2006,
+        Level = LogLevel.Warning,
+        Message = "[{Strategy}] Circuit store unavailable while acquiring for key '{Key}'; allowing the call (fail-open).")]
+    public static partial void LogAcquireFailOpen(
+        this ILogger logger, string strategy, string key, Exception exception);
+
+    [LoggerMessage(
+        EventId = 2007,
+        Level = LogLevel.Warning,
+        Message = "[{Strategy}] Circuit store unavailable while reading state for key '{Key}'; reporting {ReportedState}.")]
+    public static partial void LogStateFailOpen(
+        this ILogger logger, string strategy, string key, CircuitState reportedState, Exception exception);
+
+    [LoggerMessage(
+        EventId = 2008,
+        Level = LogLevel.Warning,
+        Message = "[{Strategy}] Circuit store unavailable while recording {Outcome} for key '{Key}'; the outcome was not recorded.")]
+    public static partial void LogRecordSkipped(
+        this ILogger logger, string strategy, string key, string outcome, Exception exception);
 }

@@ -125,7 +125,7 @@ IReadOnlyList<Product> results = await breaker.ExecuteWithFallbackAsync(
 
 ### Manual Outcome Reporting
 
-When the operation is not a single delegate, drive the breaker directly:
+When the operation is not a single delegate, drive the breaker directly. Keep **only the operation** inside the `try`, and record its outcome outside it:
 
 ```csharp
 CircuitExecutionDecision decision = await breaker.TryAcquireAsync(key, ct);
@@ -136,13 +136,49 @@ if(!decision.IsAllowed) {
 
 try {
     await DispatchAsync(ct);
-    await breaker.OnSuccessAsync(key, ct);
 }
-catch {
-    await breaker.OnFailureAsync(key, ct);
+catch(Exception) {
+    await breaker.OnFailureAsync(key, ct);   // or use a ResilientCircuitBreaker, which never throws here
     throw;
 }
+
+await breaker.OnSuccessAsync(key, ct);
 ```
+
+> **Do not record success inside the `try`.** If `OnSuccessAsync` throws (because the store is down), the `catch` records a failure and rethrows, and the caller receives an exception for an operation that already completed. A caller that retries on exception then runs the operation twice. `ExecuteAsync` is built this way.
+
+---
+
+## When the Circuit's Store Is Unavailable
+
+The built-in breakers keep their state in `Wiaoj.DistributedCounter`. When that store is unreachable, for example when Redis is down, the defaults behave as follows.
+
+- **`ExecuteAsync` never runs an operation twice and never misreports one.** Once the operation has run, the caller receives its result or its own exception. A failure to record the outcome is added as a `circuit_breaker.record_failed` event on the span, and the span keeps the operation's outcome.
+- **Acquiring throws.** The operation has not run yet at that point, so nothing is repeated. However, every protected call is refused.
+
+Refusing every call turns a store outage into an outage of everything the breakers protect. To let calls through instead, opt in to fail-open:
+
+```csharp
+services.AddWiaojResilience(resilience => resilience
+    .AddConsecutiveBreaker("payments", o => o.FailureThreshold = 5)
+    .FailOpenOnStorageFailure());
+```
+
+Every breaker the factory hands out is then wrapped in `ResilientCircuitBreaker`: named, typed, default, and each child of a composite. This is the counterpart of `ResilientRateLimiter`.
+
+| Member | When the store throws |
+| --- | --- |
+| `TryAcquireAsync` | Allows the call (`Closed`), and logs event 2006 |
+| `GetStateAsync` | Reports `Closed` (event 2007), so routing does not drop a candidate whose state could not be read. With `o.StateOnStorageFailure = StorageFailureState.Throw` it rethrows instead, for a health page that must show "unknown", not "healthy". |
+| `OnSuccessAsync` / `OnFailureAsync` | Logs event 2008 and returns, since this is bookkeeping about a call that already happened |
+
+Some exceptions are never absorbed:
+
+- **Cancellation the caller requested** always propagates.
+- **An `OperationCanceledException` the caller did not request**, such as the store client's own timeout, is treated as a store failure.
+- **An `ArgumentException`** (a caller bug such as an invalid key) propagates.
+
+You can also wrap a breaker yourself: `new ResilientCircuitBreaker(inner, options, logger)`.
 
 ---
 
