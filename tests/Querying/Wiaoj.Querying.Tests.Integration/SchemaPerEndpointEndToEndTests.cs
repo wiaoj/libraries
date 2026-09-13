@@ -129,6 +129,19 @@ public sealed class SchemaPerEndpointEndToEndTests {
     }
 
     [Fact]
+    public async Task A_Caller_Repeating_A_Field_And_Operator_Should_Get_A_400() {
+        (WebApplication app, HttpClient client) = await StartAsync(MapBoth);
+        await using WebApplication _ = app;
+
+        HttpResponseMessage response = await client.GetAsync("/admin/assets?OwnerId=8&ownerId=7", TestContext.Current.CancellationToken);
+        string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // ASP.NET merges the two casings into one query key, so the message names the same spelling twice.
+        Assert.Contains("is filtered with 'Equal' more than once", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_Validation_Error_Raised_By_The_Handler_Should_Be_A_400_Not_A_500() {
         // A cursor issued for another sort is only detected when the handler applies the query.
         (WebApplication app, HttpClient client) = await StartAsync(app =>

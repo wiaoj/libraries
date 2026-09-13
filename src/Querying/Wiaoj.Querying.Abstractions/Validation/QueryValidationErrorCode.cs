@@ -41,5 +41,11 @@ public enum QueryValidationErrorCode : byte {
     InvalidCursor = 12,
 
     /// <summary>The cursor was issued for a different sort than the request asks for.</summary>
-    CursorSortChanged = 13
+    CursorSortChanged = 13,
+
+    /// <summary>
+    /// The same field is filtered with the same operator more than once. Repeated values have no single agreed meaning —
+    /// all of them, any of them, or the last — so the request is refused rather than one being picked silently.
+    /// </summary>
+    DuplicateFilter = 14
 }

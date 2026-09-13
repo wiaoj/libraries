@@ -811,6 +811,53 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     }
 
     /// <summary>
+    /// Reports every field a caller filtered with the same operator more than once.
+    /// </summary>
+    /// <param name="request">A request as a caller sent it.</param>
+    /// <param name="options">Global options; ignored parameters are not counted.</param>
+    /// <returns>A <see cref="QueryValidationErrorCode.DuplicateFilter"/> error for each repetition; empty when there is none.</returns>
+    /// <remarks>
+    /// <para>
+    /// The same field and operator twice — under the same name, another casing or an alias — has no single agreed
+    /// meaning: every value, any value, or the last one. Applying it picks one silently, and a caller that sent it twice
+    /// usually did not mean to: <c>UsageCount[gte]=4&amp;usageCount[gte]=2</c> applied both and returned <c>&gt;= 4</c>
+    /// to a client that believed it asked for <c>&gt;= 2</c>. Different operators on one field — a range — are fine.
+    /// </para>
+    /// <para>
+    /// This is not part of <see cref="Validate(QueryRequest, QueryOptions?)"/>, deliberately. A request composed in
+    /// code — <c>QueryRequest.Merge</c> narrowing a caller's <c>locale=en</c> with a server-side <c>locale=tr</c> — repeats a
+    /// field on purpose and means all of them. The HTTP validation filter checks this on what the caller sent, before
+    /// any such composition.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<QueryValidationError> FindDuplicateFilters(QueryRequest request, QueryOptions? options = null) {
+        List<QueryValidationError>? errors = null;
+        Dictionary<(string Member, QueryOperator Operator), string>? seen = null;
+
+        for(int i = 0; i < request.Filters.Count; i++) {
+            FilterConditionNode filter = request.Filters[i];
+
+            if(IsParameterIgnored(filter.Field, options) || !TryGetProperty(filter.Field, out QueryProperty<T>? property)) {
+                continue;
+            }
+
+            seen ??= [];
+            if(seen.TryGetValue((property.MemberName, filter.Operator), out string? first)) {
+                (errors ??= []).Add(new QueryValidationError(
+                    propertyName: filter.Field,
+                    errorCode: QueryValidationErrorCode.DuplicateFilter,
+                    message: $"Field '{filter.Field}' is filtered with '{filter.Operator}' more than once (also as '{first}'). " +
+                             "Send it once: use the 'in' operator for several values, or combine the conditions."));
+                continue;
+            }
+
+            seen[(property.MemberName, filter.Operator)] = filter.Field;
+        }
+
+        return errors ?? (IReadOnlyList<QueryValidationError>)[];
+    }
+
+    /// <summary>
     /// Truncates a value for safe inclusion in a validation error's <c>AttemptedValue</c>, preventing an
     /// oversized payload from being fully echoed back into the response body.
     /// </summary>
