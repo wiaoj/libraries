@@ -226,6 +226,53 @@ So relational operators are **not** required, and neither is an implicit impleme
 
 ---
 
+### 5. Paging a projection instead of the whole entity
+
+Paging the entity and mapping to DTOs afterwards reads every column on every page. Project in the query instead. Carry the key **beside** the response in an anonymous wrapper, then unwrap the page with `Select`, which keeps the cursors and flags:
+
+```csharp
+var page = await db.Assets
+    .Where(a => a.ApplicationId == appId)
+    .OrderByDescending(a => a.Id)
+    .Select(a => new {
+        Key = a.Id,
+        Item = new AssetSummaryResponse(a.Id.Encode(), a.FileName, a.ContentType, a.FileSize)
+    })
+    .ToCursorResultAsync(request, x => x.Key, AssetIdCodec.Encode, AssetIdCodec.Decode, ct);
+
+return TypedResults.Ok(page.Select(x => x.Item));   // CursorResult<AssetSummaryResponse>, metadata intact
+```
+
+```sql
+SELECT "a"."Id", "a"."FileName", "a"."ContentType", "a"."FileSize"
+FROM "Assets" AS "a"
+WHERE "a"."ApplicationId" = @appId AND "a"."Id" < @pivot
+ORDER BY "a"."Id" DESC
+```
+
+Columns the projection does not use are not read. The seek is translated over the wrapper's `Key` member back to the column.
+
+**The wrapper has to be a type EF Core can see through.** An anonymous type or a member initialiser (`new Row { Key = a.Id, … }`) works. A constructor call does not, and that includes a positional record such as `new AssetRow(a.Id, …)`, which is what response DTOs usually are. There is no binding from `x.Key` back to `a.Id` to follow. If you order before such a projection, the call refuses it. If you order after it, EF Core fails to translate the seek. Either way it fails, and it never pages on the wrong column.
+
+**A non-translatable id encoding is fine in the final projection.** EF Core evaluates the top-level `Select` on the client, so `a.Id.Encode()` can appear there. It cannot appear in a `Where`, an `OrderBy`, or a subquery. On a value-converted id, EF Core guards that call with a null check built from `==`. A `readonly record struct` has that operator. A plain struct without `==` fails with *"The binary operator Equal is not defined"*.
+
+#### A non-unique sort key needs the tie-breaker as a key
+
+The built-in overloads inject the `Id` tie-breaker by finding a property named `Id` on the element type. An anonymous wrapper has no such property, so nothing is injected. When the sort column can repeat, pass the id as a second key yourself:
+
+```csharp
+var page = await db.Assets
+    .OrderByDescending(a => a.Priority)
+    .Select(a => new { a.Priority, a.Id, Item = new AssetSummaryResponse(a.Id.Encode(), a.FileName, a.FileSize) })
+    .ToCursorResultAsync(request, x => x.Priority, x => x.Id, PriorityIdCodec.Encode, PriorityIdCodec.Decode, ct);
+```
+
+You do not need to write `ThenBy(a => a.Id)`. A trailing key without its own ordering level is added to the `ORDER BY` in the previous level's direction: `ORDER BY "Priority" DESC, "Id" DESC`. Do not rely on naming a wrapper member `Id` to get the tie-breaker back.
+
+A strongly-typed id works in every level of a composite or triple seek, including ids with no relational operators. Types that declare operators, and `string`, are compared exactly as before. Other types are compared through `IComparable<T>.CompareTo`.
+
+---
+
 ## Architectural Behavior
 
 ### The N+1 Limit Optimization

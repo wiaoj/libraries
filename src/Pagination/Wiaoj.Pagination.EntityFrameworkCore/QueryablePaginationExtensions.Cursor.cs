@@ -1995,6 +1995,7 @@ public static partial class QueryablePaginationExtensions {
     private static class SeekTemplate<TKey> where TKey : IComparable<TKey> {
         internal static readonly Expression<Func<TKey, TKey, bool>> GreaterThan = (key, boundary) => key.CompareTo(boundary) > 0;
         internal static readonly Expression<Func<TKey, TKey, bool>> LessThan = (key, boundary) => key.CompareTo(boundary) < 0;
+        internal static readonly Expression<Func<TKey, TKey, bool>> EqualTo = (key, boundary) => key.CompareTo(boundary) == 0;
     }
 
     /// <summary>Substitutes a single parameter within an expression tree.</summary>

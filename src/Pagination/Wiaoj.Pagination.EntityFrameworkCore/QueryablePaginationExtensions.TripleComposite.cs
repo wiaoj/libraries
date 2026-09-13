@@ -296,15 +296,11 @@ public static partial class QueryablePaginationExtensions {
             Expression remappedSecondaryBody = ParameterReplacer.Replace(secondaryKeySelector.Body, secondaryKeySelector.Parameters[0], parameter);
             Expression remappedTieBreakerBody = ParameterReplacer.Replace(tieBreakerSelector.Body, tieBreakerSelector.Parameters[0], parameter);
 
-            ConstantExpression primaryConst = Expression.Constant(pivotPrimary, typeof(TPrimary));
-            ConstantExpression secondaryConst = Expression.Constant(pivotSecondary, typeof(TSecondary));
-            ConstantExpression tieConst = Expression.Constant(pivotTieBreaker, typeof(TTieBreaker));
-
-            BinaryExpression primaryComp = BuildComparisonExpression(primaryKeySelector.Body, primaryConst, primarySeekGreater);
-            BinaryExpression primaryEqual = Expression.Equal(primaryKeySelector.Body, primaryConst);
-            BinaryExpression secondaryComp = BuildComparisonExpression(remappedSecondaryBody, secondaryConst, secondarySeekGreater);
-            BinaryExpression secondaryEqual = Expression.Equal(remappedSecondaryBody, secondaryConst);
-            BinaryExpression tieComp = BuildComparisonExpression(remappedTieBreakerBody, tieConst, tieSeekGreater);
+            Expression primaryComp = BuildSeekComparison(primaryKeySelector.Body, pivotPrimary, primarySeekGreater);
+            Expression primaryEqual = BuildSeekEquality(primaryKeySelector.Body, pivotPrimary);
+            Expression secondaryComp = BuildSeekComparison(remappedSecondaryBody, pivotSecondary, secondarySeekGreater);
+            Expression secondaryEqual = BuildSeekEquality(remappedSecondaryBody, pivotSecondary);
+            Expression tieComp = BuildSeekComparison(remappedTieBreakerBody, pivotTieBreaker, tieSeekGreater);
 
             // Logic: (Primary seek) OR (Primary == pivot AND Secondary seek) OR (Primary == pivot AND Secondary == pivot AND TieBreaker seek)
             BinaryExpression secondLevel = Expression.AndAlso(primaryEqual, secondaryComp);
