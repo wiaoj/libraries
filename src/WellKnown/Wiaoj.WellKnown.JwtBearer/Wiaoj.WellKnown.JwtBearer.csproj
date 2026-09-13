@@ -4,9 +4,9 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<RootNamespace>Wiaoj.WellKnown</RootNamespace>
-		<AssemblyName>Wiaoj.WellKnown</AssemblyName>
-		<PackageId>Wiaoj.WellKnown</PackageId>
+		<RootNamespace>Wiaoj.WellKnown.JwtBearer</RootNamespace>
+		<AssemblyName>Wiaoj.WellKnown.JwtBearer</AssemblyName>
+		<PackageId>Wiaoj.WellKnown.JwtBearer</PackageId>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
@@ -18,9 +18,11 @@
 
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.*" />
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\Wiaoj.WellKnown\Wiaoj.WellKnown.csproj" />
 		<ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
 	</ItemGroup>
 

@@ -47,7 +47,9 @@
       "src\\RateLimiting\\Wiaoj.RateLimiting\\Wiaoj.RateLimiting.csproj",
       "src\\RateLimiting\\Wiaoj.RateLimiting.Abstractions\\Wiaoj.RateLimiting.Abstractions.csproj",
       "src\\RateLimiting\\Wiaoj.RateLimiting.AspNetCore\\Wiaoj.RateLimiting.AspNetCore.csproj",
-      "src\\Resilience\\Wiaoj.Resilience\\Wiaoj.Resilience.csproj"
+      "src\\Resilience\\Wiaoj.Resilience\\Wiaoj.Resilience.csproj",
+      "src\\WellKnown\\Wiaoj.WellKnown\\Wiaoj.WellKnown.csproj",
+      "src\\WellKnown\\Wiaoj.WellKnown.JwtBearer\\Wiaoj.WellKnown.JwtBearer.csproj"
     ]
   }
 }
