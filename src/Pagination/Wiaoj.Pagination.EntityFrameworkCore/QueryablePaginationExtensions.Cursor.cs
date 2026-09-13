@@ -1917,8 +1917,9 @@ public static partial class QueryablePaginationExtensions {
         IQueryable<TSource> query = source;
         bool hasPrevious = false;
 
-        // 1. Detect if the incoming query is ordered DESC or ASC
-        bool isDescending = IsQueryOrderedDescending(source.Expression);
+        // 1. Verify the query is ordered by the key, and read its direction
+        bool[] directions = VerifyKeysetOrdering(source.Expression, keySelector);
+        bool isDescending = directions[0];
 
         // 2. Apply seek predicate & directional ordering matrix
         if(!request.Cursor.IsEmpty) {
@@ -1935,14 +1936,10 @@ public static partial class QueryablePaginationExtensions {
 
             Expression<Func<TSource, bool>> predicate = BuildSeekPredicate(keySelector, pivotKey, seekGreaterThan);
             query = query.Where(predicate);
-
-            if(request.Direction == CursorDirection.Backward) {
-                // Invert the query order for backward seek
-                query = isDescending
-                    ? query.OrderBy(keySelector)
-                    : query.OrderByDescending(keySelector);
-            }
         }
+
+        // Inverted for a backward seek
+        query = ApplyKeysetOrdering(query, directions, reverse: request.Direction == CursorDirection.Backward && !request.Cursor.IsEmpty, keySelector);
 
         // 3. N + 1 Technique: Fetch Limit + 1 items to eliminate COUNT(*) queries
         int fetchLimit = request.Limit + 1;
@@ -2076,23 +2073,6 @@ public static partial class QueryablePaginationExtensions {
 
         tieBreaker = null;
         return false;
-    }
-
-    private static bool IsQueryOrderedDescending(Expression expression) {
-        Expression? current = expression;
-        while(current is MethodCallExpression methodCall) {
-            if(methodCall.Method.DeclaringType == typeof(Queryable)) {
-                string name = methodCall.Method.Name;
-                if(name is (nameof(Queryable.OrderByDescending)) or (nameof(Queryable.ThenByDescending))) {
-                    return true;
-                }
-                if(name is (nameof(Queryable.OrderBy)) or (nameof(Queryable.ThenBy))) {
-                    return false;
-                }
-            }
-            current = methodCall.Arguments.Count > 0 ? methodCall.Arguments[0] : null;
-        }
-        return false; // Default: Ascending
     }
 
     #endregion

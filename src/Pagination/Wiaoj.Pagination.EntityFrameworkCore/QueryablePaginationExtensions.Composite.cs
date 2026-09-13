@@ -1,4 +1,4 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -321,8 +321,8 @@ public static partial class QueryablePaginationExtensions {
         IQueryable<TSource> query = source;
         bool hasPrevious = false;
 
-        // 1. Analyze independent sorting directions for primary and tie-breaker expressions
-        bool[] sortDirections = ExtractSortDirections(source.Expression, expectedLevelCount: 2);
+        // 1. Verify the query is ordered by the keys, and read each one's direction
+        bool[] sortDirections = VerifyKeysetOrdering(source.Expression, primaryKeySelector, tieBreakerSelector);
         bool primaryIsDescending = sortDirections[0];
         bool tieBreakerIsDescending = sortDirections[1];
 
@@ -352,18 +352,11 @@ public static partial class QueryablePaginationExtensions {
             Expression<Func<TSource, bool>> lambda = Expression.Lambda<Func<TSource, bool>>(compositePredicate, parameter);
 
             query = query.Where(lambda);
-
-            if(request.Direction == CursorDirection.Backward) {
-                // Invert each column's direction individually
-                query = primaryIsDescending
-                    ? (tieBreakerIsDescending
-                        ? query.OrderBy(primaryKeySelector).ThenBy(tieBreakerSelector)
-                        : query.OrderBy(primaryKeySelector).ThenByDescending(tieBreakerSelector))
-                    : (tieBreakerIsDescending
-                        ? query.OrderByDescending(primaryKeySelector).ThenBy(tieBreakerSelector)
-                        : query.OrderByDescending(primaryKeySelector).ThenByDescending(tieBreakerSelector));
-            }
         }
+
+        // Every page, so a tie-breaker the caller did not write is still in the ORDER BY; inverted for a backward seek
+        query = ApplyKeysetOrdering(query, sortDirections, reverse: request.Direction == CursorDirection.Backward && !request.Cursor.IsEmpty,
+            primaryKeySelector, tieBreakerSelector);
 
         // 3. Fetch Limit + 1
         int fetchLimit = request.Limit + 1;
@@ -426,76 +419,6 @@ public static partial class QueryablePaginationExtensions {
         return isGreaterThan
             ? Expression.GreaterThan(left, right)
             : Expression.LessThan(left, right);
-    }
-
-    /// <summary>
-    /// Walks the <c>OrderBy</c>/<c>ThenBy</c> chain applied to <paramref name="expression"/> and returns
-    /// each ordering level's direction, in true application order (index 0 = <c>OrderBy</c>,
-    /// index 1 = first <c>ThenBy</c>, index 2 = second <c>ThenBy</c>, ...).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Expression trees for a chained <c>.OrderBy().ThenBy().ThenByDescending()</c> call nest with the
-    /// <b>last-applied</b> call outermost (e.g. <c>ThenByDescending(Call(ThenBy(Call(OrderBy(...)))))</c>).
-    /// Walking via <c>Arguments[0]</c> therefore visits levels in <b>reverse</b> application order, which
-    /// this method corrects for before returning.
-    /// </para>
-    /// <para>
-    /// Only the ordering levels corresponding to <paramref name="expectedLevelCount"/> key selectors are
-    /// ever part of the seek (<c>WHERE</c>) predicate built by the caller. A chain with more levels than
-    /// <paramref name="expectedLevelCount"/> would silently drop the extra key(s) from the seek boundary -
-    /// producing non-deterministic pagination on ties - so that case throws instead of failing silently.
-    /// </para>
-    /// </remarks>
-    /// <param name="expression">The queryable's expression tree (<c>source.Expression</c>).</param>
-    /// <param name="expectedLevelCount">
-    /// The exact number of ordering levels this pagination call expects, matching the number of key
-    /// selectors (primary, secondary, ..., tie-breaker) passed by the caller.
-    /// </param>
-    /// <returns>An array of length <paramref name="expectedLevelCount"/> with each level's direction.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the queryable has no explicit ordering, or has more ordering levels than
-    /// <paramref name="expectedLevelCount"/>. A chain with fewer levels than expected is tolerated: any
-    /// missing trailing level defaults to the direction of the last present level.
-    /// </exception>
-    private static bool[] ExtractSortDirections(Expression expression, int expectedLevelCount) {
-        List<bool> reverseOrderDirections = new(expectedLevelCount);
-
-        Expression? current = expression;
-        while(current is MethodCallExpression methodCall) {
-            if(methodCall.Method.DeclaringType == typeof(Queryable)) {
-                string name = methodCall.Method.Name;
-                if(name is nameof(Queryable.OrderBy) or nameof(Queryable.OrderByDescending)
-                         or nameof(Queryable.ThenBy) or nameof(Queryable.ThenByDescending)) {
-                    reverseOrderDirections.Add(name is nameof(Queryable.OrderByDescending) or nameof(Queryable.ThenByDescending));
-                }
-            }
-            current = methodCall.Arguments.Count > 0 ? methodCall.Arguments[0] : null;
-        }
-
-        if(reverseOrderDirections.Count == 0) {
-            throw new InvalidOperationException(
-                "The source queryable must be explicitly ordered (OrderBy/OrderByDescending) before calling keyset pagination.");
-        }
-
-        if(reverseOrderDirections.Count > expectedLevelCount) {
-            throw new InvalidOperationException(
-                $"The queryable's OrderBy/ThenBy chain has {reverseOrderDirections.Count} ordering level(s), but this " +
-                $"pagination call was given {expectedLevelCount} key selector(s). Extra ordering levels are never part " +
-                "of the seek (WHERE) predicate - only the explicitly passed key selectors are - so they would be " +
-                "silently excluded from the pagination boundary and can cause skipped or duplicated rows across pages " +
-                "when values tie. Align the OrderBy/ThenBy chain with the key selectors passed to this method.");
-        }
-
-        reverseOrderDirections.Reverse(); // now in true application order: [Primary, Secondary, ..., TieBreaker]
-
-        bool[] directions = new bool[expectedLevelCount];
-        for(int i = 0; i < expectedLevelCount; i++) {
-            directions[i] = i < reverseOrderDirections.Count
-                ? reverseOrderDirections[i]
-                : directions[i - 1]; // missing trailing level defaults to the previous level's direction
-        }
-        return directions;
     }
 
     private sealed class ParameterReplacer : ExpressionVisitor {

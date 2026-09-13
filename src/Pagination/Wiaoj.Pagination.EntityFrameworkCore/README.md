@@ -144,6 +144,26 @@ var previousPage = await db.Orders
     .ToCursorResultAsync(backwardReq, o => o.Id, ct);
 ```
 
+#### The query must be ordered by the cursor key
+
+The seek predicate is built from the key selector. The page window comes from the query's own `ORDER BY`. If those two refer to different columns, each page is cut from one ordering and continued in the other, so rows are skipped and repeated while every call still returns successfully. The ordering is therefore verified on every call, including the first page, and these cases throw `InvalidOperationException`:
+
+| Query | Cursor key | Why it is refused |
+| --- | --- | --- |
+| `.OrderByDescending(a => a.FileSize)` | `a => a.Id` | Different column |
+| *(no ordering)* | `a => a.Id` | The database may return rows in any order |
+| `.OrderBy(a => a.Id).ThenBy(a => a.Name)` | `a => a.Id` | `Name` is not part of the seek |
+| `.OrderBy(a => a.Id).Select(a => new AssetRow(a.Id, …))` | `x => x.Key` | A constructor cannot be traced back to `a.Id` |
+
+This matters most when the ordering comes from a client. With `Wiaoj.Querying`, `?sort=` chooses the `ORDER BY` while the handler fixes the cursor key. On a keyset endpoint, restrict `AllowSort` to the cursor key.
+
+These shapes are accepted:
+
+- **Filters after the ordering.** `.OrderBy(a => a.Id).Where(…)` is fine. `AsNoTracking()` and `Include()` also pass through.
+- **A replaced ordering.** In `.OrderBy(a => a.Name).OrderBy(a => a.Id)`, only the last `OrderBy` counts.
+- **Projections that can be followed.** Anonymous types and member initialisers are traced back to their source column: `.OrderBy(a => a.Id).Select(a => new { Key = a.Id, … })` paged on `x => x.Key` works.
+- **Omitted trailing keys.** The `Id` tie-breaker injected by the built-in overloads is one example. An omitted key is added to the `ORDER BY` in the direction of the level before it, so tied rows come back in the order the seek assumes.
+
 ---
 
 ### 4. Custom Key Codecs
