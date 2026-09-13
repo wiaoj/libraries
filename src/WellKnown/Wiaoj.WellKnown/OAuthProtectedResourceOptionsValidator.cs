@@ -58,6 +58,17 @@ internal sealed class OAuthProtectedResourceOptionsValidator(ProtectedResourceRe
         RejectNone(options.ResourceSigningAlgValuesSupported, $"{label} resource_signing_alg_values_supported", failures);
         RejectNone(options.DpopSigningAlgValuesSupported, $"{label} dpop_signing_alg_values_supported", failures);
 
+        foreach(string parameter in options.AdditionalParameters.Keys) {
+            if(string.IsNullOrWhiteSpace(parameter)) {
+                failures.Add($"{label} has an additional parameter with an empty name.");
+            }
+            else if(OAuthProtectedResourceMetadata.StandardParameterNames.Contains(parameter)) {
+                failures.Add(
+                    $"{label} additional parameter '{parameter}' is defined by RFC 9728; set it through its own option, where it is " +
+                    "validated, instead of publishing it unchecked.");
+            }
+        }
+
         if(options.CacheDuration < TimeSpan.Zero) {
             failures.Add($"{label} CacheDuration is negative.");
         }

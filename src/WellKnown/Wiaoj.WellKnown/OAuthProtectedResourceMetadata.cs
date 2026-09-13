@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Wiaoj.WellKnown;
@@ -67,6 +69,19 @@ public sealed record OAuthProtectedResourceMetadata {
     [JsonPropertyName("dpop_bound_access_tokens_required")]
     public bool? DpopBoundAccessTokensRequired { get; init; }
 
+    /// <summary>Gets the parameters published beside the standard ones, written as top-level members; null when there are none.</summary>
+    /// <remarks>Merged into the document by <see cref="ToUtf8Json"/>, not through extension data, which source-generated serialization writes incorrectly for nested values.</remarks>
+    [JsonIgnore]
+    public JsonObject? AdditionalParameters { get; init; }
+
+    /// <summary>The parameter names RFC 9728 §2 defines, which an additional parameter may not reuse.</summary>
+    public static IReadOnlySet<string> StandardParameterNames { get; } = new HashSet<string>(StringComparer.Ordinal) {
+        "resource", "authorization_servers", "jwks_uri", "scopes_supported", "bearer_methods_supported",
+        "resource_signing_alg_values_supported", "resource_name", "resource_documentation", "resource_policy_uri",
+        "resource_tos_uri", "tls_client_certificate_bound_access_tokens", "authorization_details_types_supported",
+        "dpop_signing_alg_values_supported", "dpop_bound_access_tokens_required", "signed_metadata"
+    };
+
     /// <summary>
     /// Builds the document for <paramref name="options"/>, omitting every zero-valued parameter.
     /// </summary>
@@ -90,8 +105,42 @@ public sealed record OAuthProtectedResourceMetadata {
             TlsClientCertificateBoundAccessTokens = options.TlsClientCertificateBoundAccessTokens ? true : null,
             AuthorizationDetailsTypesSupported = NullIfEmpty(options.AuthorizationDetailsTypesSupported),
             DpopSigningAlgValuesSupported = NullIfEmpty(options.DpopSigningAlgValuesSupported),
-            DpopBoundAccessTokensRequired = options.DpopBoundAccessTokensRequired ? true : null
+            DpopBoundAccessTokensRequired = options.DpopBoundAccessTokensRequired ? true : null,
+            AdditionalParameters = Additional(options.AdditionalParameters)
         };
+    }
+
+    /// <summary>
+    /// Writes the document as UTF-8 JSON: the standard parameters, followed by the additional ones as top-level members.
+    /// </summary>
+    /// <returns>The JSON bytes.</returns>
+    public byte[] ToUtf8Json() {
+        JsonObject document = JsonSerializer.SerializeToNode(this, WellKnownJsonContext.Default.OAuthProtectedResourceMetadata)!.AsObject();
+
+        if(this.AdditionalParameters is { } additional) {
+            foreach(KeyValuePair<string, JsonNode?> parameter in additional) {
+                document[parameter.Key] = parameter.Value?.DeepClone();
+            }
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(document, WellKnownJsonContext.Default.JsonObject);
+    }
+
+    /// <summary>
+    /// Copies the additional parameters into a new object. A JSON node belongs to one parent, so the options' own nodes
+    /// cannot be attached to a document; attaching them to the first request's document would fail every later request.
+    /// </summary>
+    private static JsonObject? Additional(Dictionary<string, JsonNode?> parameters) {
+        if(parameters.Count == 0) {
+            return null;
+        }
+
+        JsonObject copy = [];
+        foreach(KeyValuePair<string, JsonNode?> parameter in parameters) {
+            copy[parameter.Key] = parameter.Value?.DeepClone();
+        }
+
+        return copy;
     }
 
     private static IReadOnlyList<string>? NullIfEmpty(IEnumerable<string> values) {

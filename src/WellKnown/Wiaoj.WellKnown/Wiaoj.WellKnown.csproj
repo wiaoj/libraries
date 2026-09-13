@@ -9,6 +9,7 @@
 		<PackageId>Wiaoj.WellKnown</PackageId>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<IsAotCompatible>true</IsAotCompatible>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 

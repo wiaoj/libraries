@@ -25,6 +25,8 @@ public sealed class MetadataDocumentTests {
         return (response, JsonDocument.Parse(body).RootElement.Clone());
     }
 
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
     private static string[] Names(JsonElement document) => [.. document.EnumerateObject().Select(p => p.Name)];
 
     public sealed class TheDocument {
@@ -97,6 +99,35 @@ public sealed class MetadataDocumentTests {
             });
 
             Assert.Equal(["a:read", "a:write"], document.GetProperty("scopes_supported").EnumerateArray().Select(e => e.GetString()));
+        }
+
+        [Fact]
+        public async Task Should_Publish_Additional_Parameters_As_Top_Level_Members() {
+            (_, JsonElement document) = await FetchAsync(s => s.AddOAuthProtectedResource(r => {
+                r.Resource = "https://api.example.com";
+                r.AdditionalParameters["tenant_id"] = "acme";
+                r.AdditionalParameters["limits"] = new System.Text.Json.Nodes.JsonObject { ["rpm"] = 600 };
+            }));
+
+            Assert.Equal("acme", document.GetProperty("tenant_id").GetString());
+            Assert.Equal(600, document.GetProperty("limits").GetProperty("rpm").GetInt32());
+            Assert.Equal(["resource", "tenant_id", "limits"], Names(document));
+        }
+
+        [Fact]
+        public async Task Should_Serve_Additional_Parameters_On_Every_Request_Not_Only_The_First() {
+            // A JSON node can have one parent; attaching the options' own nodes would fail from the second request on.
+            await using TestApp app = await TestApp.StartAsync(
+                s => s.AddOAuthProtectedResource(r => {
+                    r.Resource = "https://api.example.com";
+                    r.AdditionalParameters["tier"] = new System.Text.Json.Nodes.JsonObject { ["name"] = "enterprise" };
+                }),
+                a => a.MapOAuthProtectedResource());
+
+            for(int i = 0; i < 3; i++) {
+                HttpResponseMessage response = await app.Client.GetAsync(ProtectedResourceMetadataUri.WellKnownPath, Ct);
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            }
         }
 
         [Fact]
@@ -195,6 +226,20 @@ public sealed class MetadataDocumentTests {
             Assert.Contains(error.Failures, f => f.Contains("scope 'has space'", StringComparison.Ordinal));
             Assert.Contains(error.Failures, f => f.Contains("resource_tos_uri", StringComparison.Ordinal));
             Assert.Contains(error.Failures, f => f.Contains("CacheDuration is negative", StringComparison.Ordinal));
+        }
+
+        [Theory]
+        [InlineData("resource")]
+        [InlineData("scopes_supported")]
+        [InlineData("signed_metadata")]
+        public async Task Should_Refuse_An_Additional_Parameter_That_Reuses_A_Standard_Name(string name) {
+            // It would publish, unchecked, a value the options otherwise validate.
+            OptionsValidationException error = await StartFailureAsync(r => {
+                r.Resource = "https://api.example.com";
+                r.AdditionalParameters[name] = "https://attacker.example";
+            });
+
+            Assert.Contains($"additional parameter '{name}' is defined by RFC 9728", error.Message, StringComparison.Ordinal);
         }
 
         [Fact]
