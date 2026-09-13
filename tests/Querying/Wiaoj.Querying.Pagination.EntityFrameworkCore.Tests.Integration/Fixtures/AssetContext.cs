@@ -69,6 +69,14 @@ public sealed class CommandRecorder : DbCommandInterceptor {
 
 public sealed class AssetContext(DbContextOptions<AssetContext> options) : DbContext(options) {
     public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<Document> Documents => Set<Document>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<Document>(entity => {
+            entity.HasKey(d => d.Id);
+            entity.Property(d => d.Id).HasConversion(v => v.Value, v => new DocumentId(v));
+        });
+    }
 
     public static (AssetContext Context, SqliteConnection Connection, CommandRecorder Recorder) Create() {
         SqliteConnection connection = new("DataSource=:memory:");

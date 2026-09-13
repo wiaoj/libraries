@@ -25,6 +25,8 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     private readonly Dictionary<string, string> _aliasesToMember = new(StringComparer.OrdinalIgnoreCase);
     private JsonNamingPolicy? _fieldNamingPolicy;
     private LambdaExpression? _tieBreaker;
+    private IQueryKeyCodec? _tieBreakerCodec;
+    private readonly List<(string MemberPath, LambdaExpression Selector, bool IsDescending)> _defaultSortKeys = [];
 
     /// <summary>
     /// Gets the unique key paging orders by last, so rows that tie on every requested sort field keep one order across
@@ -53,7 +55,108 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
         ArgumentNullException.ThrowIfNull(selector);
         ExtractMemberPath(selector.Body);
         this._tieBreaker = selector;
+
+        // A cursor carries the tie-breaker too; without a codec only offset paging can use it, which is checked there.
+        this._tieBreakerCodec = Nullable.GetUnderlyingType(typeof(TKey)) is null ? BuiltInQueryKeyCodecs.For<TKey>() : null;
         return this;
+    }
+
+    /// <summary>
+    /// Declares the unique key paging appends to every ordering, with the codec a cursor carries it through.
+    /// </summary>
+    /// <typeparam name="TKey">The key type.</typeparam>
+    /// <param name="selector">A unique, non-null member of the entity, usually its primary key.</param>
+    /// <param name="encode">Writes a key as text. Must round-trip exactly through <paramref name="decode"/>.</param>
+    /// <param name="decode">Reads text written by <paramref name="encode"/>.</param>
+    /// <returns>The current schema instance for method chaining.</returns>
+    /// <example>
+    /// <code>
+    /// TieBreaker(a =&gt; a.Id, id =&gt; id.Value.ToString(CultureInfo.InvariantCulture), text =&gt; new AssetId(long.Parse(text, CultureInfo.InvariantCulture)));
+    /// </code>
+    /// </example>
+    public QuerySchema<T> TieBreaker<TKey>(Expression<Func<T, TKey>> selector, Func<TKey, string> encode, Func<string, TKey> decode) {
+        ArgumentNullException.ThrowIfNull(selector);
+        ExtractMemberPath(selector.Body);
+        this._tieBreaker = selector;
+        this._tieBreakerCodec = new QueryKeyCodec<TKey>(encode, decode);
+        return this;
+    }
+
+    /// <summary>
+    /// Resolves the keys a cursor-paged query orders and seeks by: the requested sort, or the default sort, followed by
+    /// the tie-breaker.
+    /// </summary>
+    /// <param name="sort">The sort the request asks for; empty to use the schema's default sort.</param>
+    /// <returns>The keys, most significant first. The last one is always the tie-breaker.</returns>
+    /// <exception cref="QueryValidationException">
+    /// The request sorts by a field that is not sortable, or not declared <c>AsCursor()</c>. The caller chose these, so
+    /// they are a bad request.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The schema declares no tie-breaker, the tie-breaker has no codec, or a default sort field is not
+    /// <c>AsCursor()</c>. The schema chose these, so they are a server fault.
+    /// </exception>
+    public IReadOnlyList<QueryCursorKey> ResolveCursorKeys(Sort sort) {
+        LambdaExpression tieBreaker = this._tieBreaker ?? throw new InvalidOperationException(
+            $"{this.GetType().Name} declares no tie-breaker. A cursor needs a unique key ordered last to say where a page " +
+            "ended. Declare it with TieBreaker(e => e.Id).");
+
+        IQueryKeyCodec tieBreakerCodec = this._tieBreakerCodec ?? throw new InvalidOperationException(
+            $"{this.GetType().Name}'s tie-breaker is a {tieBreaker.ReturnType.Name}, which has no built-in cursor codec. " +
+            "Pass one: TieBreaker(e => e.Id, value => ..., text => ...).");
+
+        List<QueryCursorKey> keys = [];
+        HashSet<string> members = new(StringComparer.OrdinalIgnoreCase);
+
+        if(!sort.IsEmpty) {
+            List<QueryValidationError>? errors = null;
+
+            for(int i = 0; i < sort.Count; i++) {
+                SortNode node = sort[i];
+
+                if(!TryGetProperty(node.Field, out QueryProperty<T>? property) || !property.IsSortable) {
+                    (errors ??= []).Add(new QueryValidationError(node.Field, QueryValidationErrorCode.FieldNotSortable,
+                        $"Sorting by field '{node.Field}' is not allowed."));
+                    continue;
+                }
+
+                if(property.CursorCodec is null) {
+                    (errors ??= []).Add(new QueryValidationError(node.Field, QueryValidationErrorCode.FieldNotCursorSortable,
+                        $"Sorting by field '{node.Field}' is not allowed on this endpoint, which pages with a cursor."));
+                    continue;
+                }
+
+                if(members.Add(property.MemberName)) {
+                    keys.Add(new QueryCursorKey(property.MemberName, property.SortSelector!, node.IsDescending, property.CursorCodec));
+                }
+            }
+
+            if(errors is not null) {
+                throw new QueryValidationException(new QueryValidationResult(errors));
+            }
+        }
+        else {
+            foreach((string memberPath, LambdaExpression selector, bool isDescending) in this._defaultSortKeys) {
+                IQueryKeyCodec codec = this._propertiesByMemberName.TryGetValue(memberPath, out QueryProperty<T>? property)
+                    && property.CursorCodec is { } declared
+                    ? declared
+                    : throw new InvalidOperationException(
+                        $"{this.GetType().Name} sorts by '{memberPath}' by default, but it is not declared AsCursor(), so a " +
+                        $"cursor cannot carry it. Declare Property(e => e.{memberPath}).AsCursor().");
+
+                if(members.Add(memberPath)) {
+                    keys.Add(new QueryCursorKey(memberPath, selector, isDescending, codec));
+                }
+            }
+        }
+
+        string tieBreakerPath = ExtractMemberPath(tieBreaker.Body);
+        if(members.Add(tieBreakerPath)) {
+            bool descending = keys.Count > 0 && keys[^1].IsDescending;
+            keys.Add(new QueryCursorKey(tieBreakerPath, tieBreaker, descending, tieBreakerCodec));
+        }
+
+        return keys;
     }
 
     /// <summary>
@@ -428,6 +531,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
 
         bool isDescending = direction == SortDirection.Descending;
 
+        this._defaultSortKeys.Add((ExtractMemberPath(selector.Body), selector, isDescending));
         this._defaultSortAppliers.Add((query, isFirst) => {
             if(isFirst) {
                 return isDescending
@@ -1221,7 +1325,9 @@ internal sealed record QueryProperty<T>(
     string? Description = null,
     bool IsCustom = false,
     LambdaExpression? CustomPredicate = null,
-    bool IsNotInResponse = false);
+    bool IsNotInResponse = false,
+    IQueryKeyCodec? CursorCodec = null,
+    LambdaExpression? SortSelector = null);
 
 /// <summary>
 /// Fluent builder for configuring fine-grained rules on a specific property.
@@ -1331,6 +1437,81 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     }
 
     /// <summary>
+    /// Allows the field to be sorted by on an endpoint that pages with a cursor, using the built-in codec for its type.
+    /// </summary>
+    /// <returns>The property rule builder for method chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The type has no built-in codec, or is a nullable value type.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// Sortable and pageable are different statements. A cursor records where a page ended by the values of the sort
+    /// keys, so a sort field must be carried in the cursor, compared in a seek predicate, and should have enough
+    /// distinct values that the tie-breaker is not doing all the ordering. A cursor-paged endpoint refuses a sort on a
+    /// field not marked here with a 400, rather than paging on a key the cursor does not hold.
+    /// </para>
+    /// <para>
+    /// Built-in codecs cover strings, integers, <see cref="decimal"/>, floating point, <see cref="bool"/>,
+    /// <see cref="Guid"/>, <see cref="DateTime"/>, <see cref="DateTimeOffset"/>, <see cref="DateOnly"/>,
+    /// <see cref="TimeOnly"/>, <see cref="TimeSpan"/> and enums. Other types — a strongly-typed id — take a codec.
+    /// </para>
+    /// <para>
+    /// A key must not be null: SQL comparisons with <c>NULL</c> match nothing, so a page boundary on a null value would
+    /// silently end the traversal. Nullable value types are refused here; a null in a reference-typed column throws
+    /// when it lands on a page boundary.
+    /// </para>
+    /// </remarks>
+    public PropertyRuleBuilder<T, TProperty> AsCursor() {
+        // Checked before looking for a codec, which a nullable type never has: the reason to give is the null.
+        this.EnsureNotNullable();
+
+        IQueryKeyCodec codec = BuiltInQueryKeyCodecs.For<TProperty>()
+            ?? throw new InvalidOperationException(
+                $"'{this._property.ExposedName}' is a {typeof(TProperty).Name}, which has no built-in cursor codec. " +
+                "Pass one: AsCursor(value => ..., text => ...).");
+
+        return this.SetCursorCodec(codec);
+    }
+
+    /// <summary>
+    /// Allows the field to be sorted by on an endpoint that pages with a cursor, carried through the given codec.
+    /// </summary>
+    /// <param name="encode">Writes a value as text. Must round-trip exactly through <paramref name="decode"/>.</param>
+    /// <param name="decode">Reads text written by <paramref name="encode"/>.</param>
+    /// <returns>The property rule builder for method chaining.</returns>
+    /// <example>
+    /// <code>
+    /// Property(a =&gt; a.Id).AllowSort().AsCursor(id =&gt; id.Value.ToString(), text =&gt; new AssetId(long.Parse(text)));
+    /// </code>
+    /// </example>
+    public PropertyRuleBuilder<T, TProperty> AsCursor(Func<TProperty, string> encode, Func<string, TProperty> decode) {
+        ArgumentNullException.ThrowIfNull(encode);
+        ArgumentNullException.ThrowIfNull(decode);
+
+        return this.SetCursorCodec(new QueryKeyCodec<TProperty>(encode, decode));
+    }
+
+    private void EnsureNotNullable() {
+        if(Nullable.GetUnderlyingType(typeof(TProperty)) is not null) {
+            throw new InvalidOperationException(
+                $"'{this._property.ExposedName}' is nullable. A cursor cannot seek past a null key — SQL compares NULL " +
+                "with nothing — so a nullable column cannot be a cursor key.");
+        }
+    }
+
+    private PropertyRuleBuilder<T, TProperty> SetCursorCodec(IQueryKeyCodec codec) {
+        this.EnsureNotNullable();
+
+        if(!this._property.IsSortable) {
+            this.AllowSort();
+        }
+
+        this._property = this._property with { CursorCodec = codec };
+        this._schema.UpdateProperty(this._property.ExposedName, this._property);
+        return this;
+    }
+
+    /// <summary>
     /// Marks the property as allowed for sorting.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> AllowSort() {
@@ -1345,6 +1526,7 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
 
         this._property = this._property with {
             IsSortable = true,
+            SortSelector = lambda,
             SortApplier = (query, isDescending, isFirst) => {
                 if(isFirst) {
                     return isDescending

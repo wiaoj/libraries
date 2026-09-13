@@ -190,6 +190,7 @@ The `.WithQueryValidation<TEntity>()` extension adds an endpoint filter factory 
 3. Validates the request against `QuerySchema<TEntity>`.
 4. If validation fails, short-circuits the pipeline and returns `Results.ValidationProblem(...)` (`400 Bad Request`).
 5. If valid, passes execution to the endpoint handler.
+6. If the handler throws a `QueryValidationException`, returns the same `400` `ValidationProblem`. Some errors can only be found once the query is applied: a cursor issued for a different sort, a sort on a field the endpoint cannot page by, or `ApplyValidatedQuery` in the handler. These are caller errors, so they get a 400 like any invalid query string, not a 500.
 
 ---
 

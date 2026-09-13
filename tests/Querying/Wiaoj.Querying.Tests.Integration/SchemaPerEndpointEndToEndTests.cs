@@ -130,6 +130,25 @@ public sealed class SchemaPerEndpointEndToEndTests {
     }
 
     [Fact]
+    public async Task A_Validation_Error_Raised_By_The_Handler_Should_Be_A_400_Not_A_500() {
+        // A cursor issued for another sort is only detected when the handler applies the query.
+        (WebApplication app, HttpClient client) = await StartAsync(app =>
+            app.MapGet("/assets", (Query<Asset> query) => {
+                throw new QueryValidationException(new QueryValidationResult([
+                    new QueryValidationError("cursor", QueryValidationErrorCode.CursorSortChanged, "The cursor was issued for a different sort.")
+                ]));
+            }).WithQueryValidation<Asset, PublicAssetSchema>());
+        await using WebApplication _ = app;
+
+        // No query string: the request itself is valid, so a 400 can only come from the handler's exception.
+        HttpResponseMessage response = await client.GetAsync("/assets", TestContext.Current.CancellationToken);
+        string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("issued for a different sort", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_Endpoint_Selecting_No_Schema_Should_Fail_To_Build_When_The_Entity_Has_Several() {
         (WebApplication app, HttpClient _) = await StartAsync(app =>
             app.MapGet("/assets", (Query<Asset> query) => Results.Ok()).WithQueryValidation<Asset>());

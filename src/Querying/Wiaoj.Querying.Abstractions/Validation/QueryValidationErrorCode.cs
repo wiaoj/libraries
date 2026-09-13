@@ -32,5 +32,14 @@ public enum QueryValidationErrorCode : byte {
     FilterValueTooLong = 9,
 
     /// <summary>The free-text search term exceeds the configured maximum character length.</summary>
-    SearchTermTooLong = 10
+    SearchTermTooLong = 10,
+
+    /// <summary>The field may be sorted by, but not on an endpoint that pages with a cursor.</summary>
+    FieldNotCursorSortable = 11,
+
+    /// <summary>The cursor could not be read.</summary>
+    InvalidCursor = 12,
+
+    /// <summary>The cursor was issued for a different sort than the request asks for.</summary>
+    CursorSortChanged = 13
 }

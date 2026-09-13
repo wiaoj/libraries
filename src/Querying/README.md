@@ -279,6 +279,20 @@ It is checked when the container first hands it out. Two things throw:
 
 The second rule exists because filtering on data the caller cannot see can reveal that data, one narrowed result at a time.
 
+### 6. Paging a contract
+
+`Wiaoj.Querying.Pagination.EntityFrameworkCore` pages a `QuerySchema<TEntity, TResponse>` in one call:
+
+- `ToPagedResultAsync(query, schema, page)` returns offset pages;
+- `ToCursorResultAsync(query, schema, cursor)` returns keyset pages that seek on the sort the caller chose.
+
+Declare two things on the schema:
+
+- `TieBreaker(e => e.Id)`, the unique key that is always ordered last;
+- `Property(e => e.CreatedAt).AsCursor()` for every field a cursor endpoint may sort by.
+
+A cursor records the sort it was issued for, and it is refused with a 400 under a different sort. See that package's README.
+
 ---
 
 ## Crossing a service boundary
