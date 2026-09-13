@@ -19,7 +19,16 @@ public enum QueryFilterStyle {
     /// generators; check yours before choosing it. The bare <c>field=value</c> shorthand keeps working on the
     /// wire but is not described.
     /// </summary>
-    DeepObject
+    DeepObject,
+
+    /// <summary>
+    /// One parameter per permitted operator, each named as it is written and typed: <c>usageCount</c> for equality,
+    /// <c>usageCount[gte]</c>, <c>usageCount[lte]</c>. A generated client gets
+    /// <c>{ usageCount?: number; "usageCount[gte]"?: number }</c> and sends each as a plain query parameter, so it
+    /// needs no serializer that understands nested objects — unlike <see cref="DeepObject"/>. Equality is described
+    /// once, as the bare name, so a client cannot send the same condition two ways.
+    /// </summary>
+    OperatorParameters
 }
 
 /// <summary>
