@@ -94,6 +94,24 @@ public sealed class MetadataUrlTests {
         }
 
         [Fact]
+        public async Task Should_Still_Answer_At_The_Origin_Root_When_The_App_Uses_A_Path_Base() {
+            // UsePathBase("/api") moves a matching prefix into PathBase and leaves other requests alone, so the
+            // document stays reachable at the origin's /.well-known — where RFC 9728 clients look — and under the base.
+            await using TestApp app = await TestApp.StartAsync(
+                s => s.AddOAuthProtectedResource(r => r.Resource = "https://api.example.com/api"),
+                a => {
+                    a.UsePathBase("/api");
+                    a.UseRouting();
+                    a.MapOAuthProtectedResource();
+                });
+
+            HttpResponseMessage root = await app.Client.GetAsync("/.well-known/oauth-protected-resource/api", TestContext.Current.CancellationToken);
+            HttpResponseMessage underBase = await app.Client.GetAsync("/api/.well-known/oauth-protected-resource/api", TestContext.Current.CancellationToken);
+
+            Assert.Equal(HttpStatusCode.OK, root.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, underBase.StatusCode);
+        }
+        [Fact]
         public void Should_Refuse_To_Map_When_No_Resource_Is_Registered() {
             WebApplication app = TestApp.Build(_ => { }, _ => { });
 

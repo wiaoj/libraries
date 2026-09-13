@@ -3,8 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Wiaoj.Preconditions;
 using Wiaoj.WellKnown;
 
@@ -16,9 +14,6 @@ namespace Microsoft.AspNetCore.Routing;
 /// Serves RFC 9728 protected resource metadata documents.
 /// </summary>
 public static class WellKnownEndpointExtensions {
-    private static readonly JsonSerializerOptions DocumentJson = new() {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
 
     /// <summary>
     /// Serves the metadata document of every registered protected resource, each at the path derived from its identifier.
@@ -69,15 +64,27 @@ public static class WellKnownEndpointExtensions {
     }
 
     private static void MapDocument(IEndpointRouteBuilder app, string name, string path) {
-        app.MapGet(path, (HttpContext context, IOptionsMonitor<OAuthProtectedResourceOptions> options) => {
-                OAuthProtectedResourceOptions resource = options.Get(name);
+        // A RequestDelegate rather than a lambda with bound parameters: the delegate overload needs no reflection or
+        // runtime code generation, so the endpoint works under Native AOT, and the document is written through the
+        // source-generated context for the same reason.
+        app.MapGet(path, async context => {
+                OAuthProtectedResourceOptions resource = context.RequestServices
+                    .GetRequiredService<IOptionsMonitor<OAuthProtectedResourceOptions>>()
+                    .Get(name);
 
+                context.Response.StatusCode = StatusCodes.Status200OK;
+                context.Response.ContentType = "application/json";
                 context.Response.Headers.CacheControl = resource.CacheDuration > TimeSpan.Zero
                     ? $"public, max-age={((long)resource.CacheDuration.TotalSeconds).ToString(CultureInfo.InvariantCulture)}"
                     : "no-cache";
 
-                return Results.Json(OAuthProtectedResourceMetadata.FromOptions(resource), DocumentJson, "application/json", StatusCodes.Status200OK);
+                // Buffered: the document is a few hundred bytes, and the length can then be sent.
+                byte[] body = OAuthProtectedResourceMetadata.FromOptions(resource).ToUtf8Json();
+
+                context.Response.ContentLength = body.Length;
+                await context.Response.Body.WriteAsync(body, context.RequestAborted).ConfigureAwait(false);
             })
+            .WithMetadata(new ProducesResponseTypeMetadata(StatusCodes.Status200OK, typeof(OAuthProtectedResourceMetadata), ["application/json"]))
             .AllowAnonymous()
             .WithTags("Well-Known")
             .WithName(name.Length == 0 ? "OAuthProtectedResourceMetadata" : $"OAuthProtectedResourceMetadata:{name}")

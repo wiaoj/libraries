@@ -73,6 +73,22 @@ public sealed class OAuthProtectedResourceOptions {
     public bool DpopBoundAccessTokensRequired { get; set; }
 
     /// <summary>
+    /// Gets parameters published beside the standard ones — a newer draft's field, or one of the organisation's own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// RFC 9728 §2 allows additional metadata parameters, and a library release should not be what stands between an
+    /// application and publishing one. Values are JSON nodes, so any JSON can be written without reflection:
+    /// <c>resource.AdditionalParameters["tenant_id"] = "acme";</c>
+    /// </para>
+    /// <para>
+    /// A name the RFC defines is refused at startup: it would overwrite a value the options validate, and publish
+    /// something the validation never saw.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, System.Text.Json.Nodes.JsonNode?> AdditionalParameters { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Gets or sets how long clients may cache the document, sent as <c>Cache-Control: public, max-age</c>. Defaults to
     /// one day; <see cref="TimeSpan.Zero"/> sends <c>no-cache</c>.
     /// </summary>
