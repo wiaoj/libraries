@@ -181,6 +181,83 @@ public sealed class QueryDocumentConfigurationTests {
         }
     }
 
+    /// <summary>One typed parameter per operator, for generators that cannot serialize a deepObject.</summary>
+    public sealed class OperatorParametersStyle {
+        private static OpenApiOperation Operators(Action<IQueryingBuilder>? querying = null) {
+            return Transform(querying ?? (q => q.AddSchema<Key>(KeySchema)), document => document.FilterStyle = QueryFilterStyle.OperatorParameters);
+        }
+
+        private static string[] Names(OpenApiOperation operation) {
+            return [.. operation.Parameters!.OfType<OpenApiParameter>().Select(p => p.Name!)];
+        }
+
+        [Fact]
+        public void Should_Describe_Each_Permitted_Operator_As_Its_Own_Parameter() {
+            string[] names = Names(Operators());
+
+            Assert.Contains("Status", names);
+            Assert.Contains("Status[in]", names);
+            Assert.Contains("Status[notBetween]", names);
+            Assert.Contains("Revision[gt]", names);
+            Assert.Contains("UpdatedAt[gte]", names);
+        }
+
+        [Fact]
+        public void Should_Describe_Equality_Once_As_The_Bare_Name() {
+            // Both `Status` and `Status[eq]` would let a client send the same condition twice, which is refused.
+            string[] names = Names(Operators());
+
+            Assert.Contains("Status", names);
+            Assert.DoesNotContain("Status[eq]", names);
+        }
+
+        [Fact]
+        public void Should_Not_Describe_An_Operator_The_Field_Refuses() {
+            string[] names = Names(Operators());
+
+            Assert.DoesNotContain("Revision", names);           // only gt is allowed on Revision
+            Assert.DoesNotContain("Revision[lt]", names);
+        }
+
+        [Fact]
+        public void Should_Type_Each_Parameter_By_Its_Operator() {
+            OpenApiOperation operation = Operators();
+
+            Assert.Equal(JsonSchemaType.Integer, Parameter(operation, "Revision[gt]")!.Schema!.Type);
+            Assert.Equal(JsonSchemaType.String, Parameter(operation, "Status[in]")!.Schema!.Type);
+            Assert.Equal("date-time", Parameter(operation, "UpdatedAt[gte]")!.Schema!.Format);
+        }
+
+        [Fact]
+        public void Should_Allow_Only_True_For_A_Presence_Operator() {
+            IOpenApiSchema isNull = Parameter(Operators(), "ContentType[isNull]")!.Schema!;
+
+            Assert.Equal(JsonSchemaType.Boolean, isNull.Type);
+            Assert.Equal("true", Assert.Single(isNull.Enum!)!.ToJsonString());
+        }
+
+        [Fact]
+        public void Should_Follow_The_Naming_Policy() {
+            string[] names = Names(Operators(q => q.UseFieldNamingPolicy(JsonNamingPolicy.CamelCase).AddSchema<Key>(KeySchema)));
+
+            Assert.Contains("revision[gt]", names);
+            Assert.Contains("contentType[isNull]", names);
+        }
+
+        [Fact]
+        public void Should_Run_The_Filter_Hook_For_Every_Parameter() {
+            List<string> seen = [];
+
+            Transform(q => q.AddSchema<Key>(KeySchema), document => {
+                document.FilterStyle = QueryFilterStyle.OperatorParameters;
+                document.ConfigureFilter = (field, parameter) => seen.Add(parameter.Name!);
+            });
+
+            Assert.Contains("Revision[gt]", seen);
+            Assert.Contains("Status[in]", seen);
+        }
+    }
+
     public sealed class Hooks {
         [Fact]
         public void Should_Run_Per_Filter_With_The_Field_It_Describes() {

@@ -1,11 +1,10 @@
-﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Wiaoj.Querying.AspNetCore;
-using Wiaoj.Querying.Extensions;
 
 namespace Wiaoj.Querying.Tests.Integration.Fixtures;
 

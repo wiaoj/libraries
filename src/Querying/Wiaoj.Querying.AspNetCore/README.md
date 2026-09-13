@@ -62,7 +62,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Wiaoj.Querying;
 using Wiaoj.Querying.AspNetCore;
-using Wiaoj.Querying.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -205,7 +205,6 @@ A field counts as read when its member path appears anywhere in the projection. 
 ```csharp
 using Wiaoj.Querying;
 using Wiaoj.Querying.Parsers;
-using Wiaoj.Querying.Extensions;
 
 // 1. Parse query input (URL string or JSON payload)
 string rawQuery = "?name[contains]=desk&price[between]=100..500&sort=-price";

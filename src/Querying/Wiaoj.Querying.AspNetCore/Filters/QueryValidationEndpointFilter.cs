@@ -58,6 +58,12 @@ internal sealed class QueryValidationEndpointFilter<T> : IEndpointFilter {
         QueryOptions? effectiveGlobal = ignoresGlobal ? null : globalOptions;
 
         QueryValidationResult validation = this._schema.Validate(request.Value, effectiveGlobal);
+
+        // Only here, on what the caller sent: a request composed in code may repeat a field on purpose.
+        IReadOnlyList<QueryValidationError> duplicates = this._schema.FindDuplicateFilters(request.Value, effectiveGlobal);
+        if(duplicates.Count > 0) {
+            validation = new QueryValidationResult([.. validation.Errors, .. duplicates]);
+        }
         if(!validation.IsValid && endpointOpts?.IgnoredParameters is { Count: > 0 }) {
             List<QueryValidationError> remaining = [];
             for(int i = 0; i < validation.Errors.Count; i++) {

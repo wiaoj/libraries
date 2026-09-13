@@ -1,4 +1,3 @@
-using Wiaoj.Querying.Extensions;
 
 namespace Wiaoj.Querying.Tests.Unit;
 

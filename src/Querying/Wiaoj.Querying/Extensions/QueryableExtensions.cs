@@ -1,7 +1,10 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
+using Wiaoj.Preconditions;
 using Wiaoj.Querying.Expressions;
 
-namespace Wiaoj.Querying.Extensions;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Querying;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
 /// Provides extension methods for applying structured query filtering, search, and sorting to <see cref="IQueryable{T}"/>.
@@ -30,8 +33,8 @@ public static class QueryableExtensions {
         this IQueryable<T> query,
         QueryRequest request,
         QuerySchema<T> schema) {
-        ArgumentNullException.ThrowIfNull(query);
-        ArgumentNullException.ThrowIfNull(schema);
+        Preca.ThrowIfNull(query);
+        Preca.ThrowIfNull(schema);
 
         // 1. Required (locked) filters always apply, regardless of request content — including an entirely
         //    empty request, since these are schema-level invariants, not something the caller opted into.
@@ -94,8 +97,8 @@ public static class QueryableExtensions {
         QueryRequest request,
         QuerySchema<T> schema) {
 
-        ArgumentNullException.ThrowIfNull(query);
-        ArgumentNullException.ThrowIfNull(schema);
+        Preca.ThrowIfNull(query);
+        Preca.ThrowIfNull(schema);
 
         QueryValidationResult validation = schema.Validate(request);
 

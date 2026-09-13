@@ -43,7 +43,9 @@ The field list, the sortable set and the operator list all come from `QuerySchem
 
 ### It follows the application's configuration
 
-- **Names** — as the schema publishes them. With `UseJsonNamingPolicy()` (or `UseFieldNamingPolicy`) that is `contentType` / `content_type`, matching the bodies; the schema accepts those names, so the document never advertises one the server rejects.
+- **Names.** Fields are published under the names the schema uses.
+  - With `UseJsonNamingPolicy()` (or `UseFieldNamingPolicy`) that is `contentType` or `content_type`, matching the response bodies. The schema accepts those names, so the document never advertises one the server rejects.
+  - **Without it, names are the CLR member names (`UsageCount`, `LastUsedAt`).** The query string then does not match camelCase bodies. Naming policy is opt-in because it renames parameters and regenerates clients; the old names keep working as aliases.
 - **Types** — from the field's CLR type: `bool` is `boolean`, `long` is `integer/int64`, dates are `date-time`, an enum lists the names the engine parses.
 - **Operator tokens** — exactly what the parser reads (`isNull`, `notBetween`).
 - **Descriptions** — from `.Describe("...")` on the schema.
@@ -61,7 +63,20 @@ builder.Services.AddOpenApi(options => options.AddWiaojQuerying(querying => {
 }));
 ```
 
-**`QueryFilterStyle.DeepObject`** describes `field[op]=value` as OpenAPI's `deepObject`, so a generated client gets `ContentType?: { eq?: string; contains?: string }` and cannot name an operator the field refuses. Generator support varies — check yours before switching. The bare `field=value` shorthand keeps working on the wire but is not described. The default, `Prose`, types the parameter as the equality value and lists the operators in its description; every generator renders it.
+`QueryFilterStyle` has three values:
+
+| Style | Generated client (TypeScript) | Needs |
+| --- | --- | --- |
+| **`Prose`** (default) | `usageCount?: number`. The operators are listed only in the description, so the client has no typed way to send `usageCount[gte]`. | Nothing |
+| **`DeepObject`** | `usageCount?: { eq?: number; gte?: number; lte?: number }` | A query serializer that writes nested objects as brackets, such as `qs`. `URLSearchParams` writes `[object Object]`. |
+| **`OperatorParameters`** | `usageCount?: number; "usageCount[gte]"?: number; "usageCount[lte]"?: number` | Nothing. Each operator is an ordinary query parameter. |
+
+All three styles have these properties:
+
+- Only the operators a field permits are described, and each is typed from the field. `in` is a comma-separated string. `isNull` and `isNotNull` accept only `true`, because presence is the condition and a `false` would still filter.
+- In `OperatorParameters`, equality is described once, as the bare name. A client that sent both `usageCount` and `usageCount[eq]` would be filtering the same field with the same operator twice, which the validation filter refuses with a 400.
+
+If your generator handles `deepObject` well, prefer it; otherwise use `OperatorParameters`.
 
 The hooks receive the full field descriptors, so output can be extended with complete information instead of patched by a transformer that runs afterwards and depends on this one's output staying the same.
 

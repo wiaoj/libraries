@@ -87,12 +87,43 @@ internal sealed class QueryValidationOperationTransformer(QueryOpenApiOptions op
                 continue;
             }
 
-            OpenApiParameter parameter = options.FilterStyle == QueryFilterStyle.DeepObject
-                ? DeepObjectFilter(field)
-                : ProseFilter(field);
+            IEnumerable<OpenApiParameter> parameters = options.FilterStyle switch {
+                QueryFilterStyle.DeepObject => [DeepObjectFilter(field)],
+                QueryFilterStyle.OperatorParameters => OperatorFilters(field),
+                _ => [ProseFilter(field)]
+            };
 
-            options.ConfigureFilter?.Invoke(field, parameter);
-            operation.Parameters!.Add(parameter);
+            foreach(OpenApiParameter parameter in parameters) {
+                if(HasParameter(operation, parameter.Name!)) {
+                    continue;
+                }
+
+                options.ConfigureFilter?.Invoke(field, parameter);
+                operation.Parameters!.Add(parameter);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Describes each permitted operator as its own parameter: the bare name for equality, <c>field[op]</c> for the rest.
+    /// </summary>
+    private static IEnumerable<OpenApiParameter> OperatorFilters(QueryFieldDescriptor field) {
+        foreach(QueryOperator queryOperator in field.AllowedOperators) {
+            string name = queryOperator == QueryOperator.Equal
+                ? field.Name
+                : $"{field.Name}[{QuerySyntax.GetOperatorToken(queryOperator)}]";
+
+            string condition = queryOperator == QueryOperator.Equal
+                ? $"{field.Name} equals the value."
+                : $"{field.Name} {QuerySyntax.GetOperatorToken(queryOperator)} the value.";
+
+            yield return new OpenApiParameter {
+                Name = name,
+                In = ParameterLocation.Query,
+                Required = false,
+                Description = field.Description is null ? $"Filter: {condition}" : $"{field.Description} Filter: {condition}",
+                Schema = OperatorSchema(queryOperator, field.Type)
+            };
         }
     }
 
@@ -150,9 +181,12 @@ internal sealed class QueryValidationOperationTransformer(QueryOpenApiOptions op
                 Type = JsonSchemaType.String,
                 Description = $"Inclusive bounds, written lower{QuerySyntax.RangeDelimiter}upper."
             },
+            // Presence is the condition and the value is never read, so `false` would still filter. Allowing only
+            // `true` keeps a generated client from sending a value that looks like it switches the condition off.
             QueryOperator.IsNull or QueryOperator.IsNotNull => new OpenApiSchema {
                 Type = JsonSchemaType.Boolean,
-                Description = "Presence is the condition; the value is not read."
+                Enum = [JsonValue.Create(true)],
+                Description = "Presence is the condition: send `true`, or leave the parameter out."
             },
             QueryOperator.Contains or QueryOperator.NotContains or
             QueryOperator.StartsWith or QueryOperator.NotStartsWith or
