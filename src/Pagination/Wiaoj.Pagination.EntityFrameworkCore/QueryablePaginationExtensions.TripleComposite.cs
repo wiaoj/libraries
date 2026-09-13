@@ -36,10 +36,10 @@ public static partial class QueryablePaginationExtensions {
     /// (8 bytes timestamp, 16 bytes decimal, 8 bytes identifier).
     /// </para>
     /// <para>
-    /// <b>Ordering contract:</b> The queryable must be ordered with exactly three levels matching this call's
-    /// key selectors, e.g. <c>.OrderBy(primary).ThenBy(secondary).ThenBy(tieBreaker)</c> (any direction mix).
-    /// A chain with more or fewer levels than three is rejected (or padded) by <c>ExtractSortDirections</c> -
-    /// see its remarks for why extra levels can't simply be inferred.
+    /// <b>Ordering contract:</b> The queryable must be ordered by this call's key selectors, in order, e.g.
+    /// <c>.OrderBy(primary).ThenBy(secondary).ThenBy(tieBreaker)</c> (any direction mix). Trailing levels may be
+    /// omitted and are added in the previous level's direction. An ordering on any other column, or with more levels
+    /// than keys, throws: the seek would be built on different columns from the page window, and rows skipped.
     /// </para>
     /// </remarks>
     /// <typeparam name="TSource">The entity or projected data model type.</typeparam>
@@ -272,9 +272,8 @@ public static partial class QueryablePaginationExtensions {
         IQueryable<TSource> query = source;
         bool hasPrevious = false;
 
-        // 1. Analyze independent sorting directions for all three levels. Throws if the queryable's
-        //    OrderBy/ThenBy chain doesn't match exactly 3 levels - see ExtractSortDirections remarks.
-        bool[] sortDirections = ExtractSortDirections(source.Expression, expectedLevelCount: 3);
+        // 1. Verify the query is ordered by the three keys, and read each one's direction
+        bool[] sortDirections = VerifyKeysetOrdering(source.Expression, primaryKeySelector, secondaryKeySelector, tieBreakerSelector);
         bool primaryIsDescending = sortDirections[0];
         bool secondaryIsDescending = sortDirections[1];
         bool tieBreakerIsDescending = sortDirections[2];
@@ -314,22 +313,11 @@ public static partial class QueryablePaginationExtensions {
 
             Expression<Func<TSource, bool>> lambda = Expression.Lambda<Func<TSource, bool>>(compositePredicate, parameter);
             query = query.Where(lambda);
-
-            if(request.Direction == CursorDirection.Backward) {
-                // Invert each column's direction individually
-                IOrderedQueryable<TSource> reordered = primaryIsDescending
-                    ? query.OrderBy(primaryKeySelector)
-                    : query.OrderByDescending(primaryKeySelector);
-
-                reordered = secondaryIsDescending
-                    ? reordered.ThenBy(secondaryKeySelector)
-                    : reordered.ThenByDescending(secondaryKeySelector);
-
-                query = tieBreakerIsDescending
-                    ? reordered.ThenBy(tieBreakerSelector)
-                    : reordered.ThenByDescending(tieBreakerSelector);
-            }
         }
+
+        // Every page, so a trailing key the caller did not write is still in the ORDER BY; inverted for a backward seek
+        query = ApplyKeysetOrdering(query, sortDirections, reverse: request.Direction == CursorDirection.Backward && !request.Cursor.IsEmpty,
+            primaryKeySelector, secondaryKeySelector, tieBreakerSelector);
 
         // 3. Fetch Limit + 1
         int fetchLimit = request.Limit + 1;
