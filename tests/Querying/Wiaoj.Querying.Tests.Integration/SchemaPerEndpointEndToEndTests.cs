@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Http.Json;
 using Wiaoj.Querying.AspNetCore;
-using Wiaoj.Querying.Extensions;
 
 namespace Wiaoj.Querying.Tests.Integration;
 

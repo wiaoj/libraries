@@ -1,11 +1,10 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Unicode;
 using Wiaoj.Primitives.Buffers;
-using Wiaoj.Querying.Extensions;
 
 namespace Wiaoj.Querying.Parsers;
 

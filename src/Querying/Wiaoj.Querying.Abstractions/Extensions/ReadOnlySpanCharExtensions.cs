@@ -1,6 +1,8 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 
-namespace Wiaoj.Querying.Extensions;
+#pragma warning disable IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Querying;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Provides extension methods for <see cref="ReadOnlySpan{T}"/> of characters.
 /// </summary>
