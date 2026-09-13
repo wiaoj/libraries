@@ -51,6 +51,8 @@ The parameter set is chosen from the endpoint's **declared response type** rathe
 
 An endpoint whose response carries the page inside an envelope says so with `WithPagination<TResponse>(response => response.Metadata)`. That declares its style, so it is documented as offset or keyset from the declaration rather than inferred.
 
+A handler returning `IResult` has no response type to read. `WithPagination(PaginationStyle.Cursor)` states the style for it. The statement never overrides a response type the document does know: a `Produces<PagedResult<T>>()` on an endpoint declared `Cursor` fails document generation instead of producing a document that describes parameters the endpoint does not accept.
+
 Whether `Link` and `ETag` are documented follows the settings actually in effect — `services.AddPagination(...)`, refined by the endpoint's own `WithPagination(options => ...)`. The document resolves them through the same method, on the same metadata, the filter uses at run time, so it cannot advertise an ETag the application turned off.
 
 Parameters the document already carries are left alone. A handler taking `[AsParameters] PageRequest` already has `page` and `size` described by ASP.NET Core, and adding them twice produces an invalid document. A handler taking `CursorParameters` has *nothing* described — a type that binds itself contributes no parameters to the document — so this is where `cursor`, `limit` and `direction` come from.

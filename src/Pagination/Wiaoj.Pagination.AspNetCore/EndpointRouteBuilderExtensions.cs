@@ -72,6 +72,58 @@ public static class EndpointRouteBuilderExtensions {
     }
 
     /// <summary>
+    /// Adds pagination to an endpoint whose return type does not say which paging style it serves.
+    /// </summary>
+    /// <typeparam name="TBuilder">The endpoint convention builder type.</typeparam>
+    /// <param name="builder">The endpoint builder.</param>
+    /// <param name="style">The paging style the endpoint serves.</param>
+    /// <param name="configureOptions">Refines the application's settings for this endpoint, if given.</param>
+    /// <returns>The endpoint builder for chaining.</returns>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
+    /// <exception cref="PrecaArgumentException">Thrown when <paramref name="style"/> is not a defined value.</exception>
+    /// <remarks>
+    /// <para>
+    /// The style is normally read from the handler's return type, which cannot disagree with what the handler
+    /// returns. A handler returning <see cref="IResult"/> carries no shape, so the document would describe no
+    /// paging parameters, <c>Link</c> header or <c>ETag</c>. This states the style for that case. Prefer a typed
+    /// return — <c>Results&lt;Ok&lt;CursorResult&lt;T&gt;&gt;, ProblemHttpResult&gt;</c> — wherever one is available.
+    /// </para>
+    /// <para>
+    /// The declaration is checked rather than trusted, so it cannot drift from what the endpoint serves:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>A return type that can be read and does not serve <paramref name="style"/> fails when the endpoint is built.</item>
+    ///   <item>A return type that cannot be read is checked on each response: a page of the other style throws.</item>
+    ///   <item>A document whose declared response type (<c>Produces&lt;T&gt;()</c>) disagrees fails to generate.</item>
+    /// </list>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// app.MapGet("/api/assets", async Task&lt;IResult&gt; (...) => TypedResults.Ok(window))
+    ///    .WithPagination(PaginationStyle.Cursor);
+    /// </code>
+    /// </example>
+    public static TBuilder WithPagination<TBuilder>(
+        this TBuilder builder,
+        PaginationStyle style,
+        Action<PaginationOptions>? configureOptions = null) where TBuilder : IEndpointConventionBuilder {
+
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfUndefined(style);
+
+        PaginationEndpointMetadata metadata = new(configureOptions, style);
+        PaginationEndpointFilter filter = new(metadata);
+
+        builder.WithMetadata(metadata);
+        builder.AddEndpointFilterFactory((context, next) => {
+            EnsureHandlerServes(context.MethodInfo, style);
+            return invocation => filter.InvokeAsync(invocation, next);
+        });
+
+        return builder;
+    }
+
+    /// <summary>
     /// Adds offset pagination to an endpoint whose response carries a page alongside other data.
     /// </summary>
     /// <typeparam name="TResponse">The response type the handler returns.</typeparam>
@@ -171,6 +223,36 @@ public static class EndpointRouteBuilderExtensions {
             $"{returned.Name}. {declared.Name} does not appear in that return type, so the metadata accessor " +
             "would never run and the endpoint would send no Link header or ETag. Declare the type the handler " +
             "actually returns.");
+    }
+
+    /// <summary>
+    /// Fails the endpoint build when the handler's return type can be read and does not serve the declared style.
+    /// </summary>
+    private static void EnsureHandlerServes(MethodInfo handler, PaginationStyle declared) {
+        Type returned = handler.ReturnType;
+
+        if(IsOpaque(returned)) {
+            return;
+        }
+
+        bool offset = Mentions(returned, typeof(IPagedResult), depth: 0);
+        bool cursor = Mentions(returned, typeof(ICursorResult), depth: 0);
+
+        if(declared == PaginationStyle.Offset ? offset : cursor) {
+            return;
+        }
+
+        string reason = offset || cursor
+            ? $"which serves {(offset ? PaginationStyle.Offset : PaginationStyle.Cursor)} pagination. The document " +
+              $"would advertise the {declared} parameters while the endpoint serves the other kind. Remove the style " +
+              "and let it be read from the return type."
+            : $"which contains neither a {nameof(PagedResult<object>)}<T> nor a {nameof(CursorResult<object>)}<T>, " +
+              "so the endpoint would never be paginated. If the page sits inside a larger response, declare where " +
+              "with WithPagination<TResponse>(response => response.Metadata).";
+
+        throw new InvalidOperationException(
+            $"WithPagination({nameof(PaginationStyle)}.{declared}) was declared on '{handler.Name}', which returns " +
+            $"{returned.Name}, {reason}");
     }
 
     private static bool Mentions(Type type, Type target, int depth) {

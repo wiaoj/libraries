@@ -112,6 +112,8 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
             _ => this._metadata.ReadMetadata?.Invoke(value)
         };
 
+        EnsureDeclaredStyle(metadata, value);
+
         switch(metadata) {
             case PageMetadata page:
                 ApplyOffsetHeaders(httpContext, page, options);
@@ -124,6 +126,34 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Throws when the endpoint declared a paging style and returned a page of the other one.
+    /// </summary>
+    /// <remarks>
+    /// A handler returning <see cref="IResult"/> cannot be checked when the endpoint is built, so this is the
+    /// only point where a wrong declaration can be seen. Left alone, the response would still be paged
+    /// correctly while the document went on advertising the other parameters, for as long as the endpoint
+    /// existed. Failing the first such response makes it show up in the first test that calls the endpoint.
+    /// A response that is not a page at all — a problem, a redirect — is not a contradiction and passes.
+    /// </remarks>
+    private void EnsureDeclaredStyle(object? metadata, object value) {
+        PaginationStyle? served = metadata switch {
+            PageMetadata => PaginationStyle.Offset,
+            CursorMetadata => PaginationStyle.Cursor,
+            _ => null
+        };
+
+        if(served is null || this._metadata.Style is not { } declared || served == declared) {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"The endpoint declared {nameof(PaginationStyle)}.{declared} pagination but returned " +
+            $"{value.GetType().Name}, which is {served} pagination. Its OpenAPI document describes the " +
+            $"{declared} parameters, which this endpoint does not accept. Declare the style it returns, or " +
+            "return a typed result so the style can be read without being declared.");
     }
 
     /// <summary>

@@ -122,6 +122,23 @@ The declaration is checked when the endpoint is built: a `TResponse` that does n
 
 > Without this, `.WithPagination()` on an envelope endpoint does **nothing** — the filter only acts on a result it recognises as a page.
 
+#### Handlers returning `IResult`
+
+The paging style is read from the handler's return type. `IResult` says nothing, so the OpenAPI document would describe no paging at all. State the style instead:
+
+```csharp
+app.MapGet("api/v1/assets", async Task<IResult> (...) => TypedResults.Ok(window))
+   .WithPagination(PaginationStyle.Cursor);
+```
+
+Prefer a typed return (`Results<Ok<CursorResult<T>>, ProblemHttpResult>`) where one is available — it needs no statement. Where one is given, it is checked rather than trusted, so it cannot drift from what the endpoint serves:
+
+| Where | What fails |
+| --- | --- |
+| Endpoint build | A readable return type that serves the other style, or no page at all |
+| Each response | An opaque handler returning a page of the other style — `InvalidOperationException`. A non-page response (a problem, a redirect) passes. |
+| OpenAPI document | A `Produces<T>()` response type that serves the other style |
+
 ---
 
 ### 4. Standalone RFC 8288 Link Header Generation
