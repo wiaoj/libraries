@@ -1,10 +1,9 @@
-﻿// WebhookIpFilter is obsolete and forwards to Wiaoj.Net's OutboundNetworkPolicy; these tests stay as the guard that
-// nothing it refused before is allowed now.
-#pragma warning disable CS0618
+// Moved from Wiaoj.Webhooks.Tests.Unit (WebhookIpFilter*, RealWorldSsrfPayloadsTests) when the filter moved to Wiaoj.Net.
+// Every case is unchanged; only the subject changed: WebhookIpFilter.IsAllowed(ip) -> OutboundNetworkPolicy.PublicOnly.IsAllowed(ip),
+// IsAllowed(ip, allowPrivateNetworks: true) -> OutboundNetworkPolicy.Unrestricted.IsAllowed(ip).
 using System.Net;
-using Wiaoj.Webhooks.Security;
 
-namespace Wiaoj.Webhooks.Tests.Unit.Security;
+namespace Wiaoj.Net.Tests.Unit.Ssrf;
 
 [Trait("Category", "Unit")]
 [Trait("Feature", "Security")]
@@ -26,7 +25,7 @@ public sealed class RealWorldSsrfPayloadsTests {
         [InlineData("169.254.1.1", "OpenStack Default Metadata")]
         public void IsAllowed_BlocksAllMajorCloudProviderMetadataIps(string cloudMetadataIp, string providerName) {
             IPAddress ip = IPAddress.Parse(cloudMetadataIp);
-            Assert.False(WebhookIpFilter.IsAllowed(ip), $"CRITICAL: '{providerName}' metadata IP '{cloudMetadataIp}' was not blocked!");
+            Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(ip), $"CRITICAL: '{providerName}' metadata IP '{cloudMetadataIp}' was not blocked!");
         }
     }
 
@@ -48,7 +47,7 @@ public sealed class RealWorldSsrfPayloadsTests {
         [InlineData("127.255.255.254")] // Top-of-loopback subnet
         public void IsAllowed_BlocksContainerAndInternalInfrastructureIps(string internalIp) {
             IPAddress ip = IPAddress.Parse(internalIp);
-            Assert.False(WebhookIpFilter.IsAllowed(ip), $"CRITICAL VULNERABILITY: Internal infrastructure IP '{internalIp}' was not blocked!");
+            Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(ip), $"CRITICAL VULNERABILITY: Internal infrastructure IP '{internalIp}' was not blocked!");
         }
     }
 
@@ -77,7 +76,7 @@ public sealed class RealWorldSsrfPayloadsTests {
         [InlineData("54.239.28.85")]          // Amazon AWS Public Front Door
         public void IsAllowed_AllowsLegitimatePublicInternetIps(string publicIp) {
             IPAddress ip = IPAddress.Parse(publicIp);
-            Assert.True(WebhookIpFilter.IsAllowed(ip), $"FALSE POSITIVE: Legitimate public IP '{publicIp}' was incorrectly blocked!");
+            Assert.True(OutboundNetworkPolicy.PublicOnly.IsAllowed(ip), $"FALSE POSITIVE: Legitimate public IP '{publicIp}' was incorrectly blocked!");
         }
     }
 }
