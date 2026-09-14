@@ -55,7 +55,25 @@ public sealed class WebhookSecurityOptions {
     /// <summary>
     /// Gets or sets an optional outbound egress forward proxy (e.g. Squid, Envoy, DMZ proxy).
     /// </summary>
+    /// <remarks>
+    /// Through a proxy, the connection is opened to the proxy and the proxy reaches the destination, so the destination's
+    /// address is never seen here and <see cref="NetworkPolicy"/> cannot be enforced where the socket is opened. The
+    /// target is still checked before sending — exactly for an IP literal, best-effort for a host name, which the proxy may
+    /// resolve differently — but the proxy is the real SSRF control. With SSRF protection on, setting a proxy therefore
+    /// requires <see cref="ProxyEnforcesEgressPolicy"/> (or <see cref="AllowPrivateNetworks"/>), and fails at startup
+    /// otherwise.
+    /// </remarks>
     public IWebProxy? Proxy { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the configured <see cref="Proxy"/> enforces egress rules itself — refusing private, loopback
+    /// and cloud metadata destinations, for example with Smokescreen or Squid ACLs. Default is <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// An acknowledgement that the proxy, not this client, is the SSRF control. Without it, a proxy with SSRF protection
+    /// enabled fails at startup rather than silently weakening the protection.
+    /// </remarks>
+    public bool ProxyEnforcesEgressPolicy { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum number of response body bytes to read for audit history and delivery results.
@@ -88,12 +106,21 @@ public sealed class WebhookSecurityOptions {
     /// <summary>
     /// Validates the configuration values, throwing an exception if any value is out of acceptable bounds.
     /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <see cref="NetworkPolicy"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when a <see cref="Proxy"/> is set with SSRF protection enabled and
+    /// neither <see cref="ProxyEnforcesEgressPolicy"/> nor <see cref="AllowPrivateNetworks"/> is set.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when a value is negative, zero where a positive
     /// duration is required, or otherwise outside the range <see cref="SocketsHttpHandler"/> and the underlying
     /// socket layer can safely accept.</exception>
     public void Validate() {
         if(this.NetworkPolicy is null) {
             throw new ArgumentNullException(nameof(this.NetworkPolicy), "The network policy cannot be null; use OutboundNetworkPolicy.Unrestricted to allow every destination.");
+        }
+        if(this.Proxy is not null && !this.AllowPrivateNetworks && !this.ProxyEnforcesEgressPolicy) {
+            throw new InvalidOperationException(
+                "A proxy is configured while SSRF protection is enabled. Through a proxy the destination address cannot be checked " +
+                "where the connection is opened, so the proxy must enforce egress rules. Set ProxyEnforcesEgressPolicy = true to " +
+                "confirm it does, or AllowPrivateNetworks = true to turn SSRF protection off explicitly.");
         }
         if(this.ConnectTimeout <= TimeSpan.Zero) {
             throw new ArgumentOutOfRangeException(nameof(this.ConnectTimeout), this.ConnectTimeout, "Connect timeout must be greater than zero.");

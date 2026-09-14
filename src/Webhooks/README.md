@@ -308,8 +308,11 @@ webhooks.ConfigureSecurity(options =>
     options.AllowPrivateNetworks = false;
     options.ConnectTimeout = TimeSpan.FromSeconds(5);
     options.Proxy = new WebProxy("http://egress-proxy:8080");
+    options.ProxyEnforcesEgressPolicy = true;   // required with a proxy: the proxy is the SSRF control
 });
 ```
+
+Behind a proxy, the destination address is only seen by the proxy. For that reason the application refuses to start with a proxy unless `ProxyEnforcesEgressPolicy` (or `AllowPrivateNetworks`) is set. IP-literal destinations are still refused before sending. See `Wiaoj.Webhooks/README.md` for details.
 
 ---
 

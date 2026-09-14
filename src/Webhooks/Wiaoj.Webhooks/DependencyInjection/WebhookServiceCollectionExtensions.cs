@@ -53,7 +53,10 @@ public static class WebhookServiceCollectionExtensions {
              }
 
              return handler;
-         });
+         })
+         .AddHttpMessageHandler<ProxiedDestinationPolicyHandler>();
+
+        services.TryAddTransient<ProxiedDestinationPolicyHandler>();
 
         services.AddWiaojSerializer(serialization => {
             serialization.TryUseSystemTextJson<WebhookSerializerKey>();

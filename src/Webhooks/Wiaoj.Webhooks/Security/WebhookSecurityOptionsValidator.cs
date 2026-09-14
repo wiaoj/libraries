@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 
 namespace Wiaoj.Webhooks.Security;
 
@@ -14,7 +14,9 @@ internal sealed class WebhookSecurityOptionsValidator : IValidateOptions<Webhook
             options.Validate();
             return ValidateOptionsResult.Success;
         }
-        catch(ArgumentOutOfRangeException ex) {
+        // Every rule Validate() enforces is reported as a validation failure, not only the range checks — an unexpected
+        // exception type would otherwise escape startup validation as a crash instead of a readable failure.
+        catch(Exception ex) when(ex is ArgumentException or InvalidOperationException) {
             return ValidateOptionsResult.Fail($"WebhookSecurityOptions is invalid: {ex.Message}");
         }
     }
