@@ -97,7 +97,7 @@ sequenceDiagram
    - **Circuit Breaker Middleware:** Evaluates target health via `Wiaoj.Resilience`. If the target is tripped (`Open`), it fast-fails immediately (0 network I/O) and re-enqueues the job. If in `Half-Open`, it permits a single trial probe request.
    - **Standard Headers & Content-Digest Middleware:** Injects RFC 9530 `Content-Digest` and metadata headers (`Webhook-Id`, `Webhook-Event`, `Webhook-Attempt`, `User-Agent`).
    - **Cryptographic Signing Middleware:** Computes cryptographic signatures using symmetric HMAC-SHA256/512 or asymmetric RSA / ECDSA / Ed25519.
-   - **HTTP Delivery Terminal (`HttpWebhookDeliverer`):** Performs TCP socket-level SSRF validation (`WebhookIpFilter`) and POSTs the request.
+   - **HTTP Delivery Terminal (`HttpWebhookDeliverer`):** Performs TCP socket-level SSRF validation (`OutboundNetworkPolicy` from `Wiaoj.Net`, enforced where the socket is opened) and POSTs the request. A refused destination is a permanent `InvalidDestination` failure, never retried.
 
 ### Stage 3: Outcome Classification, Retries & Self-Healing
 - **Success Outcome:** If the target returns HTTP 2xx, a successful `WebhookDeliveryAttempt` is recorded, the circuit breaker resets (`OnSuccessAsync`), and status transitions to `Delivered`.

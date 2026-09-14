@@ -1,8 +1,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Net;
-using System.Net.Sockets;
+using Wiaoj.Net;
 using Wiaoj.Serialization.DependencyInjection;
 using Wiaoj.Webhooks;
 using Wiaoj.Webhooks.Internal;
@@ -48,26 +47,9 @@ public static class WebhookServiceCollectionExtensions {
                  handler.UseProxy = true;
              }
              else {
-                 // Direct socket connection with SSRF filtering
-                 handler.ConnectCallback = async (context, cancellationToken) => {
-                     IPAddress[] addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken).ConfigureAwait(false);
-
-                     IPAddress targetIp = addresses.FirstOrDefault(ip => WebhookIpFilter.IsAllowed(ip, options.AllowPrivateNetworks))
-                         ?? throw new WebhookSsrfBlockedException($"All resolved IP addresses for '{context.DnsEndPoint.Host}' are in prohibited private or link-local ranges.");
-
-                     Socket socket = new(targetIp.AddressFamily, SocketType.Stream, ProtocolType.Tcp) {
-                         NoDelay = true
-                     };
-
-                     try {
-                         await socket.ConnectAsync(new IPEndPoint(targetIp, context.DnsEndPoint.Port), cancellationToken).ConfigureAwait(false);
-                         return new NetworkStream(socket, ownsSocket: true);
-                     }
-                     catch {
-                         socket.Dispose();
-                         throw;
-                     }
-                 };
+                 // Direct connections: each host is resolved and connected to only through an address the policy
+                 // allows (Wiaoj.Net), so DNS cannot answer differently between the check and the connection.
+                 handler.UseOutboundNetworkPolicy(options.EffectiveNetworkPolicy);
              }
 
              return handler;
