@@ -17,32 +17,31 @@ builder.Services.AddOAuthDiscoveryClient(options =>
     options.TrustedAuthorizationServers.Add("https://vaultex.example.com"));
 ```
 
-### From a 401
+### From a known resource identifier (between our services)
 
 ```csharp
-public sealed class PrismClient(HttpClient http, OAuthDiscoveryClient discovery) {
-    public async Task<string> GetAsync(CancellationToken ct) {
-        using HttpResponseMessage response = await http.GetAsync("https://prism.example.com/v1/keys", ct);
+public sealed class PrismClient(OAuthDiscoveryClient discovery) {
+    public async Task<string?> TokenEndpointAsync(CancellationToken ct) {
+        OAuthDiscoveryResult found = await discovery.DiscoverAsync("https://prism.example.com/v1", ct);
 
-        if(response.StatusCode == HttpStatusCode.Unauthorized
-           && await discovery.DiscoverAsync(response, ct) is { } found) {
-            // found.ProtectedResource.Resource        "https://prism.example.com/v1"  — the token's audience (RFC 8707 resource)
-            // found.ProtectedResource.ScopesSupported
-            // found.AuthorizationServer.TokenEndpoint — obtain a token with your OAuth client, then retry
-        }
-
-        ...
+        // found.ProtectedResource.Resource        "https://prism.example.com/v1" — the token's audience (RFC 8707 resource)
+        // found.ProtectedResource.ScopesSupported
+        // found.AuthorizationServer.DeviceAuthorizationEndpoint — RFC 8628, for a CLI
+        return found.AuthorizationServer.TokenEndpoint;   // obtain a token with your OAuth client
     }
 }
 ```
 
-### From a known resource identifier
+### From a 401 (a client that doesn't know the API)
 
 ```csharp
-OAuthDiscoveryResult found = await discovery.DiscoverAsync("https://prism.example.com/v1", ct);
-string? deviceEndpoint = found.AuthorizationServer.DeviceAuthorizationEndpoint;   // RFC 8628, for a CLI
-```
+using HttpResponseMessage response = await http.GetAsync(userSuppliedUrl, ct);
 
+if(response.StatusCode == HttpStatusCode.Unauthorized
+   && await discovery.DiscoverAsync(response, ct) is { } found) {
+    // resource == userSuppliedUrl (RFC 9728 §3.3)
+}
+```
 `GetProtectedResourceMetadataAsync` and `GetAuthorizationServerMetadataAsync` fetch one document each. Parameters without a property of their own are available in `Json`.
 
 The client stops before getting a token. How the token is obtained (client credentials, device flow, token exchange) belongs to your OAuth client.
@@ -55,7 +54,7 @@ Each failure throws `OAuthDiscoveryException`, and its `Failure` says why.
 | --- | --- | --- |
 | `resource` is identical to the identifier looked up, code point for code point | `IdentifierMismatch` | RFC 9728 §3.3, §6 |
 | `issuer` is identical to the issuer looked up | `IdentifierMismatch` | RFC 8414 §3.3, §6.2 |
-| From a 401, `resource` is identical to the challenged URL, or covers it with `PathPrefix` (see below) | `IdentifierMismatch` | RFC 9728 §3.3 |
+| From a 401, `resource` is identical to the challenged URL (see below) | `IdentifierMismatch` | RFC 9728 §3.3 |
 | Documents are fetched over `https` (`http` only on loopback, for development) | `InsecureTransport` | RFC 9728 §7.1, RFC 8414 §3 |
 | A redirect to another origin is never followed, including one a custom handler followed itself | `CrossOriginRedirect` | |
 | At most `MaxRedirects` same-origin redirects | `TooManyRedirects` | |
@@ -65,27 +64,16 @@ Each failure throws `OAuthDiscoveryException`, and its `Failure` says why.
 
 The checks run on every call, whether the document comes from the network or from the cache.
 
-### Matching a resource to the challenged request
+### A 401 or the identifier?
 
-By default the client follows RFC 9728 §3.3 literally. Metadata found through a 401 is used only if its `resource` is **identical** to the URL that was requested (`ChallengeResourceMatching.Exact`). This works when the resource identifier is the URL clients call. An MCP server with a single endpoint is an example.
+RFC 9728 §3.3 says that metadata found through a 401 is used only if its `resource` is **identical** to the URL that was requested. There are two ways to discover an API:
 
-An API whose identifier names the whole API, such as `https://prism.example.com/v1`, returns 401s from URLs like `…/v1/keys`. Exact matching refuses those. If both sides agree, the client can opt in to `ChallengeResourceMatching.PathPrefix`, which is a deliberate relaxation of the RFC. The resource must then have the request's origin, and its path must be the request's path or a leading run of its segments:
+| Situation | Call |
+| --- | --- |
+| The client doesn't know the API, and the user gives it a URL (for example an MCP server's single endpoint) | `DiscoverAsync(unauthorizedResponse)` |
+| The client knows the API's identifier, for example from config (Verba → `https://prism.example.com/v1`) | `DiscoverAsync("https://prism.example.com/v1")` |
 
-| Resource | Request | `PathPrefix` accepts |
-| --- | --- | --- |
-| `https://prism.example.com/v1` | `https://prism.example.com/v1/keys` | yes |
-| `https://prism.example.com` | `https://prism.example.com/anything` | yes |
-| `https://prism.example.com/v1` | `https://prism.example.com/v10/keys` | no, not a segment boundary |
-| `https://prism.example.com/v1` | `https://other.example.com/v1/keys` | no, different origin |
-
-```csharp
-services.AddOAuthDiscoveryClient(options => {
-    options.TrustedAuthorizationServers.Add("https://vaultex.example.com");
-    options.ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix;   // between our own services
-});
-```
-
-`DiscoverAsync(resource)` needs neither mode. It looks the document up by identifier, and `resource` must be identical to that identifier.
+In the first case, a 401 from `…/v1/keys` can't use metadata for `…/v1`, because the RFC forbids it. When the identifier is known, the second call is used. It fetches the document from the URL derived from the identifier and requires `resource` to be identical to that identifier, so a 401 isn't needed.
 ## Choosing the authorization server
 
 If `TrustedAuthorizationServers` is empty, the first entry in `authorization_servers` is used.

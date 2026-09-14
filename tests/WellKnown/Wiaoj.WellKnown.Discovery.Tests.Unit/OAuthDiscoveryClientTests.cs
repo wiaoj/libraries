@@ -372,45 +372,34 @@ public sealed class OAuthDiscoveryClientTests {
             return FakeMetadataServer.Challenge(requestUrl, $"Bearer error=\"invalid_token\", resource_metadata=\"{ApiMetadata}\"");
         }
 
-        [Theory]
-        [InlineData("https://api.example.com/v1")]
-        [InlineData("https://api.example.com/v1/users")]
-        [InlineData("https://api.example.com/v1/users/5?expand=roles")]
-        public async Task Should_Accept_A_Resource_Whose_Path_Leads_The_Request_Path_When_Opted_In(string requestUrl) {
-            ProtectedResourceMetadataDocument? document = await Client(Server(), o => o.ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix).GetProtectedResourceMetadataAsync(Challenged(requestUrl), Ct);
+        [Fact]
+        public async Task Should_Accept_A_Resource_Identical_To_The_Requested_Url() {
+            ProtectedResourceMetadataDocument? document = await Client(Server()).GetProtectedResourceMetadataAsync(Challenged(Api), Ct);
 
             Assert.Equal(Api, document?.Resource);
         }
 
+        [Theory]
+        [InlineData("https://api.example.com/v1/users")]
+        [InlineData("https://api.example.com/v1/")]
+        [InlineData("https://api.example.com/v1?x=1")]
+        [InlineData("https://api.example.com/V1")]
+        [InlineData("https://api.example.com/v10")]
+        [InlineData("https://other.example.com/v1")]
+        [InlineData("http://api.example.com/v1")]
+        public async Task Should_Refuse_A_Resource_That_Is_Not_The_Requested_Url(string requestUrl) {
+            // RFC 9728 §3.3: identical, not merely covering the request.
+            Assert.Equal(OAuthDiscoveryFailure.IdentifierMismatch, await FailureAsync(() => Client(Server()).GetProtectedResourceMetadataAsync(Challenged(requestUrl), Ct)));
+        }
+
         [Fact]
-        public async Task Should_Accept_A_Root_Resource_For_Any_Path_On_Its_Origin() {
+        public async Task Should_Accept_A_Root_Resource_Requested_Without_Its_Slash() {
             FakeMetadataServer server = new FakeMetadataServer().Json(ApiMetadata, FakeMetadataServer.Resource("https://api.example.com", Vaultex));
 
-            ProtectedResourceMetadataDocument? document = await Client(server, o => o.ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix).GetProtectedResourceMetadataAsync(Challenged("https://api.example.com/anything"), Ct);
+            ProtectedResourceMetadataDocument? document = await Client(server).GetProtectedResourceMetadataAsync(Challenged("https://api.example.com"), Ct);
 
             Assert.Equal("https://api.example.com", document?.Resource);
         }
-
-        [Theory]
-        [InlineData("https://api.example.com/v10/users")]
-        [InlineData("https://api.example.com/")]
-        [InlineData("https://api.example.com/other")]
-        [InlineData("https://other.example.com/v1/users")]
-        [InlineData("http://api.example.com/v1/users")]
-        [InlineData("https://api.example.com:8443/v1/users")]
-        public async Task Should_Refuse_A_Resource_That_Does_Not_Cover_The_Request(string requestUrl) {
-            Assert.Equal(OAuthDiscoveryFailure.IdentifierMismatch, await FailureAsync(() => Client(Server(), o => o.ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix).GetProtectedResourceMetadataAsync(Challenged(requestUrl), Ct)));
-        }
-
-        [Fact]
-        public async Task Should_Require_Identity_By_Default_As_Rfc_9728_Does() {
-            Assert.Equal(ChallengeResourceMatching.Exact, new OAuthDiscoveryOptions().ChallengeResourceMatching);
-            OAuthDiscoveryClient client = Client(Server());
-
-            Assert.Equal(OAuthDiscoveryFailure.IdentifierMismatch, await FailureAsync(() => client.GetProtectedResourceMetadataAsync(Challenged("https://api.example.com/v1/users"), Ct)));
-            Assert.Equal(Api, (await client.GetProtectedResourceMetadataAsync(Challenged(Api), Ct))?.Resource);
-        }
-
         [Fact]
         public async Task Should_Return_Null_When_The_Response_Advertises_No_Metadata() {
             HttpResponseMessage response = FakeMetadataServer.Challenge(Api, "Bearer error=\"invalid_token\"");
@@ -503,8 +492,8 @@ public sealed class OAuthDiscoveryClientTests {
                 .Json(ApiMetadata, FakeMetadataServer.Resource(Api, Vaultex))
                 .Json(VaultexMetadata, FakeMetadataServer.Issuer(Vaultex));
 
-            OAuthDiscoveryResult? result = await Client(server, o => o.ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix).DiscoverAsync(
-                FakeMetadataServer.Challenge("https://api.example.com/v1/keys", $"Bearer resource_metadata=\"{ApiMetadata}\""), Ct);
+            OAuthDiscoveryResult? result = await Client(server).DiscoverAsync(
+                FakeMetadataServer.Challenge(Api, $"Bearer resource_metadata=\"{ApiMetadata}\""), Ct);
 
             Assert.NotNull(result);
             Assert.Equal(Api, result.ProtectedResource.Resource);

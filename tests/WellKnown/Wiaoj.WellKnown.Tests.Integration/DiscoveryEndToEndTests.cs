@@ -108,9 +108,9 @@ public sealed class DiscoveryEndToEndTests {
     public async Task Should_Discover_The_Authorization_Server_From_A_401() {
         await using Deployment deployment = await DeployAsync();
         using HttpClient http = deployment.Client();
-        OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex }, ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix });
+        OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex } });
 
-        using HttpResponseMessage unauthorized = await http.GetAsync($"{Resource}/keys", Ct);
+        using HttpResponseMessage unauthorized = await http.GetAsync(Resource, Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
 
         OAuthDiscoveryResult? result = await discovery.DiscoverAsync(unauthorized, Ct);
@@ -142,9 +142,9 @@ public sealed class DiscoveryEndToEndTests {
     public async Task Should_Refuse_A_Resource_That_Names_An_Untrusted_Authorization_Server() {
         await using Deployment deployment = await DeployAsync("https://attacker.example.com");
         using HttpClient http = deployment.Client();
-        OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex }, ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix });
+        OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex } });
 
-        using HttpResponseMessage unauthorized = await http.GetAsync($"{Resource}/keys", Ct);
+        using HttpResponseMessage unauthorized = await http.GetAsync(Resource, Ct);
 
         OAuthDiscoveryException error = await Assert.ThrowsAsync<OAuthDiscoveryException>(() => discovery.DiscoverAsync(unauthorized, Ct));
         Assert.Equal(OAuthDiscoveryFailure.UntrustedAuthorizationServer, error.Failure);
@@ -152,9 +152,9 @@ public sealed class DiscoveryEndToEndTests {
     }
 
     [Fact]
-    public async Task Should_Refuse_By_Default_A_Resource_That_Is_Not_The_Challenged_Url() {
+    public async Task Should_Refuse_A_401_From_A_Url_That_Is_Not_The_Resource_Identifier() {
         // RFC 9728 §3.3: the resource must be identical to the URL requested. The API's identifier is …/v1, so metadata
-        // advertised on …/v1/keys is refused unless the client opted in to PathPrefix.
+        // advertised on …/v1/keys is refused; a client that knows the identifier uses DiscoverAsync(resource).
         await using Deployment deployment = await DeployAsync();
         using HttpClient http = deployment.Client();
         OAuthDiscoveryClient discovery = new(deployment.Client());
@@ -165,17 +165,6 @@ public sealed class DiscoveryEndToEndTests {
         Assert.Equal(OAuthDiscoveryFailure.IdentifierMismatch, error.Failure);
     }
 
-    [Fact]
-    public async Task Should_Discover_By_Default_From_A_401_On_The_Resource_Url_Itself() {
-        await using Deployment deployment = await DeployAsync();
-        using HttpClient http = deployment.Client();
-        OAuthDiscoveryClient discovery = new(deployment.Client());
-
-        using HttpResponseMessage unauthorized = await http.GetAsync(Resource, Ct);
-
-        OAuthDiscoveryResult? result = await discovery.DiscoverAsync(unauthorized, Ct);
-        Assert.Equal(Vaultex, result?.AuthorizationServer.Issuer);
-    }
     [Fact]
     public async Task Should_Work_Through_The_Registered_Typed_Client() {
         await using Deployment deployment = await DeployAsync();
