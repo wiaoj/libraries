@@ -1,3 +1,5 @@
+using Wiaoj.Preconditions;
+
 namespace Wiaoj.WellKnown;
 
 /// <summary>
@@ -10,7 +12,7 @@ internal static class WellKnownUri {
     /// </summary>
     /// <exception cref="ArgumentException">The identifier is not an absolute URL, or has a query or fragment.</exception>
     public static Uri Parse(string identifier, string kind, string parameterName) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(identifier, parameterName);
+        Preca.ThrowIfNullOrWhiteSpace(identifier, parameterName);
 
         if(!Uri.TryCreate(identifier, UriKind.Absolute, out Uri? uri)) {
             throw new ArgumentException($"'{identifier}' is not an absolute URL.", parameterName);

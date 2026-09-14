@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using System.Net;
 using System.Text;
+using Wiaoj.Preconditions.Exceptions;
 
 namespace Wiaoj.WellKnown.Discovery.Tests.Unit;
 
@@ -357,9 +358,9 @@ public sealed class OAuthDiscoveryClientTests {
 
         [Fact]
         public void Should_Refuse_Options_That_Cannot_Work() {
-            Assert.Throws<ArgumentOutOfRangeException>(() => new OAuthDiscoveryClient(new HttpClient(), new OAuthDiscoveryOptions { MaxCachedDocuments = 0 }));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new OAuthDiscoveryClient(new HttpClient(), new OAuthDiscoveryOptions { MaxCacheDuration = TimeSpan.FromSeconds(-1) }));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new OAuthDiscoveryClient(new HttpClient(), new OAuthDiscoveryOptions { MaxDocumentBytes = 0 }));
+            Assert.Throws<PrecaArgumentOutOfRangeException>(() => new OAuthDiscoveryClient(new HttpClient(), new OAuthDiscoveryOptions { MaxCachedDocuments = 0 }));
+            Assert.Throws<PrecaArgumentOutOfRangeException>(() => new OAuthDiscoveryClient(new HttpClient(), new OAuthDiscoveryOptions { MaxCacheDuration = TimeSpan.FromSeconds(-1) }));
+            Assert.Throws<PrecaArgumentOutOfRangeException>(() => new OAuthDiscoveryClient(new HttpClient(), new OAuthDiscoveryOptions { MaxDocumentBytes = 0 }));
         }
     }
 

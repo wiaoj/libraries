@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Wiaoj.Preconditions;
 using Wiaoj.WellKnown.Discovery;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
@@ -31,7 +32,7 @@ public static class OAuthDiscoveryServiceExtensions {
     /// </code>
     /// </example>
     public static IHttpClientBuilder AddOAuthDiscoveryClient(this IServiceCollection services, Action<OAuthDiscoveryOptions>? configure = null) {
-        ArgumentNullException.ThrowIfNull(services);
+        Preca.ThrowIfNull(services);
 
         OptionsBuilder<OAuthDiscoveryOptions> options = services.AddOptions<OAuthDiscoveryOptions>();
         if(configure is not null) {

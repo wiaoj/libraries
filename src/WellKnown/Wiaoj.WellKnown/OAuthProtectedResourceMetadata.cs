@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.WellKnown;
 
@@ -89,7 +90,7 @@ public sealed record OAuthProtectedResourceMetadata {
     /// <returns>The metadata document.</returns>
     /// <exception cref="InvalidOperationException"><see cref="OAuthProtectedResourceOptions.Resource"/> is not set.</exception>
     public static OAuthProtectedResourceMetadata FromOptions(OAuthProtectedResourceOptions options) {
-        ArgumentNullException.ThrowIfNull(options);
+        Preca.ThrowIfNull(options);
 
         return new OAuthProtectedResourceMetadata {
             Resource = options.Resource ?? throw new InvalidOperationException("The protected resource has no Resource identifier."),
