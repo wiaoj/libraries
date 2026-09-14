@@ -73,14 +73,13 @@ public static class ModulithServiceCollectionExtensions {
         configureModules(builder);
 
         List<Type> candidates = builder.CandidateTypes.Distinct().ToList();
-
-        IReadOnlyList<ModuleDescriptor> activeDescriptors =
-            ModuleLoader.LoadActive(candidates, configuration, environment, options, logger: null);
+        
+        ModuleLoadResult loadResult = ModuleLoader.LoadActive(
+            candidates, configuration, environment, options);
 
         IReadOnlyList<ModuleDescriptor> sortedDescriptors =
-            TopologicalSorter.Sort(activeDescriptors);
+            TopologicalSorter.Sort(loadResult.ActiveDescriptors);
 
-        // Instantiate and register each module in dependency order
         List<IModule> modules = [];
 
         foreach(ModuleDescriptor descriptor in sortedDescriptors) {
@@ -96,7 +95,7 @@ public static class ModulithServiceCollectionExtensions {
                 descriptor.Type, _ => module, options.ModuleLifetime));
         }
 
-        services.AddSingleton(new ModuleRegistry(modules));
+        services.AddSingleton(new ModuleRegistry(modules, loadResult.SkippedModules));
         services.AddHostedService<ModulithHostedService>();
 
         return services;

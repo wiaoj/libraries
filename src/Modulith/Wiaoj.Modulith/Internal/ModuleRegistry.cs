@@ -1,4 +1,5 @@
-﻿namespace Wiaoj.Modulith.Internal; 
+﻿namespace Wiaoj.Modulith.Internal;
+
 /// <summary>
 /// Singleton that holds the sorted, active module instances.
 /// Built once by <c>AddModulith()</c> and registered in DI.
@@ -6,17 +7,16 @@
 /// Intentionally public and in the root namespace — the AspNetCore integration
 /// package resolves it from DI to build <c>WebModuleRegistry</c>.
 /// </para>
-/// </summary>
+/// </summary>  
 public sealed class ModuleRegistry {
 
-    /// <summary>Active modules in topological boot order.</summary>
     public IReadOnlyList<IModule> Modules { get; }
-
-    /// <summary>Active lifecycle-aware modules in boot order.</summary>
     public IReadOnlyList<IModuleLifecycle> LifecycleModules { get; }
+    internal IReadOnlyList<SkippedModuleInfo> SkippedModules { get; }
 
-    public ModuleRegistry(IReadOnlyList<IModule> modules) {
+    internal ModuleRegistry(IReadOnlyList<IModule> modules, IReadOnlyList<SkippedModuleInfo> skippedModules) {
         this.Modules = modules;
         this.LifecycleModules = modules.OfType<IModuleLifecycle>().ToList();
+        this.SkippedModules = skippedModules;
     }
 }

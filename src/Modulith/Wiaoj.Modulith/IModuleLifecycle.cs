@@ -37,29 +37,26 @@
 public interface IModuleLifecycle {
 
     /// <summary>
-    /// Called before the application starts accepting requests.
-    /// Awaited before proceeding to the next module.
+    /// Called before the host starts accepting requests.
+    /// Use this for database migrations, cache warm-up, or background connection warm-up.
     /// </summary>
-    Task OnStarting(CancellationToken cancellationToken = default);
-
-    /*Module base sınıf oluşturulacak ve override mantığı olacak
-     public async Task OnStarting(IServiceProvider sp, CancellationToken cancellationToken ) // Eğer sp geliyorsa
-        { 
-            using var scope = sp.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<VexilDbContext>();
-            await dbContext.Database.MigrateAsync(cancellationToken);
-        }
-     */
+    Task OnStarting(IServiceProvider serviceProvider, CancellationToken cancellationToken = default) {
+        return Task.CompletedTask;
+    }
 
     /// <summary>
-    /// Called after the host has fully started and is accepting requests.
-    /// Ideal for fire-and-forget warm-up tasks or diagnostic logging.
+    /// Called after the host has fully started and is ready to accept requests.
+    /// Non-fatal: exceptions are logged and do not abort the host.
     /// </summary>
-    Task OnStarted(CancellationToken cancellationToken = default);
+    Task OnStarted(IServiceProvider serviceProvider, CancellationToken cancellationToken = default) {
+        return Task.CompletedTask;
+    }
 
     /// <summary>
-    /// Called when the application is shutting down, in reverse boot order.
-    /// Use this to drain queues, close connections, or flush buffers.
+    /// Called during host shutdown, in reverse topological boot order.
+    /// Use this to flush queues, cancel module-specific timers, or release resources.
     /// </summary>
-    Task OnStopping(CancellationToken cancellationToken = default);
+    Task OnStopping(IServiceProvider serviceProvider, CancellationToken cancellationToken = default) {
+        return Task.CompletedTask;
+    }
 }
