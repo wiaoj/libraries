@@ -83,7 +83,8 @@ public sealed class OAuthDiscoveryClient {
     /// <remarks>
     /// A challenge signals that the metadata may have changed (§5.2), so a cached document older than
     /// <see cref="OAuthDiscoveryOptions.ChallengeRefreshInterval"/> is fetched again. The document's <c>resource</c> must
-    /// match the challenged request's URL as <see cref="OAuthDiscoveryOptions.ChallengeResourceMatching"/> says.
+    /// be identical to the challenged request's URL (§3.3), so a 401 from <c>…/v1/keys</c> cannot use metadata for
+    /// <c>…/v1</c>; a client that knows the API's identifier uses <see cref="DiscoverAsync(string, CancellationToken)"/>.
     /// </remarks>
     public async Task<ProtectedResourceMetadataDocument?> GetProtectedResourceMetadataAsync(HttpResponseMessage challengedResponse, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(challengedResponse);
@@ -103,10 +104,10 @@ public sealed class OAuthDiscoveryClient {
         ProtectedResourceMetadataDocument document = await this.GetAsync(
             url, ProtectedResourceMetadataDocument.Parse, this._options.ChallengeRefreshInterval, cancellationToken).ConfigureAwait(false);
 
-        if(!this.MatchesRequest(document.Resource, requestUrl)) {
+        if(!MatchesRequest(document.Resource, requestUrl)) {
             throw Mismatch(
                 $"The protected resource metadata at '{url}', advertised by a response from '{requestUrl}', is for '{document.Resource}'. " +
-                $"RFC 9728 §3.3 forbids using it for that request ({this._options.ChallengeResourceMatching} matching).");
+                "RFC 9728 §3.3 requires it to be identical to the requested URL. To discover an API by its identifier instead, use DiscoverAsync(resource).");
         }
 
         return document;
@@ -186,26 +187,10 @@ public sealed class OAuthDiscoveryClient {
         return new OAuthDiscoveryResult(protectedResource, authorizationServer);
     }
 
-    private bool MatchesRequest(string resource, Uri requestUrl) {
-        if(this._options.ChallengeResourceMatching == ChallengeResourceMatching.Exact) {
-            return resource.Equals(requestUrl.AbsoluteUri, StringComparison.Ordinal)
-                || resource.Equals(requestUrl.OriginalString, StringComparison.Ordinal);
-        }
-
-        if(!Uri.TryCreate(resource, UriKind.Absolute, out Uri? resourceUrl) || resourceUrl.Query.Length > 0 || resourceUrl.Fragment.Length > 0) {
-            return false;
-        }
-
-        if(!SameOrigin(resourceUrl, requestUrl)) {
-            return false;
-        }
-
-        string resourcePath = resourceUrl.AbsolutePath.TrimEnd('/');
-        string requestPath = requestUrl.AbsolutePath;
-
-        return resourcePath.Length == 0
-            || requestPath.Equals(resourcePath, StringComparison.Ordinal)
-            || requestPath.StartsWith(resourcePath + "/", StringComparison.Ordinal);
+    /// <summary>RFC 9728 §3.3: identical to the URL the client requested, as sent or as normalised by <see cref="Uri"/>.</summary>
+    private static bool MatchesRequest(string resource, Uri requestUrl) {
+        return resource.Equals(requestUrl.AbsoluteUri, StringComparison.Ordinal)
+            || resource.Equals(requestUrl.OriginalString, StringComparison.Ordinal);
     }
 
     private async Task<T> GetAsync<T>(Uri url, Func<Uri, JsonElement, T> parse, TimeSpan? refreshIfOlderThan, CancellationToken cancellationToken) where T : class {

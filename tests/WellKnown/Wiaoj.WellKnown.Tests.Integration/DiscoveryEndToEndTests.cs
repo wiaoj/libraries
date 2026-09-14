@@ -73,6 +73,7 @@ public sealed class DiscoveryEndToEndTests {
                 a.UseAuthorization();
                 a.MapOAuthProtectedResource();
                 a.MapGet("/v1/keys", () => "secret").RequireAuthorization();
+                a.MapGet("/v1", () => "root").RequireAuthorization();
             });
 
         WebApplication vaultex = TestApp.Build(
@@ -109,7 +110,7 @@ public sealed class DiscoveryEndToEndTests {
         using HttpClient http = deployment.Client();
         OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex } });
 
-        using HttpResponseMessage unauthorized = await http.GetAsync($"{Resource}/keys", Ct);
+        using HttpResponseMessage unauthorized = await http.GetAsync(Resource, Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
 
         OAuthDiscoveryResult? result = await discovery.DiscoverAsync(unauthorized, Ct);
@@ -143,7 +144,7 @@ public sealed class DiscoveryEndToEndTests {
         using HttpClient http = deployment.Client();
         OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex } });
 
-        using HttpResponseMessage unauthorized = await http.GetAsync($"{Resource}/keys", Ct);
+        using HttpResponseMessage unauthorized = await http.GetAsync(Resource, Ct);
 
         OAuthDiscoveryException error = await Assert.ThrowsAsync<OAuthDiscoveryException>(() => discovery.DiscoverAsync(unauthorized, Ct));
         Assert.Equal(OAuthDiscoveryFailure.UntrustedAuthorizationServer, error.Failure);
@@ -151,16 +152,16 @@ public sealed class DiscoveryEndToEndTests {
     }
 
     [Fact]
-    public async Task Should_Show_Why_Exact_Matching_Is_Not_The_Default() {
-        // RFC 9728 §3.3 as written: the resource must be identical to the challenged URL. The resource names the API, the
-        // request names one of its URLs, so exact matching refuses a correctly configured server.
+    public async Task Should_Refuse_A_401_From_A_Url_That_Is_Not_The_Resource_Identifier() {
+        // RFC 9728 §3.3: the resource must be identical to the URL requested. The API's identifier is …/v1, so metadata
+        // advertised on …/v1/keys is refused; a client that knows the identifier uses DiscoverAsync(resource).
         await using Deployment deployment = await DeployAsync();
         using HttpClient http = deployment.Client();
-        OAuthDiscoveryClient exact = new(deployment.Client(), new OAuthDiscoveryOptions { ChallengeResourceMatching = ChallengeResourceMatching.Exact });
+        OAuthDiscoveryClient discovery = new(deployment.Client());
 
         using HttpResponseMessage unauthorized = await http.GetAsync($"{Resource}/keys", Ct);
 
-        OAuthDiscoveryException error = await Assert.ThrowsAsync<OAuthDiscoveryException>(() => exact.DiscoverAsync(unauthorized, Ct));
+        OAuthDiscoveryException error = await Assert.ThrowsAsync<OAuthDiscoveryException>(() => discovery.DiscoverAsync(unauthorized, Ct));
         Assert.Equal(OAuthDiscoveryFailure.IdentifierMismatch, error.Failure);
     }
 

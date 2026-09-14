@@ -1,23 +1,5 @@
 namespace Wiaoj.WellKnown.Discovery;
 
-/// <summary>How a resource identifier found through a <c>WWW-Authenticate</c> challenge must relate to the request that was challenged.</summary>
-public enum ChallengeResourceMatching {
-    /// <summary>
-    /// The resource must have the request's origin, and its path must be the request's path or a leading run of its
-    /// segments: resource <c>https://api.example.com/v1</c> matches a request to <c>https://api.example.com/v1/users</c>.
-    /// </summary>
-    /// <remarks>
-    /// RFC 9728 §3.3 literally requires the resource to be identical to the request URL. That rejects every API whose
-    /// identifier names the API rather than one of its URLs — which is how resource identifiers are used, and what
-    /// <c>Wiaoj.WellKnown</c> publishes. The origin and segment-boundary checks keep what the rule protects against: a
-    /// resource cannot claim another host, or a sibling path such as <c>/v10</c> for <c>/v1</c>.
-    /// </remarks>
-    PathPrefix,
-
-    /// <summary>The resource must be identical to the request URL, as RFC 9728 §3.3 is written.</summary>
-    Exact
-}
-
 /// <summary>
 /// Options for <see cref="OAuthDiscoveryClient"/>.
 /// </summary>
@@ -33,9 +15,6 @@ public sealed class OAuthDiscoveryOptions {
     /// Compared ordinally, as issuers are.
     /// </remarks>
     public List<string> TrustedAuthorizationServers { get; } = [];
-
-    /// <summary>Gets or sets how a resource found through a challenge is matched to the request. <see cref="ChallengeResourceMatching.PathPrefix"/> by default.</summary>
-    public ChallengeResourceMatching ChallengeResourceMatching { get; set; } = ChallengeResourceMatching.PathPrefix;
 
     /// <summary>Gets or sets whether <c>http</c> is accepted on a loopback host, for development. <see langword="true"/> by default; every other host requires https.</summary>
     public bool AllowHttpOnLoopback { get; set; } = true;
