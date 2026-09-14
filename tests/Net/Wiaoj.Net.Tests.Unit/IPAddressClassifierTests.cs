@@ -78,6 +78,36 @@ public sealed class IPAddressClassifierTests {
     }
 
     [Theory]
+    // Added for #133 — SIIT, IPv4-translated (RFC 2765 §2.1)
+    [InlineData("::ffff:0:a9fe:a9fe", IPAddressScope.LinkLocal)]
+    [InlineData("::ffff:0:7f00:1", IPAddressScope.Loopback)]
+    [InlineData("::ffff:0:a00:1", IPAddressScope.Private)]
+    [InlineData("::ffff:0:808:808", IPAddressScope.Public)]
+    // ISATAP under a global prefix, u bit clear and set (RFC 5214 §6.1)
+    [InlineData("2606:4700::5efe:a9fe:a9fe", IPAddressScope.LinkLocal)]
+    [InlineData("2606:4700::200:5efe:a00:1", IPAddressScope.Private)]
+    [InlineData("2606:4700::5efe:808:808", IPAddressScope.Public)]
+    // 6to4 carrying a public gateway and an ISATAP identifier carrying loopback: the refused one decides
+    [InlineData("2002:808:808:1:0:5efe:7f00:1", IPAddressScope.Loopback)]
+    // NAT64 local-use prefix (RFC 8215): reserved whatever follows
+    [InlineData("64:ff9b:1::a9fe:a9fe", IPAddressScope.Reserved)]
+    [InlineData("64:ff9b:1:fffe::808:808", IPAddressScope.Reserved)]
+    // The gap between the well-known prefix and the local-use prefix stays unallocated, not reserved
+    [InlineData("64:ff9b:0:1::808:808", IPAddressScope.Public)]
+    public void Should_Classify_The_Remaining_IPv4_In_IPv6_Forms(string address, IPAddressScope scope) {
+        Assert.Equal(scope, IPAddressClassifier.Classify(IPAddress.Parse(address)));
+    }
+
+    [Theory]
+    [InlineData("::ffff:0:a01:203", "10.1.2.3")]
+    [InlineData("2606:4700::5efe:a01:203", "10.1.2.3")]
+    [InlineData("2002:0a01:0203:1:0:5efe:808:808", "10.1.2.3")]
+    public void Should_Extract_The_Carried_IPv4_Of_The_Remaining_Forms(string address, string ipv4) {
+        Assert.True(IPAddressClassifier.TryGetIPv4(IPAddress.Parse(address), out IPAddress? carried));
+        Assert.Equal(IPAddress.Parse(ipv4), carried);
+    }
+
+    [Theory]
     [InlineData("10.1.2.3", "10.1.2.3")]
     [InlineData("::ffff:10.1.2.3", "10.1.2.3")]
     [InlineData("2002:0a01:0203::", "10.1.2.3")]

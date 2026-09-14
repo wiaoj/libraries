@@ -148,6 +148,46 @@ public sealed class SsrfPolicyPropertyTests {
         Assert.Equal(OutboundNetworkPolicy.PublicOnly.IsAllowed(ipv4), OutboundNetworkPolicy.PublicOnly.IsAllowed(tunneled));
     }
 
+    // Added for #133: the IPv4-in-IPv6 forms the original suite did not cover.
+
+    [Property]
+    public void IsAllowed_IsInvariant_UnderIPv4TranslatedSiitEncoding(byte b1, byte b2, byte b3, byte b4) {
+        IPAddress ipv4 = new([b1, b2, b3, b4]);
+        IPAddress translated = EmbedSiit(b1, b2, b3, b4);
+
+        Assert.Equal(OutboundNetworkPolicy.PublicOnly.IsAllowed(ipv4), OutboundNetworkPolicy.PublicOnly.IsAllowed(translated));
+    }
+
+    [Property]
+    public void IsAllowed_IsInvariant_UnderIsatapInterfaceIdentifier_UnderAPublicPrefix(byte b1, byte b2, byte b3, byte b4, bool universal) {
+        IPAddress ipv4 = new([b1, b2, b3, b4]);
+        IPAddress isatap = EmbedIsatap(PublicIsatapPrefix, universal, b1, b2, b3, b4);
+
+        Assert.Equal(OutboundNetworkPolicy.PublicOnly.IsAllowed(ipv4), OutboundNetworkPolicy.PublicOnly.IsAllowed(isatap));
+    }
+
+    [Property]
+    public void IsAllowed_RefusesAnIsatapIdentifierCarryingARefusedIPv4_EvenUnderA6to4PrefixCarryingAPublicOne(byte b3, byte b4) {
+        // Two carried addresses: 6to4's public 8.8.8.8 must not hide ISATAP's 169.254.x.y.
+        byte[] prefix = [0x20, 0x02, 8, 8, 8, 8, 0x00, 0x01];
+        IPAddress address = EmbedIsatap(prefix, universal: false, 169, 254, b3, b4);
+
+        Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(address));
+    }
+
+    [Property]
+    public void IsAllowed_RefusesEveryAddressInTheLocalUseTranslationPrefix(ulong low, ushort subnet) {
+        // RFC 8215: 64:ff9b:1::/48 translates to operator-internal IPv4 with an undefined embedding — never public.
+        byte[] bytes = new byte[16];
+        bytes[0] = 0x00; bytes[1] = 0x64; bytes[2] = 0xFF; bytes[3] = 0x9B; bytes[4] = 0x00; bytes[5] = 0x01;
+        bytes[6] = (byte)(subnet >> 8); bytes[7] = (byte)subnet;
+        for(int i = 0; i < 8; i++) {
+            bytes[8 + i] = (byte)(low >> (56 - 8 * i));
+        }
+
+        Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(new IPAddress(bytes)));
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // General invariants
     // ─────────────────────────────────────────────────────────────────────────
@@ -208,6 +248,36 @@ public sealed class SsrfPolicyPropertyTests {
         bytes[13] = (byte)~b2;
         bytes[14] = (byte)~b3;
         bytes[15] = (byte)~b4;
+        return new IPAddress(bytes);
+    }
+
+    /// <summary>A documentation-free, globally routable prefix (Cloudflare's 2606:4700::/32) for ISATAP identifiers.</summary>
+    private static readonly byte[] PublicIsatapPrefix = [0x26, 0x06, 0x47, 0x00, 0x00, 0x00, 0x00, 0x01];
+
+    private static IPAddress EmbedSiit(byte b1, byte b2, byte b3, byte b4) {
+        // RFC 2765 §2.1: "An address of the form 0::ffff:0:a.b.c.d".
+        byte[] bytes = new byte[16];
+        bytes[8] = 0xFF;
+        bytes[9] = 0xFF;
+        bytes[12] = b1;
+        bytes[13] = b2;
+        bytes[14] = b3;
+        bytes[15] = b4;
+        return new IPAddress(bytes);
+    }
+
+    private static IPAddress EmbedIsatap(byte[] prefix, bool universal, byte b1, byte b2, byte b3, byte b4) {
+        // RFC 5214 §6.1: interface identifier 000000ug 00000000 01011110 11111110 followed by the IPv4 address.
+        byte[] bytes = new byte[16];
+        Array.Copy(prefix, bytes, 8);
+        bytes[8] = universal ? (byte)0x02 : (byte)0x00;
+        bytes[9] = 0x00;
+        bytes[10] = 0x5E;
+        bytes[11] = 0xFE;
+        bytes[12] = b1;
+        bytes[13] = b2;
+        bytes[14] = b3;
+        bytes[15] = b4;
         return new IPAddress(bytes);
     }
 }

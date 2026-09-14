@@ -63,15 +63,24 @@ Presets: `PublicOnly` (the default) and `Unrestricted` (for development).
 
 ### IPv4 hidden inside IPv6
 
-A check that looks only at the literal address can be bypassed:
+A check that looks only at the literal address can be bypassed. Every address below reaches the cloud metadata endpoint `169.254.169.254`, and each one is recognised:
 
-- `::ffff:169.254.169.254` (IPv4-mapped)
-- `2002:a9fe:a9fe::` (6to4)
-- `64:ff9b::a9fe:a9fe` (NAT64)
-- Teredo addresses
+| Form | Example | RFC |
+| --- | --- | --- |
+| IPv4-mapped | `::ffff:169.254.169.254` | 4291 |
+| 6to4 | `2002:a9fe:a9fe::` | 3056 |
+| NAT64, well-known prefix | `64:ff9b::a9fe:a9fe` | 6052 |
+| IPv4-translated (SIIT) | `::ffff:0:a9fe:a9fe` | 2765 |
+| Teredo | `2001:0:…:5601:5601` (inverted client address) | 4380 |
+| ISATAP interface identifier, under any prefix | `2606:4700::5efe:a9fe:a9fe` | 5214 |
 
-All of these reach the metadata endpoint. The classifier recognises the IPv4 address inside and classifies the address by it.
+The classifier extracts the IPv4 address and classifies the whole address by it. When one address carries two IPv4 addresses (for example a 6to4 prefix with an ISATAP identifier), the more restrictive one decides.
 
+The **local-use translation prefix `64:ff9b:1::/48`** (RFC 8215) is `Reserved` as a whole. It translates to addresses inside the operator's network with an embedding the RFC leaves undefined, so its IPv4 address can't be extracted. IANA lists the prefix as not globally reachable.
+
+**Allowed networks and embedded addresses:** an `AllowedNetworks` entry also covers a *translated* address (NAT64 or SIIT) whose IPv4 address is inside it, because the translator delivers to that IPv4 host. A *tunnelled* address (6to4, Teredo, ISATAP) carries a tunnel endpoint, not the host it reaches, so it is not covered. Blocked networks are checked against every embedded address.
+
+**Limitation:** a NAT64 translator with a *network-specific* prefix taken from an operator's own global address space (RFC 6052) looks like any public address. If your network has one, add its prefix to `BlockedNetworks`.
 ## Why checking at connection time matters
 
 If a URL's host is resolved, checked, and then connected to separately, DNS can return a different address the second time (**DNS rebinding**). Here the handler resolves the host itself and connects to the address it checked, so there is no second lookup.
