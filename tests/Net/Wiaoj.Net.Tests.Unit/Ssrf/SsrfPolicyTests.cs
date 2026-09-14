@@ -1,15 +1,14 @@
-﻿// WebhookIpFilter is obsolete and forwards to Wiaoj.Net's OutboundNetworkPolicy; these tests stay as the guard that
-// nothing it refused before is allowed now.
-#pragma warning disable CS0618
+// Moved from Wiaoj.Webhooks.Tests.Unit (WebhookIpFilter*, RealWorldSsrfPayloadsTests) when the filter moved to Wiaoj.Net.
+// Every case is unchanged; only the subject changed: WebhookIpFilter.IsAllowed(ip) -> OutboundNetworkPolicy.PublicOnly.IsAllowed(ip),
+// IsAllowed(ip, allowPrivateNetworks: true) -> OutboundNetworkPolicy.Unrestricted.IsAllowed(ip).
 using System.Net;
-using Wiaoj.Webhooks.Security;
 
-namespace Wiaoj.Webhooks.Tests.Unit.Security;
+namespace Wiaoj.Net.Tests.Unit.Ssrf;
 
 [Trait("Category", "Unit")]
 [Trait("Feature", "Security")]
 [Trait("Component", "IpFilter")]
-public sealed class WebhookIpFilterTests {
+public sealed class SsrfPolicyTests {
 
     public sealed class PublicValidIpAddresses {
         [Theory]
@@ -22,7 +21,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.True(result);
@@ -46,7 +45,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -68,7 +67,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result, $"Attack vector '{ipString}' should have been blocked!");
@@ -81,7 +80,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("2002:0808:0808::");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.True(result);
@@ -100,7 +99,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -115,8 +114,8 @@ public sealed class WebhookIpFilterTests {
             IPAddress metadata = IPAddress.Parse("169.254.169.254");
 
             // Act
-            bool localhostResult = WebhookIpFilter.IsAllowed(localhost, allowPrivateNetworks: true);
-            bool metadataResult = WebhookIpFilter.IsAllowed(metadata, allowPrivateNetworks: true);
+            bool localhostResult = OutboundNetworkPolicy.Unrestricted.IsAllowed(localhost);
+            bool metadataResult = OutboundNetworkPolicy.Unrestricted.IsAllowed(metadata);
 
             // Assert
             Assert.True(localhostResult);
@@ -130,7 +129,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress sixToFour = IPAddress.Parse("2002:7f00:0001::");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(sixToFour, allowPrivateNetworks: true);
+            bool result = OutboundNetworkPolicy.Unrestricted.IsAllowed(sixToFour);
 
             // Assert
             Assert.True(result);
@@ -143,7 +142,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress publicIp = IPAddress.Parse("8.8.8.8");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(publicIp, allowPrivateNetworks: true);
+            bool result = OutboundNetworkPolicy.Unrestricted.IsAllowed(publicIp);
 
             // Assert
             Assert.True(result);
@@ -161,7 +160,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -178,7 +177,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -192,7 +191,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.True(result);
@@ -212,7 +211,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.True(result);
@@ -227,7 +226,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -247,7 +246,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -266,7 +265,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -281,7 +280,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("64:ff9b::8.8.8.8");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.True(result);
@@ -297,7 +296,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.True(result);
@@ -313,7 +312,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse(ipString);
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -327,7 +326,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("2001:0:4136:e378:8000:63bf:f7f7:f7f7");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.True(result);
@@ -342,7 +341,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("2003::1");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.True(result);
@@ -355,7 +354,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("2002::");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -370,7 +369,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("64:ff9b::100.64.0.1");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -383,7 +382,7 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("2002:c000:0201::");
 
             // Act
-            bool result = WebhookIpFilter.IsAllowed(ip);
+            bool result = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(result);
@@ -395,8 +394,8 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("169.254.169.254");
 
             // Act
-            bool firstCall = WebhookIpFilter.IsAllowed(ip);
-            bool secondCall = WebhookIpFilter.IsAllowed(ip);
+            bool firstCall = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
+            bool secondCall = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
             // Assert
             Assert.False(firstCall);
@@ -412,8 +411,8 @@ public sealed class WebhookIpFilterTests {
             IPAddress ip = IPAddress.Parse("10.0.0.1");
 
             // Act
-            bool blockedByDefault = WebhookIpFilter.IsAllowed(ip, allowPrivateNetworks: false);
-            bool allowedWithBypass = WebhookIpFilter.IsAllowed(ip, allowPrivateNetworks: true);
+            bool blockedByDefault = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
+            bool allowedWithBypass = OutboundNetworkPolicy.Unrestricted.IsAllowed(ip);
 
             // Assert
             Assert.False(blockedByDefault);

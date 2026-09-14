@@ -1,24 +1,23 @@
-﻿// WebhookIpFilter is obsolete and forwards to Wiaoj.Net's OutboundNetworkPolicy; these tests stay as the guard that
-// nothing it refused before is allowed now.
-#pragma warning disable CS0618
+// Moved from Wiaoj.Webhooks.Tests.Unit (WebhookIpFilter*, RealWorldSsrfPayloadsTests) when the filter moved to Wiaoj.Net.
+// Every case is unchanged; only the subject changed: WebhookIpFilter.IsAllowed(ip) -> OutboundNetworkPolicy.PublicOnly.IsAllowed(ip),
+// IsAllowed(ip, allowPrivateNetworks: true) -> OutboundNetworkPolicy.Unrestricted.IsAllowed(ip).
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
 using System.Net;
-using Wiaoj.Webhooks.Security;
 
-namespace Wiaoj.Webhooks.Tests.Unit.Security;
+namespace Wiaoj.Net.Tests.Unit.Ssrf;
 
 /// <summary>
-/// Property-based tests for <see cref="WebhookIpFilter"/>, using FsCheck instead of hand-picked
+/// Property-based tests for <see cref="OutboundNetworkPolicy"/> (formerly WebhookIpFilter), using FsCheck instead of hand-picked
 /// example values. These complement — they do NOT replace — the example-based tests in
-/// <c>WebhookIpFilterTests</c>.
+/// <c>SsrfPolicyTests</c>.
 ///
 /// Two testing strategies are used here, each with a different (and limited) guarantee:
 ///
 /// 1. Metamorphic / round-trip properties: an IPv4 address is independently re-encoded into a
 ///    tunneling format (6to4, NAT64, Teredo, IPv4-mapped IPv6) using logic written directly from
-///    the RFCs — not copied from WebhookIpFilter's own extraction code — and we assert that
+///    the RFCs — not copied from IPAddressClassifier's own extraction code — and we assert that
 ///    encoding-then-filtering agrees with filtering the original address. This catches
 ///    implementation bugs (off-by-one byte slicing, wrong bit position, wrong prefix check).
 ///
@@ -35,7 +34,7 @@ namespace Wiaoj.Webhooks.Tests.Unit.Security;
 [Trait("Category", "Property")]
 [Trait("Feature", "Security")]
 [Trait("Component", "IpFilter")]
-public sealed class WebhookIpFilterPropertyTests {
+public sealed class SsrfPolicyPropertyTests {
 
     // ─────────────────────────────────────────────────────────────────────────
     // Independent reference oracle (raw arithmetic, not IPNetwork/CIDR objects)
@@ -68,7 +67,7 @@ public sealed class WebhookIpFilterPropertyTests {
     public Property IsAllowed_AgreesWithIndependentReservedRangeOracle_ForAnyIPv4(byte b1, byte b2, byte b3, byte b4) {
         IPAddress ip = new([b1, b2, b3, b4]);
         bool expected = !IsKnownReservedIPv4(b1, b2, b3, b4);
-        bool actual = WebhookIpFilter.IsAllowed(ip);
+        bool actual = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
 
         return (actual == expected)
             .Label($"{ip} -> IsAllowed returned {actual}, oracle expected {expected}");
@@ -82,25 +81,25 @@ public sealed class WebhookIpFilterPropertyTests {
     [Property]
     public void IsAllowed_ReturnsFalse_ForAnyAddress_In_10_0_0_0_8(byte b2, byte b3, byte b4) {
         IPAddress ip = new([10, b2, b3, b4]);
-        Assert.False(WebhookIpFilter.IsAllowed(ip));
+        Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(ip));
     }
 
     [Property]
     public void IsAllowed_ReturnsFalse_ForAnyAddress_In_127_0_0_0_8(byte b2, byte b3, byte b4) {
         IPAddress ip = new([127, b2, b3, b4]);
-        Assert.False(WebhookIpFilter.IsAllowed(ip));
+        Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(ip));
     }
 
     [Property]
     public void IsAllowed_ReturnsFalse_ForAnyAddress_In_169_254_0_0_16(byte b3, byte b4) {
         IPAddress ip = new([169, 254, b3, b4]);
-        Assert.False(WebhookIpFilter.IsAllowed(ip));
+        Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(ip));
     }
 
     [Property]
     public void IsAllowed_ReturnsFalse_ForAnyAddress_In_192_168_0_0_16(byte b3, byte b4) {
         IPAddress ip = new([192, 168, b3, b4]);
-        Assert.False(WebhookIpFilter.IsAllowed(ip));
+        Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(ip));
     }
 
     [Property]
@@ -108,13 +107,13 @@ public sealed class WebhookIpFilterPropertyTests {
         // 172.16.0.0/12 covers second-octet values 16-31 (top 4 bits fixed to 0001).
         byte b2 = (byte)(16 + (secondOctetSeed % 16));
         IPAddress ip = new([172, b2, b3, b4]);
-        Assert.False(WebhookIpFilter.IsAllowed(ip));
+        Assert.False(OutboundNetworkPolicy.PublicOnly.IsAllowed(ip));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Metamorphic properties: re-encoding an IPv4 address into a tunneling format
     // must never change the verdict. Embedding helpers are written from the RFCs
-    // directly, independently of WebhookIpFilter's own extraction code.
+    // directly, independently of IPAddressClassifier's own extraction code.
     // ─────────────────────────────────────────────────────────────────────────
 
     [Property]
@@ -122,7 +121,7 @@ public sealed class WebhookIpFilterPropertyTests {
         IPAddress ipv4 = new([b1, b2, b3, b4]);
         IPAddress mapped = ipv4.MapToIPv6();
 
-        Assert.Equal(WebhookIpFilter.IsAllowed(ipv4), WebhookIpFilter.IsAllowed(mapped));
+        Assert.Equal(OutboundNetworkPolicy.PublicOnly.IsAllowed(ipv4), OutboundNetworkPolicy.PublicOnly.IsAllowed(mapped));
     }
 
     [Property]
@@ -130,7 +129,7 @@ public sealed class WebhookIpFilterPropertyTests {
         IPAddress ipv4 = new([b1, b2, b3, b4]);
         IPAddress tunneled = Embed6to4(b1, b2, b3, b4);
 
-        Assert.Equal(WebhookIpFilter.IsAllowed(ipv4), WebhookIpFilter.IsAllowed(tunneled));
+        Assert.Equal(OutboundNetworkPolicy.PublicOnly.IsAllowed(ipv4), OutboundNetworkPolicy.PublicOnly.IsAllowed(tunneled));
     }
 
     [Property]
@@ -138,7 +137,7 @@ public sealed class WebhookIpFilterPropertyTests {
         IPAddress ipv4 = new([b1, b2, b3, b4]);
         IPAddress tunneled = EmbedNat64(b1, b2, b3, b4);
 
-        Assert.Equal(WebhookIpFilter.IsAllowed(ipv4), WebhookIpFilter.IsAllowed(tunneled));
+        Assert.Equal(OutboundNetworkPolicy.PublicOnly.IsAllowed(ipv4), OutboundNetworkPolicy.PublicOnly.IsAllowed(tunneled));
     }
 
     [Property]
@@ -146,7 +145,7 @@ public sealed class WebhookIpFilterPropertyTests {
         IPAddress ipv4 = new([b1, b2, b3, b4]);
         IPAddress tunneled = EmbedTeredo(b1, b2, b3, b4);
 
-        Assert.Equal(WebhookIpFilter.IsAllowed(ipv4), WebhookIpFilter.IsAllowed(tunneled));
+        Assert.Equal(OutboundNetworkPolicy.PublicOnly.IsAllowed(ipv4), OutboundNetworkPolicy.PublicOnly.IsAllowed(tunneled));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -156,20 +155,20 @@ public sealed class WebhookIpFilterPropertyTests {
     [Property]
     public void IsAllowed_AlwaysReturnsTrue_WhenBypassIsEnabled_ForAnyIPv4(byte b1, byte b2, byte b3, byte b4) {
         IPAddress ip = new([b1, b2, b3, b4]);
-        Assert.True(WebhookIpFilter.IsAllowed(ip, allowPrivateNetworks: true));
+        Assert.True(OutboundNetworkPolicy.Unrestricted.IsAllowed(ip));
     }
 
     [Property]
     public void IsAllowed_IsDeterministic_ForAnyIPv4(byte b1, byte b2, byte b3, byte b4) {
         IPAddress ip = new([b1, b2, b3, b4]);
-        bool first = WebhookIpFilter.IsAllowed(ip);
-        bool second = WebhookIpFilter.IsAllowed(ip);
+        bool first = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
+        bool second = OutboundNetworkPolicy.PublicOnly.IsAllowed(ip);
         Assert.Equal(first, second);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Tunnel embedding helpers — written from RFC text (4380, 6052, "6to4"/RFC 3056),
-    // deliberately not copied from WebhookIpFilter.ExtractEmbeddedIPv4 / TryExtractEmbeddedIPv4.
+    // deliberately not copied from IPAddressClassifier.TryGetTunneledIPv4.
     // ─────────────────────────────────────────────────────────────────────────
 
     private static IPAddress Embed6to4(byte b1, byte b2, byte b3, byte b4) {
@@ -204,7 +203,7 @@ public sealed class WebhookIpFilterPropertyTests {
         bytes[2] = 0x00;
         bytes[3] = 0x00;
         // bytes[4..12) hold the Teredo server IPv4 + flags + obfuscated port — irrelevant to
-        // WebhookIpFilter's client-address extraction, left at zero.
+        // IPAddressClassifier's client-address extraction, left at zero.
         bytes[12] = (byte)~b1;
         bytes[13] = (byte)~b2;
         bytes[14] = (byte)~b3;
