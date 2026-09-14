@@ -1,4 +1,5 @@
 using System.Text;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.WellKnown.Discovery;
 
@@ -23,7 +24,7 @@ public static class ResourceMetadataChallenge {
     /// The challenges advertise more than one different URL (<see cref="OAuthDiscoveryFailure.AmbiguousChallenge"/>).
     /// </exception>
     public static string? Find(HttpResponseMessage response) {
-        ArgumentNullException.ThrowIfNull(response);
+        Preca.ThrowIfNull(response);
 
         return response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? values)
             ? Find(values)
@@ -37,7 +38,7 @@ public static class ResourceMetadataChallenge {
     /// <returns>The advertised URL as written, or null.</returns>
     /// <exception cref="OAuthDiscoveryException">More than one different URL is advertised.</exception>
     public static string? Find(IEnumerable<string> headerValues) {
-        ArgumentNullException.ThrowIfNull(headerValues);
+        Preca.ThrowIfNull(headerValues);
 
         string? found = null;
         foreach(string header in headerValues) {

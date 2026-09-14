@@ -1,3 +1,5 @@
+using Wiaoj.Preconditions;
+
 namespace Wiaoj.WellKnown.Discovery;
 
 /// <summary>
@@ -42,10 +44,10 @@ public sealed class OAuthDiscoveryOptions {
     public int MaxDocumentBytes { get; set; } = 1024 * 1024;
 
     internal void Validate() {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(this.MaxCachedDocuments, nameof(this.MaxCachedDocuments));
-        ArgumentOutOfRangeException.ThrowIfLessThan(this.MaxCacheDuration, TimeSpan.Zero, nameof(this.MaxCacheDuration));
-        ArgumentOutOfRangeException.ThrowIfLessThan(this.ChallengeRefreshInterval, TimeSpan.Zero, nameof(this.ChallengeRefreshInterval));
-        ArgumentOutOfRangeException.ThrowIfNegative(this.MaxRedirects, nameof(this.MaxRedirects));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(this.MaxDocumentBytes, nameof(this.MaxDocumentBytes));
+        Preca.ThrowIfNegativeOrZero(this.MaxCachedDocuments, nameof(this.MaxCachedDocuments));
+        Preca.ThrowIfNegative(this.MaxCacheDuration, nameof(this.MaxCacheDuration));
+        Preca.ThrowIfNegative(this.ChallengeRefreshInterval, nameof(this.ChallengeRefreshInterval));
+        Preca.ThrowIfNegative(this.MaxRedirects, nameof(this.MaxRedirects));
+        Preca.ThrowIfNegativeOrZero(this.MaxDocumentBytes, nameof(this.MaxDocumentBytes));
     }
 }

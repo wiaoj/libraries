@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.WellKnown.Discovery;
 
@@ -44,8 +45,8 @@ public sealed class OAuthDiscoveryClient {
     }
 
     internal OAuthDiscoveryClient(HttpClient httpClient, DiscoveryDocumentCache cache) {
-        ArgumentNullException.ThrowIfNull(httpClient);
-        ArgumentNullException.ThrowIfNull(cache);
+        Preca.ThrowIfNull(httpClient);
+        Preca.ThrowIfNull(cache);
 
         cache.Options.Validate();
         this._http = httpClient;
@@ -61,7 +62,7 @@ public sealed class OAuthDiscoveryClient {
     /// <returns>The document, whose <c>resource</c> is identical to <paramref name="resource"/>.</returns>
     /// <exception cref="OAuthDiscoveryException">The document could not be fetched, or must not be used.</exception>
     public async Task<ProtectedResourceMetadataDocument> GetProtectedResourceMetadataAsync(string resource, CancellationToken cancellationToken = default) {
-        ArgumentNullException.ThrowIfNull(resource);
+        Preca.ThrowIfNull(resource);
 
         Uri url = DeriveUrl(resource, ProtectedResourcePath, trimTerminatingSlash: false, "resource identifier");
         ProtectedResourceMetadataDocument document = await this.GetAsync(url, ProtectedResourceMetadataDocument.Parse, refreshIfOlderThan: null, cancellationToken).ConfigureAwait(false);
@@ -87,7 +88,7 @@ public sealed class OAuthDiscoveryClient {
     /// <c>…/v1</c>; a client that knows the API's identifier uses <see cref="DiscoverAsync(string, CancellationToken)"/>.
     /// </remarks>
     public async Task<ProtectedResourceMetadataDocument?> GetProtectedResourceMetadataAsync(HttpResponseMessage challengedResponse, CancellationToken cancellationToken = default) {
-        ArgumentNullException.ThrowIfNull(challengedResponse);
+        Preca.ThrowIfNull(challengedResponse);
 
         Uri requestUrl = challengedResponse.RequestMessage?.RequestUri is { IsAbsoluteUri: true } requested
             ? requested
@@ -121,7 +122,7 @@ public sealed class OAuthDiscoveryClient {
     /// <returns>The document, whose <c>issuer</c> is identical to <paramref name="issuer"/>.</returns>
     /// <exception cref="OAuthDiscoveryException">The document could not be fetched, or must not be used.</exception>
     public async Task<AuthorizationServerMetadataDocument> GetAuthorizationServerMetadataAsync(string issuer, CancellationToken cancellationToken = default) {
-        ArgumentNullException.ThrowIfNull(issuer);
+        Preca.ThrowIfNull(issuer);
 
         Uri url = DeriveUrl(issuer, AuthorizationServerPath, trimTerminatingSlash: true, "issuer identifier");
         AuthorizationServerMetadataDocument document = await this.GetAsync(url, AuthorizationServerMetadataDocument.Parse, refreshIfOlderThan: null, cancellationToken).ConfigureAwait(false);

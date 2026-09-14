@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Wiaoj.Preconditions;
 using static Wiaoj.WellKnown.OAuthProtectedResourceMetadata;
 
 namespace Wiaoj.WellKnown;
@@ -160,7 +161,7 @@ public sealed record OAuthAuthorizationServerMetadata {
     /// <returns>The metadata document.</returns>
     /// <exception cref="InvalidOperationException"><see cref="OAuthAuthorizationServerOptions.Issuer"/> or <see cref="OAuthAuthorizationServerOptions.ResponseTypesSupported"/> is not set.</exception>
     public static OAuthAuthorizationServerMetadata FromOptions(OAuthAuthorizationServerOptions options) {
-        ArgumentNullException.ThrowIfNull(options);
+        Preca.ThrowIfNull(options);
 
         return new OAuthAuthorizationServerMetadata {
             Issuer = options.Issuer ?? throw new InvalidOperationException("The authorization server has no Issuer."),
