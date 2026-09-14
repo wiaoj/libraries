@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\WellKnown\Wiaoj.WellKnown\Wiaoj.WellKnown.csproj" />
+    <ProjectReference Include="..\..\..\src\WellKnown\Wiaoj.WellKnown.Discovery\Wiaoj.WellKnown.Discovery.csproj" />
     <ProjectReference Include="..\..\..\src\WellKnown\Wiaoj.WellKnown.JwtBearer\Wiaoj.WellKnown.JwtBearer.csproj" />
   </ItemGroup>
 

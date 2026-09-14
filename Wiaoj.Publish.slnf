@@ -50,6 +50,7 @@
       "src\\RateLimiting\\Wiaoj.RateLimiting.AspNetCore\\Wiaoj.RateLimiting.AspNetCore.csproj",
       "src\\Resilience\\Wiaoj.Resilience\\Wiaoj.Resilience.csproj",
       "src\\WellKnown\\Wiaoj.WellKnown\\Wiaoj.WellKnown.csproj",
+      "src\\WellKnown\\Wiaoj.WellKnown.Discovery\\Wiaoj.WellKnown.Discovery.csproj",
       "src\\WellKnown\\Wiaoj.WellKnown.JwtBearer\\Wiaoj.WellKnown.JwtBearer.csproj"
     ]
   }
