@@ -11,5 +11,6 @@ namespace Wiaoj.WellKnown;
 /// </remarks>
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(OAuthProtectedResourceMetadata))]
+[JsonSerializable(typeof(OAuthAuthorizationServerMetadata))]
 [JsonSerializable(typeof(System.Text.Json.Nodes.JsonObject))]
 internal sealed partial class WellKnownJsonContext : JsonSerializerContext;

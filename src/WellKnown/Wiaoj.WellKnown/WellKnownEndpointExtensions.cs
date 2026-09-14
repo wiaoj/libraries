@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using System.Globalization;
 using Wiaoj.Preconditions;
 using Wiaoj.WellKnown;
 
@@ -11,7 +10,7 @@ namespace Microsoft.AspNetCore.Routing;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
-/// Serves RFC 9728 protected resource metadata documents.
+/// Serves RFC 9728 protected resource and RFC 8414 authorization server metadata documents.
 /// </summary>
 public static class WellKnownEndpointExtensions {
 
@@ -63,26 +62,76 @@ public static class WellKnownEndpointExtensions {
         return app;
     }
 
+    /// <summary>
+    /// Serves the RFC 8414 metadata document of every registered authorization server, each at the path derived from its
+    /// issuer.
+    /// </summary>
+    /// <param name="app">The endpoint route builder.</param>
+    /// <returns>The endpoint route builder for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No authorization server was registered, or two issuers derive the same document path.
+    /// </exception>
+    /// <exception cref="OptionsValidationException">A server's options are invalid.</exception>
+    /// <remarks>
+    /// <para>
+    /// As with <see cref="MapOAuthProtectedResource"/>, the options are resolved while the endpoints are built, so an
+    /// invalid document fails at startup; the document is read from the options on every request.
+    /// </para>
+    /// <para>
+    /// <c>https://auth.example.com/tenant1</c> and <c>https://auth.example.com/tenant1/</c> are different issuers that
+    /// derive the same path (RFC 8414 §3.1 removes the terminating slash), so registering both fails here.
+    /// </para>
+    /// </remarks>
+    public static IEndpointRouteBuilder MapOAuthAuthorizationServer(this IEndpointRouteBuilder app) {
+        Preca.ThrowIfNull(app);
+
+        AuthorizationServerRegistry registry = app.ServiceProvider.GetService<AuthorizationServerRegistry>() is { Names.Count: > 0 } found
+            ? found
+            : throw new InvalidOperationException(
+                "No authorization server is registered. Call services.AddOAuthAuthorizationServer(...) before mapping its metadata.");
+
+        IOptionsMonitor<OAuthAuthorizationServerOptions> monitor = app.ServiceProvider.GetRequiredService<IOptionsMonitor<OAuthAuthorizationServerOptions>>();
+        Dictionary<string, string> namesByPath = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach(string name in registry.Names) {
+            string path = AuthorizationServerMetadataUri.PathFor(monitor.Get(name).Issuer!);
+
+            if(namesByPath.TryGetValue(path, out string? other)) {
+                throw new InvalidOperationException(
+                    $"The authorization servers '{other}' and '{name}' both publish their metadata at '{path}'. Each issuer must " +
+                    "derive a distinct path, since a client finds a document by its issuer.");
+            }
+
+            namesByPath[path] = name;
+
+            // A RequestDelegate rather than a lambda with bound parameters, so the endpoint works under Native AOT.
+            app.MapGet(path, context => {
+                    OAuthAuthorizationServerOptions server = context.RequestServices
+                        .GetRequiredService<IOptionsMonitor<OAuthAuthorizationServerOptions>>()
+                        .Get(name);
+
+                    return WellKnownDocument.WriteAsync(context, OAuthAuthorizationServerMetadata.FromOptions(server).ToUtf8Json(), server.CacheDuration);
+                })
+                .WithMetadata(new ProducesResponseTypeMetadata(StatusCodes.Status200OK, typeof(OAuthAuthorizationServerMetadata), ["application/json"]))
+                .AllowAnonymous()
+                .WithTags("Well-Known")
+                .WithName(name.Length == 0 ? "OAuthAuthorizationServerMetadata" : $"OAuthAuthorizationServerMetadata:{name}")
+                .WithSummary("RFC 8414 OAuth 2.0 Authorization Server Metadata");
+        }
+
+        return app;
+    }
+
     private static void MapDocument(IEndpointRouteBuilder app, string name, string path) {
         // A RequestDelegate rather than a lambda with bound parameters: the delegate overload needs no reflection or
         // runtime code generation, so the endpoint works under Native AOT, and the document is written through the
         // source-generated context for the same reason.
-        app.MapGet(path, async context => {
+        app.MapGet(path, context => {
                 OAuthProtectedResourceOptions resource = context.RequestServices
                     .GetRequiredService<IOptionsMonitor<OAuthProtectedResourceOptions>>()
                     .Get(name);
 
-                context.Response.StatusCode = StatusCodes.Status200OK;
-                context.Response.ContentType = "application/json";
-                context.Response.Headers.CacheControl = resource.CacheDuration > TimeSpan.Zero
-                    ? $"public, max-age={((long)resource.CacheDuration.TotalSeconds).ToString(CultureInfo.InvariantCulture)}"
-                    : "no-cache";
-
-                // Buffered: the document is a few hundred bytes, and the length can then be sent.
-                byte[] body = OAuthProtectedResourceMetadata.FromOptions(resource).ToUtf8Json();
-
-                context.Response.ContentLength = body.Length;
-                await context.Response.Body.WriteAsync(body, context.RequestAborted).ConfigureAwait(false);
+                return WellKnownDocument.WriteAsync(context, OAuthProtectedResourceMetadata.FromOptions(resource).ToUtf8Json(), resource.CacheDuration);
             })
             .WithMetadata(new ProducesResponseTypeMetadata(StatusCodes.Status200OK, typeof(OAuthProtectedResourceMetadata), ["application/json"]))
             .AllowAnonymous()

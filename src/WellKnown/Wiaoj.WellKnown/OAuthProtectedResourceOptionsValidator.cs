@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using static Wiaoj.WellKnown.WellKnownValidation;
 
 namespace Wiaoj.WellKnown;
 
@@ -23,31 +24,24 @@ internal sealed class OAuthProtectedResourceOptionsValidator(ProtectedResourceRe
         List<string> failures = [];
         string label = resourceName.Length == 0 ? "The protected resource" : $"The protected resource '{resourceName}'";
 
-        ValidateResource(options.Resource, label, failures);
+        RequireIdentifier(
+            options.Resource,
+            label,
+            "Resource",
+            "RFC 9728 requires it, and a client refuses the document unless it is identical to the identifier the client asked " +
+            "about, so it must be configured as the public URL — it is never taken from the request.",
+            failures);
 
         foreach(string server in options.AuthorizationServers) {
             RequireUrl(server, $"{label} authorization server", requireHttps: true, failures);
         }
 
-        if(!string.IsNullOrWhiteSpace(options.JwksUri)) {
-            RequireUrl(options.JwksUri, $"{label} jwks_uri", requireHttps: true, failures);
-        }
+        OptionalUrl(options.JwksUri, $"{label} jwks_uri", requireHttps: true, failures);
+        OptionalUrl(options.ResourceDocumentation, $"{label} resource_documentation", requireHttps: false, failures);
+        OptionalUrl(options.ResourcePolicyUri, $"{label} resource_policy_uri", requireHttps: false, failures);
+        OptionalUrl(options.ResourceTosUri, $"{label} resource_tos_uri", requireHttps: false, failures);
 
-        foreach((string? value, string field) in new[] {
-            (options.ResourceDocumentation, "resource_documentation"),
-            (options.ResourcePolicyUri, "resource_policy_uri"),
-            (options.ResourceTosUri, "resource_tos_uri")
-        }) {
-            if(!string.IsNullOrWhiteSpace(value)) {
-                RequireUrl(value, $"{label} {field}", requireHttps: false, failures);
-            }
-        }
-
-        foreach(string scope in options.Scopes) {
-            if(!IsScopeToken(scope)) {
-                failures.Add($"{label} scope '{scope}' is not a valid scope token (RFC 6749 §3.3): it must be non-empty, with no spaces, quotes or backslashes.");
-            }
-        }
+        RequireScopeTokens(options.Scopes, label, failures);
 
         foreach(string method in options.BearerMethodsSupported) {
             if(!BearerMethods.Contains(method, StringComparer.Ordinal)) {
@@ -55,89 +49,18 @@ internal sealed class OAuthProtectedResourceOptionsValidator(ProtectedResourceRe
             }
         }
 
-        RejectNone(options.ResourceSigningAlgValuesSupported, $"{label} resource_signing_alg_values_supported", failures);
-        RejectNone(options.DpopSigningAlgValuesSupported, $"{label} dpop_signing_alg_values_supported", failures);
+        RejectNone(options.ResourceSigningAlgValuesSupported, $"{label} resource_signing_alg_values_supported", "RFC 9728", failures);
+        RejectNone(options.DpopSigningAlgValuesSupported, $"{label} dpop_signing_alg_values_supported", "RFC 9728", failures);
 
-        foreach(string parameter in options.AdditionalParameters.Keys) {
-            if(string.IsNullOrWhiteSpace(parameter)) {
-                failures.Add($"{label} has an additional parameter with an empty name.");
-            }
-            else if(OAuthProtectedResourceMetadata.StandardParameterNames.Contains(parameter)) {
-                failures.Add(
-                    $"{label} additional parameter '{parameter}' is defined by RFC 9728; set it through its own option, where it is " +
-                    "validated, instead of publishing it unchecked.");
-            }
-        }
+        RequireAdditionalParameters(
+            options.AdditionalParameters.Keys,
+            OAuthProtectedResourceMetadata.StandardParameterNames,
+            label,
+            "RFC 9728",
+            failures);
 
-        if(options.CacheDuration < TimeSpan.Zero) {
-            failures.Add($"{label} CacheDuration is negative.");
-        }
+        RequireCacheDuration(options.CacheDuration, label, failures);
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
-    }
-
-    /// <summary>
-    /// The identifier every client compares against byte for byte, so it must be exact and must not come from a request.
-    /// </summary>
-    private static void ValidateResource(string? resource, string label, List<string> failures) {
-        if(string.IsNullOrWhiteSpace(resource)) {
-            failures.Add(
-                $"{label} has no Resource. RFC 9728 requires it, and a client refuses the document unless it is identical to the " +
-                "identifier the client asked about, so it must be configured as the public URL — it is never taken from the request.");
-            return;
-        }
-
-        if(!Uri.TryCreate(resource, UriKind.Absolute, out Uri? uri)) {
-            failures.Add($"{label} Resource '{resource}' is not an absolute URL.");
-            return;
-        }
-
-        if(!IsHttpsOrLoopbackHttp(uri)) {
-            failures.Add($"{label} Resource '{resource}' must use https (http is accepted only on a loopback host, for development).");
-        }
-
-        if(resource.Contains('#') || resource.Contains('?')) {
-            failures.Add($"{label} Resource '{resource}' has a query or fragment; a resource identifier has neither.");
-        }
-
-        if(!string.IsNullOrEmpty(uri.UserInfo)) {
-            failures.Add($"{label} Resource '{resource}' contains user information.");
-        }
-    }
-
-    private static void RequireUrl(string value, string label, bool requireHttps, List<string> failures) {
-        if(!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)) {
-            failures.Add($"{label} '{value}' is not an absolute http or https URL.");
-            return;
-        }
-
-        if(requireHttps && !IsHttpsOrLoopbackHttp(uri)) {
-            failures.Add($"{label} '{value}' must use https (http is accepted only on a loopback host, for development).");
-        }
-    }
-
-    private static bool IsHttpsOrLoopbackHttp(Uri uri) {
-        return uri.Scheme == Uri.UriSchemeHttps || (uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback);
-    }
-
-    private static void RejectNone(List<string> algorithms, string label, List<string> failures) {
-        if(algorithms.Contains("none", StringComparer.Ordinal)) {
-            failures.Add($"{label} contains 'none', which RFC 9728 forbids.");
-        }
-    }
-
-    /// <summary>RFC 6749 §3.3: <c>scope-token = 1*( %x21 / %x23-5B / %x5D-7E )</c>.</summary>
-    private static bool IsScopeToken(string scope) {
-        if(scope.Length == 0) {
-            return false;
-        }
-
-        foreach(char c in scope) {
-            if(c is not ('\x21' or (>= '\x23' and <= '\x5B') or (>= '\x5D' and <= '\x7E'))) {
-                return false;
-            }
-        }
-
-        return true;
     }
 }
