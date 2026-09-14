@@ -10,7 +10,8 @@ ASP.NET Core integration for `Wiaoj.Querying`. Provides Minimal API parameter bi
 - **RFC 10008 HTTP `QUERY` & Body Support:** Binds query payloads from request bodies (`application/json`, `text/plain`, `application/x-www-form-urlencoded`) on `QUERY` and `POST` methods, with automatic fallback to URL query strings on `GET`.
 - **DI-Driven Endpoint Validation:** `.WithQueryValidation<TEntity>()` endpoint filter automatically resolves `QuerySchema<TEntity>` from the DI container and validates incoming requests before handler execution.
 - **RFC 7807 Validation Responses:** Automatically returns standard `400 Bad Request` (`ValidationProblemDetails`) when requests violate schema rules, limits, or types.
-- **Protocol Status Codes:** Enforces `415 Unsupported Media Type` (with `Accept-Query` response header), `413 Payload Too Large` (via `IHttpMaxRequestBodySizeFeature`), and `400 Bad Request` (on malformed syntax).
+- **Protocol Status Codes:** Enforces `415 Unsupported Media Type` (with an `Accept` response header), `413 Payload Too Large` (via `IHttpMaxRequestBodySizeFeature`), and `400 Bad Request` (on malformed syntax).
+- **`Accept-Query` (RFC 10008):** Every response of an endpoint that accepts `QUERY` (GET included, for discovery) advertises the media types of the registered payload parsers. Endpoints that do not accept `QUERY` never send it.
 - **Route Group Support:** Applies schema validation across individual endpoints (`RouteHandlerBuilder`) and route groups (`RouteGroupBuilder`).
 - **Native AOT Compatible:** Reflection-free parameter binding and stream parsing.
 - **Zero Boilerplate:** Implicit conversions allow `Query<TEntity>` to be passed directly to `.ApplyQuery(...)`.
@@ -203,7 +204,7 @@ The `.WithQueryValidation<TEntity>()` extension adds an endpoint filter factory 
 | **`400 Bad Request`** | Malformed JSON or bracket syntax | Returns `BadHttpRequestException(400)` before reaching handler. |
 | **`400 Validation Problem`** | Schema rule or limit violation | Returns RFC 7807 `ValidationProblemDetails` dictionary. |
 | **`413 Payload Too Large`** | Body exceeds `IHttpMaxRequestBodySizeFeature` | Aborts body reading to protect server memory. |
-| **`415 Unsupported Media Type`** | Unrecognized body `Content-Type` on `QUERY`/`POST` | Sets `Accept-Query: application/json, text/plain, application/x-www-form-urlencoded`. |
+| **`415 Unsupported Media Type`** | Unrecognized body `Content-Type` on `QUERY`/`POST` | Sets `Accept` to the registered parsers' media types (RFC 10008 Appendix A.3); `Accept-Query` too when the endpoint accepts `QUERY`. |
 
 ---
 
