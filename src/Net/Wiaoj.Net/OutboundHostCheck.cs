@@ -1,0 +1,29 @@
+namespace Wiaoj.Net;
+
+/// <summary>What an <see cref="OutboundNetworkPolicy"/> decided about a host.</summary>
+public enum OutboundHostStatus {
+    /// <summary>The host resolves to at least one address the policy allows.</summary>
+    Allowed,
+
+    /// <summary>Every address the host resolves to is outside the policy.</summary>
+    Refused,
+
+    /// <summary>The host could not be resolved, so nothing could be decided.</summary>
+    Unresolvable
+}
+
+/// <summary>
+/// The outcome of checking a host against an <see cref="OutboundNetworkPolicy"/> before connecting to it.
+/// </summary>
+/// <remarks>
+/// A refused or unresolvable host is an ordinary outcome of checking a URL someone supplied, not a failure of the code
+/// checking it, so it is returned rather than thrown. The resolved addresses are deliberately not included: a caller
+/// that echoes them would reveal what internal names resolve to.
+/// </remarks>
+/// <param name="Host">The host that was checked.</param>
+/// <param name="Status">The decision.</param>
+/// <param name="ResolutionError">The resolver's error when <see cref="Status"/> is <see cref="OutboundHostStatus.Unresolvable"/>.</param>
+public readonly record struct OutboundHostCheck(string Host, OutboundHostStatus Status, Exception? ResolutionError = null) {
+    /// <summary>Gets whether the host may be connected to.</summary>
+    public bool IsAllowed => this.Status == OutboundHostStatus.Allowed;
+}

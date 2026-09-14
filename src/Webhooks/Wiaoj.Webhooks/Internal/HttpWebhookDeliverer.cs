@@ -81,7 +81,7 @@ internal sealed class HttpWebhookDeliverer : IWebhookDeliverer {
             this._logger.LogHttpRequestTimedOut(context.TargetUrl, context.Endpoint.Id);
             return WebhookDeliveryResult.Timeout($"Request to '{context.TargetUrl}' timed out.");
         }
-        catch(Exception ex) when(ex.TryGetSsrfException(out WebhookSsrfBlockedException? ssrfEx)) {
+        catch(Exception ex) when(ex.TryGetSsrfRefusal(out Exception? ssrfEx)) {
             Activity? activity = Activity.Current;
             if(activity is not null) {
                 activity.SetTag("webhook.ssrf_blocked", true);

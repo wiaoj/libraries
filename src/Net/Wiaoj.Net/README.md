@@ -30,6 +30,21 @@ HttpClient client = new(new SocketsHttpHandler().UseOutboundNetworkPolicy(Outbou
 
 A refused connection throws `HttpRequestException`, with an `OutboundNetworkPolicyException` as its inner exception. The message names the host and port but not the addresses it resolved to, so it gives no map of the internal network.
 
+### Checking a URL when it is registered
+
+To validate a URL someone supplied before any request is made, for example when a webhook endpoint is registered, check its host. The check returns a result, not an exception:
+
+```csharp
+OutboundHostCheck check = await OutboundNetworkPolicy.PublicOnly.CheckHostAsync(new Uri(url), ct);
+
+switch(check.Status) {
+    case OutboundHostStatus.Allowed:      /* register it */ break;
+    case OutboundHostStatus.Refused:      /* "this address is not allowed" */ break;
+    case OutboundHostStatus.Unresolvable: /* "this host does not exist" — check.ResolutionError */ break;
+}
+```
+
+This is an early answer, not the protection. DNS can answer differently by the time a request is sent, so the connection-time enforcement below is still what stops the request.
 ## The three parts
 
 | Type | What it does | Shape |

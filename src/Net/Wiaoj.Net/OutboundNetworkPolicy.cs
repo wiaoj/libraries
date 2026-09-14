@@ -87,4 +87,55 @@ public sealed record OutboundNetworkPolicy {
 
         return this._allowedScopes.Contains(IPAddressClassifier.Classify(address));
     }
+
+    /// <summary>
+    /// Resolves <paramref name="host"/> and returns whether it may be connected to — for validating a URL when it is
+    /// registered, before any request is made.
+    /// </summary>
+    /// <param name="host">A host name or IP literal (with or without IPv6 brackets).</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>
+    /// <see cref="OutboundHostStatus.Allowed"/> when at least one resolved address is allowed — the same rule the
+    /// connection-time check applies, which connects only through an allowed address.
+    /// </returns>
+    /// <remarks>
+    /// This is an early answer, not the protection: DNS can answer differently by the time a request is sent. Enforce
+    /// the policy at connection time as well, with <see cref="OutboundNetworkPolicyHandlerExtensions.UseOutboundNetworkPolicy"/>.
+    /// </remarks>
+    public async ValueTask<OutboundHostCheck> CheckHostAsync(string host, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNullOrWhiteSpace(host);
+
+        IPAddress[] addresses;
+        if(IPAddress.TryParse(host, out IPAddress? literal)) {
+            addresses = [literal];
+        }
+        else {
+            try {
+                addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+            }
+            catch(Exception exception) when(exception is System.Net.Sockets.SocketException or ArgumentException) {
+                return new OutboundHostCheck(host, OutboundHostStatus.Unresolvable, exception);
+            }
+        }
+
+        if(addresses.Length == 0) {
+            return new OutboundHostCheck(host, OutboundHostStatus.Unresolvable);
+        }
+
+        return new OutboundHostCheck(host, addresses.Any(this.IsAllowed) ? OutboundHostStatus.Allowed : OutboundHostStatus.Refused);
+    }
+
+    /// <summary>
+    /// Checks the host of <paramref name="url"/>; see <see cref="CheckHostAsync(string, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="url">An absolute URL.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>The decision about the URL's host.</returns>
+    public ValueTask<OutboundHostCheck> CheckHostAsync(Uri url, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNull(url);
+        Preca.ThrowIfFalse(url.IsAbsoluteUri, static () => new ArgumentException("The URL must be absolute.", nameof(url)));
+
+        // IdnHost is the punycode form DNS resolves; an IPv6 literal keeps its brackets, which IPAddress.TryParse accepts.
+        return this.CheckHostAsync(url.IdnHost, cancellationToken);
+    }
 }

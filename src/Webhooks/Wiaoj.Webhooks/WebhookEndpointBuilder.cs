@@ -1,5 +1,6 @@
-﻿using System.Net;
+using System.Runtime.ExceptionServices;
 using Wiaoj.Abstractions;
+using Wiaoj.Net;
 using Wiaoj.Security;
 using Wiaoj.Webhooks.Security;
 
@@ -20,6 +21,7 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
     private Dictionary<string, string>? _customHeaders;
     private bool _validateSsrf = true;
     private bool _allowPrivateNetworks;
+    private OutboundNetworkPolicy _networkPolicy = OutboundNetworkPolicy.PublicOnly;
 
     /// <summary>
     /// Sets the unique endpoint identifier.
@@ -136,7 +138,10 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
     /// Configures whether asynchronous DNS-level SSRF validation is performed during construction. Default is <see langword="true"/>.
     /// </summary>
     /// <param name="validate">When <see langword="true"/>, validates destination IPs against prohibited private and cloud metadata ranges.</param>
-    /// <param name="allowPrivateNetworks">When <see langword="true"/>, permits private and loopback destinations (development mode only).</param>
+    /// <param name="allowPrivateNetworks">
+    /// When <see langword="true"/>, permits every destination (development mode only), overriding
+    /// <see cref="WithNetworkPolicy"/>.
+    /// </param>
     /// <returns>This builder instance for fluent chaining.</returns>
     public WebhookEndpointBuilder WithSsrfValidation(bool validate = true, bool allowPrivateNetworks = false) {
         this._validateSsrf = validate;
@@ -145,27 +150,76 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
     }
 
     /// <summary>
-    /// Asynchronously validates network safety and materializes the <see cref="WebhookEndpoint"/> instance.
+    /// Sets the policy the target URL is validated against. <see cref="OutboundNetworkPolicy.PublicOnly"/> by default.
+    /// </summary>
+    /// <param name="policy">The policy — normally the same one as <see cref="WebhookSecurityOptions.NetworkPolicy"/>, so an
+    /// endpoint accepted here is also one deliveries may reach.</param>
+    /// <returns>This builder instance for fluent chaining.</returns>
+    public WebhookEndpointBuilder WithNetworkPolicy(OutboundNetworkPolicy policy) {
+        Preca.ThrowIfNull(policy);
+        this._networkPolicy = policy;
+        return this;
+    }
+
+    /// <summary>
+    /// Validates network safety and materializes the <see cref="WebhookEndpoint"/> instance.
     /// </summary>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A fully configured and validated <see cref="WebhookEndpoint"/> instance.</returns>
     /// <exception cref="InvalidOperationException">Thrown when required properties (ID, URL, or Secret) are missing.</exception>
-    /// <exception cref="WebhookSsrfBlockedException">Thrown when target URL resolves to prohibited IP addresses.</exception> 
+    /// <exception cref="WebhookSsrfBlockedException">Thrown when target URL resolves to prohibited IP addresses.</exception>
+    /// <exception cref="System.Net.Sockets.SocketException">Thrown when the target host cannot be resolved.</exception>
+    /// <remarks>
+    /// To handle a refused or unresolvable URL — typically one a user supplied — without catching exceptions, use
+    /// <see cref="TryBuildAsync"/>.
+    /// </remarks>
     public async Task<WebhookEndpoint> BuildAsync(CancellationToken cancellationToken = default) {
+        WebhookEndpointBuildResult result = await this.TryBuildAsync(cancellationToken).ConfigureAwait(false);
+
+        if(result.IsSuccess) {
+            return result.Endpoint;
+        }
+
+        if(result.ResolutionError is not null) {
+            // As before the result existed: the resolver's own exception, with its original stack trace.
+            ExceptionDispatchInfo.Capture(result.ResolutionError).Throw();
+        }
+
+        throw new WebhookSsrfBlockedException(result.Error);
+    }
+
+    /// <summary>
+    /// Validates network safety and materializes the <see cref="WebhookEndpoint"/>, returning a refused or unresolvable
+    /// target URL as a result instead of throwing.
+    /// </summary>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>The endpoint, or why the target URL cannot be used.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when required properties (ID, URL, or Secret) are missing — a programming error, not a property of the URL.
+    /// </exception>
+    /// <remarks>
+    /// The check resolves the host now; deliveries apply the policy again when they connect, since DNS can change.
+    /// </remarks>
+    public async Task<WebhookEndpointBuildResult> TryBuildAsync(CancellationToken cancellationToken = default) {
         Preca.ThrowIfNullOrWhiteSpace(this._id.Value, static () => new InvalidOperationException("Endpoint ID must be configured."));
         Preca.ThrowIfNull(this._targetUrl, static () => new InvalidOperationException("Target URL must be configured."));
         Preca.ThrowIfDefault(this._secret, static () => new InvalidOperationException("Signing secret must be configured."));
 
         if(this._validateSsrf) {
-            IPAddress[] addresses = await Dns.GetHostAddressesAsync(this._targetUrl.Host, cancellationToken).ConfigureAwait(false);
+            OutboundNetworkPolicy policy = this._allowPrivateNetworks ? OutboundNetworkPolicy.Unrestricted : this._networkPolicy;
+            OutboundHostCheck check = await policy.CheckHostAsync(this._targetUrl, cancellationToken).ConfigureAwait(false);
 
-            bool isSafe = addresses.Any(ip => WebhookIpFilter.IsAllowed(ip, this._allowPrivateNetworks));
-            if(!isSafe) {
-                throw new WebhookSsrfBlockedException(
-                    $"All resolved IP addresses for target host '{this._targetUrl.Host}' are in prohibited private or link-local ranges.");
+            switch(check.Status) {
+                case OutboundHostStatus.Refused:
+                    return WebhookEndpointBuildResult.Refused(
+                        $"All resolved IP addresses for target host '{this._targetUrl.Host}' are in prohibited private or link-local ranges.");
+                case OutboundHostStatus.Unresolvable:
+                    return WebhookEndpointBuildResult.Unresolvable(
+                        $"The target host '{this._targetUrl.Host}' could not be resolved.", check.ResolutionError);
             }
         }
 
-        return new WebhookEndpoint(this._id, this._targetUrl, this._secret, this._customSigner, this._customHeaders);
+        return WebhookEndpointBuildResult.Built(
+            new WebhookEndpoint(this._id, this._targetUrl, this._secret, this._customSigner, this._customHeaders));
     }
 }

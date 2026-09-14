@@ -1,4 +1,5 @@
-﻿using System.Net;
+using System.Net;
+using Wiaoj.Net;
 
 namespace Wiaoj.Webhooks.Security;
 
@@ -30,7 +31,26 @@ public sealed class WebhookSecurityOptions {
     /// Gets or sets a value indicating whether deliveries to local, private, loopback, or link-local networks are permitted.
     /// Default is <see langword="false"/> (strict SSRF protection enabled).
     /// </summary>
+    /// <remarks>
+    /// <see langword="true"/> allows every destination (<see cref="OutboundNetworkPolicy.Unrestricted"/>) and overrides
+    /// <see cref="NetworkPolicy"/>. For a specific internal network, keep this <see langword="false"/> and add the network
+    /// to <see cref="NetworkPolicy"/> instead.
+    /// </remarks>
     public bool AllowPrivateNetworks { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets which destination addresses deliveries may connect to. <see cref="OutboundNetworkPolicy.PublicOnly"/>
+    /// by default.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// options.NetworkPolicy = OutboundNetworkPolicy.PublicOnly with { AllowedNetworks = [IPNetwork.Parse("10.20.0.0/16")] };
+    /// </code>
+    /// </example>
+    public OutboundNetworkPolicy NetworkPolicy { get; set; } = OutboundNetworkPolicy.PublicOnly;
+
+    /// <summary>Gets the policy deliveries are held to: <see cref="NetworkPolicy"/>, unless <see cref="AllowPrivateNetworks"/> lifts it.</summary>
+    internal OutboundNetworkPolicy EffectiveNetworkPolicy => this.AllowPrivateNetworks ? OutboundNetworkPolicy.Unrestricted : this.NetworkPolicy;
 
     /// <summary>
     /// Gets or sets an optional outbound egress forward proxy (e.g. Squid, Envoy, DMZ proxy).
@@ -58,7 +78,7 @@ public sealed class WebhookSecurityOptions {
     /// was opened) may be reused before it is torn down and re-established on the next request. Default is 15 minutes.
     /// </summary>
     /// <remarks>
-    /// Lowering this value increases how often <see cref="WebhookIpFilter"/> re-validates the destination
+    /// Lowering this value increases how often <see cref="NetworkPolicy"/> is re-applied to the destination
     /// (tighter defense against DNS rebinding, at the cost of more frequent DNS lookups and TCP handshakes).
     /// Raising it reduces per-delivery connection overhead but widens the window during which a destination's
     /// DNS record could change without being re-checked.
@@ -72,6 +92,9 @@ public sealed class WebhookSecurityOptions {
     /// duration is required, or otherwise outside the range <see cref="SocketsHttpHandler"/> and the underlying
     /// socket layer can safely accept.</exception>
     public void Validate() {
+        if(this.NetworkPolicy is null) {
+            throw new ArgumentNullException(nameof(this.NetworkPolicy), "The network policy cannot be null; use OutboundNetworkPolicy.Unrestricted to allow every destination.");
+        }
         if(this.ConnectTimeout <= TimeSpan.Zero) {
             throw new ArgumentOutOfRangeException(nameof(this.ConnectTimeout), this.ConnectTimeout, "Connect timeout must be greater than zero.");
         }

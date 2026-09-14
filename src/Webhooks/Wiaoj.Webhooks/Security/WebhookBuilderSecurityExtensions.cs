@@ -1,5 +1,6 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
+using Wiaoj.Net;
 using Wiaoj.Webhooks.Security;
 
 #pragma warning disable IDE0130
@@ -35,6 +36,21 @@ public static partial class WebhookBuilderSecurityExtensions {
     }
 
     /// <summary>
+    /// Sets which destination addresses deliveries may connect to — for example public addresses plus an internal network.
+    /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <param name="policy">The policy; <see cref="OutboundNetworkPolicy.PublicOnly"/> is the default.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    /// <example>
+    /// <code>
+    /// builder.UseNetworkPolicy(OutboundNetworkPolicy.PublicOnly with { AllowedNetworks = [IPNetwork.Parse("10.20.0.0/16")] });
+    /// </code>
+    /// </example>
+    public static IWebhookBuilder UseNetworkPolicy(this IWebhookBuilder builder, OutboundNetworkPolicy policy) {
+        Preca.ThrowIfNull(policy);
+        return builder.ConfigureSecurity(options => options.NetworkPolicy = policy);
+    }
+    /// <summary>
     /// Configures an outbound forward proxy using a proxy URL string.
     /// </summary>
     /// <param name="builder">The webhook builder being configured.</param>
@@ -45,7 +61,7 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <remarks>
     /// <para>
     /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
-    /// (DNS resolution + <see cref="WebhookIpFilter"/> validation against the resolved IP before opening the socket).
+    /// (DNS resolution + <see cref="WebhookSecurityOptions.NetworkPolicy"/> validation against the resolved IP before opening the socket).
     /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
     /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
     /// private, loopback, and cloud-metadata ranges before relying on it in production.
@@ -67,7 +83,7 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <remarks>
     /// <para>
     /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
-    /// (DNS resolution + <see cref="WebhookIpFilter"/> validation against the resolved IP before opening the socket).
+    /// (DNS resolution + <see cref="WebhookSecurityOptions.NetworkPolicy"/> validation against the resolved IP before opening the socket).
     /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
     /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
     /// private, loopback, and cloud-metadata ranges before relying on it in production.
@@ -89,7 +105,7 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <remarks>
     /// <para>
     /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
-    /// (DNS resolution + <see cref="WebhookIpFilter"/> validation against the resolved IP before opening the socket).
+    /// (DNS resolution + <see cref="WebhookSecurityOptions.NetworkPolicy"/> validation against the resolved IP before opening the socket).
     /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
     /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
     /// private, loopback, and cloud-metadata ranges before relying on it in production.

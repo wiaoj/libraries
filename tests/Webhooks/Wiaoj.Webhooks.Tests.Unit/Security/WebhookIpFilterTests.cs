@@ -1,4 +1,7 @@
-﻿using System.Net;
+﻿// WebhookIpFilter is obsolete and forwards to Wiaoj.Net's OutboundNetworkPolicy; these tests stay as the guard that
+// nothing it refused before is allowed now.
+#pragma warning disable CS0618
+using System.Net;
 using Wiaoj.Webhooks.Security;
 
 namespace Wiaoj.Webhooks.Tests.Unit.Security;
