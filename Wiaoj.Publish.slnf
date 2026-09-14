@@ -35,6 +35,7 @@
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.Proxy\\Wiaoj.Serialization.Proxy.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.SystemTextJson\\Wiaoj.Serialization.SystemTextJson.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.YamlDotNet\\Wiaoj.Serialization.YamlDotNet.csproj",
+      "src\\Net\\Wiaoj.Net\\Wiaoj.Net.csproj",
       "src\\Pagination\\Wiaoj.Pagination\\Wiaoj.Pagination.csproj",
       "src\\Pagination\\Wiaoj.Pagination.AspNetCore\\Wiaoj.Pagination.AspNetCore.csproj",
       "src\\Pagination\\Wiaoj.Pagination.EntityFrameworkCore\\Wiaoj.Pagination.EntityFrameworkCore.csproj",
