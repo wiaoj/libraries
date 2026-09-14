@@ -74,7 +74,7 @@ public static partial class Preca {
     /// </remarks>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfNullOrEmpty([NotNull, DisallowNull] Guid? argument, [CallerArgumentExpression(nameof(argument))] string? paramName = null) {
+    public static void ThrowIfNullOrEmpty([NotNull] Guid? argument, [CallerArgumentExpression(nameof(argument))] string? paramName = null) {
         if (argument.HasValue is false) {
             Thrower.ThrowPrecaArgumentNullException(paramName);
         }
@@ -98,7 +98,7 @@ public static partial class Preca {
     /// </remarks>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfNullOrEmpty<TException>([NotNull, DisallowNull] Guid? argument, [NotNull] Func<TException> exceptionFactory)
+    public static void ThrowIfNullOrEmpty<TException>([NotNull] Guid? argument, [NotNull] Func<TException> exceptionFactory)
         where TException : notnull, Exception {
         ThrowIfNull(exceptionFactory);
 
@@ -119,7 +119,7 @@ public static partial class Preca {
     /// </remarks>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfNullOrEmpty<TException>([NotNull, DisallowNull] Guid? argument, [CallerArgumentExpression(nameof(argument))] string? paramName = null)
+    public static void ThrowIfNullOrEmpty<TException>([NotNull] Guid? argument, [CallerArgumentExpression(nameof(argument))] string? paramName = null)
         where TException : Exception, new() {
         if (argument.HasValue is false || argument.Value == Guid.Empty) {
             Thrower.ThrowException<TException>();

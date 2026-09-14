@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using Wiaoj.BloomFilter;
 using Wiaoj.BloomFilter.Engine;
-using Wiaoj.BloomFilter.Internal;
 using Wiaoj.Primitives;
 
 namespace Wiaoj.Benchmarks.BloomFilter;

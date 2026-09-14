@@ -33,7 +33,7 @@ public static partial class TimeSpanExtensions {
         /// <param name="timeSpans">An array of <see cref="TimeSpan"/> values to compare.</param>
         /// <returns>The smallest <see cref="TimeSpan"/> in the array.</returns>
         /// <exception cref="ArgumentException">Thrown if <paramref name="timeSpans"/> is null or empty.</exception>
-        public static TimeSpan Min(params Span<TimeSpan> timeSpans) {
+        public static TimeSpan Min(params ReadOnlySpan<TimeSpan> timeSpans) {
             Preca.ThrowIfEmpty(timeSpans, static () => new ArgumentException("At least one TimeSpan must be provided."));
 
             TimeSpan min = timeSpans[0];

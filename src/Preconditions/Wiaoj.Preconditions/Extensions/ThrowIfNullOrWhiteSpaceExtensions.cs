@@ -4,6 +4,7 @@ namespace Wiaoj.Preconditions.Extensions;
 /// Provides fluent extension methods for string whitespace validation.
 /// </summary>
 [DebuggerNonUserCode, DebuggerStepThrough]
+[Obsolete]
 public static class ThrowIfNullOrWhiteSpaceExtensions {
     /// <summary>
     /// Validates that the specified string is not null, empty, or consists only of whitespace characters.
@@ -19,6 +20,7 @@ public static class ThrowIfNullOrWhiteSpaceExtensions {
     /// </remarks>
     [DebuggerStepThrough, DebuggerHidden, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Obsolete]
     public static string ThrowIfNullOrWhiteSpace(this PrecaExtensions _,
                                                  [NotNull] string? argument,
                                                  [CallerArgumentExpression(nameof(argument))] string? paramName = null) {

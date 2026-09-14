@@ -61,14 +61,14 @@ public static partial class Preca {
     /// <typeparam name="TException">The type of exception to throw.</typeparam>
     /// <param name="argument">The numeric value to validate.</param>
     /// <param name="maximum">The maximum allowed value (inclusive).</param>
-    /// <param name="exceptionFactory">A factory function that takes a state and creates the exception.</param>
     /// <param name="state">The state object to pass to the exception factory.</param>
+    /// <param name="exceptionFactory">A factory function that takes a state and creates the exception.</param>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfGreaterThan<T, TState, TException>(T argument,
                                                                  T maximum,
-                                                                 [NotNull] Func<TState, TException> exceptionFactory,
-                                                                 [NotNull] TState state)
+                                                                 [NotNull] TState state,
+                                                                 [NotNull] Func<TState, TException> exceptionFactory)
         where T : IComparisonOperators<T, T, bool>
         where TException : Exception {
         Preca.ThrowIfNull(argument, nameof(argument));
@@ -76,7 +76,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(exceptionFactory);
         Preca.ThrowIfNull(state);
         if(argument > maximum) {
-            Thrower.ThrowFromFactory(exceptionFactory, state);
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 

@@ -4,6 +4,7 @@ namespace Wiaoj.Preconditions.Extensions;
 /// Provides fluent extension methods for condition and type validations.
 /// </summary>
 [DebuggerNonUserCode, DebuggerStepThrough]
+[Obsolete]
 public static class ThrowIfExtensions {
     /// <summary>
     /// Validates that <paramref name="argument"/> is of type <typeparamref name="TDerived"/>.
@@ -17,6 +18,7 @@ public static class ThrowIfExtensions {
     /// <returns>The argument cast to <typeparamref name="TDerived"/> if validation succeeds.</returns>
     [DebuggerStepThrough, DebuggerHidden, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Obsolete]
     public static TDerived ThrowIfNotType<TBase, TDerived>(this PrecaExtensions _,
                                                            [NotNull] TBase? argument,
                                                            [CallerArgumentExpression(nameof(argument))] string? paramName = null)

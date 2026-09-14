@@ -11,7 +11,7 @@ public static partial class Preca {
     /// This method provides high-performance null checking with aggressive inlining.
     /// The parameter name is automatically captured using CallerArgumentExpressionAttribute.
     /// </remarks>
-    [DebuggerStepThrough, DebuggerHidden, StackTraceHidden]
+    [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNull([NotNull] object? argument, [CallerArgumentExpression(nameof(argument))] string? paramName = null) {
         if (argument is null) {
@@ -70,21 +70,21 @@ public static partial class Preca {
     /// <typeparam name="TState">The type of the state object passed to the exception factory.</typeparam>
     /// <typeparam name="TException">The type of exception to throw. Must inherit from Exception and be non-null.</typeparam>
     /// <param name="argument">The argument to validate. Must not be null.</param>
-    /// <param name="exceptionFactory">A factory function that creates the exception to throw. Cannot be null.</param>
     /// <param name="state">The state object passed to the exception factory. Cannot be null.</param>
+    /// <param name="exceptionFactory">A factory function that creates the exception to throw. Cannot be null.</param>
     /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="exceptionFactory"/> or <paramref name="state"/> is null.</exception>
     /// <exception cref="Exception">Thrown when <paramref name="argument"/> is null, using the exception from <paramref name="exceptionFactory"/>.</exception>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNull<T, TState, TException>([NotNull] T? argument,
-                                                          [NotNull] Func<TState, TException> exceptionFactory,
-                                                          [NotNull] TState state)
+                                                          [NotNull] TState state,
+                                                          [NotNull] Func<TState, TException> exceptionFactory)
        where TException : notnull, Exception {
         Preca.ThrowIfNull(exceptionFactory);
         Preca.ThrowIfNull(state);
 
         if (argument is null) {
-            Thrower.ThrowFromFactory(exceptionFactory, state);
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 

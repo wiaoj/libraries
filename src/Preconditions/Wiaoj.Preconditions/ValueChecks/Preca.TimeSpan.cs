@@ -55,15 +55,15 @@ public static partial class Preca {
     /// <typeparam name="TException">The type of the exception to throw.</typeparam>
     /// <typeparam name="TState">The type of the state object passed to <paramref name="exceptionFactory"/>.</typeparam>
     /// <param name="argument">The TimeSpan value to validate.</param>
-    /// <param name="exceptionFactory">The factory function that creates the exception to throw if the validation fails, given <paramref name="state"/>.</param>
     /// <param name="state">The state object passed to <paramref name="exceptionFactory"/>, avoiding a closure allocation for the common case where the exception message needs contextual data.</param>
+    /// <param name="exceptionFactory">The factory function that creates the exception to throw if the validation fails, given <paramref name="state"/>.</param>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfNegative<TException, TState>(TimeSpan argument, [NotNull] Func<TState, TException> exceptionFactory, TState state)
+    public static void ThrowIfNegative<TException, TState>(TimeSpan argument, TState state, [NotNull] Func<TState, TException> exceptionFactory)
         where TException : notnull, Exception {
         Preca.ThrowIfNull(exceptionFactory);
         if(argument < TimeSpan.Zero) {
-            Thrower.ThrowFromFactory(exceptionFactory, state);
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 
@@ -121,15 +121,15 @@ public static partial class Preca {
     /// <typeparam name="TException">The type of the exception to throw.</typeparam>
     /// <typeparam name="TState">The type of the state object passed to <paramref name="exceptionFactory"/>.</typeparam>
     /// <param name="argument">The TimeSpan value to validate.</param>
-    /// <param name="exceptionFactory">The factory function that creates the exception to throw if the validation fails, given <paramref name="state"/>.</param>
     /// <param name="state">The state object passed to <paramref name="exceptionFactory"/>, avoiding a closure allocation for the common case where the exception message needs contextual data.</param>
+    /// <param name="exceptionFactory">The factory function that creates the exception to throw if the validation fails, given <paramref name="state"/>.</param>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfNegativeOrZero<TException, TState>(TimeSpan argument, [NotNull] Func<TState, TException> exceptionFactory, TState state)
+    public static void ThrowIfNegativeOrZero<TException, TState>(TimeSpan argument, TState state, [NotNull] Func<TState, TException> exceptionFactory)
         where TException : notnull, Exception {
         Preca.ThrowIfNull(exceptionFactory);
         if(argument <= TimeSpan.Zero) {
-            Thrower.ThrowFromFactory(exceptionFactory, state);
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 }

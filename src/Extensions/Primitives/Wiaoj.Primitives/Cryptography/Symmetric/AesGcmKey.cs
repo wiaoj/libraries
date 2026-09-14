@@ -440,10 +440,10 @@ public sealed class AesGcmKey : IDisposable {
         Preca.ThrowIfLessThan(
             packet.Length,
             NonceSizeBytes + TagSizeBytes,
+            packet.Length,
             (length) => new ArgumentException(
                 $"Packet too short. Minimum is {NonceSizeBytes + TagSizeBytes} bytes. Got {length}.",
-                nameof(packet)),
-            packet.Length);
+                nameof(packet)));
 
         int plainLength = packet.Length - NonceSizeBytes - TagSizeBytes;
 

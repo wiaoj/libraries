@@ -68,15 +68,15 @@ public static partial class Preca {
     /// <param name="argument">The numeric value to validate.</param>
     /// <param name="minimum">The exclusive lower bound.</param>
     /// <param name="maximum">The exclusive upper bound.</param>
-    /// <param name="exceptionFactory">A factory function that creates the exception to throw given the state. Cannot be null.</param>
     /// <param name="state">The state object to pass into the exception factory.</param>
+    /// <param name="exceptionFactory">A factory function that creates the exception to throw given the state. Cannot be null.</param>
     /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="exceptionFactory"/> or <paramref name="state"/> is null.</exception>
     /// <exception cref="Exception">Thrown when <paramref name="argument"/> is outside the exclusive range.</exception>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNotBetweenExclusive<T, TState, TException>(T argument, T minimum, T maximum,
-                                                                         [NotNull] Func<TState, TException> exceptionFactory,
-                                                                         [NotNull] TState state)
+                                                                         [NotNull] TState state,
+                                                                         [NotNull] Func<TState, TException> exceptionFactory)
         where T : IComparisonOperators<T, T, bool>
         where TException : notnull, Exception {
         Preca.ThrowIfNull(argument, nameof(argument));
@@ -86,7 +86,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(state);
 
         if(argument <= minimum || argument >= maximum) {
-            Thrower.ThrowFromFactory(exceptionFactory, state);
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 

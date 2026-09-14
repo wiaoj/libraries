@@ -55,9 +55,9 @@ public readonly partial record struct NanoId :
     private static readonly SearchValues<char> ValidChars = SearchValues.Create(Alphabets.UrlSafe);
 
     /// <summary>
-    /// Gets the internal alphabet used for generation (defaults to NoVowels to prevent profanity).
+    /// Gets the internal alphabet used for generation, defaulting to the standard 64-character <see cref="Alphabets.UrlSafe"/> set.
     /// </summary>
-    private static ReadOnlySpan<char> Alphabet => Alphabets.NoVowels;
+    private static ReadOnlySpan<char> Alphabet => Alphabets.UrlSafe;
 
     /// <summary>
     /// The underlying string value of the identifier.
@@ -67,7 +67,7 @@ public readonly partial record struct NanoId :
     /// <summary>
     /// Gets a <see cref="NanoId"/> that represents an empty value.
     /// </summary>
-    public static NanoId Empty { get; } = new(string.Empty);
+    public static NanoId Empty => default;
 
     /// <summary>
     /// Gets the string representation of this <see cref="NanoId"/>.
@@ -88,13 +88,9 @@ public readonly partial record struct NanoId :
         this._value = value;
     }
 
-    // -------------------------------------------------------------------------
-    // GENERATION (High Performance)
-    // -------------------------------------------------------------------------
-
     /// <summary>
-    /// Generates a new cryptographically secure <see cref="NanoId"/> using the default length (21) 
-    /// and the profanity-safe alphabet.
+    /// Generates a new cryptographically secure <see cref="NanoId"/> using the default length (<see cref="DefaultLength"/>) 
+    /// and the standard <see cref="Alphabets.UrlSafe"/> alphabet.
     /// </summary>
     /// <returns>A new, unique <see cref="NanoId"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -104,7 +100,7 @@ public readonly partial record struct NanoId :
 
     /// <summary>
     /// Generates a new cryptographically secure <see cref="NanoId"/> with the specified length 
-    /// using the profanity-safe alphabet.
+    /// using the standard <see cref="Alphabets.UrlSafe"/> alphabet.
     /// </summary>
     /// <param name="length">The desired length of the identifier. Must be between 1 and <see cref="MaxAllowedLength"/>.</param>
     /// <returns>A new <see cref="NanoId"/> with the specified length.</returns>
@@ -124,25 +120,29 @@ public readonly partial record struct NanoId :
     /// Generates a new cryptographically secure <see cref="NanoId"/> using a custom alphabet and length.
     /// </summary>
     /// <remarks>
-    /// NOTE: The custom alphabet must be a subset of the standard URL-safe characters (A-Za-z0-9_-) 
+    /// NOTE: The custom alphabet must be a strict subset of <see cref="Alphabets.UrlSafe"/> 
     /// to maintain strict validation rules.
     /// </remarks>
     /// <param name="customAlphabet">The set of characters to use for generation.</param>
-    /// <param name="length">The desired length of the identifier.</param>
+    /// <param name="length">The desired length of the identifier. Must be between 1 and <see cref="MaxAllowedLength"/>.</param>
     /// <returns>A new <see cref="NanoId"/> generated from the custom alphabet.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="customAlphabet"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when the alphabet is empty or contains invalid (non URL-safe) characters.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when length is invalid.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when length is less than or equal to zero or exceeds <see cref="MaxAllowedLength"/>.</exception>
     public static NanoId NewId(string customAlphabet, int length) {
+        Preca.ThrowIfNull(customAlphabet);
         Preca.ThrowIfNonValidNanoIdLength(length);
-        Preca.ThrowIfZero(customAlphabet.Length, static () => new ArgumentException("Alphabet cannot be empty."));
+        Preca.ThrowIfZero(customAlphabet.Length, static () => new ArgumentException("Alphabet cannot be empty.", nameof(customAlphabet)));
         Preca.ThrowIfGreaterThanOrEqualTo(
-            customAlphabet.IndexOfAnyExcept(ValidChars),
+            customAlphabet.AsSpan().IndexOfAnyExcept(ValidChars),
             0,
-            () => new ArgumentException("Custom alphabet contains invalid characters. Only URL-safe characters (A-Za-z0-9_-) are allowed to maintain strict typing."));
+            nameof(customAlphabet),
+            static (customAlphabet) => new ArgumentException("Custom alphabet contains invalid characters. Only URL-safe characters (A-Za-z0-9_-) are allowed to maintain strict typing.", customAlphabet));
 
         string result = string.Create(length, customAlphabet, (span, alphabet) => {
             RandomNumberGenerator.GetItems(alphabet.AsSpan(), span);
         });
+
         return new NanoId(result);
     }
 
@@ -403,7 +403,7 @@ public readonly partial record struct NanoId :
 
     /// <inheritdoc/>
     public override int GetHashCode() {
-        return this._value?.GetHashCode() ?? 0;
+        return string.GetHashCode(this.Value.AsSpan(), StringComparison.Ordinal);
     }
 
     /// <inheritdoc/>

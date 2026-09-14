@@ -173,8 +173,8 @@ internal static class Thrower {
     [MethodImpl(MethodImplOptions.NoInlining)]
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal static void ThrowFromFactory<TState, TException>(
-        [NotNull] Func<TState, TException> exceptionFactory,
-        [NotNull] TState state) where TException : notnull, Exception {
+        [NotNull] TState state,
+        [NotNull] Func<TState, TException> exceptionFactory) where TException : notnull, Exception {
         TException? exception = exceptionFactory(state);
 
         if(exception is null) {
@@ -192,9 +192,7 @@ internal static class Thrower {
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal static void ThrowGenericTypeMismatchException<TActual, TExpected>(string? message) {
         string errorMessage = message ?? $"Generic type argument must be exactly '{typeof(TExpected).Name}', but was '{typeof(TActual).Name}'.";
-
-        // Eğer kendi özel InvalidOperationException'ın (örn: PrecaInvalidOperationException) varsa
-        // onu da kullanabilirsin. Yoksa standart olanı fırlatıyoruz.
+         
         Thrower.ThrowPrecaInvalidOperationException(errorMessage);
     }
 }

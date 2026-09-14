@@ -1,16 +1,15 @@
 using System.ComponentModel;
 using System.Text.Json;
-using Wiaoj.Primitives;
-using Xunit;
 
 namespace Wiaoj.Primitives.Tests.Unit;
+
 public class NanoIdTests {
     #region Generation Tests
 
     [Fact]
     public void NewId_WithDefaultParameters_ReturnsCorrectLength() {
         // Act
-        var id = NanoId.NewId();
+        NanoId id = NanoId.NewId();
 
         // Assert
         Assert.Equal(21, id.Value.Length);
@@ -24,21 +23,30 @@ public class NanoIdTests {
     [InlineData(128)]
     public void NewId_WithCustomLength_ReturnsRequestedLength(int length) {
         // Act
-        var id = NanoId.NewId(length);
+        NanoId id = NanoId.NewId(length);
 
         // Assert
         Assert.Equal(length, id.Value.Length);
     }
 
     [Fact]
-    public void NewId_DefaultAlphabet_ContainsNoVowels() {
-        // Act - Çok sayıda ID üretip sesli harf kontrolü yapalım (Profanity-safe check)
-        var vowels = new[] { 'a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U' };
+    public void NewId_DefaultAlphabet_ContainsOnlyUrlSafeCharacters() {
+        // Arrange
+        const int sampleCount = 100;
+        const int expectedLength = 21;
+        string allowedChars = NanoId.Alphabets.UrlSafe;
 
-        for(int i = 0; i < 100; i++) {
-            var id = NanoId.NewId();
-            Assert.DoesNotContain(id.Value, c => vowels.Contains(c));
+        // Act
+        NanoId[] generatedIds = new NanoId[sampleCount];
+        for(int i = 0; i < sampleCount; i++) {
+            generatedIds[i] = NanoId.NewId();
         }
+
+        // Assert
+        Assert.All(generatedIds, id => {
+            Assert.Equal(expectedLength, id.Value.Length);
+            Assert.All(id.Value, c => Assert.Contains(c, allowedChars));
+        });
     }
 
     [Fact]
@@ -48,7 +56,7 @@ public class NanoIdTests {
         const int length = 15;
 
         // Act
-        var id = NanoId.NewId(alphabet, length);
+        NanoId id = NanoId.NewId(alphabet, length);
 
         // Assert
         Assert.Equal(length, id.Value.Length);
@@ -79,7 +87,7 @@ public class NanoIdTests {
     [InlineData("_____________________")]
     public void Parse_ValidString_ReturnsCorrectNanoId(string input) {
         // Act
-        var id = NanoId.Parse(input);
+        NanoId id = NanoId.Parse(input);
 
         // Assert
         Assert.Equal(input, id.Value);
@@ -123,13 +131,13 @@ public class NanoIdTests {
 
     [Fact]
     public void ToString_ReturnsUnderlyingValue() {
-        var id = NanoId.NewId();
+        NanoId id = NanoId.NewId();
         Assert.Equal(id.Value, id.ToString());
     }
 
     [Fact]
     public void TryFormat_BufferTooSmall_ReturnsFalse() {
-        var id = NanoId.NewId(21);
+        NanoId id = NanoId.NewId(21);
         Span<char> buffer = stackalloc char[20]; // 21 lazım
 
         bool success = id.TryFormat(buffer, out int written);
@@ -140,7 +148,7 @@ public class NanoIdTests {
 
     [Fact]
     public void TryFormat_ValidBuffer_WritesValue() {
-        var id = NanoId.NewId(10);
+        NanoId id = NanoId.NewId(10);
         Span<char> buffer = stackalloc char[10];
 
         bool success = id.TryFormat(buffer, out int written);
@@ -156,8 +164,8 @@ public class NanoIdTests {
 
     [Fact]
     public void Equals_SameValue_ReturnsTrue() {
-        var id1 = NanoId.Parse("abc-123");
-        var id2 = NanoId.Parse("abc-123");
+        NanoId id1 = NanoId.Parse("abc-123");
+        NanoId id2 = NanoId.Parse("abc-123");
 
         Assert.Equal(id1, id2);
         Assert.True(id1 == id2);
@@ -166,8 +174,8 @@ public class NanoIdTests {
 
     [Fact]
     public void Equals_DifferentValue_ReturnsFalse() {
-        var id1 = NanoId.NewId();
-        var id2 = NanoId.NewId();
+        NanoId id1 = NanoId.NewId();
+        NanoId id2 = NanoId.NewId();
 
         Assert.NotEqual(id1, id2);
         Assert.True(id1 != id2);
@@ -176,8 +184,8 @@ public class NanoIdTests {
 
     [Fact]
     public void CompareTo_WorksCorrectly() {
-        var idA = NanoId.Parse("aaaaa");
-        var idB = NanoId.Parse("bbbbb");
+        NanoId idA = NanoId.Parse("aaaaa");
+        NanoId idB = NanoId.Parse("bbbbb");
 
         Assert.True(idA.CompareTo(idB) < 0);
         Assert.True(idB.CompareTo(idA) > 0);
@@ -189,7 +197,7 @@ public class NanoIdTests {
 
     [Fact]
     public void JsonSerializer_SerializesAsString() {
-        var id = NanoId.NewId();
+        NanoId id = NanoId.NewId();
         var json = JsonSerializer.Serialize(id);
 
         Assert.Equal($"\"{id.Value}\"", json);
@@ -210,7 +218,7 @@ public class NanoIdTests {
         var converter = TypeDescriptor.GetConverter(typeof(NanoId));
         const string input = "converted-id-456";
 
-        var result = (NanoId)converter.ConvertFrom(input)!;
+        NanoId result = (NanoId)converter.ConvertFrom(input)!;
 
         Assert.Equal(input, result.Value);
     }
@@ -221,7 +229,7 @@ public class NanoIdTests {
 
     [Fact]
     public void ImplicitOperator_ToString_Works() {
-        var id = NanoId.Parse("my-id");
+        NanoId id = NanoId.Parse("my-id");
         string s = id;
 
         Assert.Equal("my-id", s);
@@ -230,7 +238,7 @@ public class NanoIdTests {
     [Fact]
     public void ExplicitOperator_FromString_Works() {
         const string s = "explicit-id";
-        var id = (NanoId)s;
+        NanoId id = (NanoId)s;
 
         Assert.Equal(s, id.Value);
     }

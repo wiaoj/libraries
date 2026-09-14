@@ -194,6 +194,9 @@ public ref struct ValueList<T> : IDisposable {
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Clear() {
+        if(RuntimeHelpers.IsReferenceOrContainsReferences<T>()) {
+            this._span[..this._pos].Clear();
+        }
         this._pos = 0;
     }
 
@@ -241,6 +244,8 @@ public ref struct ValueList<T> : IDisposable {
         else if(RuntimeHelpers.IsReferenceOrContainsReferences<T>()) {
             this._span[..this._pos].Clear();
         }
+
+        this._pos = 0;
     }
 
     /// <summary>
