@@ -49,7 +49,7 @@ public static class WebhookServiceCollectionExtensions {
              else {
                  // Direct connections: each host is resolved and connected to only through an address the policy
                  // allows (Wiaoj.Net), so DNS cannot answer differently between the check and the connection.
-                 handler.UseOutboundNetworkPolicy(options.EffectiveNetworkPolicy);
+                 handler.UseOutboundNetworkPolicy(options.EffectiveNetworkPolicy, sp.GetService<DnsResolver>() ?? DnsResolver.System);
              }
 
              return handler;

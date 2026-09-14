@@ -16,7 +16,7 @@ internal sealed class OutboundNetworkPolicyRegistry {
 /// action registered through the client builder would run in registration order, and a later
 /// <c>ConfigurePrimaryHttpMessageHandler</c> would replace the protected handler.
 /// </remarks>
-internal sealed class OutboundNetworkPolicyFilter(IOptions<OutboundNetworkPolicyRegistry> registry) : IHttpMessageHandlerBuilderFilter {
+internal sealed class OutboundNetworkPolicyFilter(IOptions<OutboundNetworkPolicyRegistry> registry, IServiceProvider services) : IHttpMessageHandlerBuilderFilter {
     public Action<HttpMessageHandlerBuilder> Configure(Action<HttpMessageHandlerBuilder> next) {
         return builder => {
             next(builder);
@@ -32,7 +32,7 @@ internal sealed class OutboundNetworkPolicyFilter(IOptions<OutboundNetworkPolicy
                     "one as the primary handler.");
             }
 
-            sockets.UseOutboundNetworkPolicy(policy);
+            sockets.UseOutboundNetworkPolicy(policy, (DnsResolver?)services.GetService(typeof(DnsResolver)) ?? DnsResolver.System);
         };
     }
 }

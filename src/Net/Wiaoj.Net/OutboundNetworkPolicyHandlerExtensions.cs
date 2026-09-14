@@ -35,8 +35,26 @@ public static class OutboundNetworkPolicyHandlerExtensions {
     /// </para>
     /// </remarks>
     public static SocketsHttpHandler UseOutboundNetworkPolicy(this SocketsHttpHandler handler, OutboundNetworkPolicy policy) {
+        return handler.UseOutboundNetworkPolicy(policy, DnsResolver.System);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="handler"/> resolve each host with <paramref name="resolver"/> and connect only to an address
+    /// <paramref name="policy"/> allows.
+    /// </summary>
+    /// <param name="handler">The handler; not yet used to send a request.</param>
+    /// <param name="policy">The policy to enforce.</param>
+    /// <param name="resolver">Resolves host names; IP literals are decided without it.</param>
+    /// <returns>The handler, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The handler already has a <see cref="SocketsHttpHandler.ConnectCallback"/>, or an explicit
+    /// <see cref="SocketsHttpHandler.Proxy"/>.
+    /// </exception>
+    /// <remarks>See <see cref="UseOutboundNetworkPolicy(SocketsHttpHandler, OutboundNetworkPolicy)"/>.</remarks>
+    public static SocketsHttpHandler UseOutboundNetworkPolicy(this SocketsHttpHandler handler, OutboundNetworkPolicy policy, DnsResolver resolver) {
         Preca.ThrowIfNull(handler);
         Preca.ThrowIfNull(policy);
+        Preca.ThrowIfNull(resolver);
 
         if(handler.ConnectCallback is not null) {
             throw new InvalidOperationException(
@@ -51,14 +69,12 @@ public static class OutboundNetworkPolicyHandlerExtensions {
         }
 
         handler.UseProxy = false;
-        handler.ConnectCallback = (context, cancellationToken) => ConnectAsync(context.DnsEndPoint, policy, cancellationToken);
+        handler.ConnectCallback = (context, cancellationToken) => ConnectAsync(context.DnsEndPoint, policy, resolver, cancellationToken);
         return handler;
     }
 
-    internal static async ValueTask<Stream> ConnectAsync(DnsEndPoint endpoint, OutboundNetworkPolicy policy, CancellationToken cancellationToken) {
-        IPAddress[] addresses = IPAddress.TryParse(endpoint.Host, out IPAddress? literal)
-            ? [literal]
-            : await Dns.GetHostAddressesAsync(endpoint.Host, cancellationToken).ConfigureAwait(false);
+    internal static async ValueTask<Stream> ConnectAsync(DnsEndPoint endpoint, OutboundNetworkPolicy policy, DnsResolver resolver, CancellationToken cancellationToken) {
+        IPAddress[] addresses = await DnsResolver.ResolveOrParseAsync(resolver, endpoint.Host, cancellationToken).ConfigureAwait(false);
 
         Exception? lastError = null;
 
