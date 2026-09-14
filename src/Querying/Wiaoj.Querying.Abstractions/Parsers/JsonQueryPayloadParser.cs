@@ -9,6 +9,9 @@ public sealed class JsonQueryPayloadParser : IQueryPayloadParser {
     private const string JsonMediaType = MediaTypeNames.Application.Json;
 
     /// <inheritdoc/>
+    public IReadOnlyList<string> SupportedMediaTypes { get; } = [JsonMediaType];
+
+    /// <inheritdoc/>
     public bool CanParse(string mediaType) {
         if(string.IsNullOrWhiteSpace(mediaType)) {
             return false;

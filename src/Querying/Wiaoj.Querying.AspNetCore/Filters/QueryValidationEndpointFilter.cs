@@ -12,8 +12,6 @@ namespace Wiaoj.Querying.AspNetCore;
 /// </summary>
 /// <typeparam name="T">The entity type of the query schema.</typeparam>
 internal sealed class QueryValidationEndpointFilter<T> : IEndpointFilter {
-    private const string AcceptQueryHeader = "Accept-Query";
-    private const string SupportedQueryMediaTypes = "text/plain, application/x-www-form-urlencoded";
 
     private readonly QuerySchema<T> _schema;
     private readonly QueryValidationEndpointOptions? _options;
@@ -35,7 +33,6 @@ internal sealed class QueryValidationEndpointFilter<T> : IEndpointFilter {
         Preca.ThrowIfNull(context);
         Preca.ThrowIfNull(next);
 
-        context.HttpContext.Response.Headers[AcceptQueryHeader] = SupportedQueryMediaTypes;
 
         QueryRequest? request = null;
         for(int i = 0; i < context.Arguments.Count; i++) {

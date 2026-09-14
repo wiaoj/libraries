@@ -26,4 +26,11 @@ public interface IQueryPayloadParser {
     /// payload accumulate in memory. Defaults to 64 KB; override to raise or lower it per parser.
     /// </summary>
     int MaxPayloadBytes => 64 * 1024;
+
+    /// <summary>
+    /// Gets the media types this parser accepts, without parameters — advertised in the <c>Accept-Query</c> response
+    /// field (RFC 10008) and in generated API documents. Defaults to none, which keeps existing implementations
+    /// compiling but leaves their media types unadvertised; override it.
+    /// </summary>
+    IReadOnlyList<string> SupportedMediaTypes => [];
 }

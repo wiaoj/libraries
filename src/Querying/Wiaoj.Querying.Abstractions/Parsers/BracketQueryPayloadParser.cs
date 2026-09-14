@@ -11,6 +11,9 @@ public sealed class BracketQueryPayloadParser : IQueryPayloadParser {
     private const string FormUrlEncodedMediaType = MediaTypeNames.Application.FormUrlEncoded;
 
     /// <inheritdoc/>
+    public IReadOnlyList<string> SupportedMediaTypes { get; } = [TextPlainMediaType, FormUrlEncodedMediaType];
+
+    /// <inheritdoc/>
     public bool CanParse(string mediaType) {
         if(string.IsNullOrWhiteSpace(mediaType)) {
             return false;
