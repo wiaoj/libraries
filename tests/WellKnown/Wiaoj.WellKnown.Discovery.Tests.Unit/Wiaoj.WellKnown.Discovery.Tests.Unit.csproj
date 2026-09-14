@@ -6,21 +6,19 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.*" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageReference Include="xunit.v3" Version="4.0.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\WellKnown\Wiaoj.WellKnown\Wiaoj.WellKnown.csproj" />
     <ProjectReference Include="..\..\..\src\WellKnown\Wiaoj.WellKnown.Discovery\Wiaoj.WellKnown.Discovery.csproj" />
-    <ProjectReference Include="..\..\..\src\WellKnown\Wiaoj.WellKnown.JwtBearer\Wiaoj.WellKnown.JwtBearer.csproj" />
   </ItemGroup>
 
   <ItemGroup>

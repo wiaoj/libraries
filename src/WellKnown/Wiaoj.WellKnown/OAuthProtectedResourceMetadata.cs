@@ -106,7 +106,7 @@ public sealed record OAuthProtectedResourceMetadata {
             AuthorizationDetailsTypesSupported = NullIfEmpty(options.AuthorizationDetailsTypesSupported),
             DpopSigningAlgValuesSupported = NullIfEmpty(options.DpopSigningAlgValuesSupported),
             DpopBoundAccessTokensRequired = options.DpopBoundAccessTokensRequired ? true : null,
-            AdditionalParameters = Additional(options.AdditionalParameters)
+            AdditionalParameters = WellKnownDocument.CopyAdditionalParameters(options.AdditionalParameters)
         };
     }
 
@@ -115,40 +115,17 @@ public sealed record OAuthProtectedResourceMetadata {
     /// </summary>
     /// <returns>The JSON bytes.</returns>
     public byte[] ToUtf8Json() {
-        JsonObject document = JsonSerializer.SerializeToNode(this, WellKnownJsonContext.Default.OAuthProtectedResourceMetadata)!.AsObject();
-
-        if(this.AdditionalParameters is { } additional) {
-            foreach(KeyValuePair<string, JsonNode?> parameter in additional) {
-                document[parameter.Key] = parameter.Value?.DeepClone();
-            }
-        }
-
-        return JsonSerializer.SerializeToUtf8Bytes(document, WellKnownJsonContext.Default.JsonObject);
+        return WellKnownDocument.ToUtf8Json(
+            JsonSerializer.SerializeToNode(this, WellKnownJsonContext.Default.OAuthProtectedResourceMetadata)!,
+            this.AdditionalParameters);
     }
 
-    /// <summary>
-    /// Copies the additional parameters into a new object. A JSON node belongs to one parent, so the options' own nodes
-    /// cannot be attached to a document; attaching them to the first request's document would fail every later request.
-    /// </summary>
-    private static JsonObject? Additional(Dictionary<string, JsonNode?> parameters) {
-        if(parameters.Count == 0) {
-            return null;
-        }
-
-        JsonObject copy = [];
-        foreach(KeyValuePair<string, JsonNode?> parameter in parameters) {
-            copy[parameter.Key] = parameter.Value?.DeepClone();
-        }
-
-        return copy;
-    }
-
-    private static IReadOnlyList<string>? NullIfEmpty(IEnumerable<string> values) {
+    internal static IReadOnlyList<string>? NullIfEmpty(IEnumerable<string> values) {
         string[] distinct = [.. values.Distinct(StringComparer.Ordinal)];
         return distinct.Length == 0 ? null : distinct;
     }
 
-    private static string? NullIfBlank(string? value) {
+    internal static string? NullIfBlank(string? value) {
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 }

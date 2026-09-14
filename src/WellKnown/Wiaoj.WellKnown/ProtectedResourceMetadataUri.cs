@@ -26,9 +26,7 @@ public static class ProtectedResourceMetadataUri {
     /// of a different identifier.
     /// </remarks>
     public static string PathFor(string resource) {
-        Uri uri = Parse(resource);
-        string path = uri.AbsolutePath;
-        return path == "/" ? WellKnownPath : WellKnownPath + path;
+        return WellKnownUri.PathFor(Parse(resource), WellKnownPath, trimTerminatingSlash: false);
     }
 
     /// <summary>
@@ -39,22 +37,10 @@ public static class ProtectedResourceMetadataUri {
     /// <exception cref="ArgumentException">The identifier is not an absolute URL, or has a query or fragment.</exception>
     public static Uri For(string resource) {
         Uri uri = Parse(resource);
-        return new Uri(uri.GetLeftPart(UriPartial.Authority) + PathFor(resource), UriKind.Absolute);
+        return WellKnownUri.Absolute(uri, WellKnownUri.PathFor(uri, WellKnownPath, trimTerminatingSlash: false));
     }
 
     private static Uri Parse(string resource) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(resource);
-
-        if(!Uri.TryCreate(resource, UriKind.Absolute, out Uri? uri)) {
-            throw new ArgumentException($"'{resource}' is not an absolute URL.", nameof(resource));
-        }
-
-        if(uri.Query.Length > 0 || uri.Fragment.Length > 0 || resource.Contains('#') || resource.Contains('?')) {
-            throw new ArgumentException(
-                $"'{resource}' has a query or fragment. A resource identifier has no fragment (RFC 9728 §1.2), and a query " +
-                "cannot be routed to a well-known document, so neither is supported.", nameof(resource));
-        }
-
-        return uri;
+        return WellKnownUri.Parse(resource, "A resource identifier (RFC 9728 §1.2)", nameof(resource));
     }
 }

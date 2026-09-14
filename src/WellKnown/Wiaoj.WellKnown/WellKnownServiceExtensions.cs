@@ -8,7 +8,8 @@ namespace Microsoft.Extensions.DependencyInjection;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
-/// Registers OAuth 2.0 protected resources whose RFC 9728 metadata the application publishes.
+/// Registers the OAuth 2.0 protected resources (RFC 9728) and authorization servers (RFC 8414) whose metadata the
+/// application publishes.
 /// </summary>
 public static class WellKnownServiceExtensions {
     /// <summary>
@@ -63,6 +64,68 @@ public static class WellKnownServiceExtensions {
         ProtectedResourceRegistry.For(services).Add(name);
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<OAuthProtectedResourceOptions>, OAuthProtectedResourceOptionsValidator>());
         services.AddOptions<OAuthProtectedResourceOptions>(name).Configure(configure).ValidateOnStart();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the application's authorization server, configured elsewhere — through configuration binding or
+    /// <c>services.Configure&lt;OAuthAuthorizationServerOptions&gt;(...)</c>.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddOAuthAuthorizationServer(this IServiceCollection services) {
+        return services.AddOAuthAuthorizationServer(Microsoft.Extensions.Options.Options.DefaultName, static _ => { });
+    }
+
+    /// <summary>
+    /// Registers the application's authorization server, whose RFC 8414 metadata <c>MapOAuthAuthorizationServer</c> serves.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">
+    /// Describes the server. <see cref="OAuthAuthorizationServerOptions.Issuer"/> and
+    /// <see cref="OAuthAuthorizationServerOptions.ResponseTypesSupported"/> are required, and the endpoints the supported
+    /// grant types use.
+    /// </param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// services.AddOAuthAuthorizationServer(server =&gt; {
+    ///     server.Issuer = "https://auth.example.com";
+    ///     server.TokenEndpoint = "https://auth.example.com/connect/token";
+    ///     server.DeviceAuthorizationEndpoint = "https://auth.example.com/connect/device";
+    ///     server.GrantTypesSupported.AddRange(["client_credentials", "urn:ietf:params:oauth:grant-type:device_code"]);
+    ///     server.ResponseTypesSupported.Add("code");
+    /// });
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddOAuthAuthorizationServer(this IServiceCollection services, Action<OAuthAuthorizationServerOptions> configure) {
+        return services.AddOAuthAuthorizationServer(Microsoft.Extensions.Options.Options.DefaultName, configure);
+    }
+
+    /// <summary>
+    /// Registers one of several authorization servers — issuers — the application serves, under <paramref name="name"/>.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="name">The name the server's options are registered under.</param>
+    /// <param name="configure">Describes the server.</param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <remarks>
+    /// Each issuer gets its own document at the path derived from it, so <c>https://auth.example.com/tenant1</c> and
+    /// <c>https://auth.example.com/tenant2</c> can share a host.
+    /// </remarks>
+    public static IServiceCollection AddOAuthAuthorizationServer(
+        this IServiceCollection services,
+        string name,
+        Action<OAuthAuthorizationServerOptions> configure) {
+
+        Preca.ThrowIfNull(services);
+        Preca.ThrowIfNull(name);
+        Preca.ThrowIfNull(configure);
+
+        AuthorizationServerRegistry.For(services).Add(name);
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<OAuthAuthorizationServerOptions>, OAuthAuthorizationServerOptionsValidator>());
+        services.AddOptions<OAuthAuthorizationServerOptions>(name).Configure(configure).ValidateOnStart();
 
         return services;
     }

@@ -150,6 +150,7 @@
   </Folder>
   <Folder Name="/src/WellKnown/">
     <File Path="src/WellKnown/README.md" />
+    <Project Path="src/WellKnown/Wiaoj.WellKnown.Discovery/Wiaoj.WellKnown.Discovery.csproj" />
     <Project Path="src/WellKnown/Wiaoj.WellKnown.JwtBearer/Wiaoj.WellKnown.JwtBearer.csproj" />
     <Project Path="src/WellKnown/Wiaoj.WellKnown/Wiaoj.WellKnown.csproj" />
   </Folder>
@@ -205,6 +206,7 @@
     <Project Path="tests/Webhooks/Wiaoj.Webhooks.Tests.Unit/Wiaoj.Webhooks.Tests.Unit.csproj" />
   </Folder>
   <Folder Name="/tests/WellKnown/">
+    <Project Path="tests/WellKnown/Wiaoj.WellKnown.Discovery.Tests.Unit/Wiaoj.WellKnown.Discovery.Tests.Unit.csproj" />
     <Project Path="tests/WellKnown/Wiaoj.WellKnown.Tests.Integration/Wiaoj.WellKnown.Tests.Integration.csproj" />
   </Folder>
 </Solution>
