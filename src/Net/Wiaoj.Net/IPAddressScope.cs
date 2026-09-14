@@ -49,7 +49,8 @@ public enum IPAddressScope {
 
     /// <summary>
     /// Reserved or protocol-specific: <c>192.0.0.0/24</c> (RFC 6890), <c>192.88.99.0/24</c> (RFC 7526),
-    /// <c>240.0.0.0/4</c> (RFC 1112), <c>100::/64</c> (RFC 6666), and the deprecated IPv4-compatible <c>::/96</c>.
+    /// <c>240.0.0.0/4</c> (RFC 1112), <c>100::/64</c> (RFC 6666), the deprecated IPv4-compatible <c>::/96</c>, and the
+    /// local-use translation prefix <c>64:ff9b:1::/48</c> (RFC 8215).
     /// </summary>
     Reserved
 }

@@ -69,18 +69,30 @@ public sealed record OutboundNetworkPolicy {
     public bool IsAllowed(IPAddress address) {
         Preca.ThrowIfNull(address);
 
-        // IPNetwork already matches an IPv4-mapped address against an IPv4 network. A 6to4 or NAT64 address is not
-        // mapped, so the IPv4 address it carries is checked against the blocked networks as well.
-        IPAddressClassifier.TryGetIPv4(address, out IPAddress? carried);
+        // IPNetwork already matches an IPv4-mapped address against an IPv4 network. Every other IPv4 address the address
+        // carries — tunnelled or translated — is checked against the blocked networks too.
+        Span<IPAddress?> carried = [null, null];
+        int carriedCount = IPAddressClassifier.GetCarriedIPv4(address, carried);
 
         foreach(IPNetwork blocked in this._blockedNetworks) {
-            if(blocked.Contains(address) || (carried is not null && blocked.Contains(carried))) {
+            if(blocked.Contains(address)) {
                 return false;
+            }
+
+            for(int i = 0; i < carriedCount; i++) {
+                if(blocked.Contains(carried[i]!)) {
+                    return false;
+                }
             }
         }
 
+        // An allowed network is an exception for a destination. A translated address (NAT64, SIIT) reaches the IPv4 host it
+        // carries, so it is allowed with it; a tunnel's carried address (6to4, Teredo, ISATAP) is an endpoint, not the host
+        // reached, so it grants nothing.
+        IPAddressClassifier.TryGetTranslatedIPv4(address, out IPAddress? translated);
+
         foreach(IPNetwork allowed in this._allowedNetworks) {
-            if(allowed.Contains(address)) {
+            if(allowed.Contains(address) || (translated is not null && allowed.Contains(translated))) {
                 return true;
             }
         }

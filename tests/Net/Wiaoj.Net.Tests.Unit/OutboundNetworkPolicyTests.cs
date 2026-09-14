@@ -33,6 +33,30 @@ public sealed class OutboundNetworkPolicyTests {
         Assert.False(Allowed(policy, "169.254.169.254"));
     }
 
+    [Theory]
+    // Added for #133: a translated address reaches the IPv4 host it carries, so the exception applies to it.
+    [InlineData("64:ff9b::a14:501", true)]
+    [InlineData("::ffff:0:a14:501", true)]
+    // A tunnel's carried address is an endpoint, not the host reached, so it grants nothing.
+    [InlineData("2002:a14:501::1", false)]
+    [InlineData("2606:4700::5efe:a14:501", false)]
+    [InlineData("2001:0:4136:e378:8000:63bf:f5eb:fafe", false)]
+    public void Should_Apply_An_Allowed_Network_Only_To_The_Destination_A_Translated_Address_Carries(string address, bool allowed) {
+        OutboundNetworkPolicy policy = OutboundNetworkPolicy.PublicOnly with { AllowedNetworks = [IPNetwork.Parse("10.20.0.0/16")] };
+
+        Assert.Equal(allowed, Allowed(policy, address));
+    }
+
+    [Theory]
+    [InlineData("::ffff:0:a9fe:a9fe")]
+    [InlineData("2606:4700::5efe:a9fe:a9fe")]
+    [InlineData("2002:808:808:1:0:5efe:a9fe:a9fe")]
+    public void Should_Refuse_A_Blocked_IPv4_Carried_By_The_Remaining_Forms(string address) {
+        OutboundNetworkPolicy policy = OutboundNetworkPolicy.Unrestricted with { BlockedNetworks = [IPNetwork.Parse("169.254.169.254/32")] };
+
+        Assert.False(Allowed(policy, address));
+    }
+
     [Fact]
     public void Should_Match_A_Network_Written_As_IPv4_Mapped_IPv6() {
         OutboundNetworkPolicy policy = OutboundNetworkPolicy.PublicOnly with { AllowedNetworks = [IPNetwork.Parse("::ffff:10.20.0.0/112")] };
