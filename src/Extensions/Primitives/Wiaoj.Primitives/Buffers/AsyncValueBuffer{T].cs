@@ -177,29 +177,30 @@ public sealed class AsyncValueBuffer<T> : IAsyncDisposable, IDisposable where T 
     /// then clears and returns the rented array to the pool (if any).
     /// Safe to call multiple times, and safe to call concurrently; only the winner runs cleanup.
     /// </summary>
-    public async ValueTask DisposeAsync() {
-        if(!this._disposeState.TryBeginDispose()) return;
+    public ValueTask DisposeAsync() {
+        if(!this._disposeState.TryBeginDispose()) return ValueTask.CompletedTask;
 
-        try {
-            Memory<T> memory = this._memory;
-            this._memory = default;
+        Memory<T> memory = this._memory;
+        this._memory = default;
 
-            T[]? toReturn = this._rented;
-            this._rented = null;
+        T[]? toReturn = this._rented;
+        this._rented = null;
 
-            if(this._onDisposeAsync is not null) {
-                await this._onDisposeAsync(memory).ConfigureAwait(false);
+        if(this._onDisposeAsync is null) {
+            try {
+                this._onDispose?.Invoke(memory);
             }
-            this._onDispose?.Invoke(memory);
-
-            if(toReturn is not null) {
-                toReturn.AsSpan().Clear();
-                ArrayPool<T>.Shared.Return(toReturn);
+            finally {
+                if(toReturn is not null) {
+                    toReturn.AsSpan().Clear();
+                    ArrayPool<T>.Shared.Return(toReturn);
+                }
+                this._disposeState.SetDisposed();
             }
+            return ValueTask.CompletedTask;
         }
-        finally {
-            this._disposeState.SetDisposed();
-        }
+
+        return DisposeAsyncCore(memory, toReturn);
     }
 
     /// <summary>
@@ -210,6 +211,28 @@ public sealed class AsyncValueBuffer<T> : IAsyncDisposable, IDisposable where T 
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose() {
+        // Eğer async callback yoksa doğrudan DisposeAsync'in senkron fast-path'ini çağırır (Deadlock riski 0!)
+        if(this._onDisposeAsync is null) {
+            _ = DisposeAsync();
+            return;
+        }
+
+        // Sadece async callback verilip ısrarla senkron Dispose çağrıldıysa bloklar
         DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
+
+    private async ValueTask DisposeAsyncCore(Memory<T> memory, T[]? toReturn) {
+        try {
+            await this._onDisposeAsync!(memory).ConfigureAwait(false);
+            this._onDispose?.Invoke(memory);
+        }
+        finally {
+            if(toReturn is not null) {
+                toReturn.AsSpan().Clear();
+                ArrayPool<T>.Shared.Return(toReturn);
+            }
+            this._disposeState.SetDisposed();
+        }
+    }
+
 }

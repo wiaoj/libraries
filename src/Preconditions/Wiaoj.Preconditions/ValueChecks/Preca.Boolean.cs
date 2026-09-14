@@ -49,18 +49,20 @@ public static partial class Preca {
     /// <typeparam name="TState">The type of the state object passed to the exception factory.</typeparam>
     /// <typeparam name="TException">The type of exception to throw. Must inherit from Exception and be non-null.</typeparam>
     /// <param name="condition">The condition to validate.</param>
-    /// <param name="exceptionFactory">A factory function that creates the exception to throw. Cannot be null.</param>
     /// <param name="state">The state object passed to the exception factory. Cannot be null.</param>
+    /// <param name="exceptionFactory">A factory function that creates the exception to throw. Cannot be null.</param>
     /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="exceptionFactory"/> or <paramref name="state"/> is null.</exception>
     /// <exception cref="Exception">Thrown when <paramref name="condition"/> is true, using the exception from <paramref name="exceptionFactory"/>.</exception>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIf<TState, TException>([DoesNotReturnIf(true)] bool condition, [NotNull] Func<TState, TException> exceptionFactory, [NotNull] TState state)
+    public static void ThrowIf<TState, TException>([DoesNotReturnIf(true)] bool condition,
+                                                   [NotNull] TState state,
+                                                   [NotNull] Func<TState, TException> exceptionFactory)
        where TException : notnull, Exception {
         Preca.ThrowIfNull(exceptionFactory);
         Preca.ThrowIfNull(state);
-        if (condition) {
-            Thrower.ThrowFromFactory(exceptionFactory, state);
+        if (condition) { 
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 
@@ -131,9 +133,11 @@ public static partial class Preca {
     /// <exception cref="Exception">Thrown when <paramref name="argument"/> is true, using the exception from <paramref name="exceptionFactory"/>.</exception>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfTrue<TState, TException>([DoesNotReturnIf(true)] bool argument, [NotNull] Func<TState, TException> exceptionFactory, [NotNull] TState state)
+    public static void ThrowIfTrue<TState, TException>([DoesNotReturnIf(true)] bool argument,
+                                                       [NotNull] TState state,
+                                                       [NotNull] Func<TState, TException> exceptionFactory)
         where TException : notnull, Exception {
-        Preca.ThrowIf(argument, exceptionFactory, state);
+        Preca.ThrowIf(argument, state, exceptionFactory);
     }
 
     /// <summary>
@@ -201,9 +205,11 @@ public static partial class Preca {
     /// <exception cref="Exception">Thrown when <paramref name="argument"/> is false, using the exception from <paramref name="exceptionFactory"/>.</exception>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfFalse<TState, TException>([DoesNotReturnIf(false)] bool argument, [NotNull] Func<TState, TException> exceptionFactory, [NotNull] TState state)
+    public static void ThrowIfFalse<TState, TException>([DoesNotReturnIf(false)] bool argument,
+                                                        [NotNull] TState state,
+                                                        [NotNull] Func<TState, TException> exceptionFactory)
         where TException : notnull, Exception {
-        Preca.ThrowIf(argument is false, exceptionFactory, state);
+        Preca.ThrowIf(argument is false, state, exceptionFactory);
     }
 
     /// <summary>

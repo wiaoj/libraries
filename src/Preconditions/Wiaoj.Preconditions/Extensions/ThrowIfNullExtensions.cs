@@ -6,6 +6,7 @@ namespace Wiaoj.Preconditions.Extensions;
 /// Provides fluent extension methods for null validation.
 /// </summary>
 [DebuggerNonUserCode, DebuggerStepThrough]
+[Obsolete]
 public static class ThrowIfNullExtensions {
     /// <summary>
     /// Validates that the specified argument is not null.
@@ -20,6 +21,7 @@ public static class ThrowIfNullExtensions {
     /// </remarks>
     [DebuggerStepThrough, DebuggerHidden, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Obsolete]
     public static T ThrowIfNull<T>(this PrecaExtensions _,
                                    [NotNull] T? argument,
                                    [CallerArgumentExpression(nameof(argument))] string? paramName = null) {

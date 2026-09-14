@@ -6,7 +6,7 @@ public static partial class Preca {
     /// <summary>
     /// Validates that the specified numeric value is within the specified range (inclusive).
     /// </summary>
-    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparable{T}"/>.</typeparam>
+    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparisonOperators{TSelf, TOther, TResult}"/>.</typeparam>
     /// <param name="argument">The numeric value to validate.</param>
     /// <param name="minimum">The minimum allowed value (inclusive).</param>
     /// <param name="maximum">The maximum allowed value (inclusive).</param>
@@ -25,7 +25,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(minimum, nameof(minimum));
         Preca.ThrowIfNull(maximum, nameof(maximum));
 
-        if (argument < minimum || argument > maximum) {
+        if(argument < minimum || argument > maximum) {
             Thrower.ThrowPrecaArgumentOutOfRangeException(paramName, argument, PrecaMessages.Numeric.GetRangeMessage(minimum, maximum));
         }
     }
@@ -33,8 +33,8 @@ public static partial class Preca {
     /// <summary>
     /// Validates that the specified numeric value is within the specified range (inclusive), using a custom exception factory.
     /// </summary>
-    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparable{T}"/>.</typeparam>
-    /// <typeparam name="TException">The type of exception to throw. Must inherit from Exception and be non-null.</typeparam>
+    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparisonOperators{TSelf, TOther, TResult}"/>.</typeparam>
+    /// <typeparam name="TException">The type of exception to throw. Must inherit from <see cref="Exception"/> and be non-null.</typeparam>
     /// <param name="argument">The numeric value to validate.</param>
     /// <param name="minimum">The minimum allowed value (inclusive).</param>
     /// <param name="maximum">The maximum allowed value (inclusive).</param>
@@ -53,17 +53,54 @@ public static partial class Preca {
         Preca.ThrowIfNull(argument, nameof(argument));
         Preca.ThrowIfNull(minimum, nameof(minimum));
         Preca.ThrowIfNull(maximum, nameof(maximum));
-        Preca.ThrowIfNull(exceptionFactory);
+        Preca.ThrowIfNull(exceptionFactory, nameof(exceptionFactory));
 
-        if (argument < minimum || argument > maximum) {
+        if(argument < minimum || argument > maximum) {
             Thrower.ThrowFromFactory(exceptionFactory);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the specified numeric value is within the specified range (inclusive), 
+    /// using a state-based custom exception factory to avoid delegate and closure allocations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparisonOperators{TSelf, TOther, TResult}"/>.</typeparam>
+    /// <typeparam name="TState">The type of the state object passed to the exception factory.</typeparam>
+    /// <typeparam name="TException">The type of exception to throw. Must inherit from <see cref="Exception"/> and be non-null.</typeparam>
+    /// <param name="argument">The numeric value to validate.</param>
+    /// <param name="minimum">The minimum allowed value (inclusive).</param>
+    /// <param name="maximum">The maximum allowed value (inclusive).</param>
+    /// <param name="state">The state data passed directly to <paramref name="exceptionFactory"/>, enabling static delegate caching.</param>
+    /// <param name="exceptionFactory">A factory function that accepts the provided state and creates the exception to throw. Cannot be null.</param>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="argument"/>, <paramref name="minimum"/>, <paramref name="maximum"/>, <paramref name="state"/>, or <paramref name="exceptionFactory"/> is null.</exception>
+    /// <exception cref="Exception">Thrown when <paramref name="argument"/> is outside the specified range, using the exception created by <paramref name="exceptionFactory"/>.</exception>
+    /// <remarks>
+    /// This overload enables domain-specific exception handling without allocating closures on the hot path.
+    /// </remarks>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfOutOfRange<T, TState, TException>(T argument,
+                                                                T minimum,
+                                                                T maximum,
+                                                                [NotNull] TState state,
+                                                                [NotNull] Func<TState, TException> exceptionFactory)
+        where T : IComparisonOperators<T, T, bool>
+        where TException : notnull, Exception {
+        Preca.ThrowIfNull(argument, nameof(argument));
+        Preca.ThrowIfNull(minimum, nameof(minimum));
+        Preca.ThrowIfNull(maximum, nameof(maximum));
+        Preca.ThrowIfNull(state, nameof(state));
+        Preca.ThrowIfNull(exceptionFactory, nameof(exceptionFactory));
+
+        if(argument < minimum || argument > maximum) {
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 
     /// <summary>
     /// Validates that the specified numeric value is within the specified range (inclusive), throwing a specific exception type.
     /// </summary>
-    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparable{T}"/>.</typeparam>
+    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparisonOperators{TSelf, TOther, TResult}"/>.</typeparam>
     /// <typeparam name="TException">The type of exception to throw. Must have a parameterless constructor.</typeparam>
     /// <param name="argument">The numeric value to validate.</param>
     /// <param name="minimum">The minimum allowed value (inclusive).</param>
@@ -83,7 +120,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(minimum, nameof(minimum));
         Preca.ThrowIfNull(maximum, nameof(maximum));
 
-        if (argument < minimum || argument > maximum) {
+        if(argument < minimum || argument > maximum) {
             Thrower.ThrowException<TException>();
         }
     }

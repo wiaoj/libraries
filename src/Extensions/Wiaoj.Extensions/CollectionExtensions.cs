@@ -40,15 +40,12 @@ public static class CollectionExtensions {
     /// <param name="target">The target collection.</param>
     /// <param name="source">The read-only span of elements to add.</param>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="target"/> is <see langword="null"/>.</exception>
-    public static void AddRange<T>(this ICollection<T> target, ReadOnlySpan<T> source) {
+    public static void AddRange<T>(this ICollection<T> target, params ReadOnlySpan<T> source) {
         Preca.ThrowIfNull(target);
         if(source.IsEmpty) return;
 
         if(target is List<T> list) {
-            list.Capacity = Math.Max(list.Capacity, list.Count + source.Length);
-            foreach(ref readonly T item in source) {
-                list.Add(item);
-            }
+            list.AddRange(source);
             return;
         }
 
@@ -110,24 +107,32 @@ public static class CollectionExtensions {
     public static void CopyToValueList<T>(this IEnumerable<T> source, ref ValueList<T> target) {
         Preca.ThrowIfNull(source);
 
-        // Fast-path: Array
-        if(source is T[] array) {
-            for(int i = 0; i < array.Length; i++) {
-                target.Add(array[i]);
+        ReadOnlySpan<T> span = source switch {
+            T[] array => array,
+            List<T> list => CollectionsMarshal.AsSpan(list),
+            _ => default
+        };
+
+        if(!span.IsEmpty) {
+            target.AddRange(span);
+            return;
+        }
+
+        if(source is IReadOnlyList<T> readOnlyList) {
+            int count = readOnlyList.Count;
+            if(count is 0) return;
+
+            target.EnsureCapacity(target.Count + count);
+            for(int i = 0; i < count; i++) {
+                target.Add(readOnlyList[i]);
             }
             return;
         }
 
-        // Fast-path: List
-        if(source is List<T> list) {
-            ReadOnlySpan<T> span = CollectionsMarshal.AsSpan(list);
-            for(int i = 0; i < span.Length; i++) {
-                target.Add(span[i]);
-            }
-            return;
+        if(source.TryGetNonEnumeratedCount(out int expectedCount) && expectedCount > 0) {
+            target.EnsureCapacity(target.Count + expectedCount);
         }
 
-        // Fallback: General enumeration
         foreach(T item in source) {
             target.Add(item);
         }

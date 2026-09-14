@@ -1,6 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
-using System.Diagnostics;
 
 namespace Wiaoj.Preconditions;
 
@@ -21,7 +19,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(argument, paramName);
         Preca.ThrowIfNull(limit, nameof(limit));
 
-        if (argument <= limit) {
+        if(argument <= limit) {
             // Not: PrecaMessages.Numeric içerisinde "Deðer {limit}'ten büyük olmalýdýr" 
             // þeklinde bir mesaj üreten (örn: GetGreaterThanMessage) metot olduðu varsayýlmýþtýr.
             Thrower.ThrowPrecaArgumentOutOfRangeException(paramName, argument, PrecaMessages.Numeric.GetGreaterThanMessage(limit));
@@ -48,8 +46,39 @@ public static partial class Preca {
         Preca.ThrowIfNull(limit, nameof(limit));
         Preca.ThrowIfNull(exceptionFactory);
 
-        if (argument <= limit) {
+        if(argument <= limit) {
             Thrower.ThrowFromFactory(exceptionFactory);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the specified numeric value is strictly greater than the limit, 
+    /// using a state-based custom exception factory to avoid delegate and closure allocations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="IComparisonOperators{TSelf, TOther, TResult}"/>.</typeparam>
+    /// <typeparam name="TState">The type of the state object passed to the exception factory.</typeparam>
+    /// <typeparam name="TException">The type of exception to throw. Must inherit from <see cref="Exception"/> and be non-null.</typeparam>
+    /// <param name="argument">The numeric value to validate.</param>
+    /// <param name="limit">The exclusive lower bound limit.</param>
+    /// <param name="state">The state data passed directly to <paramref name="exceptionFactory"/>, enabling static delegate caching.</param>
+    /// <param name="exceptionFactory">A factory function that accepts the provided state and creates the exception to throw. Cannot be null.</param>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="argument"/>, <paramref name="limit"/>, <paramref name="state"/>, or <paramref name="exceptionFactory"/> is null.</exception>
+    /// <exception cref="Exception">Thrown when <paramref name="argument"/> is less than or equal to <paramref name="limit"/>, using the exception created by <paramref name="exceptionFactory"/>.</exception>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfLessThanOrEqualTo<T, TState, TException>(T argument,
+                                                                       T limit,
+                                                                       [NotNull] TState state,
+                                                                       [NotNull] Func<TState, TException> exceptionFactory)
+        where T : IComparisonOperators<T, T, bool>
+        where TException : notnull, Exception {
+        Preca.ThrowIfNull(argument, nameof(argument));
+        Preca.ThrowIfNull(limit, nameof(limit));
+        Preca.ThrowIfNull(state, nameof(state));
+        Preca.ThrowIfNull(exceptionFactory, nameof(exceptionFactory));
+
+        if(argument <= limit) {
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 
@@ -71,7 +100,7 @@ public static partial class Preca {
         Preca.ThrowIfNull(argument, paramName);
         Preca.ThrowIfNull(limit, nameof(limit));
 
-        if (argument <= limit) {
+        if(argument <= limit) {
             Thrower.ThrowException<TException>();
         }
     }

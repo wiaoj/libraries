@@ -17,8 +17,8 @@ internal static partial class PrecaExtensions {
 
             Preca.ThrowIf(
                 argument.IsEmpty,
-                static (name) => new ArgumentException($"Cryptographic parameter '{name}' cannot be empty or uninitialized.", name),
-                paramName);
+                paramName,
+                static (name) => new ArgumentException($"Cryptographic parameter '{name}' cannot be empty or uninitialized.", name));
         }
 
         /// <summary>
@@ -38,8 +38,8 @@ internal static partial class PrecaExtensions {
 
             Preca.ThrowIf(
                 keySizeInBits % RequiredAlignmentInBits != 0,
-                static (name) => new ArgumentOutOfRangeException(name, $"RSA key size must be a multiple of {RequiredAlignmentInBits} bits."),
-                paramName);
+                paramName,
+                static (name) => new ArgumentOutOfRangeException(name, $"RSA key size must be a multiple of {RequiredAlignmentInBits} bits."));
         }
     }
 }

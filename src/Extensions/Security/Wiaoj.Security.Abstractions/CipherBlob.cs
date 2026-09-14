@@ -40,10 +40,10 @@ public readonly record struct CipherBlob {
     public static CipherBlob From(Base64UrlString base64Url) {
         Preca.ThrowIfLessThan(
             base64Url.Value.Length,
-            MinBase64UrlLength, 
-            static (string name) => new ArgumentException(
-                $"CipherBlob cannot be empty or shorter than the minimum valid AES-GCM packet ({MinBase64UrlLength} characters)."),
-            nameof(base64Url));
+            MinBase64UrlLength,
+            nameof(base64Url),
+            static name => new ArgumentException(
+                $"CipherBlob cannot be empty or shorter than the minimum valid AES-GCM packet ({MinBase64UrlLength} characters)."));
 
         return new(base64Url);
     }
@@ -56,7 +56,9 @@ public readonly record struct CipherBlob {
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="base64Url"/> is empty or shorter than the minimum AES-GCM packet size (38 characters).
     /// </exception>
-    public static CipherBlob FromBase64Url(Base64UrlString base64Url) => From(base64Url);
+    public static CipherBlob FromBase64Url(Base64UrlString base64Url) {
+        return From(base64Url);
+    }
 
     /// <summary>
     /// Parses a stored Base64Url string from persistence into a <see cref="CipherBlob"/>.

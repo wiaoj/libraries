@@ -33,6 +33,7 @@ public ref struct ValueBuffer<T> where T : unmanaged {
     private T[]? _rented;
     private Span<T> _span;
     private readonly Action<Span<T>>? _onDispose;
+    private bool _isDisposed;
 
     /// <summary>
     /// Initializes a new instance using the provided stack-allocated memory if sufficient;
@@ -142,11 +143,15 @@ public ref struct ValueBuffer<T> where T : unmanaged {
 
     /// <summary>Implicitly converts a <see cref="ValueBuffer{T}"/> to a <see cref="Span{T}"/>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Span<T>(ValueBuffer<T> buffer) => buffer._span;
+    public static implicit operator Span<T>(ValueBuffer<T> buffer) {
+        return buffer._span;
+    }
 
     /// <summary>Implicitly converts a <see cref="ValueBuffer{T}"/> to a <see cref="ReadOnlySpan{T}"/>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator ReadOnlySpan<T>(ValueBuffer<T> buffer) => buffer._span;
+    public static implicit operator ReadOnlySpan<T>(ValueBuffer<T> buffer) {
+        return buffer._span;
+    }
 
     /// <summary>
     /// Invokes the disposal callback (if any) with the active span,
@@ -163,19 +168,23 @@ public ref struct ValueBuffer<T> where T : unmanaged {
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose() {
+        if(this._isDisposed) return;
+        this._isDisposed = true;
+
         Span<T> span = this._span;
         this._span = default;
 
         T[]? toReturn = this._rented;
         this._rented = null;
 
-        // 1. Caller callback — sees the logical slice, not the oversized rented array.
-        this._onDispose?.Invoke(span);
-
-        // 2. Clear + return the full rented array (covers any extra bytes beyond minimumLength).
-        if(toReturn is not null) {
-            toReturn.AsSpan().Clear();
-            ArrayPool<T>.Shared.Return(toReturn);
+        try {
+            this._onDispose?.Invoke(span);
+        }
+        finally {
+            if(toReturn is not null) {
+                toReturn.AsSpan().Clear();
+                ArrayPool<T>.Shared.Return(toReturn);
+            }
         }
     }
 }

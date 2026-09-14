@@ -59,6 +59,34 @@ public static partial class Preca {
     }
 
     /// <summary>
+    /// Validates that the specified numeric value is greater than or equal to zero, 
+    /// using a state-based custom exception factory to avoid delegate allocations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="ISignedNumber{T}"/>.</typeparam>
+    /// <typeparam name="TState">The type of the state object passed to the exception factory.</typeparam>
+    /// <typeparam name="TException">The type of exception to throw. Must inherit from <see cref="Exception"/> and be non-null.</typeparam>
+    /// <param name="argument">The numeric value to validate.</param>
+    /// <param name="state">The state data passed directly to <paramref name="exceptionFactory"/>, enabling static delegate caching.</param>
+    /// <param name="exceptionFactory">A factory function that accepts the provided state and creates the exception to throw. Cannot be null.</param>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="state"/> or <paramref name="exceptionFactory"/> is null.</exception>
+    /// <exception cref="Exception">Thrown when <paramref name="argument"/> is less than zero, using the exception created by <paramref name="exceptionFactory"/>.</exception>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfNegative<T, TState, TException>(T argument,
+                                                              [NotNull] TState state,
+                                                              [NotNull] Func<TState, TException> exceptionFactory)
+        where T : ISignedNumber<T>
+        where TException : notnull, Exception {
+        Preca.ThrowIfNull(argument, nameof(argument));
+        Preca.ThrowIfNull(state, nameof(state));
+        Preca.ThrowIfNull(exceptionFactory, nameof(exceptionFactory));
+
+        if(T.IsNegative(argument) && !T.IsZero(argument) && !T.IsNaN(argument)) {
+            Thrower.ThrowFromFactory(state, exceptionFactory);
+        }
+    }
+
+    /// <summary>
     /// Validates that the specified numeric value is greater than or equal to zero, throwing a specific exception type.
     /// </summary>
     /// <typeparam name="T">The numeric type to validate. Must implement <see cref="ISignedNumber{T}"/>.</typeparam>

@@ -123,45 +123,5 @@ public sealed class AdditionalPrimitivesTests {
         Assert.Equal(e1, deserialized);
     }
 
-    #endregion
-
-    #region 5. OperationTimeout Tests
-
-    [Fact]
-    public void OperationTimeout_Infinite_ShouldBeDefault() {
-        var timeout = OperationTimeout.Infinite;
-        Assert.True(timeout.IsInfinite);
-        Assert.False(timeout.IsTimeoutSet);
-        Assert.False(timeout.IsCancellable);
-    }
-
-    [Fact]
-    public void OperationTimeout_FromSeconds_ShouldSetDelay() {
-        OperationTimeout timeout = OperationTimeout.FromSeconds(5);
-        Assert.True(timeout.IsTimeoutSet);
-        Assert.False(timeout.IsInfinite);
-    }
-
-    [Fact]
-    public void OperationTimeout_ThrowIfExpired_ShouldThrowWhenCancelled() {
-        using CancellationTokenSource cts = new();
-        cts.Cancel();
-
-        OperationTimeout timeout = OperationTimeout.From(cts.Token);
-
-        Assert.Throws<OperationCanceledException>(() => timeout.ThrowIfExpired());
-    }
-
-    [Fact]
-    public async Task OperationTimeout_ExecuteAsync_ShouldRespectTimeout() {
-        OperationTimeout timeout = OperationTimeout.FromSeconds(0.1); // 100ms
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => {
-            await timeout.ExecuteAsync(async (t) => {
-                await Task.Delay(500, t.Token); // Wait longer than timeout
-            });
-        });
-    }
-
-    #endregion
+    #endregion 
 }

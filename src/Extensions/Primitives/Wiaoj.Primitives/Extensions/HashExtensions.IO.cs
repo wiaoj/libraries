@@ -16,7 +16,7 @@ public static class HashExtensions {
     /// <exception cref="FileNotFoundException">Thrown if the file does not exist.</exception>
     public static async ValueTask<Sha256Hash> ComputeSha256Async(this FileInfo fileInfo, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(fileInfo);
-        Preca.ThrowIfFalse(fileInfo.Exists, static (fullName) => new FileNotFoundException("File not found.", fullName), fileInfo.FullName);
+        Preca.ThrowIfFalse(fileInfo.Exists, fileInfo.FullName, static (fullName) => new FileNotFoundException("File not found.", fullName));
 
         await using FileStream fs = fileInfo.OpenRead();
         return await Sha256HashExtensions.ComputeAsync(fs, cancellationToken);

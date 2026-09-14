@@ -12,22 +12,19 @@ public static partial class Preca {
     /// <exception cref="PrecaArgumentOutOfRangeException">Thrown when <paramref name="argument"/> is zero or positive. Inherits from <see cref="ArgumentOutOfRangeException"/>.</exception>
     /// <remarks>
     /// <para>This method ensures numeric values are strictly negative, rejecting both zero and positive values.</para>
-    /// <para><strong>Usage:</strong> <c>Preca.ThrowIfPozitiveOrZero(deficit);</c> - Ensures negative value</para>
+    /// <para><strong>Usage:</strong> <c>Preca.ThrowIfPositiveOrZero(deficit);</c> - Ensures negative value</para>
     /// <para><strong>Modern API:</strong> Uses efficient <see cref="ISignedNumber{T}"/> static methods for type-safe validation</para>
     /// <para><strong>IEEE 754 Compliance:</strong> Both positive and negative zero are treated as zero (invalid), NaN is treated as neither positive nor negative</para>
     /// <para><strong>Exception:</strong> Throws <see cref="PrecaArgumentOutOfRangeException"/> for compatibility with standard exception handling</para>
     /// </remarks>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfPozitiveOrZero<T>(T argument,
+    public static void ThrowIfPositiveOrZero<T>(T argument,
                                                 [CallerArgumentExpression(nameof(argument))] string? paramName = null)
         where T : ISignedNumber<T> {
         Preca.ThrowIfNull(argument, paramName);
 
-        // Fix: Handle IEEE 754 special cases correctly
-        // - Both positive and negative zero should be treated as zero (invalid)
-        // - NaN should be treated as neither positive nor negative (invalid)
-        if (T.IsZero(argument) || (T.IsPositive(argument) && !T.IsZero(argument)) || T.IsNaN(argument)) {
+        if(T.IsZero(argument) || (T.IsPositive(argument) && !T.IsZero(argument)) || T.IsNaN(argument)) {
             Thrower.ThrowPrecaArgumentOutOfRangeException(paramName, argument, PrecaMessages.Numeric.ValueCannotBeZeroOrPositive);
         }
     }
@@ -43,20 +40,48 @@ public static partial class Preca {
     /// <exception cref="Exception">Thrown when <paramref name="argument"/> is zero or positive, using the exception from <paramref name="exceptionFactory"/>.</exception>
     /// <remarks>
     /// <para>This overload enables domain-specific exception handling for zero or positive value validation.</para>
-    /// <para><strong>Usage:</strong> <c>Preca.ThrowIfPozitiveOrZero(deficit, () => new BusinessException("Value must be negative"));</c></para>
+    /// <para><strong>Usage:</strong> <c>Preca.ThrowIfPositiveOrZero(deficit, () => new BusinessException("Value must be negative"));</c></para>
     /// <para><strong>Related:</strong> Use when zero or positive validation failures require specific business exception types</para>
     /// </remarks>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfPozitiveOrZero<T, TException>(T argument,
+    public static void ThrowIfPositiveOrZero<T, TException>(T argument,
                                                 [NotNull] Func<TException> exceptionFactory)
         where T : ISignedNumber<T>
         where TException : notnull, Exception {
         Preca.ThrowIfNull(argument, nameof(argument));
-        Preca.ThrowIfNull(exceptionFactory);
+        Preca.ThrowIfNull(exceptionFactory, nameof(exceptionFactory));
 
-        if (T.IsZero(argument) || (T.IsPositive(argument) && !T.IsZero(argument)) || T.IsNaN(argument)) {
+        if(T.IsZero(argument) || (T.IsPositive(argument) && !T.IsZero(argument)) || T.IsNaN(argument)) {
             Thrower.ThrowFromFactory(exceptionFactory);
+        }
+    }
+
+    /// <summary>
+    /// Validates that the specified numeric value is less than zero, using a stateful custom exception factory.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to validate. Must implement <see cref="ISignedNumber{T}"/>.</typeparam>
+    /// <typeparam name="TState">The type of the state object passed to the exception factory.</typeparam>
+    /// <typeparam name="TException">The type of exception to throw. Must inherit from Exception and be non-null.</typeparam>
+    /// <param name="argument">The numeric value to validate.</param>
+    /// <param name="state">The state object passed to the exception factory. Cannot be null.</param>
+    /// <param name="exceptionFactory">A factory function that creates the exception to throw. Cannot be null.</param>
+    /// <exception cref="PrecaArgumentNullException">Thrown when <paramref name="exceptionFactory"/> or <paramref name="state"/> is null.</exception>
+    /// <exception cref="Exception">Thrown when <paramref name="argument"/> is zero, positive, or NaN, using the exception from <paramref name="exceptionFactory"/>.</exception>
+    [DebuggerStepThrough, StackTraceHidden]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfPositiveOrZero<T, TState, TException>(T argument,
+                                                                    [NotNull] TState state,
+                                                                    [NotNull] Func<TState, TException> exceptionFactory)
+        where T : ISignedNumber<T>
+        where TState : notnull
+        where TException : notnull, Exception {
+        Preca.ThrowIfNull(argument, nameof(argument));
+        Preca.ThrowIfNull(state, nameof(state));
+        Preca.ThrowIfNull(exceptionFactory, nameof(exceptionFactory));
+
+        if(T.IsZero(argument) || (T.IsPositive(argument) && !T.IsZero(argument)) || T.IsNaN(argument)) {
+            Thrower.ThrowFromFactory(state, exceptionFactory);
         }
     }
 
@@ -70,18 +95,18 @@ public static partial class Preca {
     /// <exception cref="Exception">Thrown when <paramref name="argument"/> is zero or positive. The specific exception type is determined by the TException generic parameter.</exception>
     /// <remarks>
     /// <para>This overload enables throwing specific exception types while maintaining parameter name information.</para>
-    /// <para><strong>Usage:</strong> <c>Preca.ThrowIfPozitiveOrZero&lt;decimal, InvalidOperationException&gt;(deficit);</c></para>
+    /// <para><strong>Usage:</strong> <c>Preca.ThrowIfPositiveOrZero&lt;decimal, InvalidOperationException&gt;(deficit);</c></para>
     /// <para><strong>Related:</strong> Use when you need specific exception types for domain-specific error handling</para>
     /// </remarks>
     [DebuggerStepThrough, StackTraceHidden]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfPozitiveOrZero<T, TException>(T argument,
+    public static void ThrowIfPositiveOrZero<T, TException>(T argument,
                                                             [CallerArgumentExpression(nameof(argument))] string? paramName = null)
         where T : ISignedNumber<T>
         where TException : Exception, new() {
         Preca.ThrowIfNull(argument, paramName);
 
-        if (T.IsZero(argument) || (T.IsPositive(argument) && !T.IsZero(argument)) || T.IsNaN(argument)) {
+        if(T.IsZero(argument) || (T.IsPositive(argument) && !T.IsZero(argument)) || T.IsNaN(argument)) {
             Thrower.ThrowException<TException>();
         }
     }

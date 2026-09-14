@@ -53,8 +53,8 @@ public sealed class KeyRingBuilder<TContext> where TContext : ISecretContext {
     private void ValidateAndAdd(EncryptionKey encryptionKey) {
         Preca.ThrowIfTrue(
             this._entries.ContainsKey(encryptionKey.Version),
-            (version) => new ArgumentException($"A key with version {encryptionKey.Version} is already registered."),
-            encryptionKey.Version);
+            encryptionKey.Version,
+            (version) => new ArgumentException($"A key with version {encryptionKey.Version} is already registered."));
 
 
         this._entries[encryptionKey.Version] = encryptionKey;

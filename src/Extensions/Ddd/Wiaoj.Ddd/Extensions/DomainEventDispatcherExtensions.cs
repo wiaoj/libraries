@@ -58,8 +58,8 @@ public static class DomainEventDispatcherExtensions {
 
         Preca.ThrowIfNull(
             genericMethod,
-            (methodName) => new InvalidOperationException($"Method '{methodName}' not found on IDomainEventDispatcher."),
-            methodName);
+            methodName,
+            (methodName) => new InvalidOperationException($"Method '{methodName}' not found on IDomainEventDispatcher."));
 
         // 2. Metodu Event Tipiyle Özelleştir: DispatchPreCommitAsync<VisitorCreatedDomainEvent>(...)
         MethodInfo concreteMethod = genericMethod.MakeGenericMethod(eventType);

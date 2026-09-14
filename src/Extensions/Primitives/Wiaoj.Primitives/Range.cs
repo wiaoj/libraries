@@ -54,7 +54,8 @@ public readonly record struct Range<T> : IEquatable<Range<T>>, IEqualityOperator
 
         Preca.ThrowIf(
             min.CompareTo(max) > 0,
-            static (x) => new PrecaArgumentException($"Min value ({x.min}) cannot be greater than Max value ({x.max})."), (min, max));
+            (min, max),
+            static (x) => new PrecaArgumentException($"Min value ({x.min}) cannot be greater than Max value ({x.max})."));
 
         this.Min = min;
         this.Max = max;

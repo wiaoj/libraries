@@ -32,11 +32,8 @@ public static class RandomExtensions {
         /// <returns>A new <see cref="Percentage"/> instance with a random value within the specified range.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Percentage NextPercentage(Percentage maxValue) {
-            int maxInt = (int)(maxValue.Value * 100);
-
-            int randomValue = random.Next(0, maxInt + 1);
-
-            return Percentage.FromInt(randomValue);
+            double val = random.NextDouble() * maxValue.Value;
+            return Percentage.FromDouble(val);
         }
 
         /// <summary>
