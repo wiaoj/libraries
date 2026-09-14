@@ -141,20 +141,39 @@ Protects internal infrastructure from malicious webhook destinations:
 webhooks.ConfigureSecurity(options =>
 {
     options.AllowPrivateNetworks = false;            // Strict SSRF defense (Default)
+    options.NetworkPolicy = OutboundNetworkPolicy.PublicOnly with {
+        AllowedNetworks = [IPNetwork.Parse("10.20.0.0/16")]   // Optional: an internal network deliveries may reach
+    };
     options.ConnectTimeout = TimeSpan.FromSeconds(5);
     options.RequestTimeout = TimeSpan.FromSeconds(15);
     options.MaxResponseBodyBytes = 8 * 1024;        // 8 KB body audit limit
-    options.Proxy = new WebProxy("http://egress-proxy:8080"); // Optional forward proxy
 });
 
-// Proactively validate endpoints at construction time:
-WebhookEndpoint endpoint = await new WebhookEndpointBuilder()
+// Proactively validate endpoints at construction time. TryBuildAsync returns a refused or unresolvable URL
+// as a result, for reporting a user-supplied URL as a validation error; BuildAsync throws instead.
+WebhookEndpointBuildResult result = await new WebhookEndpointBuilder()
     .WithId("ep_customer_1")
     .WithTargetUrl("https://api.customer.com/webhooks")
     .WithSecret("whsec_secure_key_12345", secretProtector)
     .WithSsrfValidation(validate: true)
-    .BuildAsync();
+    .TryBuildAsync();
 ```
+
+#### Behind an egress proxy
+Through a proxy, the connection goes to the proxy, and the proxy resolves and reaches the destination. This client never sees the destination's address, so it can't enforce the policy where the socket is opened. **The egress proxy is the real SSRF control.** Configure it to refuse private, loopback and cloud-metadata destinations, for example with Smokescreen or Squid ACLs.
+
+With SSRF protection on, a proxy must therefore be acknowledged. Otherwise the application fails at startup, instead of silently losing the protection:
+
+```csharp
+webhooks.UseProxy("http://egress-proxy:8080")
+        .ConfigureSecurity(options => options.ProxyEnforcesEgressPolicy = true);
+```
+
+The destination is still checked before it is sent to the proxy:
+- **IP literal** (`http://169.254.169.254/…`): refused exactly.
+- **Host name:** resolved and refused when it resolves only to refused addresses. This is best effort, because the proxy resolves the name again. A name that does not resolve locally is left to the proxy.
+
+A refused destination is a permanent `InvalidDestination` failure and is never retried.
 
 ### 4. Standard RFC Metadata & Content Digest
 Injects RFC 9530 integrity hashes and standard metadata:

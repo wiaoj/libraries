@@ -60,11 +60,11 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <exception cref="ArgumentException">Thrown when <paramref name="proxyUrl"/> is <see langword="null"/>, empty, or whitespace.</exception>
     /// <remarks>
     /// <para>
-    /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
-    /// (DNS resolution + <see cref="WebhookSecurityOptions.NetworkPolicy"/> validation against the resolved IP before opening the socket).
-    /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
-    /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
-    /// private, loopback, and cloud-metadata ranges before relying on it in production.
+    /// <b>Important:</b> through a proxy, sockets are opened to the proxy, so the destination address cannot be checked
+    /// where the connection is opened; the proxy must enforce egress rules for private, loopback, and cloud-metadata
+    /// ranges. With SSRF protection on, also set <see cref="WebhookSecurityOptions.ProxyEnforcesEgressPolicy"/> to confirm
+    /// it does — otherwise startup fails. Destinations are still checked before sending: IP literals exactly, host names
+    /// best-effort.
     /// </para>
     /// </remarks>
     public static IWebhookBuilder UseProxy(this IWebhookBuilder builder, string proxyUrl) {
@@ -82,11 +82,11 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/>, <paramref name="proxyUrl"/>, or <paramref name="credentials"/> is <see langword="null"/>.</exception>
     /// <remarks>
     /// <para>
-    /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
-    /// (DNS resolution + <see cref="WebhookSecurityOptions.NetworkPolicy"/> validation against the resolved IP before opening the socket).
-    /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
-    /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
-    /// private, loopback, and cloud-metadata ranges before relying on it in production.
+    /// <b>Important:</b> through a proxy, sockets are opened to the proxy, so the destination address cannot be checked
+    /// where the connection is opened; the proxy must enforce egress rules for private, loopback, and cloud-metadata
+    /// ranges. With SSRF protection on, also set <see cref="WebhookSecurityOptions.ProxyEnforcesEgressPolicy"/> to confirm
+    /// it does — otherwise startup fails. Destinations are still checked before sending: IP literals exactly, host names
+    /// best-effort.
     /// </para>
     /// </remarks>
     public static IWebhookBuilder UseProxy(this IWebhookBuilder builder, string proxyUrl, ICredentials credentials) {
@@ -104,11 +104,11 @@ public static partial class WebhookBuilderSecurityExtensions {
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="proxy"/> is <see langword="null"/>.</exception>
     /// <remarks>
     /// <para>
-    /// <b>Important:</b> configuring a proxy replaces the built-in <c>ConnectCallback</c>-based SSRF protection
-    /// (DNS resolution + <see cref="WebhookSecurityOptions.NetworkPolicy"/> validation against the resolved IP before opening the socket).
-    /// When a proxy is set, outbound sockets are routed through it instead, and destination filtering becomes the
-    /// proxy's responsibility. Make sure the configured proxy enforces its own egress allow-list/deny-list for
-    /// private, loopback, and cloud-metadata ranges before relying on it in production.
+    /// <b>Important:</b> through a proxy, sockets are opened to the proxy, so the destination address cannot be checked
+    /// where the connection is opened; the proxy must enforce egress rules for private, loopback, and cloud-metadata
+    /// ranges. With SSRF protection on, also set <see cref="WebhookSecurityOptions.ProxyEnforcesEgressPolicy"/> to confirm
+    /// it does — otherwise startup fails. Destinations are still checked before sending: IP literals exactly, host names
+    /// best-effort.
     /// </para>
     /// </remarks>
     public static IWebhookBuilder UseProxy(this IWebhookBuilder builder, IWebProxy proxy) {
