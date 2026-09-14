@@ -1,3 +1,5 @@
+using Wiaoj.Preconditions;
+
 namespace Wiaoj.Querying;
 
 /// <summary>
@@ -35,7 +37,7 @@ public static class QueryRequestSchemaExtensions {
         this QueryRequest request,
         QuerySchema<T> schema) {
 
-        ArgumentNullException.ThrowIfNull(schema);
+        Preca.ThrowIfNull(schema);
 
         List<FilterConditionNode> ownedFilters = [];
         List<FilterConditionNode> otherFilters = [];

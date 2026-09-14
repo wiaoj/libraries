@@ -64,8 +64,15 @@ internal sealed class QueryValidationOperationTransformer(QueryOpenApiOptions op
 
         operation.Parameters ??= [];
 
-        DescribeFilters(operation, fields, isIgnored);
-        DescribeSort(operation, fields, isIgnored);
+        // A limit of zero means the caller may send none, so none is advertised.
+        if(ReadLimit(schema!, nameof(QuerySchema<object>.MaxFilterCount)) > 0) {
+            DescribeFilters(operation, fields, isIgnored);
+        }
+
+        if(ReadLimit(schema!, nameof(QuerySchema<object>.MaxSortFieldsCount)) > 0) {
+            DescribeSort(operation, fields, isIgnored);
+        }
+
         DescribeSearch(operation);
         DescribeValidationFailure(operation);
 
@@ -319,5 +326,10 @@ internal sealed class QueryValidationOperationTransformer(QueryOpenApiOptions op
     private static IReadOnlyList<QueryFieldDescriptor> DescribeFields(object schema) {
         MethodInfo describe = schema.GetType().GetMethod(DescribeFieldsMethod.Name)!;
         return (IReadOnlyList<QueryFieldDescriptor>)describe.Invoke(schema, null)!;
+    }
+
+    /// <summary>Reads one of the schema's public limits, reflectively for the same reason as <see cref="DescribeFields"/>.</summary>
+    private static int ReadLimit(object schema, string propertyName) {
+        return (int)schema.GetType().GetProperty(propertyName)!.GetValue(schema)!;
     }
 }

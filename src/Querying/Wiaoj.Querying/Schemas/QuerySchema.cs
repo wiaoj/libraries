@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Text;
 using System.Text.Json;
+using Wiaoj.Preconditions;
 using Wiaoj.Querying.Expressions;
 
 namespace Wiaoj.Querying;
@@ -52,7 +53,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// </para>
     /// </remarks>
     public QuerySchema<T> TieBreaker<TKey>(Expression<Func<T, TKey>> selector) {
-        ArgumentNullException.ThrowIfNull(selector);
+        Preca.ThrowIfNull(selector);
         ExtractMemberPath(selector.Body);
         this._tieBreaker = selector;
 
@@ -75,7 +76,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// </code>
     /// </example>
     public QuerySchema<T> TieBreaker<TKey>(Expression<Func<T, TKey>> selector, Func<TKey, string> encode, Func<string, TKey> decode) {
-        ArgumentNullException.ThrowIfNull(selector);
+        Preca.ThrowIfNull(selector);
         ExtractMemberPath(selector.Body);
         this._tieBreaker = selector;
         this._tieBreakerCodec = new QueryKeyCodec<TKey>(encode, decode);
@@ -341,7 +342,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// <param name="parameters">The collection of parameter names to ignore.</param>
     /// <returns>The current schema instance for method chaining.</returns>
     public QuerySchema<T> IgnoreParameters(IEnumerable<string> parameters) {
-        ArgumentNullException.ThrowIfNull(parameters);
+        Preca.ThrowIfNull(parameters);
         foreach(string? param in parameters) {
             if(!string.IsNullOrWhiteSpace(param)) {
                 string trimmed = param.Trim();
@@ -385,7 +386,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// <param name="parameters">The collection of parameter names to allow.</param>
     /// <returns>The current schema instance for method chaining.</returns>
     public QuerySchema<T> AllowParameters(IEnumerable<string> parameters) {
-        ArgumentNullException.ThrowIfNull(parameters);
+        Preca.ThrowIfNull(parameters);
         foreach(string? param in parameters) {
             if(!string.IsNullOrWhiteSpace(param)) {
                 string trimmed = param.Trim();
@@ -485,7 +486,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// <c>ModelBuilder.Entity&lt;T&gt;().HasQueryFilter(...)</c> instead.
     /// </remarks>
     public QuerySchema<T> RequireFilter(Expression<Func<T, bool>> predicate) {
-        ArgumentNullException.ThrowIfNull(predicate);
+        Preca.ThrowIfNull(predicate);
         this._requiredFilters.Add(predicate);
         return this;
     }
@@ -507,8 +508,8 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     public QuerySchema<T> DefaultFilter<TProperty>(
         Expression<Func<T, TProperty>> propertySelector,
         Expression<Func<T, bool>> predicate) {
-        ArgumentNullException.ThrowIfNull(propertySelector);
-        ArgumentNullException.ThrowIfNull(predicate);
+        Preca.ThrowIfNull(propertySelector);
+        Preca.ThrowIfNull(predicate);
 
         string memberPath = ExtractMemberPath(propertySelector.Body);
         this._defaultFilters.Add((memberPath, predicate));
@@ -527,7 +528,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     public QuerySchema<T> DefaultSort<TProperty>(
         Expression<Func<T, TProperty>> selector,
         SortDirection direction = SortDirection.Ascending) {
-        ArgumentNullException.ThrowIfNull(selector);
+        Preca.ThrowIfNull(selector);
 
         bool isDescending = direction == SortDirection.Descending;
 
@@ -562,9 +563,15 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// <summary>
     /// Configures security and abuse limits for query evaluation.
     /// </summary>
-    /// <param name="maxFilters">The maximum number of filters allowed per request.</param>
+    /// <param name="maxFilters">
+    /// The maximum number of filters allowed per request. <c>0</c> accepts no filters from the caller; default filters
+    /// still apply.
+    /// </param>
     /// <param name="maxInValues">The maximum number of elements allowed in a single IN/NOT IN list.</param>
-    /// <param name="maxSortFields">The maximum number of sort fields allowed per request.</param>
+    /// <param name="maxSortFields">
+    /// The maximum number of sort fields allowed per request. <c>0</c> accepts no sort from the caller; the schema's
+    /// default sort still applies.
+    /// </param>
     /// <param name="maxFilterValueLength">
     /// The maximum character length allowed for a single filter's raw value. Defaults to 512.
     /// </param>
@@ -577,11 +584,12 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
         int maxSortFields,
         int maxFilterValueLength = 512,
         int maxSearchTermLength = 256) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxFilters);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxInValues);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxSortFields);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxFilterValueLength);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxSearchTermLength);
+        // Zero is a meaningful count — "none allowed" — but not a meaningful length or list size.
+        Preca.ThrowIfNegative(maxFilters);
+        Preca.ThrowIfNegativeOrZero(maxInValues);
+        Preca.ThrowIfNegative(maxSortFields);
+        Preca.ThrowIfNegativeOrZero(maxFilterValueLength);
+        Preca.ThrowIfNegativeOrZero(maxSearchTermLength);
 
         this.MaxFilterCount = maxFilters;
         this.MaxInValuesCount = maxInValues;
@@ -891,7 +899,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// Configures a specific entity property with fine-grained rules or aliases via a builder.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> Property<TProperty>(Expression<Func<T, TProperty>> propertySelector) {
-        ArgumentNullException.ThrowIfNull(propertySelector);
+        Preca.ThrowIfNull(propertySelector);
 
         string memberPath = ExtractMemberPath(propertySelector.Body);
 
@@ -969,12 +977,12 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// </code>
     /// </example>
     public PropertyRuleBuilder<T, TValue> CustomFilter<TValue>(string name, Expression<Func<T, TValue, bool>> predicate) {
-        ArgumentNullException.ThrowIfNull(predicate);
+        Preca.ThrowIfNull(predicate);
         return DeclareCustomFilter<TValue>(name, predicate);
     }
 
     private PropertyRuleBuilder<T, TValue> DeclareCustomFilter<TValue>(string name, LambdaExpression? predicate) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        Preca.ThrowIfNullOrWhiteSpace(name);
         string trimmed = name.Trim();
 
         if(TryGetProperty(trimmed, out QueryProperty<T>? existing)) {
@@ -1087,7 +1095,7 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     public QuerySchema<T> Property<TProperty>(
         Expression<Func<T, TProperty>> propertySelector,
         Action<PropertyRuleBuilder<T, TProperty>> configure) {
-        ArgumentNullException.ThrowIfNull(configure);
+        Preca.ThrowIfNull(configure);
         PropertyRuleBuilder<T, TProperty> builder = Property(propertySelector);
         configure(builder);
         return this;
@@ -1159,10 +1167,10 @@ public class QuerySchema<T> : IQuerySchemaParameters, DependencyInjection.IQuery
     /// Configures properties to be queried during free-text search (<c>q=term</c>).
     /// </summary>
     public QuerySchema<T> SearchIn(params Expression<Func<T, string?>>[] selectors) {
-        ArgumentNullException.ThrowIfNull(selectors);
+        Preca.ThrowIfNull(selectors);
         for(int i = 0; i < selectors.Length; i++) {
             Expression<Func<T, string?>> selector = selectors[i];
-            ArgumentNullException.ThrowIfNull(selector, nameof(selectors));
+            Preca.ThrowIfNull(selector, nameof(selectors));
             this._searchSelectors.Add(selector);
         }
         return this;
@@ -1392,7 +1400,7 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     /// Sets a custom exposed name (alias) for the property in query parameters.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> HasName(string alias) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(alias);
+        Preca.ThrowIfNullOrWhiteSpace(alias);
         string oldName = this._property.ExposedName;
         this._property = this._property with { ExposedName = alias.Trim(), IsExplicitlyNamed = true };
         this._schema.UpdateProperty(oldName, this._property);
@@ -1403,7 +1411,7 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     /// Registers a custom parser delegate to convert raw string values into <typeparamref name="TProperty"/>.
     /// </summary>
     public PropertyRuleBuilder<T, TProperty> WithParser(Func<string, TProperty> parser) {
-        ArgumentNullException.ThrowIfNull(parser);
+        Preca.ThrowIfNull(parser);
 
         this._property = this._property with {
             CustomParser = raw => parser(raw)
@@ -1461,7 +1469,7 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     /// </summary>
     /// <param name="description">What the field means, in the terms a caller uses.</param>
     public PropertyRuleBuilder<T, TProperty> Describe(string description) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        Preca.ThrowIfNullOrWhiteSpace(description);
 
         this._property = this._property with { Description = description.Trim() };
         this._schema.UpdateProperty(this._property.ExposedName, this._property);
@@ -1532,8 +1540,8 @@ public sealed class PropertyRuleBuilder<T, TProperty> {
     /// </code>
     /// </example>
     public PropertyRuleBuilder<T, TProperty> AsCursor(Func<TProperty, string> encode, Func<string, TProperty> decode) {
-        ArgumentNullException.ThrowIfNull(encode);
-        ArgumentNullException.ThrowIfNull(decode);
+        Preca.ThrowIfNull(encode);
+        Preca.ThrowIfNull(decode);
 
         return this.SetCursorCodec(new QueryKeyCodec<TProperty>(encode, decode));
     }

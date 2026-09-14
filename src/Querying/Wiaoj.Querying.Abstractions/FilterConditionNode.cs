@@ -274,7 +274,7 @@ public readonly record struct FilterConditionNode :
     /// Parses a bracket-style parameter string into a <see cref="FilterConditionNode"/> instance.
     /// </summary>
     public static FilterConditionNode Parse(string s) {
-        ArgumentNullException.ThrowIfNull(s);
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 

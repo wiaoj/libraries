@@ -87,7 +87,7 @@ public static class QueryingBuilderExtensions {
         this IQueryingBuilder builder,
         IEnumerable<string> parameters) {
         Preca.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(parameters);
+        Preca.ThrowIfNull(parameters);
 
         string[] copy = parameters as string[] ?? [.. parameters];
         builder.Services.Configure<QueryOptions>(options => {

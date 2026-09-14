@@ -140,6 +140,7 @@ public sealed class ProductQuerySchema : QuerySchema<Product>
 }
 ```
 
+`maxFilters` and `maxSortFields` accept `0`: the caller may send no filters or no sort. Default filters and the default sort still apply, and the OpenAPI document leaves out the parameters the caller cannot send. `maxInValues` and the two length limits must be positive.
 ---
 
 ## Dependency Injection Registration
