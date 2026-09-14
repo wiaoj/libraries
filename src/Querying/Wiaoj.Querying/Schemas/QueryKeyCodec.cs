@@ -1,4 +1,5 @@
 using System.Globalization;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.Querying;
 
@@ -32,8 +33,8 @@ public sealed class QueryKeyCodec<T> : IQueryKeyCodec {
     /// <param name="encode">Writes a key as text. Must round-trip exactly through <paramref name="decode"/>.</param>
     /// <param name="decode">Reads text written by <paramref name="encode"/>.</param>
     public QueryKeyCodec(Func<T, string> encode, Func<string, T> decode) {
-        ArgumentNullException.ThrowIfNull(encode);
-        ArgumentNullException.ThrowIfNull(decode);
+        Preca.ThrowIfNull(encode);
+        Preca.ThrowIfNull(decode);
         this._encode = encode;
         this._decode = decode;
     }

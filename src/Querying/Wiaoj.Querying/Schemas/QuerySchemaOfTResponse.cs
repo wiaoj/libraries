@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Text;
+using Wiaoj.Preconditions;
 
 namespace Wiaoj.Querying;
 
@@ -58,7 +59,7 @@ public class QuerySchema<TEntity, TResponse> : QuerySchema<TEntity>, IQuerySchem
     /// </param>
     /// <returns>The schema, for chaining.</returns>
     public QuerySchema<TEntity, TResponse> Project(Expression<Func<TEntity, TResponse>> projection) {
-        ArgumentNullException.ThrowIfNull(projection);
+        Preca.ThrowIfNull(projection);
         this._projection = projection;
         return this;
     }

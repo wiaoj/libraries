@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Text.Json.Serialization;
+using Wiaoj.Preconditions;
 using Wiaoj.Querying.JsonConverters;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -157,7 +158,7 @@ public readonly partial record struct QueryRequest :
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="s"/> is <see langword="null"/>.</exception>
     /// <exception cref="FormatException">Thrown when the query string format is invalid.</exception>
     public static QueryRequest Parse(string s) {
-        ArgumentNullException.ThrowIfNull(s);
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 

@@ -125,6 +125,30 @@ public sealed class QueryValidationOperationTransformerTests {
     }
 
     [Fact]
+    public void Should_Omit_The_Sort_Parameter_When_The_Schema_Allows_Zero_Sort_Fields() {
+        QuerySchema<Product> schema = new();
+        schema.Property(p => p.Name).AllowFilter().AllowSort();
+        schema.ConfigureLimits(maxFilters: 5, maxInValues: 5, maxSortFields: 0);
+
+        OpenApiOperation operation = Transform(schema);
+
+        Assert.Null(Parameter(operation, QuerySyntax.Parameters.Sort));
+        Assert.NotNull(Parameter(operation, nameof(Product.Name)));
+    }
+
+    [Fact]
+    public void Should_Omit_The_Filter_Parameters_When_The_Schema_Allows_Zero_Filters() {
+        QuerySchema<Product> schema = new();
+        schema.Property(p => p.Name).AllowFilter().AllowSort();
+        schema.ConfigureLimits(maxFilters: 0, maxInValues: 5, maxSortFields: 2);
+
+        OpenApiOperation operation = Transform(schema);
+
+        Assert.Null(Parameter(operation, nameof(Product.Name)));
+        Assert.NotNull(Parameter(operation, QuerySyntax.Parameters.Sort));
+    }
+
+    [Fact]
     public void Should_Document_The_400_A_Violating_Query_Receives() {
         QuerySchema<Product> schema = new();
         schema.Property(p => p.Name).AllowFilter();

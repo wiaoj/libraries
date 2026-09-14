@@ -229,10 +229,9 @@ public class QuerySchemaTests {
         }
 
         [Theory]
-        [InlineData(0, 10, 5)]
         [InlineData(-1, 10, 5)]
         [InlineData(10, 0, 5)]
-        [InlineData(10, 10, 0)]
+        [InlineData(10, 10, -1)]
         public void Should_Throw_ArgumentOutOfRangeException_When_Limits_Are_Invalid(
             int maxFilters,
             int maxInValues,

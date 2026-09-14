@@ -6,6 +6,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Unicode;
+using Wiaoj.Preconditions;
 using Wiaoj.Primitives.Buffers;
 using Wiaoj.Querying.Parsers;
 
@@ -120,7 +121,7 @@ public readonly record struct Sort :
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="s"/> is <see langword="null"/>.</exception>
     /// <exception cref="FormatException">Thrown when the sort expression format is invalid.</exception>
     public static Sort Parse(string s) {
-        ArgumentNullException.ThrowIfNull(s);
+        Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
     }
 
