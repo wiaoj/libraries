@@ -55,7 +55,7 @@ Each failure throws `OAuthDiscoveryException`, and its `Failure` says why.
 | --- | --- | --- |
 | `resource` is identical to the identifier looked up, code point for code point | `IdentifierMismatch` | RFC 9728 §3.3, §6 |
 | `issuer` is identical to the issuer looked up | `IdentifierMismatch` | RFC 8414 §3.3, §6.2 |
-| From a 401, `resource` covers the challenged URL (see below) | `IdentifierMismatch` | RFC 9728 §3.3 |
+| From a 401, `resource` is identical to the challenged URL, or covers it with `PathPrefix` (see below) | `IdentifierMismatch` | RFC 9728 §3.3 |
 | Documents are fetched over `https` (`http` only on loopback, for development) | `InsecureTransport` | RFC 9728 §7.1, RFC 8414 §3 |
 | A redirect to another origin is never followed, including one a custom handler followed itself | `CrossOriginRedirect` | |
 | At most `MaxRedirects` same-origin redirects | `TooManyRedirects` | |
@@ -67,19 +67,25 @@ The checks run on every call, whether the document comes from the network or fro
 
 ### Matching a resource to the challenged request
 
-RFC 9728 §3.3 says literally that the `resource` must be **identical** to the URL the client requested. A resource identifier names the API (`https://prism.example.com/v1`), while a request names one of its URLs (`…/v1/keys`). Exact matching therefore rejects a correctly configured server, `Wiaoj.WellKnown` included.
+By default the client follows RFC 9728 §3.3 literally. Metadata found through a 401 is used only if its `resource` is **identical** to the URL that was requested (`ChallengeResourceMatching.Exact`). This works when the resource identifier is the URL clients call. An MCP server with a single endpoint is an example.
 
-By default, `ChallengeResourceMatching.PathPrefix` is used instead. The resource must have the request's origin, and its path must be the request's path or a leading run of its segments:
+An API whose identifier names the whole API, such as `https://prism.example.com/v1`, returns 401s from URLs like `…/v1/keys`. Exact matching refuses those. If both sides agree, the client can opt in to `ChallengeResourceMatching.PathPrefix`, which is a deliberate relaxation of the RFC. The resource must then have the request's origin, and its path must be the request's path or a leading run of its segments:
 
-| Resource | Request | Accepted |
+| Resource | Request | `PathPrefix` accepts |
 | --- | --- | --- |
 | `https://prism.example.com/v1` | `https://prism.example.com/v1/keys` | yes |
 | `https://prism.example.com` | `https://prism.example.com/anything` | yes |
 | `https://prism.example.com/v1` | `https://prism.example.com/v10/keys` | no, not a segment boundary |
 | `https://prism.example.com/v1` | `https://other.example.com/v1/keys` | no, different origin |
 
-`ChallengeResourceMatching.Exact` applies the RFC text as written.
+```csharp
+services.AddOAuthDiscoveryClient(options => {
+    options.TrustedAuthorizationServers.Add("https://vaultex.example.com");
+    options.ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix;   // between our own services
+});
+```
 
+`DiscoverAsync(resource)` needs neither mode. It looks the document up by identifier, and `resource` must be identical to that identifier.
 ## Choosing the authorization server
 
 If `TrustedAuthorizationServers` is empty, the first entry in `authorization_servers` is used.

@@ -73,6 +73,7 @@ public sealed class DiscoveryEndToEndTests {
                 a.UseAuthorization();
                 a.MapOAuthProtectedResource();
                 a.MapGet("/v1/keys", () => "secret").RequireAuthorization();
+                a.MapGet("/v1", () => "root").RequireAuthorization();
             });
 
         WebApplication vaultex = TestApp.Build(
@@ -107,7 +108,7 @@ public sealed class DiscoveryEndToEndTests {
     public async Task Should_Discover_The_Authorization_Server_From_A_401() {
         await using Deployment deployment = await DeployAsync();
         using HttpClient http = deployment.Client();
-        OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex } });
+        OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex }, ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix });
 
         using HttpResponseMessage unauthorized = await http.GetAsync($"{Resource}/keys", Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
@@ -141,7 +142,7 @@ public sealed class DiscoveryEndToEndTests {
     public async Task Should_Refuse_A_Resource_That_Names_An_Untrusted_Authorization_Server() {
         await using Deployment deployment = await DeployAsync("https://attacker.example.com");
         using HttpClient http = deployment.Client();
-        OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex } });
+        OAuthDiscoveryClient discovery = new(deployment.Client(), new OAuthDiscoveryOptions { TrustedAuthorizationServers = { Vaultex }, ChallengeResourceMatching = ChallengeResourceMatching.PathPrefix });
 
         using HttpResponseMessage unauthorized = await http.GetAsync($"{Resource}/keys", Ct);
 
@@ -151,19 +152,30 @@ public sealed class DiscoveryEndToEndTests {
     }
 
     [Fact]
-    public async Task Should_Show_Why_Exact_Matching_Is_Not_The_Default() {
-        // RFC 9728 §3.3 as written: the resource must be identical to the challenged URL. The resource names the API, the
-        // request names one of its URLs, so exact matching refuses a correctly configured server.
+    public async Task Should_Refuse_By_Default_A_Resource_That_Is_Not_The_Challenged_Url() {
+        // RFC 9728 §3.3: the resource must be identical to the URL requested. The API's identifier is …/v1, so metadata
+        // advertised on …/v1/keys is refused unless the client opted in to PathPrefix.
         await using Deployment deployment = await DeployAsync();
         using HttpClient http = deployment.Client();
-        OAuthDiscoveryClient exact = new(deployment.Client(), new OAuthDiscoveryOptions { ChallengeResourceMatching = ChallengeResourceMatching.Exact });
+        OAuthDiscoveryClient discovery = new(deployment.Client());
 
         using HttpResponseMessage unauthorized = await http.GetAsync($"{Resource}/keys", Ct);
 
-        OAuthDiscoveryException error = await Assert.ThrowsAsync<OAuthDiscoveryException>(() => exact.DiscoverAsync(unauthorized, Ct));
+        OAuthDiscoveryException error = await Assert.ThrowsAsync<OAuthDiscoveryException>(() => discovery.DiscoverAsync(unauthorized, Ct));
         Assert.Equal(OAuthDiscoveryFailure.IdentifierMismatch, error.Failure);
     }
 
+    [Fact]
+    public async Task Should_Discover_By_Default_From_A_401_On_The_Resource_Url_Itself() {
+        await using Deployment deployment = await DeployAsync();
+        using HttpClient http = deployment.Client();
+        OAuthDiscoveryClient discovery = new(deployment.Client());
+
+        using HttpResponseMessage unauthorized = await http.GetAsync(Resource, Ct);
+
+        OAuthDiscoveryResult? result = await discovery.DiscoverAsync(unauthorized, Ct);
+        Assert.Equal(Vaultex, result?.AuthorizationServer.Issuer);
+    }
     [Fact]
     public async Task Should_Work_Through_The_Registered_Typed_Client() {
         await using Deployment deployment = await DeployAsync();
