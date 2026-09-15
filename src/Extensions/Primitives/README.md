@@ -1,4 +1,4 @@
-﻿Here is a highly detailed, professional, and strictly technical `README.md`. All emojis have been removed, the tone is purely engineering-focused, and all experimental buffer structures have been excluded. It explains the "why" and "how" for each feature in depth.
+Here is a highly detailed, professional, and strictly technical `README.md`. All emojis have been removed, the tone is purely engineering-focused, and all experimental buffer structures have been excluded. It explains the "why" and "how" for each feature in depth.
 
 ---
 
@@ -46,7 +46,7 @@ using Secret<byte> derivedKey = masterKey.DeriveKey(salt: apiKey, outputByteCoun
 
 ---
 
-## 2. Distributed Identity & Obfuscation
+## 2. Distributed Identity
 
 Relying on standard auto-incrementing `int` or random `Guid` (v4) for primary keys leads to database B-Tree index fragmentation and leaks business intelligence (e.g., how many orders you process daily).
 
@@ -64,26 +64,8 @@ SnowflakeId internalId = SnowflakeId.NewId();
 UnixTimestamp creationTime = internalId.ToUnixTimestamp();
 ```
 
-### OpaqueId (Secure ID Obfuscation)
-You should never expose internal sequential database IDs to the public. `OpaqueId` wraps a `SnowflakeId` or `long` and scrambles it using a Format-Preserving Encryption approach (e.g., Feistel Cipher). It generates short, YouTube-like URL-safe strings while remaining an integer under the hood.
-
-```csharp
-using Wiaoj.Primitives.Obfuscation;
-
-// Configure the global obfuscation strategy using a secret seed
-var options = new FeistelObfuscatorOptions { Seed = mySecretSeed };
-OpaqueId.Configure(new FeistelBase62Obfuscator(options));
-
-// Create an opaque representation of the internal ID
-OpaqueId publicId = new OpaqueId(internalId);
-
-// Expose to API responses or URLs
-Console.WriteLine(publicId.ToString()); // Outputs a stable string like "7xk9A2"
-
-// Parse back from incoming HTTP requests directly to the internal ID
-OpaqueId parsedId = OpaqueId.Parse("7xk9A2");
-SnowflakeId originalId = parsedId.AsSnowflake();
-```
+### Public identifiers
+`OpaqueId` and the `Wiaoj.Primitives.Obfuscation` namespace have been removed. Their obfuscators looked like encryption but were not: the keys came straight from the seed's first bytes, the ciphers were custom, and nothing detected a forged value. Strongly typed, prefixed public identifiers, with a plain or AES-encrypted form, are moving to `Wiaoj.Identifiers`.
 
 ### NanoId
 For completely random, highly collision-resistant public identifiers.
@@ -217,7 +199,7 @@ await FetchDataAsync(HttpContext.RequestAborted);
 
 ## System.Text.Json Integration
 
-All primitives (`SnowflakeId`, `OpaqueId`, `Base64String`, `SemVer`, `UnixTimestamp`, etc.) are decorated with high-performance `JsonConverter` implementations. They serialize directly to primitive JSON formats (strings or numbers) using UTF-8 span writers, bypassing intermediate string allocations entirely.
+All primitives (`SnowflakeId`, `Base64String`, `SemVer`, `UnixTimestamp`, etc.) are decorated with high-performance `JsonConverter` implementations. They serialize directly to primitive JSON formats (strings or numbers) using UTF-8 span writers, bypassing intermediate string allocations entirely.
 
 ## License
 

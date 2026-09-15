@@ -1,4 +1,4 @@
-﻿using BenchmarkDotNet.Running;
+using BenchmarkDotNet.Running;
 using System;
 using Wiaoj.Primitives;
 
@@ -9,7 +9,6 @@ internal class Program {
         // var _ = BenchmarkRunner.Run(typeof(Program).Assembly);
         var _ = BenchmarkRunner.Run<BufferAndListBenchmarks>();
         //var _ = BenchmarkRunner.Run<IdGenerationBenchmark>();
-        //BenchmarkRunner.Run<PublicIdBenchmark>(); 
         //BenchmarkRunner.Run<ValueListVsListBenchmark>();
         //var _ = BenchmarkRunner.Run<SpanSplitterBenchmark>(); 
         //var _ = BenchmarkRunner.Run<HashingBenchmark>(); 
