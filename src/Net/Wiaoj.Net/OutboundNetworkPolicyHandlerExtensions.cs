@@ -68,7 +68,8 @@ public static class OutboundNetworkPolicyHandlerExtensions {
         if(handler.Proxy is not null) {
             throw new InvalidOperationException(
                 "The handler has a proxy. Connections would be opened to the proxy, so the outbound network policy would check " +
-                "the proxy's address instead of the destination; enforce egress rules at the proxy instead.");
+                "the proxy's address instead of the destination; enforce egress rules at the proxy, and check destinations " +
+                "before they are sent with ProxiedDestinationCheckHandler.");
         }
 
         return handler.UseOutboundNetworkPolicy(policy, resolver, HappyEyeballsConnector.Default);
@@ -83,7 +84,7 @@ public static class OutboundNetworkPolicyHandlerExtensions {
     internal static async ValueTask<Stream> ConnectAsync(DnsEndPoint endpoint, OutboundNetworkPolicy policy, DnsResolver resolver, HappyEyeballsConnector connector, CancellationToken cancellationToken) {
         // A refused port needs no lookup: nothing the host resolves to could make it allowed.
         if(!policy.IsPortAllowed(endpoint.Port)) {
-            OutboundNetworkMeter.RecordRefused(OutboundRefusalReason.Port, scope: null);
+            OutboundNetworkMeter.RecordRefused(OutboundNetworkMeter.ConnectStage, OutboundRefusalReason.Port, scope: null);
             throw new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port, OutboundRefusalReason.Port);
         }
 
@@ -92,7 +93,7 @@ public static class OutboundNetworkPolicyHandlerExtensions {
         // Refused addresses are dropped before ordering, so they are never attempted and never delay an allowed one.
         List<IPAddress> allowed = new(resolved.Length);
         if(policy.Decide(resolved, allowed, out IPAddressScope? scope) is { } refusal) {
-            OutboundNetworkMeter.RecordRefused(refusal, scope);
+            OutboundNetworkMeter.RecordRefused(OutboundNetworkMeter.ConnectStage, refusal, scope);
             throw new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port, refusal);
         }
 

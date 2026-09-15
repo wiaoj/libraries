@@ -251,10 +251,10 @@ public sealed record OutboundNetworkPolicy {
             return new OutboundHostCheck(host, OutboundHostStatus.Unresolvable);
         }
 
-        OutboundRefusalReason? refusal = this.Decide(addresses, allowed: null, out _);
+        OutboundRefusalReason? refusal = this.Decide(addresses, allowed: null, out IPAddressScope? scope);
         return refusal is null
             ? new OutboundHostCheck(host, OutboundHostStatus.Allowed)
-            : new OutboundHostCheck(host, OutboundHostStatus.Refused) { RefusalReason = refusal };
+            : new OutboundHostCheck(host, OutboundHostStatus.Refused) { RefusalReason = refusal, RefusedScope = scope };
     }
 
     /// <summary>

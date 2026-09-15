@@ -20,7 +20,7 @@ public sealed class MetricsCollection;
 public sealed class OutboundNetworkMetricsTests : IDisposable {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static readonly HashSet<string> RefusedTagKeys = ["reason", "scope"];
+    private static readonly HashSet<string> RefusedTagKeys = ["stage", "reason", "scope"];
     private static readonly HashSet<string> Reasons = ["address", "port", "blocked_network"];
     private static readonly HashSet<string> Outcomes = ["success", "failure", "cancelled"];
 
@@ -71,14 +71,14 @@ public sealed class OutboundNetworkMetricsTests : IDisposable {
 
     [Fact]
     public void Should_Publish_Both_Instruments_With_Units_And_Descriptions() {
-        OutboundNetworkMeter.RecordRefused(OutboundRefusalReason.Port, scope: null);
+        OutboundNetworkMeter.RecordRefused(OutboundNetworkMeter.ConnectStage, OutboundRefusalReason.Port, scope: null);
 
         Instrument refused = this._instruments["wiaoj.net.outbound.refused"];
         Instrument duration = this._instruments["wiaoj.net.dns.resolution.duration"];
 
         Assert.IsType<Counter<long>>(refused);
-        Assert.Equal("{connection}", refused.Unit);
-        Assert.Contains("connections", refused.Description, StringComparison.Ordinal);
+        Assert.Equal("{refusal}", refused.Unit);
+        Assert.Contains("stage=request", refused.Description, StringComparison.Ordinal);
         Assert.IsType<Histogram<double>>(duration);
         Assert.Equal("s", duration.Unit);
     }
@@ -224,7 +224,55 @@ public sealed class OutboundNetworkMetricsTests : IDisposable {
 
         string[] values = [.. this._measurements.SelectMany(m => m.Tags.Values).Select(v => v?.ToString() ?? "")];
         string[] scopeNames = [.. Enum.GetValues<IPAddressScope>().Select(s => OutboundNetworkMeter.ScopeName(s))];
-        Assert.All(values, value => Assert.True(Reasons.Contains(value) || Outcomes.Contains(value) || scopeNames.Contains(value), value));
+        Assert.All(values, value => Assert.True(Reasons.Contains(value) || Outcomes.Contains(value) || scopeNames.Contains(value) || value is "connect" or "request", value));
+    }
+
+    // Added for #154: refusals before a proxied request are counted too, told apart by stage.
+    [Fact]
+    public async Task Should_Tag_A_Connection_Time_Refusal_With_The_Connect_Stage() {
+        await RefusedAsync(OutboundNetworkPolicy.PublicOnly, "http://loopback.test/");
+
+        Assert.Equal("connect", Assert.Single(this.Refusals()).Tags["stage"]);
+    }
+
+    [Fact]
+    public async Task Should_Count_A_Proxied_Destination_Refusal_With_The_Request_Stage() {
+        using HttpClient client = new(new ProxiedDestinationCheckHandler(OutboundNetworkPolicy.PublicOnly, Resolver()) {
+            InnerHandler = new ProxiedDestinationCheckHandlerTests.RecordingProxy()
+        });
+
+        await Assert.ThrowsAsync<OutboundNetworkPolicyException>(() => client.GetAsync("http://metadata.test/", Ct));
+
+        Measurement measurement = Assert.Single(this.Refusals());
+        Assert.Equal("request", measurement.Tags["stage"]);
+        Assert.Equal("address", measurement.Tags["reason"]);
+        Assert.Equal("link_local", measurement.Tags["scope"]);
+    }
+
+    [Fact]
+    public async Task Should_Count_A_Proxied_Port_Refusal_Without_A_Scope() {
+        using HttpClient client = new(new ProxiedDestinationCheckHandler(OutboundNetworkPolicy.WebOnly, Resolver()) {
+            InnerHandler = new ProxiedDestinationCheckHandlerTests.RecordingProxy()
+        });
+
+        await Assert.ThrowsAsync<OutboundNetworkPolicyException>(() => client.GetAsync("https://loopback.test:6379/", Ct));
+
+        Measurement measurement = Assert.Single(this.Refusals());
+        Assert.Equal("request", measurement.Tags["stage"]);
+        Assert.Equal("port", measurement.Tags["reason"]);
+        Assert.False(measurement.Tags.ContainsKey("scope"));
+    }
+
+    [Fact]
+    public async Task Should_Count_Nothing_When_A_Proxied_Destination_Is_Sent() {
+        using HttpClient client = new(new ProxiedDestinationCheckHandler(OutboundNetworkPolicy.PublicOnly, Resolver()) {
+            InnerHandler = new ProxiedDestinationCheckHandlerTests.RecordingProxy()
+        });
+
+        using HttpResponseMessage allowed = await client.GetAsync("https://mixed-blocked.test/", Ct);
+        using HttpResponseMessage unresolvable = await client.GetAsync("https://unknown.test/", Ct);
+
+        Assert.Empty(this.Refusals());
     }
 
     [Fact]

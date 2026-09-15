@@ -239,13 +239,13 @@ The core engine emits comprehensive telemetry:
   - `wiaoj.webhooks.dead_letter.count` (Counter)
   - `wiaoj.webhooks.ssrf.blocked.count` (Counter): deliveries refused by the outbound network policy, tagged with `webhook.endpoint_id`
 
-**SSRF refusals at two levels.** Subscribe to the `Wiaoj.Net` meter as well to see refused connections as `wiaoj.net.outbound.refused`, tagged with a `reason` and an address `scope`. The two counters show the same event at different levels, so don't add them up:
+**SSRF refusals at two levels.** Subscribe to the `Wiaoj.Net` meter as well to see refusals as `wiaoj.net.outbound.refused`, tagged with a `stage`, a `reason` and an address `scope`. The two counters show the same event at different levels, so don't add them up:
 
 | Situation | `wiaoj.webhooks.ssrf.blocked.count` | `wiaoj.net.outbound.refused` |
 | --- | --- | --- |
-| Delivery refused, no proxy | +1 (the delivery) | +1 (the connection behind it) |
-| Delivery refused through a proxy (checked before any connection) | +1 | nothing |
-| Another `HttpClient` in the application with a policy refuses a connection | nothing | +1 |
+| Delivery refused, no proxy | +1 (the delivery) | +1, `stage=connect` |
+| Delivery refused through a proxy (checked before the request is sent) | +1 | +1, `stage=request` |
+| Another `HttpClient` in the application with a policy refuses a destination | nothing | +1 |
 
 ---
 
