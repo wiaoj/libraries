@@ -87,6 +87,16 @@ If a URL's host is resolved, checked, and then connected to separately, DNS can 
 
 `AddOutboundNetworkPolicy` applies the policy **after** all of the client's handler configuration has run. A later `ConfigurePrimaryHttpMessageHandler` call can't silently replace the protected handler, and that handler's own settings, such as `AllowAutoRedirect = false`, are kept.
 
+## Hosts with several addresses
+
+A host often resolves to several addresses, for example an IPv6 and an IPv4 one. Addresses the policy refuses are dropped first and never attempted. The allowed ones are connected to as **Happy Eyeballs v2 (RFC 8305)** describes:
+
+- **Order:** address families are interleaved, starting with the family of the first address the resolver returned (IPv6, IPv4, IPv6, …).
+- **Racing:** each attempt gets a 250 ms head start (the delay RFC 8305 recommends). If it hasn't connected by then, the next attempt starts alongside it, and an attempt that fails starts the next one at once.
+- **Winner:** the first connection is used. The other attempts are cancelled, and a socket one of them still opens is closed.
+- **Failure:** the request fails only when every attempt has failed, with the last attempt's `SocketException`. The handler's `ConnectTimeout` bounds all attempts together.
+
+Without racing, an IPv6 path that silently drops packets would use up the whole connect timeout, and the healthy IPv4 address would never be tried.
 ## DNS resolution
 
 Host names are resolved with a `DnsResolver`. The default is `DnsResolver.System`, the operating system resolver. To use a corporate resolver, or a fake one in tests, register a replacement. `AddOutboundNetworkPolicy` and Webhooks use the registered resolver automatically:

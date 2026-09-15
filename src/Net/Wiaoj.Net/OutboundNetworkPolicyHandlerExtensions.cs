@@ -31,7 +31,10 @@ public static class OutboundNetworkPolicyHandlerExtensions {
     /// the proxy is the place to enforce egress rules.
     /// </para>
     /// <para>
-    /// A host resolving to both allowed and refused addresses is connected through an allowed one only.
+    /// A host resolving to both allowed and refused addresses is connected through an allowed one only. When several
+    /// addresses are allowed, the attempts are raced as Happy Eyeballs (RFC 8305) describes: an address that does not
+    /// answer within 250 ms no longer holds up the next one, so an unreachable IPv6 path does not use up the connect
+    /// timeout before IPv4 is tried.
     /// </para>
     /// </remarks>
     public static SocketsHttpHandler UseOutboundNetworkPolicy(this SocketsHttpHandler handler, OutboundNetworkPolicy policy) {
@@ -68,36 +71,25 @@ public static class OutboundNetworkPolicyHandlerExtensions {
                 "the proxy's address instead of the destination; enforce egress rules at the proxy instead.");
         }
 
+        return handler.UseOutboundNetworkPolicy(policy, resolver, HappyEyeballsConnector.Default);
+    }
+
+    internal static SocketsHttpHandler UseOutboundNetworkPolicy(this SocketsHttpHandler handler, OutboundNetworkPolicy policy, DnsResolver resolver, HappyEyeballsConnector connector) {
         handler.UseProxy = false;
-        handler.ConnectCallback = (context, cancellationToken) => ConnectAsync(context.DnsEndPoint, policy, resolver, cancellationToken);
+        handler.ConnectCallback = (context, cancellationToken) => ConnectAsync(context.DnsEndPoint, policy, resolver, connector, cancellationToken);
         return handler;
     }
 
-    internal static async ValueTask<Stream> ConnectAsync(DnsEndPoint endpoint, OutboundNetworkPolicy policy, DnsResolver resolver, CancellationToken cancellationToken) {
-        IPAddress[] addresses = await DnsResolver.ResolveOrParseAsync(resolver, endpoint.Host, cancellationToken).ConfigureAwait(false);
+    internal static async ValueTask<Stream> ConnectAsync(DnsEndPoint endpoint, OutboundNetworkPolicy policy, DnsResolver resolver, HappyEyeballsConnector connector, CancellationToken cancellationToken) {
+        IPAddress[] resolved = await DnsResolver.ResolveOrParseAsync(resolver, endpoint.Host, cancellationToken).ConfigureAwait(false);
 
-        Exception? lastError = null;
-
-        foreach(IPAddress address in addresses) {
-            if(!policy.IsAllowed(address)) {
-                continue;
-            }
-
-            Socket socket = new(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-            try {
-                await socket.ConnectAsync(new IPEndPoint(address, endpoint.Port), cancellationToken).ConfigureAwait(false);
-                return new NetworkStream(socket, ownsSocket: true);
-            }
-            catch(SocketException exception) {
-                socket.Dispose();
-                lastError = exception;
-            }
-            catch {
-                socket.Dispose();
-                throw;
-            }
+        // Refused addresses are dropped before ordering, so they are never attempted and never delay an allowed one.
+        IPAddress[] allowed = HappyEyeballsConnector.Interleave([.. resolved.Where(policy.IsAllowed)]);
+        if(allowed.Length == 0) {
+            throw new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port);
         }
 
-        throw lastError ?? new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port);
+        Socket socket = await connector.ConnectAsync(allowed, endpoint.Port, cancellationToken).ConfigureAwait(false);
+        return new NetworkStream(socket, ownsSocket: true);
     }
 }
