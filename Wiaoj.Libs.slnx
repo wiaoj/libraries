@@ -72,6 +72,10 @@
   <Folder Name="/src/Extensions/Concurrency/">
     <Project Path="src/Extensions/Concurrency/Wiaoj.Concurrency/Wiaoj.Concurrency.csproj" />
   </Folder>
+  <Folder Name="/src/Identifiers/">
+    <Project Path="src/Identifiers/Wiaoj.Identifiers.Generators/Wiaoj.Identifiers.Generators.csproj" />
+    <Project Path="src/Identifiers/Wiaoj.Identifiers/Wiaoj.Identifiers.csproj" />
+  </Folder>
   <Folder Name="/src/Mediator/">
     <Project Path="src/Mediator/Wiaoj.Mediator/Wiaoj.Mediator.csproj" />
   </Folder>
@@ -170,6 +174,9 @@
   <Folder Name="/tests/DistributedCounter/">
     <Project Path="tests/DistributedCounter/Wiaoj.DistributedCounter.Redis.Tests.Integration/Wiaoj.DistributedCounter.Redis.Tests.Integration.csproj" Id="267e56ef-24da-47b0-98f4-b9b0173c8e68" />
     <Project Path="tests/DistributedCounter/Wiaoj.DistributedCounter.Tests.Unit/Wiaoj.DistributedCounter.Tests.Unit.csproj" Id="3b49f798-09fc-4e18-899b-5011603b215f" />
+  </Folder>
+  <Folder Name="/tests/Identifiers/">
+    <Project Path="tests/Identifiers/Wiaoj.Identifiers.Tests.Unit/Wiaoj.Identifiers.Tests.Unit.csproj" />
   </Folder>
   <Folder Name="/tests/Net/">
     <Project Path="tests/Net/Wiaoj.Net.Tests.Unit/Wiaoj.Net.Tests.Unit.csproj" />
