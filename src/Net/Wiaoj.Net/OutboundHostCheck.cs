@@ -12,6 +12,15 @@ public enum OutboundHostStatus {
     Unresolvable
 }
 
+/// <summary>Why an <see cref="OutboundNetworkPolicy"/> refused a destination.</summary>
+public enum OutboundRefusalReason {
+    /// <summary>No address the host resolves to is allowed.</summary>
+    Address,
+
+    /// <summary>The port is not allowed, whatever the address.</summary>
+    Port
+}
+
 /// <summary>
 /// The outcome of checking a host against an <see cref="OutboundNetworkPolicy"/> before connecting to it.
 /// </summary>
@@ -26,4 +35,7 @@ public enum OutboundHostStatus {
 public readonly record struct OutboundHostCheck(string Host, OutboundHostStatus Status, Exception? ResolutionError = null) {
     /// <summary>Gets whether the host may be connected to.</summary>
     public bool IsAllowed => this.Status == OutboundHostStatus.Allowed;
+
+    /// <summary>Gets why the destination was refused when <see cref="Status"/> is <see cref="OutboundHostStatus.Refused"/>.</summary>
+    public OutboundRefusalReason? RefusalReason { get; init; }
 }

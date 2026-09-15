@@ -33,7 +33,7 @@ internal sealed class ProxiedDestinationPolicyHandler(IOptions<WebhookSecurityOp
             OutboundHostCheck check = await security.EffectiveNetworkPolicy.CheckHostAsync(url, resolver, cancellationToken).ConfigureAwait(false);
 
             if(check.Status == OutboundHostStatus.Refused) {
-                throw new OutboundNetworkPolicyException(url.Host, url.Port);
+                throw new OutboundNetworkPolicyException(url.Host, url.Port, check.RefusalReason ?? OutboundRefusalReason.Address);
             }
         }
 

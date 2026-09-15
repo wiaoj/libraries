@@ -222,6 +222,9 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
             OutboundHostCheck check = await policy.CheckHostAsync(this._targetUrl, this._dnsResolver, cancellationToken).ConfigureAwait(false);
 
             switch(check.Status) {
+                case OutboundHostStatus.Refused when check.RefusalReason == OutboundRefusalReason.Port:
+                    return WebhookEndpointBuildResult.Refused(
+                        $"The port {this._targetUrl.Port} of target URL '{this._targetUrl}' is not allowed by the outbound network policy.");
                 case OutboundHostStatus.Refused:
                     return WebhookEndpointBuildResult.Refused(
                         $"All resolved IP addresses for target host '{this._targetUrl.Host}' are in prohibited private or link-local ranges.");

@@ -80,7 +80,16 @@ If `TrustedAuthorizationServers` is empty, the first entry in `authorization_ser
 
 If it is set, the first listed server that is also trusted is used. A resource that lists none of them is refused before anything is fetched from those servers.
 
-RFC 9728 §7.7 warns that fetching whatever a resource names enables server-side request forgery. Between services that know each other, the trusted list is the control. The client does not block private IP addresses. A client that talks to arbitrary APIs should add that check itself, in the handler.
+RFC 9728 §7.7 warns that fetching whatever a resource names enables server-side request forgery. Between services that know each other, the trusted list is the control. The client does not block private IP addresses itself.
+
+A client that talks to arbitrary APIs should add that check. Metadata is always fetched over https, so [Wiaoj.Net](../../Net/Wiaoj.Net/README.md)'s `WebOnly` policy fits: public addresses on ports 80 and 443 only.
+
+```csharp
+builder.Services.AddOAuthDiscoveryClient()
+    .AddOutboundNetworkPolicy(OutboundNetworkPolicy.WebOnly);
+```
+
+`WebOnly` also refuses loopback, so leave it out when developing against `http://localhost`.
 
 ## Caching
 

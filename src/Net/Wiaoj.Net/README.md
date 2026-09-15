@@ -59,7 +59,30 @@ This is an early answer, not the protection. DNS can answer differently by the t
 2. **Allowed exception:** if the address is in `AllowedNetworks`, it is allowed.
 3. **Scope:** otherwise it is allowed only when its scope is in `AllowedScopes`.
 
-Presets: `PublicOnly` (the default) and `Unrestricted` (for development).
+Presets:
+
+| Preset | Addresses | Ports |
+| --- | --- | --- |
+| `PublicOnly` (the default) | Public | Any |
+| `WebOnly` | Public | 80 and 443 |
+| `Unrestricted` (for development) | Any | Any |
+
+### Ports
+
+SSRF often targets an internal service by its port as much as by its address: Redis on 6379, the Docker API on 2375, SSH on 22. Ports are checked before addresses:
+
+- **`BlockedPorts`:** refused whatever else allows them.
+- **`AllowedPorts`:** when set, only these ports are allowed. `null` (the default) allows any port.
+
+```csharp
+// A webhook receiver on 8443 as well as the web ports
+OutboundNetworkPolicy policy = OutboundNetworkPolicy.PublicOnly with { AllowedPorts = new HashSet<int> { 80, 443, 8443 } };
+```
+
+`PublicOnly` keeps allowing any port, because webhook receivers legitimately listen on ports such as 8443.
+
+- **At connection time:** a refused port is refused before the host is resolved, with `OutboundNetworkPolicyException` whose `Reason` is `Port`.
+- **`CheckHostAsync(Uri)`:** uses the URL's explicit port or its scheme's default (80 for http, 443 for https), and returns `Refused` with `RefusalReason` `Port`. A host name alone has no port, so `CheckHostAsync(string)` applies only the address rules.
 
 ### IPv4 hidden inside IPv6
 

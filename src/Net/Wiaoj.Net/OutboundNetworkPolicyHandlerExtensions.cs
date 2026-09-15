@@ -9,7 +9,7 @@ namespace Wiaoj.Net;
 /// </summary>
 public static class OutboundNetworkPolicyHandlerExtensions {
     /// <summary>
-    /// Makes <paramref name="handler"/> resolve each host itself and connect only to an address
+    /// Makes <paramref name="handler"/> resolve each host itself and connect only to an address and port
     /// <paramref name="policy"/> allows.
     /// </summary>
     /// <param name="handler">The handler; not yet used to send a request.</param>
@@ -81,10 +81,15 @@ public static class OutboundNetworkPolicyHandlerExtensions {
     }
 
     internal static async ValueTask<Stream> ConnectAsync(DnsEndPoint endpoint, OutboundNetworkPolicy policy, DnsResolver resolver, HappyEyeballsConnector connector, CancellationToken cancellationToken) {
+        // A refused port needs no lookup: nothing the host resolves to could make it allowed.
+        if(!policy.IsPortAllowed(endpoint.Port)) {
+            throw new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port, OutboundRefusalReason.Port);
+        }
+
         IPAddress[] resolved = await DnsResolver.ResolveOrParseAsync(resolver, endpoint.Host, cancellationToken).ConfigureAwait(false);
 
         // Refused addresses are dropped before ordering, so they are never attempted and never delay an allowed one.
-        IPAddress[] allowed = HappyEyeballsConnector.Interleave([.. resolved.Where(policy.IsAllowed)]);
+        IPAddress[] allowed = HappyEyeballsConnector.Interleave([.. resolved.Where(address => policy.IsAllowed(address))]);
         if(allowed.Length == 0) {
             throw new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port);
         }
