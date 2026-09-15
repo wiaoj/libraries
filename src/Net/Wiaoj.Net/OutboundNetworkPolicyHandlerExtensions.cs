@@ -83,18 +83,20 @@ public static class OutboundNetworkPolicyHandlerExtensions {
     internal static async ValueTask<Stream> ConnectAsync(DnsEndPoint endpoint, OutboundNetworkPolicy policy, DnsResolver resolver, HappyEyeballsConnector connector, CancellationToken cancellationToken) {
         // A refused port needs no lookup: nothing the host resolves to could make it allowed.
         if(!policy.IsPortAllowed(endpoint.Port)) {
+            OutboundNetworkMeter.RecordRefused(OutboundRefusalReason.Port, scope: null);
             throw new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port, OutboundRefusalReason.Port);
         }
 
         IPAddress[] resolved = await DnsResolver.ResolveOrParseAsync(resolver, endpoint.Host, cancellationToken).ConfigureAwait(false);
 
         // Refused addresses are dropped before ordering, so they are never attempted and never delay an allowed one.
-        IPAddress[] allowed = HappyEyeballsConnector.Interleave([.. resolved.Where(address => policy.IsAllowed(address))]);
-        if(allowed.Length == 0) {
-            throw new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port);
+        List<IPAddress> allowed = new(resolved.Length);
+        if(policy.Decide(resolved, allowed, out IPAddressScope? scope) is { } refusal) {
+            OutboundNetworkMeter.RecordRefused(refusal, scope);
+            throw new OutboundNetworkPolicyException(endpoint.Host, endpoint.Port, refusal);
         }
 
-        Socket socket = await connector.ConnectAsync(allowed, endpoint.Port, cancellationToken).ConfigureAwait(false);
+        Socket socket = await connector.ConnectAsync(HappyEyeballsConnector.Interleave(allowed), endpoint.Port, cancellationToken).ConfigureAwait(false);
         return new NetworkStream(socket, ownsSocket: true);
     }
 }

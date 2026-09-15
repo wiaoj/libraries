@@ -14,11 +14,14 @@ public enum OutboundHostStatus {
 
 /// <summary>Why an <see cref="OutboundNetworkPolicy"/> refused a destination.</summary>
 public enum OutboundRefusalReason {
-    /// <summary>No address the host resolves to is allowed.</summary>
+    /// <summary>No address the host resolves to is allowed: each is outside the allowed scopes and networks.</summary>
     Address,
 
     /// <summary>The port is not allowed, whatever the address.</summary>
-    Port
+    Port,
+
+    /// <summary>No address the host resolves to is allowed, and at least one of them is in a blocked network.</summary>
+    BlockedNetwork
 }
 
 /// <summary>

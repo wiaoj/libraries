@@ -39,7 +39,24 @@ public abstract class DnsResolver {
     internal static ValueTask<IPAddress[]> ResolveOrParseAsync(DnsResolver resolver, string host, CancellationToken cancellationToken) {
         return IPAddress.TryParse(host, out IPAddress? literal)
             ? ValueTask.FromResult<IPAddress[]>([literal])
-            : resolver.ResolveAsync(host, cancellationToken);
+            : ResolveTimedAsync(resolver, host, cancellationToken);
+    }
+
+    private static async ValueTask<IPAddress[]> ResolveTimedAsync(DnsResolver resolver, string host, CancellationToken cancellationToken) {
+        long started = OutboundNetworkMeter.StartResolution();
+        try {
+            IPAddress[] addresses = await resolver.ResolveAsync(host, cancellationToken).ConfigureAwait(false);
+            OutboundNetworkMeter.RecordResolution(started, "success");
+            return addresses;
+        }
+        catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested) {
+            OutboundNetworkMeter.RecordResolution(started, "cancelled");
+            throw;
+        }
+        catch {
+            OutboundNetworkMeter.RecordResolution(started, "failure");
+            throw;
+        }
     }
 
     private sealed class SystemDnsResolver : DnsResolver {

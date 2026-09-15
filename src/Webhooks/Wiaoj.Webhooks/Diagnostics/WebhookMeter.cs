@@ -124,12 +124,21 @@ internal static class WebhookMeter {
             unit: "ms",
             description: "Duration spent waiting to acquire partition delivery lock in milliseconds.");
 
-    /// <summary>Total number of SSRF attempts intercepted and blocked.</summary>
+    /// <summary>
+    /// Total number of webhook deliveries refused by the outbound network policy.
+    /// </summary>
+    /// <remarks>
+    /// Counts deliveries, tagged with the endpoint. The connection-level count is <c>wiaoj.net.outbound.refused</c> on the
+    /// <c>Wiaoj.Net</c> meter: without a proxy one refused delivery is also one refused connection there, so the two are
+    /// the same event seen at two levels and must not be added up. Through a proxy the destination is refused before any
+    /// connection, so only this counter records it.
+    /// </remarks>
     public static readonly Counter<long> SsrfBlockedCount =
         _meter.CreateCounter<long>(
             "wiaoj.webhooks.ssrf.blocked.count",
-            unit: "{blocks}",
-            description: "Total number of SSRF attempts intercepted and blocked.");
+            unit: "{deliveries}",
+            description: "Total number of webhook deliveries refused by the outbound network policy. Counts deliveries; " +
+                         "wiaoj.net.outbound.refused counts the refused connections behind them.");
 
     // ── Recovery Metrics ──────────────────────────────────────────────────────
 

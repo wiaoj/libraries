@@ -137,6 +137,24 @@ Without dependency injection, pass the resolver to `UseOutboundNetworkPolicy(pol
 - **IP literals** never reach the resolver; the policy decides them directly.
 - **Unresolvable hosts:** throw `SocketException` for a host that cannot be resolved, as the system resolver does. `CheckHostAsync` reports it as `Unresolvable`, and any other exception propagates.
 - **Why an abstract class:** like `TimeProvider`, so members added later can be `virtual` without breaking existing implementations.
+## Metrics
+
+The `Wiaoj.Net` meter (`System.Diagnostics.Metrics`, no extra dependency) publishes:
+
+| Instrument | Type | Tags |
+| --- | --- | --- |
+| `wiaoj.net.outbound.refused` | Counter, `{connection}` | `reason`: `address`, `port` or `blocked_network`. `scope`: the `IPAddressScope` of the address that decided the refusal, in snake case (`loopback`, `link_local`, `carrier_grade_nat`, …); absent for `port` |
+| `wiaoj.net.dns.resolution.duration` | Histogram, seconds | `outcome`: `success`, `failure` or `cancelled` |
+
+```csharp
+builder.Services.AddOpenTelemetry().WithMetrics(metrics => metrics.AddMeter("Wiaoj.Net"));
+```
+
+- **What is counted:** `outbound.refused` counts connections refused by `UseOutboundNetworkPolicy` / `AddOutboundNetworkPolicy`. `CheckHostAsync` is an answer to a question, not a connection, so it records no refusal.
+- **Several addresses:** when a host resolves to several refused addresses, the refusal is counted once, as `blocked_network` if any address is in a blocked network, otherwise as `address`.
+- **DNS timing:** the histogram covers host names resolved through the `DnsResolver`, including a custom one. IP literals are not resolved, so they are not recorded. For `DnsResolver.System`, .NET's own `dns.lookup.duration` measures the same lookup.
+- **No host, port or address tags:** those values come from whoever supplied the URL, and an attacker could make each one unique and flood the metrics backend.
+- **Packages keep their own context:** Webhooks counts refused *deliveries* per endpoint in `wiaoj.webhooks.ssrf.blocked.count`. That is the same event at another level, not a second one.
 ## Proxies
 
 Behind a proxy, the connection goes to the proxy, and the proxy reaches the destination. The client never sees the destination's address, so it can't check it:

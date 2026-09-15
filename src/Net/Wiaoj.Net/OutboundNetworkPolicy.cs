@@ -119,7 +119,51 @@ public sealed record OutboundNetworkPolicy {
     /// <returns><see langword="true"/> when the policy allows it.</returns>
     public bool IsAllowed(IPAddress address) {
         Preca.ThrowIfNull(address);
+        return this.Evaluate(address) is null;
+    }
 
+    /// <summary>
+    /// Decides a set of resolved addresses, collecting the allowed ones.
+    /// </summary>
+    /// <param name="addresses">The addresses a host resolved to.</param>
+    /// <param name="allowed">Receives the allowed addresses, in order; <see langword="null"/> when only the decision is needed.</param>
+    /// <param name="scope">The scope of the address that decided a refusal; <see langword="null"/> when allowed or empty.</param>
+    /// <returns>
+    /// <see langword="null"/> when at least one address is allowed; otherwise why not. A blocked network is reported over
+    /// an address merely outside the allowed scopes, since it is the explicit rule the host ran into.
+    /// </returns>
+    internal OutboundRefusalReason? Decide(IReadOnlyList<IPAddress> addresses, List<IPAddress>? allowed, out IPAddressScope? scope) {
+        OutboundRefusalReason? refusal = null;
+        IPAddress? decisive = null;
+        bool anyAllowed = false;
+
+        foreach(IPAddress address in addresses) {
+            OutboundRefusalReason? reason = this.Evaluate(address);
+            if(reason is null) {
+                anyAllowed = true;
+                if(allowed is null) {
+                    break;
+                }
+
+                allowed.Add(address);
+            }
+            else if(refusal is null || (reason == OutboundRefusalReason.BlockedNetwork && refusal != OutboundRefusalReason.BlockedNetwork)) {
+                refusal = reason;
+                decisive = address;
+            }
+        }
+
+        if(anyAllowed) {
+            scope = null;
+            return null;
+        }
+
+        scope = decisive is null ? null : IPAddressClassifier.Classify(decisive);
+        return refusal ?? OutboundRefusalReason.Address;
+    }
+
+    /// <summary>Returns <see langword="null"/> when <paramref name="address"/> is allowed, otherwise why it is not.</summary>
+    private OutboundRefusalReason? Evaluate(IPAddress address) {
         // IPNetwork already matches an IPv4-mapped address against an IPv4 network. Every other IPv4 address the address
         // carries — tunnelled or translated — is checked against the blocked networks too.
         Span<IPAddress?> carried = [null, null];
@@ -127,12 +171,12 @@ public sealed record OutboundNetworkPolicy {
 
         foreach(IPNetwork blocked in this._blockedNetworks) {
             if(blocked.Contains(address)) {
-                return false;
+                return OutboundRefusalReason.BlockedNetwork;
             }
 
             for(int i = 0; i < carriedCount; i++) {
                 if(blocked.Contains(carried[i]!)) {
-                    return false;
+                    return OutboundRefusalReason.BlockedNetwork;
                 }
             }
         }
@@ -144,11 +188,11 @@ public sealed record OutboundNetworkPolicy {
 
         foreach(IPNetwork allowed in this._allowedNetworks) {
             if(allowed.Contains(address) || (translated is not null && allowed.Contains(translated))) {
-                return true;
+                return null;
             }
         }
 
-        return this._allowedScopes.Contains(IPAddressClassifier.Classify(address));
+        return this._allowedScopes.Contains(IPAddressClassifier.Classify(address)) ? null : OutboundRefusalReason.Address;
     }
 
     /// <summary>Returns whether <paramref name="port"/> passes the port rules; blocked ports win.</summary>
@@ -207,9 +251,10 @@ public sealed record OutboundNetworkPolicy {
             return new OutboundHostCheck(host, OutboundHostStatus.Unresolvable);
         }
 
-        return addresses.Any(this.IsAllowed)
+        OutboundRefusalReason? refusal = this.Decide(addresses, allowed: null, out _);
+        return refusal is null
             ? new OutboundHostCheck(host, OutboundHostStatus.Allowed)
-            : new OutboundHostCheck(host, OutboundHostStatus.Refused) { RefusalReason = OutboundRefusalReason.Address };
+            : new OutboundHostCheck(host, OutboundHostStatus.Refused) { RefusalReason = refusal };
     }
 
     /// <summary>
