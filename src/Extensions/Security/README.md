@@ -22,6 +22,7 @@ A strongly-typed, AES-GCM envelope encryption library for .NET with automatic ke
   - [Automatic rotation](#automatic-rotation)
   - [Forced rotation](#forced-rotation)
   - [Key lifecycle](#key-lifecycle)
+  - [Subkeys for other features](#subkeys-for-other-features)
 - [Master Key Providers](#master-key-providers)
   - [Environment variable (dev/staging)](#environment-variable-devstaging)
   - [IConfiguration / appsettings](#iconfiguration--appsettings)
@@ -356,6 +357,28 @@ Day 180:  Key v3 created (active), v2 retired
 ```
 
 Retired keys stay in the database until **all** records referencing them have been re-encrypted by `IDataRotator<TContext>`. Only then is it safe to delete them.
+
+### Subkeys for other features
+
+Some features need a key that follows a domain's rotation but can't use an AES-GCM packet, for example encrypting identifiers into a fixed-size block. `ISubkeyDeriver<TContext>` derives such a key from any version in the ring, without exposing the key itself:
+
+```csharp
+public sealed class MyFeature(ISubkeyDeriver<WebhookContext> keys) {
+    public byte[] CurrentKey() {
+        byte[] subkey = new byte[32];
+        keys.DeriveSubkey(keys.CurrentKeyVersion, "my-company.my-feature"u8, subkey);
+        return subkey;
+    }
+}
+```
+
+- **Derivation:** HKDF-SHA256 over the version's key, with the info `"wiaoj.security.subkey:" + purpose`.
+- **Deterministic:** the same version and purpose always derive the same bytes. Different purposes, keys or versions derive unrelated bytes, and a subkey reveals nothing about the domain key.
+- **Retired versions derive too:** data written under them stays readable. `KeyVersions` lists every version available.
+- **Registration:** `AddManagedProtector<TContext>()` registers the managed protector as `ISubkeyDeriver<TContext>`, so after a rotation the new version appears in `CurrentKeyVersion` and `KeyVersions` without further action.
+- **Purpose:** a fixed label, never secret or user-supplied data. It must not be empty.
+
+[Wiaoj.Identifiers.Security](../../Identifiers/Wiaoj.Identifiers.Security/README.md) uses this to key identifier encryption by a domain's key ring.
 
 ---
 

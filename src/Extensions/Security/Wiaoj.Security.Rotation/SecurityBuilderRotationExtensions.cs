@@ -58,6 +58,10 @@ public static class SecurityBuilderRotationExtensions {
         services.TryAddSingleton<ISecretProtector<TContext>>(
             sp => sp.GetRequiredService<ManagedSecretProtector<TContext>>());
 
+        // Subkeys follow the same reloads, so a feature keyed by this domain rotates with it.
+        services.TryAddSingleton<ISubkeyDeriver<TContext>>(
+            sp => sp.GetRequiredService<ManagedSecretProtector<TContext>>());
+
         // Pre-warm the lazy key ring during IHostedService.StartAsync (fully async).
         services.AddHostedService<SecurityInitializationService<TContext>>();
 

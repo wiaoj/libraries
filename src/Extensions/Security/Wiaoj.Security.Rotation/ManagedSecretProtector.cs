@@ -21,7 +21,7 @@ namespace Wiaoj.Security;
 /// </para>
 /// </remarks>
 /// <typeparam name="TContext">The phantom type representing the secret domain context.</typeparam>
-public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext>, IDisposable, IAsyncDisposable
+public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext>, ISubkeyDeriver<TContext>, IDisposable, IAsyncDisposable
     where TContext : ISecretContext {
 
     private volatile AsyncLazy<SecretProtector<TContext>> _lazy;
@@ -81,6 +81,15 @@ public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext
     /// <inheritdoc/>
     public EncryptedSecret<TContext> Rotate(in EncryptedSecret<TContext> encrypted) {
         return this.Inner.Rotate(encrypted);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Reflects the key ring loaded most recently, so versions added by a reload appear here.</remarks>
+    public IReadOnlyCollection<KeyVersion> KeyVersions => this.Inner.KeyVersions;
+
+    /// <inheritdoc/>
+    public void DeriveSubkey(KeyVersion version, ReadOnlySpan<byte> purpose, Span<byte> destination) {
+        this.Inner.DeriveSubkey(version, purpose, destination);
     }
 
     /// <summary>
