@@ -110,7 +110,7 @@ public abstract class IdCodec {
     /// </summary>
     /// <param name="other">The other codec.</param>
     /// <returns><see langword="true"/> when the codecs are interchangeable. The default compares references.</returns>
-    protected virtual bool IsEquivalentTo(IdCodec other) => ReferenceEquals(this, other);
+    public virtual bool IsEquivalentTo(IdCodec other) => ReferenceEquals(this, other);
 
     /// <summary>Gets the longest text this codec writes for an identifier with <paramref name="prefix"/>.</summary>
     /// <param name="prefix">The identifier's prefix.</param>

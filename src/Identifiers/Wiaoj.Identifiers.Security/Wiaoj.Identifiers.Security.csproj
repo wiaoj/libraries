@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Wiaoj.Identifiers.Security</RootNamespace>
+		<AssemblyName>Wiaoj.Identifiers.Security</AssemblyName>
+		<PackageId>Wiaoj.Identifiers.Security</PackageId>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<IsAotCompatible>true</IsAotCompatible>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Wiaoj.Identifiers\Wiaoj.Identifiers.csproj" />
+		<ProjectReference Include="..\..\Extensions\Security\Wiaoj.Security.Abstractions\Wiaoj.Security.Abstractions.csproj" />
+	</ItemGroup>
+
+</Project>

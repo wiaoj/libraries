@@ -36,6 +36,7 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="Wiaoj.Identifiers.Tests.Unit" />
+		<InternalsVisibleTo Include="Wiaoj.Identifiers.Security.Tests.Unit" />
 	</ItemGroup>
 
 </Project>
