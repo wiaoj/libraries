@@ -41,4 +41,7 @@ public readonly record struct OutboundHostCheck(string Host, OutboundHostStatus 
 
     /// <summary>Gets why the destination was refused when <see cref="Status"/> is <see cref="OutboundHostStatus.Refused"/>.</summary>
     public OutboundRefusalReason? RefusalReason { get; init; }
+
+    /// <summary>The scope of the address that decided a refusal, for the refusal metric; never shown to callers.</summary>
+    internal IPAddressScope? RefusedScope { get; init; }
 }

@@ -54,9 +54,14 @@ public static class WebhookServiceCollectionExtensions {
 
              return handler;
          })
-         .AddHttpMessageHandler<ProxiedDestinationPolicyHandler>();
-
-        services.TryAddTransient<ProxiedDestinationPolicyHandler>();
+         .AddHttpMessageHandler(sp => {
+             // Through a proxy the connection-time policy sees the proxy, not the destination, so destinations are checked
+             // before they are sent (Wiaoj.Net). Direct connections are already checked where the socket opens.
+             WebhookSecurityOptions options = sp.GetRequiredService<IOptions<WebhookSecurityOptions>>().Value;
+             return options.Proxy is not null && !options.AllowPrivateNetworks
+                 ? new ProxiedDestinationCheckHandler(options.EffectiveNetworkPolicy, sp.GetService<DnsResolver>() ?? DnsResolver.System)
+                 : new PassThroughHandler();
+         });
 
         services.AddWiaojSerializer(serialization => {
             serialization.TryUseSystemTextJson<WebhookSerializerKey>();

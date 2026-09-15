@@ -51,6 +51,27 @@ public static class OutboundNetworkPolicyHttpClientBuilderExtensions {
     }
 
     /// <summary>
+    /// Checks each request's destination against <paramref name="policy"/> before it is sent — for a client whose
+    /// connections go through a proxy, where <see cref="AddOutboundNetworkPolicy(IHttpClientBuilder, OutboundNetworkPolicy)"/>
+    /// cannot be used.
+    /// </summary>
+    /// <param name="builder">The client builder.</param>
+    /// <param name="policy">The policy.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// Best effort: the proxy resolves host names again, so it must still enforce egress rules. See
+    /// <see cref="ProxiedDestinationCheckHandler"/>. Host names are resolved with the <see cref="DnsResolver"/> registered
+    /// in the container, or <see cref="DnsResolver.System"/> when there is none.
+    /// </remarks>
+    public static IHttpClientBuilder AddProxiedDestinationCheck(this IHttpClientBuilder builder, OutboundNetworkPolicy policy) {
+        Preca.ThrowIfNull(builder);
+        Preca.ThrowIfNull(policy);
+
+        return builder.AddHttpMessageHandler(services =>
+            new ProxiedDestinationCheckHandler(policy, (DnsResolver?)services.GetService(typeof(DnsResolver)) ?? DnsResolver.System));
+    }
+
+    /// <summary>
     /// Enforces <see cref="OutboundNetworkPolicy.PublicOnly"/>, adjusted by <paramref name="configure"/>, on every
     /// connection the client opens.
     /// </summary>

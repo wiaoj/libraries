@@ -23,15 +23,22 @@ internal static class OutboundNetworkMeter {
     public const string ReasonTag = "reason";
     public const string ScopeTag = "scope";
     public const string OutcomeTag = "outcome";
+    public const string StageTag = "stage";
+
+    /// <summary>Refused where the socket is opened, against the address actually connected to.</summary>
+    public const string ConnectStage = "connect";
+
+    /// <summary>Refused before a request is sent through a proxy — best effort, since the proxy resolves again.</summary>
+    public const string RequestStage = "request";
 
     private static readonly Meter Meter = new(Name, typeof(OutboundNetworkMeter).Assembly
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
 
     private static readonly Counter<long> Refused = Meter.CreateCounter<long>(
         RefusedName,
-        unit: "{connection}",
-        description: "Outbound connections refused by the outbound network policy before a socket was opened. " +
-                     "Counts connections, not requests or deliveries.");
+        unit: "{refusal}",
+        description: "Outbound destinations refused by the outbound network policy: at connection time (stage=connect), " +
+                     "or before a request is sent through a proxy (stage=request). Counts refusals, not deliveries.");
 
     private static readonly Histogram<double> DnsResolutionDuration = Meter.CreateHistogram<double>(
         DnsResolutionDurationName,
@@ -51,12 +58,12 @@ internal static class OutboundNetworkMeter {
     public static string ScopeName(IPAddressScope scope) => ScopeNames.TryGetValue(scope, out string? name) ? name : "unknown";
 
     /// <summary>Records a refused connection; <paramref name="scope"/> is absent when no address decided it (a port refusal).</summary>
-    public static void RecordRefused(OutboundRefusalReason reason, IPAddressScope? scope) {
+    public static void RecordRefused(string stage, OutboundRefusalReason reason, IPAddressScope? scope) {
         if(!Refused.Enabled) {
             return;
         }
 
-        TagList tags = new() { { ReasonTag, ReasonName(reason) } };
+        TagList tags = new() { { StageTag, stage }, { ReasonTag, ReasonName(reason) } };
         if(scope is { } known) {
             tags.Add(ScopeTag, ScopeName(known));
         }

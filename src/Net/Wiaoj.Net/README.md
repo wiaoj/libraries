@@ -143,14 +143,14 @@ The `Wiaoj.Net` meter (`System.Diagnostics.Metrics`, no extra dependency) publis
 
 | Instrument | Type | Tags |
 | --- | --- | --- |
-| `wiaoj.net.outbound.refused` | Counter, `{connection}` | `reason`: `address`, `port` or `blocked_network`. `scope`: the `IPAddressScope` of the address that decided the refusal, in snake case (`loopback`, `link_local`, `carrier_grade_nat`, …); absent for `port` |
+| `wiaoj.net.outbound.refused` | Counter, `{refusal}` | `stage`: `connect` (where the socket opens, exact) or `request` (before a proxied request is sent, best effort). `reason`: `address`, `port` or `blocked_network`. `scope`: the `IPAddressScope` of the address that decided the refusal, in snake case (`loopback`, `link_local`, `carrier_grade_nat`, …); absent for `port` |
 | `wiaoj.net.dns.resolution.duration` | Histogram, seconds | `outcome`: `success`, `failure` or `cancelled` |
 
 ```csharp
 builder.Services.AddOpenTelemetry().WithMetrics(metrics => metrics.AddMeter("Wiaoj.Net"));
 ```
 
-- **What is counted:** `outbound.refused` counts connections refused by `UseOutboundNetworkPolicy` / `AddOutboundNetworkPolicy`. `CheckHostAsync` is an answer to a question, not a connection, so it records no refusal.
+- **What is counted:** `outbound.refused` counts destinations refused by `UseOutboundNetworkPolicy` / `AddOutboundNetworkPolicy` (`stage=connect`) and by `ProxiedDestinationCheckHandler` / `AddProxiedDestinationCheck` (`stage=request`). A proxied deployment therefore does not read as "no refusals". `CheckHostAsync` on its own is an answer to a question, not an outbound request, so it records no refusal.
 - **Several addresses:** when a host resolves to several refused addresses, the refusal is counted once, as `blocked_network` if any address is in a blocked network, otherwise as `address`.
 - **DNS timing:** the histogram covers host names resolved through the `DnsResolver`, including a custom one. IP literals are not resolved, so they are not recorded. For `DnsResolver.System`, .NET's own `dns.lookup.duration` measures the same lookup.
 - **No host, port or address tags:** those values come from whoever supplied the URL, and an attacker could make each one unique and flood the metrics backend.
@@ -162,7 +162,21 @@ Behind a proxy, the connection goes to the proxy, and the proxy reaches the dest
 - An explicitly configured proxy is refused with `InvalidOperationException`.
 - The environment proxy (`HTTPS_PROXY`) is turned off (`UseProxy = false`), so it can't silently take over the connection.
 
-If your traffic must go through a proxy, enforce egress rules **at the proxy** (for example Smokescreen or Squid ACLs).
+If your traffic must go through a proxy, enforce egress rules **at the proxy** (for example Smokescreen or Squid ACLs). On the client, destinations can still be checked before each request is sent:
+
+```csharp
+services.AddHttpClient<PartnerClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { Proxy = new WebProxy("http://egress:3128") })
+    .AddProxiedDestinationCheck(OutboundNetworkPolicy.PublicOnly);
+```
+
+This check is **best effort**, so it doesn't replace the proxy's rules:
+
+- **Ports and IP literals** are decided exactly.
+- **Host names** are resolved here, but the proxy resolves them again and may get a different answer.
+- **A name that doesn't resolve here** is let through, because the proxy may resolve names this host can't.
+
+A refusal throws `OutboundNetworkPolicyException` and is counted with `stage=request`.
 
 ## Requirements
 
