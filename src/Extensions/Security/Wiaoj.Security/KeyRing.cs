@@ -16,6 +16,14 @@ public sealed class KeyRing<TContext> : IDisposable
     /// <summary>Total number of key versions registered (active + retired).</summary>
     public int Count => _keys.Count;
 
+    /// <summary>Gets every registered key version, active and retired, in ascending order.</summary>
+    public IReadOnlyCollection<KeyVersion> Versions {
+        get {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return [.. _keys.Keys.Order().Select(KeyVersion.Of)];
+        }
+    }
+
     internal KeyRing(IReadOnlyDictionary<int, EncryptionKey> keys, KeyVersion currentVersion) {
         _keys = keys;
         CurrentVersion = currentVersion;

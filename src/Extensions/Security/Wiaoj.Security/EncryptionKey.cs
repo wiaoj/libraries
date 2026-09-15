@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Wiaoj.Primitives;
 using Wiaoj.Primitives.Cryptography.Symmetric;
 
@@ -44,6 +45,46 @@ public sealed class EncryptionKey : IDisposable {
     internal Secret<byte> Decrypt(ReadOnlySpan<byte> packet, ReadOnlySpan<byte> associatedData = default) {
         this._disposeState.ThrowIfDisposingOrDisposed(nameof(EncryptionKey));
         return this._key.Decrypt(packet, associatedData);
+    }
+
+    /// <summary>The longest HKDF-SHA256 output: 255 hash blocks.</summary>
+    internal const int MaxSubkeyLength = 255 * 32;
+
+    private static readonly byte[] SubkeyInfoPrefix = "wiaoj.security.subkey:"u8.ToArray();
+
+    /// <summary>
+    /// Derives a subkey for <paramref name="purpose"/> into <paramref name="destination"/> with HKDF-SHA256 — the key
+    /// itself is never exposed.
+    /// </summary>
+    /// <param name="purpose">A fixed, non-empty label naming what the subkey is for.</param>
+    /// <param name="destination">Receives the subkey; 1 to 8,160 bytes.</param>
+    /// <exception cref="ArgumentException"><paramref name="purpose"/> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="destination"/> is empty or too long.</exception>
+    /// <exception cref="ObjectDisposedException">The key has been disposed.</exception>
+    /// <remarks>
+    /// The HKDF info is <c>"wiaoj.security.subkey:" + purpose</c>, which separates subkeys from each other and from the
+    /// key's own AES-GCM use. A retired key derives too, so data written under it stays readable.
+    /// </remarks>
+    public void DeriveSubkey(ReadOnlySpan<byte> purpose, Span<byte> destination) {
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(EncryptionKey));
+        if(purpose.IsEmpty) {
+            throw new ArgumentException("A subkey needs a purpose, so subkeys for different uses are unrelated.", nameof(purpose));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfZero(destination.Length, nameof(destination));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(destination.Length, MaxSubkeyLength, nameof(destination));
+
+        byte[] info = [.. SubkeyInfoPrefix, .. purpose];
+        int length = destination.Length;
+
+        // AesGcmKey only lends its bytes to a callback, which cannot capture spans: derive into an array, copy, then wipe.
+        byte[] subkey = this._key.Expose(key => HKDF.DeriveKey(HashAlgorithmName.SHA256, key.ToArray(), length, salt: null, info));
+        try {
+            subkey.CopyTo(destination);
+        }
+        finally {
+            CryptographicOperations.ZeroMemory(subkey);
+        }
     }
 
     /// <summary>Securely erases the key material. After disposal this instance must not be used.</summary>

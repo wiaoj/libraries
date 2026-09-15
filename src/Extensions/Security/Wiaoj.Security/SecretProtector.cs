@@ -11,7 +11,7 @@ namespace Wiaoj.Security;
 /// Delegates all cipher operations directly to <see cref="EncryptionKey"/> —
 /// no manual key exposure, no AesGcmKey construction inside callbacks.
 /// </summary>
-public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDisposable
+public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, ISubkeyDeriver<TContext>, IDisposable
     where TContext : ISecretContext {
 
     private readonly KeyRing<TContext> _keyRing;
@@ -131,7 +131,21 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, IDis
         return plain.Expose(Protect);
     }
 
-    /// <summary>Disposes this protector and its key ring, zeroing all key material.</summary> 
+    /// <inheritdoc/>
+    public IReadOnlyCollection<KeyVersion> KeyVersions {
+        get {
+            this._disposeState.ThrowIfDisposingOrDisposed(nameof(SecretProtector<>));
+            return this._keyRing.Versions;
+        }
+    }
+
+    /// <inheritdoc/>
+    public void DeriveSubkey(KeyVersion version, ReadOnlySpan<byte> purpose, Span<byte> destination) {
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(SecretProtector<>));
+        this._keyRing.GetKey(version).DeriveSubkey(purpose, destination);
+    }
+
+    /// <summary>Disposes this protector and its key ring, zeroing all key material.</summary>
     public void Dispose() {
         if(this._disposeState.TryBeginDispose()) {
             this._keyRing.Dispose();
