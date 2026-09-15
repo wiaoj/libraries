@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Wiaoj.Modulith.Internal; 
+namespace Wiaoj.Modulith.Internal;
 /// <summary>
 /// <see cref="IHostedService"/> that drives the <see cref="IModuleLifecycle"/> hooks
 /// for all active modules in topological order.
@@ -16,63 +16,72 @@ namespace Wiaoj.Modulith.Internal;
 /// </summary>
 internal sealed class ModulithHostedService(
     ModuleRegistry registry,
+    IServiceProvider serviceProvider,
     IOptions<ModulithOptions> options,
     ILogger<ModulithHostedService> logger) : IHostedService {
 
     private readonly ModulithOptions _options = options.Value;
 
     public async Task StartAsync(CancellationToken cancellationToken) {
+        // 1. Log skipped modules
+        if(_options.LogSkippedModules && registry.SkippedModules.Count > 0) {
+            foreach(SkippedModuleInfo skipped in registry.SkippedModules) {
+                logger.LogInformation(
+                    "[Modulith] Module '{Module}' was skipped: {Reason}",
+                    skipped.ModuleType.Name, skipped.Reason);
+            }
+        }
+
+        // 2. Execute OnStarting (in boot order, fatal on error)
         foreach(IModuleLifecycle module in registry.LifecycleModules) {
             string name = ((IModule)module).Name;
-            logger.LogInformation("[Modulith] {Module} — OnStarting", name);
+            logger.LogDebug("[Modulith] {Module} — OnStarting", name);
 
             await RunWithTimeoutAsync(
-                ct => module.OnStarting(cancellationToken),
+                ct => module.OnStarting(serviceProvider, ct),
                 _options.StartupHookTimeout,
                 name, "OnStarting",
                 cancellationToken,
                 throwOnFailure: true);
         }
 
+        // 3. Execute OnStarted (in boot order, non-fatal)
         foreach(IModuleLifecycle module in registry.LifecycleModules) {
             string name = ((IModule)module).Name;
 
             await RunWithTimeoutAsync(
-                ct => module.OnStarted(cancellationToken),
+                ct => module.OnStarted(serviceProvider, ct),
                 _options.StartupHookTimeout,
                 name, "OnStarted",
                 cancellationToken,
-                throwOnFailure: false);   // non-fatal after host is up
+                throwOnFailure: false);
         }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken) {
+        // Execute OnStopping (in reverse boot order, non-fatal)
         foreach(IModuleLifecycle module in registry.LifecycleModules.Reverse()) {
             string name = ((IModule)module).Name;
-            logger.LogInformation("[Modulith] {Module} — OnStopping", name);
+            logger.LogDebug("[Modulith] {Module} — OnStopping", name);
 
             await RunWithTimeoutAsync(
-                ct => module.OnStopping(cancellationToken),
+                ct => module.OnStopping(serviceProvider, ct),
                 _options.ShutdownHookTimeout,
                 name, "OnStopping",
                 cancellationToken,
-                throwOnFailure: false);  // always let all modules stop
+                throwOnFailure: false);
         }
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task RunWithTimeoutAsync(
         Func<CancellationToken, Task> work,
         TimeSpan timeout,
         string moduleName,
         string hookName,
-        CancellationToken cancellationToken ,
+        CancellationToken cancellationToken,
         bool throwOnFailure) {
 
-        using CancellationTokenSource cts = timeout == Timeout.InfiniteTimeSpan
-            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
-            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         if(timeout != Timeout.InfiniteTimeSpan)
             cts.CancelAfter(timeout);

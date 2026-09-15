@@ -158,6 +158,14 @@ public sealed class ModuleLoaderTests {
         string environment = "Development",
         Dictionary<string, string?>? config = null) {
 
+        return LoadResult(types, environment, config).ActiveDescriptors;
+    }
+
+    private static ModuleLoadResult LoadResult(
+        IReadOnlyList<Type> types,
+        string environment = "Development",
+        Dictionary<string, string?>? config = null) {
+
         IHostEnvironment env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns(environment);
 
@@ -165,10 +173,50 @@ public sealed class ModuleLoaderTests {
             .AddInMemoryCollection(config ?? [])
             .Build();
 
-        return ModuleLoader.LoadActive(types, configuration, env, DefaultOptions, logger: null);
+        return ModuleLoader.LoadActive(types, configuration, env, DefaultOptions);
     }
 
+    // ── Skipped modules and their dependents ─────────────────────────────────
+
+    [Fact]
+    public void Should_Skip_A_Module_Whose_Dependency_Was_Skipped_And_Say_Why() {
+        ModuleLoadResult result = LoadResult([typeof(DevOnlyModule), typeof(DependsOnDevOnlyModule)], environment: "Production");
+
+        Assert.Empty(result.ActiveDescriptors);
+        SkippedModuleInfo dependent = Assert.Single(result.SkippedModules, s => s.ModuleType == typeof(DependsOnDevOnlyModule));
+        Assert.Contains(nameof(DevOnlyModule), dependent.Reason, StringComparison.Ordinal);
+        Assert.Contains(result.SkippedModules, s => s.ModuleType == typeof(DevOnlyModule) && s.Reason.Contains("Production", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Should_Skip_Every_Module_Down_A_Chain_Of_Skipped_Dependencies() {
+        ModuleLoadResult result = LoadResult(
+            [typeof(DependsOnDependentModule), typeof(DependsOnDevOnlyModule), typeof(DevOnlyModule), typeof(UnrestrictedModule)],
+            environment: "Production");
+
+        Assert.Equal([typeof(UnrestrictedModule)], result.ActiveDescriptors.Select(d => d.Type));
+        Assert.Equal(3, result.SkippedModules.Count);
+    }
+
+    [Fact]
+    public void Should_Keep_A_Dependent_Whose_Dependency_Is_Active() {
+        ModuleLoadResult result = LoadResult([typeof(DevOnlyModule), typeof(DependsOnDevOnlyModule)], environment: "Development");
+
+        Assert.Equal(2, result.ActiveDescriptors.Count);
+        Assert.Empty(result.SkippedModules);
+    }
     // ── Stub types ────────────────────────────────────────────────────────────
+    [DependsOn(typeof(DevOnlyModule))]
+    private sealed class DependsOnDevOnlyModule : IModule {
+        public string Name => nameof(DependsOnDevOnlyModule);
+        public void Register(IServiceCollection s, IConfiguration c) { }
+    }
+
+    [DependsOn(typeof(DependsOnDevOnlyModule))]
+    private sealed class DependsOnDependentModule : IModule {
+        public string Name => nameof(DependsOnDependentModule);
+        public void Register(IServiceCollection s, IConfiguration c) { }
+    }
 
     private sealed class UnrestrictedModule : IModule {
         public string Name => nameof(UnrestrictedModule);

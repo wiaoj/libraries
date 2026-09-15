@@ -1,19 +1,24 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace Wiaoj.Modulith.Internal;
 
+internal record SkippedModuleInfo(Type ModuleType, string Reason);
+
+internal sealed record ModuleLoadResult(
+    IReadOnlyList<ModuleDescriptor> ActiveDescriptors,
+    IReadOnlyList<SkippedModuleInfo> SkippedModules);
+
 internal static class ModuleLoader {
 
-    public static IReadOnlyList<ModuleDescriptor> LoadActive(
+    public static ModuleLoadResult LoadActive(
         IReadOnlyList<Type> candidateTypes,
         IConfiguration configuration,
         IHostEnvironment environment,
-        ModulithOptions options,
-        ILogger? logger) {
+        ModulithOptions options) {
 
         List<ModuleDescriptor> active = [];
+        List<SkippedModuleInfo> skipped = [];
 
         foreach(Type type in candidateTypes) {
             if(!typeof(IModule).IsAssignableFrom(type) || type.IsAbstract || type.IsInterface)
@@ -22,32 +27,43 @@ internal static class ModuleLoader {
             ModuleDescriptor descriptor = new(type);
 
             if(!PassesEnvironmentFilter(descriptor, environment)) {
-                if(options.LogSkippedModules)
-                    logger?.LogInformation(
-                        "[Modulith] Skipping {Module} — not active in environment '{Env}'.",
-                        type.Name, environment.EnvironmentName);
+                skipped.Add(new(type, $"Not active in environment '{environment.EnvironmentName}'."));
                 continue;
             }
 
             if(!PassesFeatureFlagFilter(descriptor, configuration, options)) {
-                if(options.LogSkippedModules)
-                    logger?.LogInformation(
-                        "[Modulith] Skipping {Module} — feature flag '{Key}' is disabled.",
-                        type.Name, descriptor.FeatureFlag!.Key);
+                skipped.Add(new(type, $"Feature flag '{descriptor.FeatureFlag!.Key}' is disabled or missing."));
                 continue;
             }
 
             active.Add(descriptor);
         }
 
-        return active;
+        // Zincirleme kontrol: Eğer bağımlı olduğu modül kapatılmışsa, bu modülü de atla
+        bool changed;
+        do {
+            changed = false;
+            HashSet<Type> activeTypes = active.Select(d => d.Type).ToHashSet();
+
+            for(int i = active.Count - 1; i >= 0; i--) {
+                ModuleDescriptor current = active[i];
+                Type? disabledDep = current.Dependencies.FirstOrDefault(dep =>
+                    skipped.Any(s => s.ModuleType == dep));
+
+                if(disabledDep is not null) {
+                    active.RemoveAt(i);
+                    skipped.Add(new(current.Type, $"Required dependency '{disabledDep.Name}' was disabled or skipped."));
+                    changed = true;
+                }
+            }
+        } while(changed);
+
+        return new ModuleLoadResult(active, skipped);
     }
 
     private static bool PassesEnvironmentFilter(
         ModuleDescriptor descriptor, IHostEnvironment environment) {
-
-        if(descriptor.RequiresEnvironment is null)
-            return true;
+        if(descriptor.RequiresEnvironment is null) return true;
 
         return descriptor.RequiresEnvironment.Environments
             .Any(e => string.Equals(e, environment.EnvironmentName, StringComparison.OrdinalIgnoreCase));
@@ -55,12 +71,9 @@ internal static class ModuleLoader {
 
     private static bool PassesFeatureFlagFilter(
         ModuleDescriptor descriptor, IConfiguration configuration, ModulithOptions options) {
-
-        if(descriptor.FeatureFlag is null)
-            return true;
+        if(descriptor.FeatureFlag is null) return true;
 
         string? value = configuration[descriptor.FeatureFlag.Key];
-
         if(value is null)
             return descriptor.FeatureFlag.LoadWhenMissing || !options.SkipModulesWithMissingFeatureFlag;
 
