@@ -99,15 +99,19 @@ internal sealed class InMemoryDelayedScheduler : IAsyncDisposable, IDisposable {
                     continue;
                 }
 
-                // 3. Queue has items, but not yet due: wait for EITHER a new incoming job OR the timer to expire
-                TimeSpan waitDuration = dueTimestamp - now;
+                // 3. Queue has items, but not yet due: wait for EITHER a new incoming job OR the due time to pass.
+                //
+                // The due-time source is a CancellationTokenSource driven by the TimeProvider, not a hand-made timer that
+                // cancels a separate source: disposing that pair raced with its callback — Timer.Dispose does not wait for a
+                // running callback, which then called Cancel on a disposed source and threw on the timer thread.
+                using CancellationTokenSource dueCts = new(dueTimestamp - now, this._timeProvider);
+                using CancellationTokenSource delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct, dueCts.Token);
 
-                using CancellationTokenSource delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                using ITimer timer = this._timeProvider.CreateTimer(
-                    static state => ((CancellationTokenSource)state!).Cancel(),
-                    delayCts,
-                    waitDuration,
-                    Timeout.InfiniteTimeSpan);
+                // Time may have moved between reading 'now' and arming the wait — a clock that jumps, or a thread that was
+                // descheduled. The wait is armed relative to the time it was armed at, so re-check before sleeping.
+                if(dueTimestamp <= this._timeProvider.GetMonotonicTimestamp()) {
+                    continue;
+                }
 
                 try {
                     // Wakes up if:
