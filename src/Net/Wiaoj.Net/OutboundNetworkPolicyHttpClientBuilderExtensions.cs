@@ -28,6 +28,10 @@ public static class OutboundNetworkPolicyHttpClientBuilderExtensions {
     /// The primary handler must be a <see cref="SocketsHttpHandler"/> (the default) with no proxy; otherwise creating the
     /// client throws <see cref="InvalidOperationException"/> instead of connecting unprotected.
     /// </para>
+    /// <para>
+    /// Host names are resolved with the <see cref="DnsResolver"/> registered in the container, or
+    /// <see cref="DnsResolver.System"/> when there is none.
+    /// </para>
     /// </remarks>
     /// <example>
     /// <code>

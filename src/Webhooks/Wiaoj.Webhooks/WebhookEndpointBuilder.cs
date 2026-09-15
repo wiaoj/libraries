@@ -22,6 +22,7 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
     private bool _validateSsrf = true;
     private bool _allowPrivateNetworks;
     private OutboundNetworkPolicy _networkPolicy = OutboundNetworkPolicy.PublicOnly;
+    private DnsResolver _dnsResolver = DnsResolver.System;
 
     /// <summary>
     /// Sets the unique endpoint identifier.
@@ -162,6 +163,17 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
     }
 
     /// <summary>
+    /// Sets the resolver the target host is resolved with. <see cref="DnsResolver.System"/> by default.
+    /// </summary>
+    /// <param name="resolver">The resolver — normally the one registered for deliveries, so both see the same addresses.</param>
+    /// <returns>This builder instance for fluent chaining.</returns>
+    public WebhookEndpointBuilder WithDnsResolver(DnsResolver resolver) {
+        Preca.ThrowIfNull(resolver);
+        this._dnsResolver = resolver;
+        return this;
+    }
+
+    /// <summary>
     /// Validates network safety and materializes the <see cref="WebhookEndpoint"/> instance.
     /// </summary>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
@@ -207,7 +219,7 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
 
         if(this._validateSsrf) {
             OutboundNetworkPolicy policy = this._allowPrivateNetworks ? OutboundNetworkPolicy.Unrestricted : this._networkPolicy;
-            OutboundHostCheck check = await policy.CheckHostAsync(this._targetUrl, cancellationToken).ConfigureAwait(false);
+            OutboundHostCheck check = await policy.CheckHostAsync(this._targetUrl, this._dnsResolver, cancellationToken).ConfigureAwait(false);
 
             switch(check.Status) {
                 case OutboundHostStatus.Refused:

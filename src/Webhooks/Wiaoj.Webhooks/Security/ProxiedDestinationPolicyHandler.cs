@@ -9,7 +9,7 @@ namespace Wiaoj.Webhooks.Security;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Without a proxy this handler does nothing: <see cref="OutboundNetworkPolicyHandlerExtensions.UseOutboundNetworkPolicy"/>
+/// Without a proxy this handler does nothing: <see cref="OutboundNetworkPolicyHandlerExtensions.UseOutboundNetworkPolicy(SocketsHttpHandler, OutboundNetworkPolicy, DnsResolver)"/>
 /// checks the address actually connected to. Through a proxy the socket reaches the proxy instead, so the destination is
 /// checked here:
 /// </para>
@@ -24,12 +24,13 @@ namespace Wiaoj.Webhooks.Security;
 /// <see cref="PermanentFailureReason.InvalidDestination"/> failure, exactly as a connection-time refusal.
 /// </para>
 /// </remarks>
-internal sealed class ProxiedDestinationPolicyHandler(IOptions<WebhookSecurityOptions> options) : DelegatingHandler {
+internal sealed class ProxiedDestinationPolicyHandler(IOptions<WebhookSecurityOptions> options, IServiceProvider services) : DelegatingHandler {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
         WebhookSecurityOptions security = options.Value;
 
         if(security.Proxy is not null && !security.AllowPrivateNetworks && request.RequestUri is { IsAbsoluteUri: true } url) {
-            OutboundHostCheck check = await security.EffectiveNetworkPolicy.CheckHostAsync(url, cancellationToken).ConfigureAwait(false);
+            DnsResolver resolver = (DnsResolver?)services.GetService(typeof(DnsResolver)) ?? DnsResolver.System;
+            OutboundHostCheck check = await security.EffectiveNetworkPolicy.CheckHostAsync(url, resolver, cancellationToken).ConfigureAwait(false);
 
             if(check.Status == OutboundHostStatus.Refused) {
                 throw new OutboundNetworkPolicyException(url.Host, url.Port);

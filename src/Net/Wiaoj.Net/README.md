@@ -87,6 +87,23 @@ If a URL's host is resolved, checked, and then connected to separately, DNS can 
 
 `AddOutboundNetworkPolicy` applies the policy **after** all of the client's handler configuration has run. A later `ConfigurePrimaryHttpMessageHandler` call can't silently replace the protected handler, and that handler's own settings, such as `AllowAutoRedirect = false`, are kept.
 
+## DNS resolution
+
+Host names are resolved with a `DnsResolver`. The default is `DnsResolver.System`, the operating system resolver. To use a corporate resolver, or a fake one in tests, register a replacement. `AddOutboundNetworkPolicy` and Webhooks use the registered resolver automatically:
+
+```csharp
+services.AddSingleton<DnsResolver, ConsulDnsResolver>();
+
+sealed class ConsulDnsResolver : DnsResolver {
+    public override ValueTask<IPAddress[]> ResolveAsync(string host, CancellationToken ct) => /* … */;
+}
+```
+
+Without dependency injection, pass the resolver to `UseOutboundNetworkPolicy(policy, resolver)` or `CheckHostAsync(host, resolver)`.
+
+- **IP literals** never reach the resolver; the policy decides them directly.
+- **Unresolvable hosts:** throw `SocketException` for a host that cannot be resolved, as the system resolver does. `CheckHostAsync` reports it as `Unresolvable`, and any other exception propagates.
+- **Why an abstract class:** like `TimeProvider`, so members added later can be `virtual` without breaking existing implementations.
 ## Proxies
 
 Behind a proxy, the connection goes to the proxy, and the proxy reaches the destination. The client never sees the destination's address, so it can't check it:
