@@ -73,6 +73,7 @@
     <Project Path="src/Extensions/Concurrency/Wiaoj.Concurrency/Wiaoj.Concurrency.csproj" />
   </Folder>
   <Folder Name="/src/Identifiers/">
+    <Project Path="src/Identifiers/Wiaoj.Identifiers.EntityFrameworkCore/Wiaoj.Identifiers.EntityFrameworkCore.csproj" />
     <Project Path="src/Identifiers/Wiaoj.Identifiers.Generators/Wiaoj.Identifiers.Generators.csproj" />
     <Project Path="src/Identifiers/Wiaoj.Identifiers.Security/Wiaoj.Identifiers.Security.csproj" />
     <Project Path="src/Identifiers/Wiaoj.Identifiers/Wiaoj.Identifiers.csproj" />
@@ -178,6 +179,7 @@
   </Folder>
   <Folder Name="/tests/Identifiers/">
     <Project Path="tests/Identifiers/Wiaoj.Identifiers.Security.Tests.Unit/Wiaoj.Identifiers.Security.Tests.Unit.csproj" />
+    <Project Path="tests/Identifiers/Wiaoj.Identifiers.EntityFrameworkCore.Tests.Integration/Wiaoj.Identifiers.EntityFrameworkCore.Tests.Integration.csproj" />
     <Project Path="tests/Identifiers/Wiaoj.Identifiers.Tests.Unit/Wiaoj.Identifiers.Tests.Unit.csproj" />
   </Folder>
   <Folder Name="/tests/Net/">

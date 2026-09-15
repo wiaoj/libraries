@@ -104,7 +104,7 @@ The generator reports these as compile errors:
 | Each prefix used by only one identifier | `WIAOJID003` |
 | Not nested, not generic | `WIAOJID004` |
 
-The database stores `Value`, the `SnowflakeId`. Entity Framework Core conversions are planned for `Wiaoj.Identifiers.EntityFrameworkCore`.
+The database stores `Value`, the `SnowflakeId`, never the codec text. For Entity Framework Core, [Wiaoj.Identifiers.EntityFrameworkCore](../Wiaoj.Identifiers.EntityFrameworkCore/README.md) maps identifiers to `bigint` columns and generates keys.
 
 ## Replacing `OpaqueId`
 
