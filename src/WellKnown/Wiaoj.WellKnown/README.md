@@ -1,6 +1,6 @@
 # Wiaoj.WellKnown
 
-Publishes `/.well-known/*` documents: **RFC 9728 OAuth 2.0 Protected Resource Metadata** for an API, and **RFC 8414 OAuth 2.0 Authorization Server Metadata** for an authorization server such as Vaultex. A client that gets a 401 from your API reads this document to find out which authorization server issues tokens for it, and with which scopes. MCP clients follow this flow.
+Publishes `/.well-known/*` documents: **RFC 9728 OAuth 2.0 Protected Resource Metadata** for an API, and **RFC 8414 OAuth 2.0 Authorization Server Metadata** for an authorization server such as Vaultex, and **RFC 9116 `security.txt`** for any site. A client that gets a 401 from your API reads this document to find out which authorization server issues tokens for it, and with which scopes. MCP clients follow this flow.
 
 ## Installation
 
@@ -157,6 +157,60 @@ Typed options cover:
 Any other registered parameter goes in `AdditionalParameters`, for example OpenID Connect's `userinfo_endpoint` or `mtls_endpoint_aliases`. A name that has a typed option is refused, because it would bypass validation.
 
 Publishing at `openid-configuration` as well is not supported.
+
+## security.txt (RFC 9116)
+
+`security.txt` tells security researchers how to report a vulnerability. It is served at `/.well-known/security.txt`.
+
+```csharp
+builder.Services.AddSecurityTxt();
+builder.Services.Configure<SecurityTxtOptions>(builder.Configuration.GetSection("SecurityTxt"));
+
+app.MapSecurityTxt();
+```
+
+```json
+"SecurityTxt": {
+  "Contact": [ "mailto:security@example.com", "https://example.com/security/report" ],
+  "Expires": "2027-06-30T00:00:00Z",
+  "Encryption": [ "https://example.com/pgp-key.txt" ],
+  "Acknowledgments": [ "https://example.com/security/thanks" ],
+  "PreferredLanguages": [ "en", "tr" ],
+  "Canonical": [ "https://example.com/.well-known/security.txt" ],
+  "Policy": [ "https://example.com/security/policy" ],
+  "Hiring": [ "https://example.com/jobs" ]
+}
+```
+
+Every field RFC 9116 defines has an option. `AdditionalFields` holds fields registered later, and a name RFC 9116 defines is refused there.
+
+### Expires
+
+`Expires` is a **fixed date** you set. It isn't computed from the start time: a date that moved forward on every restart would never let the file look stale, however outdated its contacts became, and that is exactly what the field is for.
+
+| When the endpoint is mapped | Result |
+| --- | --- |
+| `Expires` has passed | Startup fails |
+| More than a year ahead (RFC 9116 recommends less) | Warning |
+| Less than 30 days away | Warning, so the date is renewed before it lapses |
+
+If the date passes while the application is running, the file is still served, since its contacts are the best available, and one warning is logged. The next start fails until the date is renewed.
+
+### What startup rejects
+
+- **Contact:** no Contact, or a Contact that is not a `mailto:`, `tel:` or `https://` URI. A bare email address gets a hint to write it as `mailto:`.
+- **URIs:** an `http://` URI in any field; RFC 9116 requires web URIs to begin with `https://`.
+- **Encryption:** a key pasted into Encryption instead of its URI.
+- **Preferred-Languages:** a value that isn't an RFC 5646 language tag. The values are written as one comma-separated field.
+- **Line breaks:** any value with a line break, which would inject another field.
+- **Size:** a file researchers may refuse to parse (§5.4): more than 32 KB, more than 1,000 lines, or a field longer than 2,048 characters.
+
+### Serving
+
+- **Format:** `text/plain; charset=utf-8`, lines ending with LF, `Cache-Control` from `CacheDuration` (one day by default).
+- **Legacy path:** `/security.txt` redirects to `/.well-known/security.txt` with 301. Turn it off with `RedirectLegacyPath = false`.
+- **HTTPS:** RFC 9116 requires the file to be retrieved over https. Serve the application over https (behind a TLS-terminating proxy, the proxy does this), and list the public URL in `Canonical`, since researchers shouldn't trust a file fetched from a URL it doesn't list.
+- **Not supported:** OpenPGP-signed files.
 
 ## Discovering these documents
 

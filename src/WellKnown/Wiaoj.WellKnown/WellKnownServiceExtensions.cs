@@ -131,6 +131,49 @@ public static class WellKnownServiceExtensions {
     }
 
     /// <summary>
+    /// Registers the application's RFC 9116 <c>security.txt</c>, configured elsewhere — typically bound from configuration
+    /// with <c>services.Configure&lt;SecurityTxtOptions&gt;(configuration.GetSection("SecurityTxt"))</c>.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddSecurityTxt(this IServiceCollection services) {
+        return services.AddSecurityTxt(static _ => { });
+    }
+
+    /// <summary>
+    /// Registers the application's RFC 9116 <c>security.txt</c>, which <c>MapSecurityTxt</c> serves.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">
+    /// Describes the file. <see cref="SecurityTxtOptions.Contact"/> and <see cref="SecurityTxtOptions.Expires"/> are required.
+    /// </param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <remarks>
+    /// The options are validated at startup. The current time comes from the registered <see cref="TimeProvider"/>, or
+    /// <see cref="TimeProvider.System"/> when there is none.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// services.AddSecurityTxt(file =&gt; {
+    ///     file.Contact.Add("mailto:security@example.com");
+    ///     file.Expires = new DateTimeOffset(2027, 6, 30, 0, 0, 0, TimeSpan.Zero);
+    ///     file.Policy.Add("https://example.com/security/policy");
+    /// });
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddSecurityTxt(this IServiceCollection services, Action<SecurityTxtOptions> configure) {
+        Preca.ThrowIfNull(services);
+        Preca.ThrowIfNull(configure);
+
+        services.TryAddSingleton<SecurityTxtRegistration>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<SecurityTxtOptions>, SecurityTxtOptionsValidator>(
+            static sp => new SecurityTxtOptionsValidator(sp.GetService<TimeProvider>() ?? TimeProvider.System)));
+        services.AddOptions<SecurityTxtOptions>().Configure(configure).ValidateOnStart();
+
+        return services;
+    }
+
+    /// <summary>
     /// Adds scopes to the application's protected resource, so each module can publish the scopes it defines.
     /// </summary>
     /// <param name="services">The service collection.</param>

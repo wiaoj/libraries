@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wiaoj.Preconditions;
 using Wiaoj.WellKnown;
@@ -10,7 +11,7 @@ namespace Microsoft.AspNetCore.Routing;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
-/// Serves RFC 9728 protected resource and RFC 8414 authorization server metadata documents.
+/// Serves RFC 9728 protected resource and RFC 8414 authorization server metadata documents, and the RFC 9116 security.txt.
 /// </summary>
 public static class WellKnownEndpointExtensions {
 
@@ -117,6 +118,56 @@ public static class WellKnownEndpointExtensions {
                 .WithTags("Well-Known")
                 .WithName(name.Length == 0 ? "OAuthAuthorizationServerMetadata" : $"OAuthAuthorizationServerMetadata:{name}")
                 .WithSummary("RFC 8414 OAuth 2.0 Authorization Server Metadata");
+        }
+
+        return app;
+    }
+
+    /// <summary>
+    /// Serves the RFC 9116 <c>security.txt</c> at <c>/.well-known/security.txt</c>, and redirects <c>/security.txt</c>
+    /// to it unless <see cref="SecurityTxtOptions.RedirectLegacyPath"/> is off.
+    /// </summary>
+    /// <param name="app">The endpoint route builder.</param>
+    /// <returns>The endpoint route builder for chaining.</returns>
+    /// <exception cref="InvalidOperationException"><c>AddSecurityTxt</c> was not called.</exception>
+    /// <exception cref="OptionsValidationException">The options are invalid, or Expires has passed.</exception>
+    /// <remarks>
+    /// <para>
+    /// The options are resolved while the endpoints are built, so an invalid or expired file fails at startup. An Expires
+    /// more than a year ahead, or less than 30 days away, logs a warning here. The file is rendered from the options on
+    /// every request, so a reloaded configuration is served without a restart.
+    /// </para>
+    /// <para>
+    /// RFC 9116 §3 requires the file to be retrieved over https. Serve the application over https — behind a proxy that
+    /// terminates TLS, that is the proxy's job — and list the public URL in <see cref="SecurityTxtOptions.Canonical"/>.
+    /// </para>
+    /// </remarks>
+    public static IEndpointRouteBuilder MapSecurityTxt(this IEndpointRouteBuilder app) {
+        Preca.ThrowIfNull(app);
+
+        if(app.ServiceProvider.GetService<SecurityTxtRegistration>() is null) {
+            throw new InvalidOperationException("security.txt is not registered. Call services.AddSecurityTxt(...) before mapping it.");
+        }
+
+        SecurityTxtOptions options = app.ServiceProvider.GetRequiredService<IOptionsMonitor<SecurityTxtOptions>>().CurrentValue;
+        TimeProvider timeProvider = app.ServiceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+        SecurityTxtEndpoint.WarnAboutExpiry(
+            app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(SecurityTxtEndpoint.LoggerCategory),
+            options.Expires!.Value,
+            timeProvider.GetUtcNow());
+
+        SecurityTxtExpiredWarning expiredWarning = new();
+        app.MapGet(SecurityTxtDocument.WellKnownPath, context => SecurityTxtEndpoint.WriteAsync(context, expiredWarning))
+            .WithMetadata(new ProducesResponseTypeMetadata(StatusCodes.Status200OK, typeof(string), ["text/plain"]))
+            .AllowAnonymous()
+            .WithTags("Well-Known")
+            .WithName("SecurityTxt")
+            .WithSummary("RFC 9116 security.txt");
+
+        if(options.RedirectLegacyPath) {
+            app.MapGet(SecurityTxtDocument.LegacyPath, SecurityTxtEndpoint.RedirectAsync)
+                .AllowAnonymous()
+                .ExcludeFromDescription();
         }
 
         return app;

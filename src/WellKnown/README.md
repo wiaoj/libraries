@@ -4,7 +4,7 @@ Serves `/.well-known/*` documents for ASP.NET Core applications, and discovers t
 
 | Package | Purpose |
 | --- | --- |
-| **`Wiaoj.WellKnown`** | RFC 9728 Protected Resource Metadata and RFC 8414 Authorization Server Metadata: the documents, identifiers with a path, and startup validation |
+| **`Wiaoj.WellKnown`** | RFC 9728 Protected Resource Metadata, RFC 8414 Authorization Server Metadata and RFC 9116 security.txt: the documents, identifiers with a path, and startup validation |
 | **`Wiaoj.WellKnown.JwtBearer`** | Adds `resource_metadata` to JwtBearer's 401 challenge without dropping its error |
 | **`Wiaoj.WellKnown.Discovery`** | The client: from a 401 or a resource identifier to validated resource and authorization server metadata. No ASP.NET Core dependency. |
 
