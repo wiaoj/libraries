@@ -37,6 +37,7 @@
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.YamlDotNet\\Wiaoj.Serialization.YamlDotNet.csproj",
       "src\\Identifiers\\Wiaoj.Identifiers\\Wiaoj.Identifiers.csproj",
       "src\\Identifiers\\Wiaoj.Identifiers.Generators\\Wiaoj.Identifiers.Generators.csproj",
+      "src\\Identifiers\\Wiaoj.Identifiers.Security\\Wiaoj.Identifiers.Security.csproj",
       "src\\Net\\Wiaoj.Net\\Wiaoj.Net.csproj",
       "src\\Pagination\\Wiaoj.Pagination\\Wiaoj.Pagination.csproj",
       "src\\Pagination\\Wiaoj.Pagination.AspNetCore\\Wiaoj.Pagination.AspNetCore.csproj",

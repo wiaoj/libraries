@@ -23,7 +23,7 @@ public sealed class PlainIdCodec : IdCodec {
     public static PlainIdCodec Instance { get; } = new();
 
     /// <inheritdoc/>
-    protected override bool IsEquivalentTo(IdCodec other) => other is PlainIdCodec;
+    public override bool IsEquivalentTo(IdCodec other) => other is PlainIdCodec;
 
     /// <inheritdoc/>
     public override int GetMaxEncodedLength(string prefix) {

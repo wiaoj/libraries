@@ -74,7 +74,7 @@ public sealed class AesIdCodec : IdCodec {
 
     /// <inheritdoc/>
     /// <remarks>Equivalent when the version and the derived keys are equal, compared in constant time.</remarks>
-    protected override bool IsEquivalentTo(IdCodec other) {
+    public override bool IsEquivalentTo(IdCodec other) {
         return other is AesIdCodec aes
                && aes.Version == this.Version
                && CryptographicOperations.FixedTimeEquals(aes._aesKey, this._aesKey)

@@ -74,6 +74,7 @@
   </Folder>
   <Folder Name="/src/Identifiers/">
     <Project Path="src/Identifiers/Wiaoj.Identifiers.Generators/Wiaoj.Identifiers.Generators.csproj" />
+    <Project Path="src/Identifiers/Wiaoj.Identifiers.Security/Wiaoj.Identifiers.Security.csproj" />
     <Project Path="src/Identifiers/Wiaoj.Identifiers/Wiaoj.Identifiers.csproj" />
   </Folder>
   <Folder Name="/src/Mediator/">
@@ -176,6 +177,7 @@
     <Project Path="tests/DistributedCounter/Wiaoj.DistributedCounter.Tests.Unit/Wiaoj.DistributedCounter.Tests.Unit.csproj" Id="3b49f798-09fc-4e18-899b-5011603b215f" />
   </Folder>
   <Folder Name="/tests/Identifiers/">
+    <Project Path="tests/Identifiers/Wiaoj.Identifiers.Security.Tests.Unit/Wiaoj.Identifiers.Security.Tests.Unit.csproj" />
     <Project Path="tests/Identifiers/Wiaoj.Identifiers.Tests.Unit/Wiaoj.Identifiers.Tests.Unit.csproj" />
   </Folder>
   <Folder Name="/tests/Net/">

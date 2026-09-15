@@ -63,7 +63,7 @@ The value is encrypted as a single AES-128 block laid out as `[first 8 bytes of 
 - **Decoding:** the codec decrypts the block and compares the tag in constant time. A made-up identifier, one written under another key, or one moved to another prefix fails this check and is refused.
 - **Deterministic:** the same identifier always gives the same text.
 
-**Changing the key changes every identifier's text.** The version character (`AesKeyVersion`, default `1`) marks which key wrote an identifier. Reading identifiers under several key versions, with rotation from Wiaoj.Security, is planned for `Wiaoj.Identifiers.Security`.
+**Changing the key changes every identifier's text.** The version character (`AesKeyVersion`, default `1`) marks which key wrote an identifier. To rotate the key without breaking issued identifiers, use [Wiaoj.Identifiers.Security](../Wiaoj.Identifiers.Security/README.md): it keys identifiers by a Wiaoj.Security key ring, writes with the current version and reads every version still in the ring.
 
 ## Where identifiers work without injecting anything
 
