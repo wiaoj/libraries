@@ -36,6 +36,30 @@ For each endpoint marked with `WithQueryValidation<T>()`, resolved from that ent
 | `sort` | listing the **sortable** fields |
 | `q` | free-text search |
 | `400` response | with a note that the body is a `ProblemDetails` carrying the validation errors |
+| **On `POST`:** a request body | one entry per media type the registered payload parsers declare; `application/json` as a typed schema (below). Not required, since an empty body falls back to the query string |
+| **On `POST`:** `413` and `415` | the statuses the binder returns for a body; `415` documents its `Accept` header |
+| **Where `QUERY` is accepted:** `Accept-Query` | on every response, listing the query media types |
+
+### The JSON body
+
+```json
+{ "q": "widget", "sort": "-price", "filters": [ { "field": "price", "op": "gte", "value": 100 } ] }
+```
+
+`filters` is described as a `oneOf` with one alternative per filterable field. Each alternative's `op` is limited to the operators that field permits, and its `value` is typed the way the query parameter is. A generated client therefore can't pair a field with an operator it refuses. `op` is required for a field that does not permit equality, because omitting it means `eq`.
+
+The schema's limits carry over:
+- `filters` gets `maxItems`.
+- `q` gets `maxLength`.
+- A limit of `0` leaves the property out.
+
+`QueryFilterStyle` does not apply to the body.
+
+By default both the query parameters and the body are described. Set `RequestBodyDescription = QueryRequestBodyDescription.BodyOnly` to describe only the body.
+
+### `QUERY` endpoints
+
+ASP.NET Core generates OpenAPI 3.0 or 3.1 documents (through Microsoft.OpenApi 2.x). Neither version has a `query` operation, so the generator **leaves the `QUERY` method out of the document**. An endpoint mapped for `QUERY` alone does not appear, and one mapped for `QUERY` and `POST` appears as `post` only. The document signals `QUERY` support through the `Accept-Query` header on the operations it does describe.
 
 Fields the endpoint ignores via `IgnoreQueryParameters(...)` — or that are ignored globally with `AddQuerying(q => q.IgnoreParameters(...))`, unless the schema or endpoint opts out of global rules — are left out, because the validator does not accept them. The rule is the same one the validation filter applies.
 

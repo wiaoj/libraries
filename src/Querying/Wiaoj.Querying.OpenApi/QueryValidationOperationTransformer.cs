@@ -4,7 +4,9 @@ using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using System.Reflection;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http;
 using Wiaoj.Querying.AspNetCore;
+using Wiaoj.Querying.AspNetCore.Binders;
 
 namespace Wiaoj.Querying.OpenApi;
 
@@ -64,17 +66,34 @@ internal sealed class QueryValidationOperationTransformer(QueryOpenApiOptions op
 
         operation.Parameters ??= [];
 
+        bool readsBody = HttpMethods.IsPost(context.Description.HttpMethod ?? string.Empty);
+        bool describeParameters = !readsBody || options.RequestBodyDescription == QueryRequestBodyDescription.BodyAndQueryParameters;
+
         // A limit of zero means the caller may send none, so none is advertised.
-        if(ReadLimit(schema!, nameof(QuerySchema<object>.MaxFilterCount)) > 0) {
-            DescribeFilters(operation, fields, isIgnored);
+        if(describeParameters) {
+            if(ReadLimit(schema!, nameof(QuerySchema<object>.MaxFilterCount)) > 0) {
+                DescribeFilters(operation, fields, isIgnored);
+            }
+
+            if(ReadLimit(schema!, nameof(QuerySchema<object>.MaxSortFieldsCount)) > 0) {
+                DescribeSort(operation, fields, isIgnored);
+            }
+
+            DescribeSearch(operation);
         }
 
-        if(ReadLimit(schema!, nameof(QuerySchema<object>.MaxSortFieldsCount)) > 0) {
-            DescribeSort(operation, fields, isIgnored);
-        }
-
-        DescribeSearch(operation);
         DescribeValidationFailure(operation);
+
+        IReadOnlyList<string> mediaTypes = QueryPayloadMediaTypes.Resolve(context.ApplicationServices);
+
+        if(readsBody) {
+            DescribeRequestBody(operation, schema!, fields, isIgnored, mediaTypes);
+            DescribeBodyFailures(operation, mediaTypes);
+        }
+
+        if(EndpointAcceptsQuery(context)) {
+            DescribeAcceptQuery(operation, mediaTypes);
+        }
 
         options.ConfigureOperation?.Invoke(operation, fields);
 
@@ -281,6 +300,174 @@ internal sealed class QueryValidationOperationTransformer(QueryOpenApiOptions op
             Description = "The query violates the endpoint's schema — an unknown field, a disallowed operator, "
                         + "or a limit exceeded. The body is a ProblemDetails carrying the validation errors."
         });
+    }
+
+    /// <summary>
+    /// Describes the query body the binder reads on <c>POST</c>, one entry per media type the registered parsers declare.
+    /// </summary>
+    private static void DescribeRequestBody(
+        OpenApiOperation operation,
+        object schema,
+        IReadOnlyList<QueryFieldDescriptor> fields,
+        Func<string, bool> isIgnored,
+        IReadOnlyList<string> mediaTypes) {
+
+        operation.RequestBody ??= new OpenApiRequestBody {
+            // The query string still works when the body is empty, so the body is never required.
+            Required = false,
+            Description = "The query, as an alternative to the query string. An empty body falls back to the query string.",
+            Content = new Dictionary<string, OpenApiMediaType>(StringComparer.OrdinalIgnoreCase)
+        };
+
+        if(operation.RequestBody is not OpenApiRequestBody body) {
+            return;
+        }
+
+        body.Content ??= new Dictionary<string, OpenApiMediaType>(StringComparer.OrdinalIgnoreCase);
+
+        foreach(string mediaType in mediaTypes) {
+            if(body.Content.ContainsKey(mediaType)) {
+                continue;
+            }
+
+            body.Content[mediaType] = new OpenApiMediaType {
+                Schema = mediaType switch {
+                    _ when mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase) => JsonBodySchema(schema, fields, isIgnored),
+                    _ when mediaType.Equals("text/plain", StringComparison.OrdinalIgnoreCase)
+                        || mediaType.Equals("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase) => new OpenApiSchema {
+                            Type = JsonSchemaType.String,
+                            Description = "The query in the query-string syntax: `name[op]=value&sort=-field&q=text`."
+                        },
+                    _ => new OpenApiSchema {
+                        Type = JsonSchemaType.String,
+                        Description = $"A query payload read by the parser registered for {mediaType}."
+                    }
+                }
+            };
+        }
+    }
+
+    /// <summary>
+    /// The JSON payload <c>JsonQueryParser</c> reads: <c>q</c>, <c>sort</c>, and <c>filters</c> as a list of
+    /// <c>{ field, op, value }</c> — one alternative per filterable field, so a generated client cannot pair a field with
+    /// an operator it refuses. Limits, names and ignored fields follow the query-parameter description.
+    /// </summary>
+    private static OpenApiSchema JsonBodySchema(object schema, IReadOnlyList<QueryFieldDescriptor> fields, Func<string, bool> isIgnored) {
+        Dictionary<string, IOpenApiSchema> properties = new(StringComparer.Ordinal) {
+            [QuerySyntax.Parameters.Q] = new OpenApiSchema {
+                Type = JsonSchemaType.String,
+                MaxLength = ReadLimit(schema, nameof(QuerySchema<object>.MaxSearchTermLength)),
+                Description = "Free-text search across the fields the schema marks searchable."
+            }
+        };
+
+        string[] sortable = [.. fields.Where(f => f.IsSortable && !isIgnored(f.Name)).Select(f => f.Name)];
+        if(sortable.Length > 0 && ReadLimit(schema, nameof(QuerySchema<object>.MaxSortFieldsCount)) > 0) {
+            properties[QuerySyntax.Parameters.Sort] = new OpenApiSchema {
+                Type = JsonSchemaType.String,
+                Description = "Comma-separated sort directives; prefix a field with '-' to sort descending. " +
+                              $"Sortable fields: {string.Join(", ", sortable)}."
+            };
+        }
+
+        QueryFieldDescriptor[] filterable = [.. fields.Where(f => f.IsFilterable && f.AllowedOperators.Count > 0 && !isIgnored(f.Name))];
+        int maxFilters = ReadLimit(schema, nameof(QuerySchema<object>.MaxFilterCount));
+
+        if(filterable.Length > 0 && maxFilters > 0) {
+            properties["filters"] = new OpenApiSchema {
+                Type = JsonSchemaType.Array,
+                MaxItems = maxFilters,
+                Items = new OpenApiSchema { OneOf = [.. filterable.Select(JsonFilterSchema)] },
+                Description = "Filter conditions, all of which must hold."
+            };
+        }
+
+        return new OpenApiSchema { Type = JsonSchemaType.Object, Properties = properties };
+    }
+
+    private static IOpenApiSchema JsonFilterSchema(QueryFieldDescriptor field) {
+        Dictionary<string, IOpenApiSchema> properties = new(StringComparer.Ordinal) {
+            ["field"] = new OpenApiSchema { Type = JsonSchemaType.String, Enum = [JsonValue.Create(field.Name)] },
+            ["op"] = new OpenApiSchema {
+                Type = JsonSchemaType.String,
+                Enum = [.. field.AllowedOperators.Select(op => (JsonNode)JsonValue.Create(QuerySyntax.GetOperatorToken(op)))],
+                Description = "The operator; omitted means equality."
+            }
+        };
+
+        // The value is typed as the query parameter types each operator; operators whose value is ignored add nothing.
+        OpenApiSchema[] valueSchemas = [.. field.AllowedOperators
+            .Where(op => op is not (QueryOperator.IsNull or QueryOperator.IsNotNull))
+            .Select(op => OperatorSchema(op, field.Type))
+            .DistinctBy(s => (s.Type, s.Format, s.Description))];
+
+        if(valueSchemas.Length == 1) {
+            properties["value"] = valueSchemas[0];
+        }
+        else if(valueSchemas.Length > 1) {
+            properties["value"] = new OpenApiSchema { AnyOf = [.. valueSchemas] };
+        }
+
+        HashSet<string> required = ["field"];
+        if(!field.AllowedOperators.Contains(QueryOperator.Equal)) {
+            // Without op the condition is equality, which this field refuses.
+            required.Add("op");
+        }
+
+        return new OpenApiSchema {
+            Type = JsonSchemaType.Object,
+            Description = field.Description,
+            Properties = properties,
+            Required = required
+        };
+    }
+
+    /// <summary>Records the statuses the binder returns for a body it cannot accept.</summary>
+    private static void DescribeBodyFailures(OpenApiOperation operation, IReadOnlyList<string> mediaTypes) {
+        operation.Responses ??= [];
+
+        operation.Responses.TryAdd("413", new OpenApiResponse {
+            Description = "The query body exceeds the maximum payload size for its media type."
+        });
+
+        operation.Responses.TryAdd("415", new OpenApiResponse {
+            Description = $"The body's media type is not a query format. Accepted: {string.Join(", ", mediaTypes)}.",
+            Headers = new Dictionary<string, IOpenApiHeader> {
+                ["Accept"] = new OpenApiHeader {
+                    Description = "The media types a query body may use.",
+                    Schema = new OpenApiSchema { Type = JsonSchemaType.String }
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Documents the <c>Accept-Query</c> field (RFC 10008 §3) on every response of an endpoint that accepts QUERY —
+    /// the only place the document can say so, since the QUERY operation itself cannot be described.
+    /// </summary>
+    private static void DescribeAcceptQuery(OpenApiOperation operation, IReadOnlyList<string> mediaTypes) {
+        if(operation.Responses is null) {
+            return;
+        }
+
+        foreach(IOpenApiResponse response in operation.Responses.Values) {
+            if(response is not OpenApiResponse concrete) {
+                continue;
+            }
+
+            concrete.Headers ??= new Dictionary<string, IOpenApiHeader>();
+            concrete.Headers.TryAdd(QueryPayloadMediaTypes.AcceptQueryHeaderName, new OpenApiHeader {
+                Description = "This resource also accepts the HTTP QUERY method (RFC 10008), with a query body in these media types: " +
+                              $"{string.Join(", ", mediaTypes)}.",
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String }
+            });
+        }
+    }
+
+    private static bool EndpointAcceptsQuery(OpenApiOperationTransformerContext context) {
+        return context.Description.ActionDescriptor.EndpointMetadata
+            .OfType<Microsoft.AspNetCore.Routing.IHttpMethodMetadata>()
+            .Any(m => m.HttpMethods.Contains(HttpMethods.Query, StringComparer.OrdinalIgnoreCase));
     }
 
     private static bool HasParameter(OpenApiOperation operation, string name) {

@@ -15,13 +15,7 @@ namespace Wiaoj.Querying.AspNetCore.Binders;
 /// Supports standard GET query strings and RFC 10008 HTTP QUERY / POST request bodies via extensible payload parsers.
 /// </summary>
 internal static class QueryRequestBinder {
-    private const string AcceptQueryHeader = "Accept-Query";
-    private const string DefaultSupportedMediaTypes = "application/json, text/plain, application/x-www-form-urlencoded";
-
-    private static readonly IQueryPayloadParser[] DefaultParsers = [
-        new JsonQueryPayloadParser(),
-        new BracketQueryPayloadParser()
-    ];
+    private static readonly object AdvertisedKey = new();
 
     /// <summary>
     /// Asynchronously binds a <see cref="QueryRequest"/> from the incoming HTTP request.
@@ -51,14 +45,7 @@ internal static class QueryRequestBinder {
 
         HttpRequest request = context.Request;
 
-        // Register Accept-Query response header for QUERY and POST requests
-        if(IsBodyQuerySupported(request.Method)) {
-            context.Response.OnStarting(static state => {
-                HttpContext httpContext = (HttpContext)state;
-                httpContext.Response.Headers[AcceptQueryHeader] = DefaultSupportedMediaTypes;
-                return Task.CompletedTask;
-            }, context);
-        }
+        AdvertiseMediaTypes(context);
 
         QueryOptions? options = context.RequestServices?.GetService<IOptions<QueryOptions>>()?.Value;
         bool allowBodyPayloads = options?.AllowBodyPayloads ?? true;
@@ -87,12 +74,42 @@ internal static class QueryRequestBinder {
         return HttpMethods.IsPost(method) || HttpMethods.IsQuery(method);
     }
 
+    /// <summary>
+    /// Adds, once per request, the fields that tell a client which query payloads it may send:
+    /// <c>Accept-Query</c> on every response of an endpoint that accepts QUERY (RFC 10008 §3 — including GET, for
+    /// discovery, and never on an endpoint that does not accept QUERY), and <c>Accept</c> on a 415 from a request whose
+    /// body was read (RFC 10008 Appendix A.3). Both come from the registered parsers.
+    /// </summary>
+    private static void AdvertiseMediaTypes(HttpContext context) {
+        bool acceptsQuery = QueryPayloadMediaTypes.EndpointAcceptsQuery(context);
+        bool readsBody = IsBodyQuerySupported(context.Request.Method);
+
+        if((!acceptsQuery && !readsBody) || !context.Items.TryAdd(AdvertisedKey, true)) {
+            return;
+        }
+
+        context.Response.OnStarting(static state => {
+            (HttpContext httpContext, bool advertiseQuery, bool mayRefuseMediaType) = ((HttpContext, bool, bool))state;
+            string mediaTypes = QueryPayloadMediaTypes.FormatStructuredList(QueryPayloadMediaTypes.Resolve(httpContext.RequestServices));
+
+            if(advertiseQuery) {
+                httpContext.Response.Headers[QueryPayloadMediaTypes.AcceptQueryHeaderName] = mediaTypes;
+            }
+
+            if(mayRefuseMediaType && httpContext.Response.StatusCode == StatusCodes.Status415UnsupportedMediaType) {
+                httpContext.Response.Headers.Accept = mediaTypes;
+            }
+
+            return Task.CompletedTask;
+        }, (context, acceptsQuery, readsBody));
+    }
+
     private static async ValueTask<QueryRequest?> TryBindFromBodyAsync(HttpContext context, string contentType, QueryOptions? options) {
         HttpRequest request = context.Request;
-        IQueryPayloadParser[] parsers = ResolveParsers(context.RequestServices);
+        IReadOnlyList<IQueryPayloadParser> parsers = QueryPayloadMediaTypes.ResolveParsers(context.RequestServices);
 
         IQueryPayloadParser? selectedParser = null;
-        for(int i = 0; i < parsers.Length; i++) {
+        for(int i = 0; i < parsers.Count; i++) {
             if(parsers[i].CanParse(contentType)) {
                 selectedParser = parsers[i];
                 break;
@@ -167,19 +184,6 @@ internal static class QueryRequestBinder {
         }
     }
 
-    private static IQueryPayloadParser[] ResolveParsers(IServiceProvider? serviceProvider) {
-        if(serviceProvider is null) {
-            return DefaultParsers;
-        }
-
-        IEnumerable<IQueryPayloadParser>? registered = serviceProvider.GetServices<IQueryPayloadParser>();
-        if(registered is null) {
-            return DefaultParsers;
-        }
-
-        IQueryPayloadParser[] array = registered as IQueryPayloadParser[] ?? [.. registered];
-        return array.Length > 0 ? array : DefaultParsers;
-    }
 
     private static QueryRequest BindFromQueryCollection(
         IQueryCollection query,

@@ -32,6 +32,20 @@ public enum QueryFilterStyle {
 }
 
 /// <summary>
+/// How a <c>POST</c> query endpoint, which reads the query from its body, is described.
+/// </summary>
+public enum QueryRequestBodyDescription {
+    /// <summary>
+    /// Describe the request body and keep the query parameters: the binder falls back to the query string when the body
+    /// is empty, so both forms work.
+    /// </summary>
+    BodyAndQueryParameters,
+
+    /// <summary>Describe only the request body, for APIs that want clients to send queries in the body.</summary>
+    BodyOnly
+}
+
+/// <summary>
 /// Configures how query schemas are published into OpenAPI documents.
 /// </summary>
 /// <remarks>
@@ -43,6 +57,17 @@ public enum QueryFilterStyle {
 public sealed class QueryOpenApiOptions {
     /// <summary>Gets or sets how filterable fields are described. Defaults to <see cref="QueryFilterStyle.Prose"/>.</summary>
     public QueryFilterStyle FilterStyle { get; set; } = QueryFilterStyle.Prose;
+
+    /// <summary>
+    /// Gets or sets how a <c>POST</c> query endpoint is described. Defaults to
+    /// <see cref="QueryRequestBodyDescription.BodyAndQueryParameters"/>.
+    /// </summary>
+    /// <remarks>
+    /// <c>QUERY</c> endpoints (RFC 10008) cannot be described: the OpenAPI version ASP.NET Core generates (3.0 and 3.1,
+    /// through Microsoft.OpenApi 2.x) has no <c>query</c> operation, and document generation leaves the method out. Their
+    /// support is advertised instead by the <c>Accept-Query</c> response header on the operations that are described.
+    /// </remarks>
+    public QueryRequestBodyDescription RequestBodyDescription { get; set; } = QueryRequestBodyDescription.BodyAndQueryParameters;
 
     /// <summary>
     /// Gets or sets a callback run for every filter parameter after it is built, with the field it describes.
