@@ -23,7 +23,28 @@ internal sealed class RedisCounterStorage : ICounterStorage {
         this._redis = redis;
     }
 
-    private IDatabase Db => this._redis.GetDatabase(this._dbIndex ?? -1);
+    /// <summary>
+    /// The database to send a command to — or, while the multiplexer has no connection, a
+    /// <see cref="RedisConnectionException"/> at once.
+    /// </summary>
+    /// <remarks>
+    /// StackExchange.Redis queues a command issued while disconnected and fails it only when the backlog timeout expires
+    /// (5 s by default). Counters guard claims, circuits, pacing and frequency caps, whose callers each have a fail-open or
+    /// fail-closed rule for an unavailable store; waiting out the timeout on every call first turns a Redis outage into a
+    /// stall on everything they protect. A command issued while connected is unaffected, and a connection that drops
+    /// mid-command still ends in StackExchange.Redis' own timeout.
+    /// </remarks>
+    private IDatabase Db {
+        get {
+            if(!this._redis.IsConnected) {
+                throw new RedisConnectionException(
+                    ConnectionFailureType.UnableToConnect,
+                    "Redis is not connected; the counter operation was not attempted rather than waiting for a connection.");
+            }
+
+            return this._redis.GetDatabase(this._dbIndex ?? -1);
+        }
+    }
 
     /// <inheritdoc/>
     public async ValueTask<CounterValue> AtomicIncrementAsync(
