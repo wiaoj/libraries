@@ -25,18 +25,12 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
-		<ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
-	</ItemGroup>
-
-	<!-- The source generator ships inside this package, so referencing Wiaoj.Identifiers is all a project needs. -->
-	<ItemGroup>
-		<ProjectReference Include="..\Wiaoj.Identifiers.Generators\Wiaoj.Identifiers.Generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
-		<None Include="..\Wiaoj.Identifiers.Generators\bin\$(Configuration)\netstandard2.0\Wiaoj.Identifiers.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+		<!-- PrivateAssets="none": a project referencing only this package still gets the source generator. -->
+		<ProjectReference Include="..\Wiaoj.Identifiers.Abstractions\Wiaoj.Identifiers.Abstractions.csproj" PrivateAssets="none" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="Wiaoj.Identifiers.Tests.Unit" />
-		<InternalsVisibleTo Include="Wiaoj.Identifiers.Security.Tests.Unit" />
 	</ItemGroup>
 
 </Project>

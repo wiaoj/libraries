@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<!-- Types stay in the Wiaoj.Identifiers namespace: the package split is about dependencies, not about names. -->
+		<RootNamespace>Wiaoj.Identifiers</RootNamespace>
+		<AssemblyName>Wiaoj.Identifiers.Abstractions</AssemblyName>
+		<PackageId>Wiaoj.Identifiers.Abstractions</PackageId>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<IsAotCompatible>true</IsAotCompatible>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<!-- No Microsoft.Extensions.* dependency: this is the package a domain layer references. -->
+	<ItemGroup>
+		<ProjectReference Include="..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+		<ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
+	</ItemGroup>
+
+	<!-- The source generator ships inside this package: the code it generates needs these types, so the two always travel together. -->
+	<ItemGroup>
+		<ProjectReference Include="..\Wiaoj.Identifiers.Generators\Wiaoj.Identifiers.Generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+		<None Include="..\Wiaoj.Identifiers.Generators\bin\$(Configuration)\netstandard2.0\Wiaoj.Identifiers.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="Wiaoj.Identifiers.Tests.Unit" />
+		<InternalsVisibleTo Include="Wiaoj.Identifiers.Security.Tests.Unit" />
+	</ItemGroup>
+
+</Project>
