@@ -153,6 +153,17 @@ Batch key queries convert `CounterKey` spans to `RedisKey` arrays using `ArrayPo
 
 ---
 
+## When Redis Is Unavailable
+
+While the multiplexer has no connection (`IConnectionMultiplexer.IsConnected` is `false`), every storage operation throws `RedisConnectionException` (`ConnectionFailureType.UnableToConnect`) **at once**. It doesn't queue the command and wait out StackExchange.Redis' backlog timeout (5 s by default).
+
+Counters back claims, circuit state, rate limits and frequency caps. Each caller decides what an unavailable store means for it: for example `ResilientRateLimiter` and `ResilientCircuitBreaker` fail open. With the wait removed, that decision takes effect immediately instead of after 5 s on every call. Once the multiplexer reconnects, operations succeed again without any action.
+
+- **Detection:** a connection closed by the server is noticed at once. A silent network partition is only noticed once StackExchange.Redis detects it. Commands issued before then still end in its timeout.
+- **Startup:** use `abortConnect=false` so the application starts while Redis is down. Counters then fail fast until the connection is established.
+
+---
+
 ## License
 
 This project is licensed under the MIT License.
