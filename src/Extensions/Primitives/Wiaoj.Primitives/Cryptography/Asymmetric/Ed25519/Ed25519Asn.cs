@@ -62,7 +62,7 @@ internal static class Ed25519Asn {
             throw new FormatException("Invalid Ed25519 SubjectPublicKeyInfo: unexpected unused bit count.");
         }
 
-        return Ed25519PublicKey.Create(keyBytes);
+        return Ed25519PublicKey.From(keyBytes);
     }
 
     // ── Private Key (PKCS#8) ──────────────────────────────────────────────────

@@ -1,7 +1,3 @@
-Here is a highly detailed, professional, and strictly technical `README.md`. All emojis have been removed, the tone is purely engineering-focused, and all experimental buffer structures have been excluded. It explains the "why" and "how" for each feature in depth.
-
----
-
 # Wiaoj.Primitives
 
 **Wiaoj.Primitives** is a high-performance, security-focused .NET foundation library engineered to eliminate **Primitive Obsession** in domain-driven applications. 
@@ -15,6 +11,21 @@ This library replaces these generic types with self-validating, strongly-typed v
 ```bash
 dotnet add package Wiaoj.Primitives
 ```
+
+## Factory Naming
+
+Every type follows the same verbs, so the name of a factory tells you what it does:
+
+| Verb | Meaning | Examples |
+| --- | --- | --- |
+| `Parse` / `TryParse` | Read the type's canonical text form (`ISpanParsable<T>`, `IUtf8SpanParsable<T>`) | `SemVer.Parse("1.2.3")`, `UnixTimestamp.TryParse(text, out _)` |
+| `From` / `FromX` / `TryFrom` | Wrap **one** existing value: bytes, a number, a unit | `Sha256Hash.FromBytes(bytes)`, `UnixTimestamp.FromSeconds(exp)`, `Ed25519PublicKey.From(x)` |
+| `Create` / `TryCreate` | Build from **several** parts | `GeoCoordinate.Create(lat, lon)`, `RsaPublicKey.Create(modulus, exponent)`, `Urn.Create(nid, nss)` |
+| `Generate` | Produce new random key material | `AesGcmKey.Generate256()`, `RsaKeyPair.Generate()` |
+| `New` / `NewId` | Produce a new identifier | `SnowflakeId.NewId()`, `NanoId.NewId()` |
+
+- **`Try` variants:** the `Try` form of each verb returns `false` instead of throwing, for untrusted input such as a JWT `exp` claim.
+- **Exception:** `GuidV7.Create()` keeps the name of the BCL's `Guid.CreateVersion7()`, which it wraps.
 
 ## 1. Secure Memory Management (`Secret<T>`)
 
