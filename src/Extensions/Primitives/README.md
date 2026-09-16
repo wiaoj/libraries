@@ -155,6 +155,20 @@ bool isExpired = cacheExpiry.IsOlderThan(TimeSpan.FromMinutes(10));
 TimeSpan remaining = cacheExpiry.TimeUntil();
 ```
 
+Values are always within `UnixTimestamp.MinValue`…`MaxValue` (the range of `DateTimeOffset`):
+
+- **Creating:** `FromSeconds`, `FromMilliseconds`, the `long` cast and arithmetic throw `ArgumentOutOfRangeException` outside it.
+- **Parsing:** `TryParse` returns `false`, and JSON throws `JsonException`.
+- **Untrusted numbers:** such as a JWT `exp` claim; use the non-throwing factories:
+
+```csharp
+if(!UnixTimestamp.TryFromSeconds(expSeconds, out UnixTimestamp expiration)) {
+    return JwtParseStatus.InvalidPayloadJson;
+}
+```
+
+`MonotonicTimestamp` arithmetic throws `OverflowException` instead of wrapping around, so `now + TimeSpan.MaxValue` can't turn into an instant in the past.
+
 ### SemVer
 A strict, allocation-free implementation of Semantic Versioning 2.0.0. It supports pre-release and build metadata parsing without the heavy overhead of `System.Version`.
 

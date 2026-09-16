@@ -116,8 +116,8 @@ public readonly record struct MonotonicTimestamp :
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="timeProvider"/> is null.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MonotonicTimestamp From(TimeProvider timeProvider) {
-        Preca.ThrowIfNull(timeProvider); 
-        
+        Preca.ThrowIfNull(timeProvider);
+
         long rawTicks = timeProvider.GetTimestamp();
         long providerFreq = timeProvider.TimestampFrequency;
 
@@ -125,8 +125,8 @@ public readonly record struct MonotonicTimestamp :
             return new MonotonicTimestamp(rawTicks);
         }
 
-        long normalizedTicks = (long)((double)rawTicks * Stopwatch.Frequency / providerFreq);
-        return new MonotonicTimestamp(normalizedTicks);
+        // Integer math: a double loses precision once the product passes 2^53 (months of uptime at 1 ns resolution).
+        return new MonotonicTimestamp(Scale(rawTicks, Stopwatch.Frequency, providerFreq));
     }
 
     // -------------------------------------------------------------------------
@@ -204,7 +204,7 @@ public readonly record struct MonotonicTimestamp :
     /// <returns>A <see cref="TimeSpan"/> representing the elapsed duration.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TimeSpan ElapsedUntil(MonotonicTimestamp endTimestamp) {
-        return Stopwatch.GetElapsedTime(this._ticks, endTimestamp._ticks);
+        return endTimestamp - this;
     }
 
     /// <summary>
@@ -255,23 +255,38 @@ public readonly record struct MonotonicTimestamp :
     // -------------------------------------------------------------------------
 
     /// <inheritdoc cref="IAdditionOperators{TSelf, TOther, TResult}.op_Addition(TSelf, TOther)" />
+    /// <exception cref="OverflowException">The result is outside the range of <see cref="long"/> ticks, e.g. <c>Now + TimeSpan.MaxValue</c> where the counter runs faster than <see cref="TimeSpan"/> ticks.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MonotonicTimestamp operator +(MonotonicTimestamp left, TimeSpan right) {
-        long deltaTicks = (long)(right.Ticks * ((double)Stopwatch.Frequency / TimeSpan.TicksPerSecond));
-        return new MonotonicTimestamp(left._ticks + deltaTicks);
+        return new MonotonicTimestamp(checked(left._ticks + ToStopwatchTicks(right)));
     }
 
     /// <inheritdoc cref="ISubtractionOperators{TSelf, TOther, TResult}.op_Subtraction(TSelf, TOther)" />
+    /// <exception cref="OverflowException">The result is outside the range of <see cref="long"/> ticks.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MonotonicTimestamp operator -(MonotonicTimestamp left, TimeSpan right) {
-        long deltaTicks = (long)(right.Ticks * ((double)Stopwatch.Frequency / TimeSpan.TicksPerSecond));
-        return new MonotonicTimestamp(left._ticks - deltaTicks);
+        return new MonotonicTimestamp(checked(left._ticks - ToStopwatchTicks(right)));
     }
 
     /// <inheritdoc cref="ISubtractionOperators{TSelf, TOther, TResult}.op_Subtraction(TSelf, TOther)" />
+    /// <exception cref="OverflowException">The difference does not fit in <see cref="long"/> ticks or in a <see cref="TimeSpan"/>.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static TimeSpan operator -(MonotonicTimestamp left, MonotonicTimestamp right) {
-        return Stopwatch.GetElapsedTime(right._ticks, left._ticks);
+        long elapsed = checked(left._ticks - right._ticks);
+        return Stopwatch.Frequency == TimeSpan.TicksPerSecond
+            ? new TimeSpan(elapsed)
+            : new TimeSpan(Scale(elapsed, TimeSpan.TicksPerSecond, Stopwatch.Frequency));
+    }
+
+    private static long ToStopwatchTicks(TimeSpan duration) {
+        return Stopwatch.Frequency == TimeSpan.TicksPerSecond
+            ? duration.Ticks
+            : Scale(duration.Ticks, Stopwatch.Frequency, TimeSpan.TicksPerSecond);
+    }
+
+    /// <summary>Returns <c>value * numerator / denominator</c>, truncated toward zero, throwing instead of wrapping around.</summary>
+    internal static long Scale(long value, long numerator, long denominator) {
+        return checked((long)((Int128)value * numerator / denominator));
     }
 
     /// <inheritdoc cref="IComparisonOperators{TSelf, TOther, TResult}.op_GreaterThan(TSelf, TOther)" />

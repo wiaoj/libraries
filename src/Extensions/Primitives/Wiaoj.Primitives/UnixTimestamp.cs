@@ -148,9 +148,47 @@ public readonly record struct UnixTimestamp :
     /// </summary>
     /// <param name="milliseconds">The milliseconds elapsed since Epoch.</param>
     /// <returns>A new <see cref="UnixTimestamp"/> instance.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="milliseconds"/> is outside <see cref="MinValue"/>…<see cref="MaxValue"/>.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static UnixTimestamp FromMilliseconds(long milliseconds) {
+        Preca.ThrowIfOutOfRange(milliseconds, MinUnixMillis, MaxUnixMillis);
+
         return new UnixTimestamp(milliseconds);
+    }
+
+    /// <summary>
+    /// Tries to create a <see cref="UnixTimestamp"/> from raw seconds, without throwing for untrusted input such as a JWT
+    /// <c>exp</c> claim.
+    /// </summary>
+    /// <param name="seconds">The seconds elapsed since Epoch.</param>
+    /// <param name="result">The timestamp, or <see langword="default"/> when <paramref name="seconds"/> is out of range.</param>
+    /// <returns><see langword="true"/> if <paramref name="seconds"/> is within <see cref="MinSeconds"/>…<see cref="MaxSeconds"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryFromSeconds(long seconds, out UnixTimestamp result) {
+        if(seconds is >= MinSeconds and <= MaxSeconds) {
+            result = new UnixTimestamp(seconds * 1000);
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to create a <see cref="UnixTimestamp"/> from raw milliseconds, without throwing for untrusted input.
+    /// </summary>
+    /// <param name="milliseconds">The milliseconds elapsed since Epoch.</param>
+    /// <param name="result">The timestamp, or <see langword="default"/> when <paramref name="milliseconds"/> is out of range.</param>
+    /// <returns><see langword="true"/> if <paramref name="milliseconds"/> is within <see cref="MinValue"/>…<see cref="MaxValue"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryFromMilliseconds(long milliseconds, out UnixTimestamp result) {
+        if(milliseconds is >= MinUnixMillis and <= MaxUnixMillis) {
+            result = new UnixTimestamp(milliseconds);
+            return true;
+        }
+
+        result = default;
+        return false;
     }
 
     /// <summary>
@@ -215,9 +253,10 @@ public readonly record struct UnixTimestamp :
     /// </summary>
     /// <param name="milliseconds">The number of milliseconds to add. Can be negative.</param>
     /// <returns>A new <see cref="UnixTimestamp"/> representing the future or past instant.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the result is outside <see cref="MinValue"/>…<see cref="MaxValue"/>.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public UnixTimestamp AddMilliseconds(long milliseconds) {
-        return new UnixTimestamp(this._milliseconds + milliseconds);
+        return Offset(this._milliseconds, milliseconds, nameof(milliseconds));
     }
 
     /// <summary>
@@ -378,13 +417,30 @@ public readonly record struct UnixTimestamp :
     // -------------------------------------------------------------------------
 
     /// <inheritdoc cref="IAdditionOperators{TSelf, TOther, TResult}.op_Addition(TSelf, TOther)" />
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the result is outside <see cref="MinValue"/>…<see cref="MaxValue"/>.</exception>
     public static UnixTimestamp operator +(UnixTimestamp left, TimeSpan right) {
-        return new(checked(left._milliseconds + (long)right.TotalMilliseconds));
+        return Offset(left._milliseconds, (long)right.TotalMilliseconds, nameof(right));
     }
 
     /// <inheritdoc cref="ISubtractionOperators{TSelf, TOther, TResult}.op_Subtraction(TSelf, TOther)" />
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the result is outside <see cref="MinValue"/>…<see cref="MaxValue"/>.</exception>
     public static UnixTimestamp operator -(UnixTimestamp left, TimeSpan right) {
-        return new(checked(left._milliseconds - (long)right.TotalMilliseconds));
+        return Offset(left._milliseconds, -(Int128)(long)right.TotalMilliseconds, nameof(right));
+    }
+
+    /// <summary>
+    /// Adds <paramref name="delta"/> to <paramref name="milliseconds"/> without wrapping around, like
+    /// <see cref="DateTimeOffset.Add(TimeSpan)"/>.
+    /// </summary>
+    private static UnixTimestamp Offset(long milliseconds, Int128 delta, string paramName) {
+        Int128 result = milliseconds + delta;
+        if(result < MinUnixMillis || result > MaxUnixMillis) {
+            throw new ArgumentOutOfRangeException(
+                paramName,
+                $"The result is outside the range of {nameof(UnixTimestamp)} ({MinUnixMillis} to {MaxUnixMillis} milliseconds).");
+        }
+
+        return new UnixTimestamp((long)result);
     }
 
     /// <inheritdoc cref="ISubtractionOperators{TSelf, TOther, TResult}.op_Subtraction(TSelf, TOther)" />
@@ -433,8 +489,9 @@ public readonly record struct UnixTimestamp :
     }
 
     /// <summary>Explicitly converts <see cref="long"/> (milliseconds) to <see cref="UnixTimestamp"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="milliseconds"/> is outside <see cref="MinValue"/>…<see cref="MaxValue"/>.</exception>
     public static explicit operator UnixTimestamp(long milliseconds) {
-        return new(milliseconds);
+        return FromMilliseconds(milliseconds);
     }
 
     // Casting - DateTimeOffset
@@ -651,10 +708,7 @@ public readonly record struct UnixTimestamp :
     /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, out UnixTimestamp result) {
         if(long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out long milliseconds)) {
-            if(milliseconds is >= MinUnixMillis and <= MaxUnixMillis) {
-                result = new UnixTimestamp(milliseconds);
-                return true;
-            }
+            return TryFromMilliseconds(milliseconds, out result);
         }
         result = default;
         return false;
@@ -668,10 +722,7 @@ public readonly record struct UnixTimestamp :
     /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, out UnixTimestamp result) {
         if(Utf8Parser.TryParse(utf8Text, out long milliseconds, out int bytesConsumed) && bytesConsumed == utf8Text.Length) {
-            if(milliseconds is >= MinUnixMillis and <= MaxUnixMillis) {
-                result = new UnixTimestamp(milliseconds);
-                return true;
-            }
+            return TryFromMilliseconds(milliseconds, out result);
         }
         result = default;
         return false;

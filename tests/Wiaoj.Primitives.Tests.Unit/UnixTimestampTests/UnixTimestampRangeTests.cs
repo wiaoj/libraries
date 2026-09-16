@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 namespace Wiaoj.Primitives.Tests.Unit.UnixTimestampTests;
 
@@ -61,13 +62,98 @@ public sealed class UnixTimestampRangeTests {
     }
 
     [Fact]
-    public void Operators_ShouldThrow_WhenTheResultOverflows() {
-        UnixTimestamp nearMax = UnixTimestamp.FromMilliseconds(long.MaxValue - 1);
-        UnixTimestamp nearMin = UnixTimestamp.FromMilliseconds(long.MinValue + 1);
+    public void Operators_ShouldReachTheLimits_AndThrowBeyondThem() {
+        UnixTimestamp justBelowMax = UnixTimestamp.FromMilliseconds(UnixTimestamp.MaxValue.TotalMilliseconds - 1);
+        UnixTimestamp justAboveMin = UnixTimestamp.FromMilliseconds(UnixTimestamp.MinValue.TotalMilliseconds + 1);
+        TimeSpan oneMs = TimeSpan.FromMilliseconds(1);
 
-        Assert.Throws<OverflowException>(() => nearMax + TimeSpan.FromMilliseconds(2));
-        Assert.Throws<OverflowException>(() => nearMin - TimeSpan.FromMilliseconds(2));
-        Assert.Equal(long.MaxValue, (nearMax + TimeSpan.FromMilliseconds(1)).TotalMilliseconds);
-        Assert.Equal(long.MinValue, (nearMin - TimeSpan.FromMilliseconds(1)).TotalMilliseconds);
+        Assert.Equal(UnixTimestamp.MaxValue, justBelowMax + oneMs);
+        Assert.Equal(UnixTimestamp.MinValue, justAboveMin - oneMs);
+        Assert.Equal(UnixTimestamp.MaxValue, justBelowMax.AddMilliseconds(1));
+        Assert.Equal(UnixTimestamp.MinValue, justAboveMin.AddMilliseconds(-1));
+
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MaxValue + oneMs);
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MinValue - oneMs);
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MaxValue.AddMilliseconds(1));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MinValue.AddMilliseconds(-1));
+    }
+
+    [Fact]
+    public void Operators_ShouldThrow_InsteadOfWrappingAround() {
+        // Subtracting TimeSpan.MinValue negates past long.MaxValue; adding long.MaxValue wraps a long sum.
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MaxValue + TimeSpan.MaxValue);
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MinValue + TimeSpan.MinValue);
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MaxValue - TimeSpan.MinValue);
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MaxValue.AddMilliseconds(long.MaxValue));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.MinValue.AddMilliseconds(long.MinValue));
+    }
+
+    [Fact]
+    public void FromMilliseconds_And_Cast_ShouldAcceptTheLimits() {
+        Assert.Equal(UnixTimestamp.MinValue, UnixTimestamp.FromMilliseconds(-62135596800000));
+        Assert.Equal(UnixTimestamp.MaxValue, UnixTimestamp.FromMilliseconds(253402300799999));
+        Assert.Equal(UnixTimestamp.MinValue, (UnixTimestamp)(-62135596800000));
+        Assert.Equal(UnixTimestamp.MaxValue, (UnixTimestamp)253402300799999);
+    }
+
+    [Theory]
+    [InlineData(-62135596800001)]
+    [InlineData(253402300800000)]
+    [InlineData(long.MinValue)]
+    [InlineData(long.MaxValue)]
+    public void FromMilliseconds_And_Cast_ShouldThrow_OutsideTheRange(long milliseconds) {
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => UnixTimestamp.FromMilliseconds(milliseconds));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => (UnixTimestamp)milliseconds);
+    }
+
+    [Theory]
+    [InlineData(-62135596800000, true)]
+    [InlineData(253402300799999, true)]
+    [InlineData(0, true)]
+    [InlineData(-62135596800001, false)]
+    [InlineData(253402300800000, false)]
+    [InlineData(long.MaxValue, false)]
+    public void TryFromMilliseconds_ShouldMatchTheRange(long milliseconds, bool expected) {
+        Assert.Equal(expected, UnixTimestamp.TryFromMilliseconds(milliseconds, out UnixTimestamp result));
+        Assert.Equal(expected ? milliseconds : 0, result.TotalMilliseconds);
+    }
+
+    [Theory]
+    [InlineData(UnixTimestamp.MinSeconds, true)]
+    [InlineData(UnixTimestamp.MaxSeconds, true)]
+    [InlineData(1_700_000_000, true)]
+    [InlineData(UnixTimestamp.MinSeconds - 1, false)]
+    [InlineData(UnixTimestamp.MaxSeconds + 1, false)]
+    [InlineData(long.MaxValue / 1000 + 1, false)]
+    public void TryFromSeconds_ShouldMatchTheRange(long seconds, bool expected) {
+        Assert.Equal(expected, UnixTimestamp.TryFromSeconds(seconds, out UnixTimestamp result));
+        Assert.Equal(expected ? seconds * 1000 : 0, result.TotalMilliseconds);
+    }
+
+    [Theory]
+    [InlineData("253402300800000")]
+    [InlineData("\"253402300800000\"")]
+    [InlineData("-62135596800001")]
+    [InlineData("9223372036854775807")]
+    public void Json_ShouldRefuse_OutsideTheRange(string json) {
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<UnixTimestamp>(json));
+    }
+
+    [Fact]
+    public void Json_ShouldRefuse_OutsideTheRange_AsDictionaryKeyAndInARange() {
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Dictionary<UnixTimestamp, int>>("""{"253402300800000":1}"""));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Range<UnixTimestamp>>("""{"Min":0,"Max":253402300800000}"""));
+    }
+
+    [Fact]
+    public void Json_ShouldAcceptTheLimits() {
+        Assert.Equal(UnixTimestamp.MaxValue, JsonSerializer.Deserialize<UnixTimestamp>("253402300799999"));
+        Assert.Equal(UnixTimestamp.MinValue, JsonSerializer.Deserialize<UnixTimestamp>("\"-62135596800000\""));
+        Assert.Equal(
+            UnixTimestamp.MaxValue,
+            JsonSerializer.Deserialize<Dictionary<UnixTimestamp, int>>("""{"253402300799999":1}""")!.Keys.Single());
+        Assert.Equal(
+            new Range<UnixTimestamp>(UnixTimestamp.MinValue, UnixTimestamp.MaxValue),
+            JsonSerializer.Deserialize<Range<UnixTimestamp>>("""{"Min":-62135596800000,"Max":253402300799999}"""));
     }
 }

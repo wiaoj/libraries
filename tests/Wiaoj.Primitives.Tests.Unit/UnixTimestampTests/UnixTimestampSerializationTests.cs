@@ -97,9 +97,9 @@ public sealed class UnixTimestampSerializationTests {
     }
 
     [Fact]
-    public void ToString_OutOfRange_ShouldFallbackToRawWithoutCrashing() {
-        UnixTimestamp extreme = (UnixTimestamp)long.MaxValue;
-        Assert.Equal(long.MaxValue.ToString(), extreme.ToString());
+    public void OutOfRange_ShouldNotBeRepresentable() {
+        // Out-of-range values used to be representable and formatted as raw milliseconds; they are now refused (#170).
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => (UnixTimestamp)long.MaxValue);
     }
 
     [Fact]
