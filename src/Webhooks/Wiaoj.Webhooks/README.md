@@ -213,6 +213,19 @@ webhooks.UseStaleJobRecovery(options =>
 });
 ```
 
+**What is recovered:**
+- `InFlight` jobs whose lease has expired.
+- `Queued` jobs older than `QueuedJobStaleThreshold`.
+- `Retrying` jobs whose `NextAttemptAt` (plus `RetryingJobGracePeriod`) has passed. On an instance that crashed, the in-memory delayed retry is gone.
+
+A job can therefore reach workers more than once, for example as a delayed retry and as a copy re-enqueued by recovery. Only one copy delivers it:
+
+- **Lease:** a worker claims a lease (`RecoveryLeaseDuration`) on the job before delivering it, so recovery and other instances leave it alone while it runs.
+- **Same instance:** copies take turns.
+- **Finished jobs:** a copy that arrives after the job is `Delivered` or `DeadLettered` can't claim a lease, so the job is not delivered again.
+
+Keep `RecoveryLeaseDuration` longer than a delivery can take. If the lease expires mid-delivery, recovery treats the job as abandoned.
+
 ### 7. Outbound Idempotency
 Prevents duplicate event transmissions within a sliding window:
 

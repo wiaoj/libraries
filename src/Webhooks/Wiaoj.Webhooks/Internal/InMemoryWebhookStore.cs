@@ -85,11 +85,7 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     public Task UpdateStatusAsync(WebhookJobId jobId, WebhookJobStatus status, CancellationToken cancellationToken = default) {
         if(this._jobs.TryGetValue(jobId, out WebhookJobRecord? job)) {
             lock(job) {
-                job.Status = status;
-                if(status == WebhookJobStatus.Retrying) {
-                    job.LockedBy = null;
-                    job.LockExpiresAt = null;
-                }
+                SetStatus(job, status);
             }
         }
         return Task.CompletedTask;
@@ -99,15 +95,19 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
     public Task UpdateStatusAsync(WebhookJobId jobId, WebhookJobStatus status, DateTimeOffset? nextAttemptAt, CancellationToken cancellationToken = default) {
         if(this._jobs.TryGetValue(jobId, out WebhookJobRecord? job)) {
             lock(job) {
-                job.Status = status;
+                SetStatus(job, status);
                 job.NextAttemptAt = nextAttemptAt;
-                if(status == WebhookJobStatus.Retrying) {
-                    job.LockedBy = null;
-                    job.LockExpiresAt = null;
-                }
             }
         }
         return Task.CompletedTask;
+    }
+
+    private static void SetStatus(WebhookJobRecord job, WebhookJobStatus status) {
+        job.Status = status;
+        if(status is WebhookJobStatus.Retrying or WebhookJobStatus.Delivered or WebhookJobStatus.DeadLettered) {
+            job.LockedBy = null;
+            job.LockExpiresAt = null;
+        }
     }
 
     /// <inheritdoc/>
@@ -122,6 +122,10 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
         DateTimeOffset now = this._timeProvider.GetUtcNow();
 
         lock(job) {
+            if(job.Status is WebhookJobStatus.Delivered or WebhookJobStatus.DeadLettered) {
+                return Task.FromResult(false);
+            }
+
             if(job.LockedBy is not null && job.LockExpiresAt.HasValue && job.LockExpiresAt.Value > now && job.LockedBy != instanceId) {
                 return Task.FromResult(false);
             }

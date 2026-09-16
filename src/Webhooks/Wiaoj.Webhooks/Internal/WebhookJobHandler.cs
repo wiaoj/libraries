@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Wiaoj.Serialization;
 using Wiaoj.Webhooks.Diagnostics;
 
@@ -15,6 +16,9 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
     private readonly WebhookPipelineRunner _pipelineRunner;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<WebhookJobHandler> _logger;
+    private readonly WebhookJobExecutionGuard _guard;
+    private readonly string _instanceId;
+    private readonly TimeSpan _leaseDuration;
 
     public WebhookJobHandler(
         IWebhookStore store,
@@ -22,13 +26,38 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
         ISerializer<WebhookSerializerKey> serializer,
         WebhookPipelineRunner pipelineRunner,
         TimeProvider timeProvider,
-        ILogger<WebhookJobHandler> logger) {
+        ILogger<WebhookJobHandler> logger)
+        : this(
+            store,
+            endpointResolver,
+            serializer,
+            pipelineRunner,
+            timeProvider,
+            logger,
+            new WebhookJobExecutionGuard(),
+            Options.Create(new WebhookOptions()),
+            Options.Create(new WebhookRecoveryOptions())) {
+    }
+
+    public WebhookJobHandler(
+        IWebhookStore store,
+        IWebhookEndpointResolver endpointResolver,
+        ISerializer<WebhookSerializerKey> serializer,
+        WebhookPipelineRunner pipelineRunner,
+        TimeProvider timeProvider,
+        ILogger<WebhookJobHandler> logger,
+        WebhookJobExecutionGuard guard,
+        IOptions<WebhookOptions> webhookOptions,
+        IOptions<WebhookRecoveryOptions> recoveryOptions) {
         Preca.ThrowIfNull(store);
         Preca.ThrowIfNull(endpointResolver);
         Preca.ThrowIfNull(serializer);
         Preca.ThrowIfNull(pipelineRunner);
         Preca.ThrowIfNull(timeProvider);
         Preca.ThrowIfNull(logger);
+        Preca.ThrowIfNull(guard);
+        Preca.ThrowIfNull(webhookOptions);
+        Preca.ThrowIfNull(recoveryOptions);
 
         this._store = store;
         this._endpointResolver = endpointResolver;
@@ -36,11 +65,38 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
         this._pipelineRunner = pipelineRunner;
         this._timeProvider = timeProvider;
         this._logger = logger;
+        this._guard = guard;
+        this._instanceId = webhookOptions.Value.InstanceId;
+        this._leaseDuration = recoveryOptions.Value.RecoveryLeaseDuration;
     }
 
     public async Task<WebhookDeliveryAttempt> HandleAsync(WebhookDeliveryJob job, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(job);
 
+        // A job can reach a worker more than once: a delayed retry and a copy re-enqueued by recovery, or two recovery
+        // sweeps. Copies in this process take turns; across instances the lease decides. A copy that cannot lease the
+        // job — leased elsewhere, or already finished — is not delivered.
+        using WebhookJobExecutionGuard.Releaser slot = await this._guard.EnterAsync(job.Id, cancellationToken);
+
+        if(!await this._store.TryClaimLeaseAsync(job.Id, this._instanceId, this._leaseDuration, cancellationToken)) {
+            WebhookJobRecord? record = await this._store.GetJobAsync(job.Id, cancellationToken);
+            if(record is not null) {
+                this._logger.LogJobDeliverySkipped(job.Id, record.Status, record.LockedBy);
+                return WebhookDeliveryAttempt.Create(
+                    job.EndpointId,
+                    record.Attempts.Count + 1,
+                    UnixTimestamp.From(this._timeProvider),
+                    TimeSpan.Zero,
+                    WebhookDeliveryResult.Duplicate($"job-lease:{job.Id}"));
+            }
+
+            // The store does not track this job, so there is no lease to take.
+        }
+
+        return await DeliverAsync(job, cancellationToken);
+    }
+
+    private async Task<WebhookDeliveryAttempt> DeliverAsync(WebhookDeliveryJob job, CancellationToken cancellationToken) {
         WebhookEndpoint? endpoint;
         try {
             endpoint = await this._endpointResolver.ResolveAsync(job.EndpointId, cancellationToken);

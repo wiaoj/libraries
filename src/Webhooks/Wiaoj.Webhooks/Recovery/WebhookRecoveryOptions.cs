@@ -35,8 +35,13 @@ public sealed class WebhookRecoveryOptions {
     public int BatchSize { get; set; } = DefaultBatchSize;
 
     /// <summary>
-    /// Gets or sets the lease lock duration when claiming a stale job for re-enqueuing. Default is 2 minutes.
+    /// Gets or sets the lease lock duration claimed on a job: by a worker while it delivers the job, and by recovery while
+    /// it re-enqueues a stale one. Default is 2 minutes.
     /// </summary>
+    /// <remarks>
+    /// Keep it longer than a delivery can take (the request timeout plus the pipeline). A lease that expires while the
+    /// delivery is still running lets recovery treat the job as abandoned and enqueue it again.
+    /// </remarks>
     public TimeSpan RecoveryLeaseDuration { get; set; } = DefaultRecoveryLeaseDuration;
 
     /// <summary>

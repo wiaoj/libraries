@@ -288,7 +288,7 @@ webhooks.UseShardedInMemoryTransport(shardCount: Environment.ProcessorCount * 2)
 ```
 
 ### 6. Self-Healing Stale Job Recovery
-Sweeps both expired in-flight leases and stranded queued jobs caused by node crashes:
+Sweeps expired in-flight leases, stranded queued jobs, and retries whose scheduled time passed on a node that crashed. Workers lease a job before delivering it, so a recovered copy never runs alongside the original, and a finished job is never delivered again:
 
 ```csharp
 webhooks.UseStaleJobRecovery(options =>

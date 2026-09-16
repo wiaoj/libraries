@@ -39,6 +39,11 @@ public interface IWebhookStore {
     /// <summary>
     /// Updates the lifecycle status of a webhook job.
     /// </summary>
+    /// <remarks>
+    /// Moving a job to <see cref="WebhookJobStatus.Retrying"/>, <see cref="WebhookJobStatus.Delivered"/> or
+    /// <see cref="WebhookJobStatus.DeadLettered"/> releases its lease (<see cref="WebhookJobRecord.LockedBy"/> and
+    /// <see cref="WebhookJobRecord.LockExpiresAt"/> are cleared); other statuses keep it.
+    /// </remarks>
     /// <param name="jobId">The job identifier.</param>
     /// <param name="status">The new status.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -48,6 +53,7 @@ public interface IWebhookStore {
     /// <summary>
     /// Updates the lifecycle status and next scheduled retry timestamp of a webhook job atomically.
     /// </summary>
+    /// <remarks>Releases the lease under the same rule as <see cref="UpdateStatusAsync(WebhookJobId, WebhookJobStatus, CancellationToken)"/>.</remarks>
     /// <param name="jobId">The job identifier.</param>
     /// <param name="status">The new status.</param>
     /// <param name="nextAttemptAt">The timestamp when the next execution attempt should occur. Pass <see langword="null"/> to clear the scheduled retry.</param>
@@ -58,6 +64,18 @@ public interface IWebhookStore {
     /// <summary>
     /// Attempts to acquire an execution lease lock for a worker instance.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Must be atomic. The claim succeeds when the job exists, is not finished (<see cref="WebhookJobStatus.Delivered"/> or
+    /// <see cref="WebhookJobStatus.DeadLettered"/>), and has no unexpired lease held by a different
+    /// <paramref name="instanceId"/>; the same instance may renew its own lease. A successful claim sets the status to
+    /// <see cref="WebhookJobStatus.InFlight"/>.
+    /// </para>
+    /// <para>
+    /// Workers claim a lease before delivering a job, and recovery before re-enqueuing one, so a job is never delivered by
+    /// two instances at once and a finished job is never delivered again.
+    /// </para>
+    /// </remarks>
     /// <param name="jobId">The job identifier.</param>
     /// <param name="instanceId">The identifier of the acquiring instance/pod.</param>
     /// <param name="duration">The duration of the lease.</param>
