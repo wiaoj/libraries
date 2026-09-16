@@ -246,7 +246,7 @@ internal sealed class RangeHalfConverter : RangeConverterBase<Half> {
 }
 
 internal sealed class RangeUnixTimestampConverter : RangeConverterBase<UnixTimestamp> {
-    protected override UnixTimestamp ReadValue(ref Utf8JsonReader r) => UnixTimestamp.FromMilliseconds(r.GetInt64());
+    protected override UnixTimestamp ReadValue(ref Utf8JsonReader r) => UnixTimestampJsonConverter.FromMilliseconds(r.GetInt64());
     protected override void WriteValue(Utf8JsonWriter w, UnixTimestamp v) => w.WriteNumberValue(v.TotalMilliseconds);
 }
 

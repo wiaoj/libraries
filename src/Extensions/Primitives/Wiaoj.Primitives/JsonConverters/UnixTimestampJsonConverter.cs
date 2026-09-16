@@ -8,7 +8,8 @@ namespace Wiaoj.Primitives.JsonConverters;
 /// <summary>
 /// Handles strict and flexible serialization of <see cref="UnixTimestamp"/>.
 /// Supports both numeric JSON values (standard) and string JSON values (compatibility).
-/// Interprets values as MILLISECONDS.
+/// Interprets values as MILLISECONDS; values outside <see cref="UnixTimestamp.MinValue"/>…<see cref="UnixTimestamp.MaxValue"/>
+/// are refused with a <see cref="JsonException"/>.
 /// </summary>
 public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
 
@@ -17,7 +18,7 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
         // 1. Optimization: Try reading as a number first (most common and fastest case)
         if(reader.TokenType == JsonTokenType.Number) {
             if(reader.TryGetInt64(out long milliseconds)) {
-                return UnixTimestamp.FromMilliseconds(milliseconds);
+                return FromMilliseconds(milliseconds);
             }
         }
 
@@ -28,7 +29,7 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
 
             // Direct usage of Utf8Parser is faster than casting to IUtf8SpanParsable
             if(Utf8Parser.TryParse(span, out long milliseconds, out int bytesConsumed) && bytesConsumed == span.Length) {
-                return UnixTimestamp.FromMilliseconds(milliseconds);
+                return FromMilliseconds(milliseconds);
             }
         }
 
@@ -48,7 +49,7 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
         ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
 
         if(Utf8Parser.TryParse(span, out long milliseconds, out int bytesConsumed) && bytesConsumed == span.Length) {
-            return UnixTimestamp.FromMilliseconds(milliseconds);
+            return FromMilliseconds(milliseconds);
         }
 
         throw new JsonException($"Invalid property name format for UnixTimestamp. Expected an integer string.");
@@ -57,5 +58,15 @@ public sealed class UnixTimestampJsonConverter : JsonConverter<UnixTimestamp> {
     /// <inheritdoc/>
     public override void WriteAsPropertyName(Utf8JsonWriter writer, UnixTimestamp value, JsonSerializerOptions options) {
         writer.WritePropertyName(value.TotalMilliseconds.ToString(CultureInfo.InvariantCulture));
+    }
+
+    internal static UnixTimestamp FromMilliseconds(long milliseconds) {
+        if(UnixTimestamp.TryFromMilliseconds(milliseconds, out UnixTimestamp timestamp)) {
+            return timestamp;
+        }
+
+        throw new JsonException(
+            $"The value {milliseconds} is outside the range of UnixTimestamp " +
+            $"({UnixTimestamp.MinValue.TotalMilliseconds} to {UnixTimestamp.MaxValue.TotalMilliseconds} milliseconds).");
     }
 }
