@@ -8,6 +8,8 @@ Stores [Wiaoj.Identifiers](../Wiaoj.Identifiers/README.md) as `bigint` columns i
 dotnet add package Wiaoj.Identifiers.EntityFrameworkCore
 ```
 
+This package depends on [`Wiaoj.Identifiers.Abstractions`](../Wiaoj.Identifiers.Abstractions/README.md), not on the hosting package. An infrastructure project that maps entities doesn't need `AddIdentifiers()`.
+
 ## Usage
 
 ```csharp

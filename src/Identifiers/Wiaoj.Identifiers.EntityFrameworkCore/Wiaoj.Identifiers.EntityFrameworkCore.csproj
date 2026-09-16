@@ -21,7 +21,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Wiaoj.Identifiers\Wiaoj.Identifiers.csproj" />
+		<!-- PrivateAssets="none": a project referencing only this package still gets the source generator. -->
+		<ProjectReference Include="..\Wiaoj.Identifiers.Abstractions\Wiaoj.Identifiers.Abstractions.csproj" PrivateAssets="none" />
 	</ItemGroup>
 
 </Project>

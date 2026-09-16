@@ -15,11 +15,20 @@ A `UserId` can't be passed where an `OrgId` is expected, and neither can its tex
 
 ## Installation
 
+The family is split so a domain layer doesn't take on hosting dependencies:
+
+| Package | Contains | Reference it from |
+| --- | --- | --- |
+| [`Wiaoj.Identifiers.Abstractions`](../Wiaoj.Identifiers.Abstractions/README.md) | `[Identifier]`, `IIdentifier<T>`, `IdCodec`, `PlainIdCodec`, `AesIdCodec`, and the source generator. Depends only on `Wiaoj.Primitives`. | The domain project that declares identifiers |
+| `Wiaoj.Identifiers` (this package) | `AddIdentifiers()`, `IdentifiersOptions`, and the startup codec installer. Adds `Microsoft.Extensions.DependencyInjection`, `Hosting` and `Options`. | The host / composition root |
+
 ```bash
-dotnet add package Wiaoj.Identifiers
+dotnet add Domain package Wiaoj.Identifiers.Abstractions
+dotnet add Api package Wiaoj.Identifiers
 ```
 
-The source generator is included in the package, so there is nothing else to reference.
+- **Namespace:** every type is in the `Wiaoj.Identifiers` namespace.
+- **Generator:** it comes with every package in the family. A single-project application can reference only `Wiaoj.Identifiers`.
 
 ## Setup
 

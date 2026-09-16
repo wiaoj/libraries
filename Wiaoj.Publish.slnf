@@ -35,6 +35,7 @@
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.Proxy\\Wiaoj.Serialization.Proxy.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.SystemTextJson\\Wiaoj.Serialization.SystemTextJson.csproj",
       "src\\Serialization\\Implementations\\Wiaoj.Serialization.YamlDotNet\\Wiaoj.Serialization.YamlDotNet.csproj",
+      "src\\Identifiers\\Wiaoj.Identifiers.Abstractions\\Wiaoj.Identifiers.Abstractions.csproj",
       "src\\Identifiers\\Wiaoj.Identifiers\\Wiaoj.Identifiers.csproj",
       "src\\Identifiers\\Wiaoj.Identifiers.Generators\\Wiaoj.Identifiers.Generators.csproj",
       "src\\Identifiers\\Wiaoj.Identifiers.Security\\Wiaoj.Identifiers.Security.csproj",
