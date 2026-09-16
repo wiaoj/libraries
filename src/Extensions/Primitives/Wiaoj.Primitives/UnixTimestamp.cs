@@ -36,7 +36,7 @@ public readonly record struct UnixTimestamp :
     IUtf8SpanFormattable,
     IAdditionOperators<UnixTimestamp, TimeSpan, UnixTimestamp>,
     ISubtractionOperators<UnixTimestamp, TimeSpan, UnixTimestamp>,
-    ISubtractionOperators<UnixTimestamp, UnixTimestamp, TimeSpan>, 
+    ISubtractionOperators<UnixTimestamp, UnixTimestamp, TimeSpan>,
     IComparisonOperators<UnixTimestamp, UnixTimestamp, bool> {
 
     // -------------------------------------------------------------------------
@@ -47,6 +47,18 @@ public readonly record struct UnixTimestamp :
     private const long MinUnixMillis = -62135596800000; // 0001-01-01
     private const long MaxUnixMillis = 253402300799999; // 9999-12-31
     private const long MillisecondsPerDay = 86400000;
+
+    /// <summary>
+    /// Represents the minimum representable Unix timestamp in seconds (-62,135,596,800), corresponding to 0001-01-01T00:00:00Z.
+    /// Matches <see cref="DateTimeOffset.MinValue"/>.
+    /// </summary>
+    public const long MinSeconds = MinUnixMillis / 1000; // -62135596800
+
+    /// <summary>
+    /// Represents the maximum representable Unix timestamp in seconds (253,402,300,799), corresponding to 9999-12-31T23:59:59Z.
+    /// Matches <see cref="DateTimeOffset.MaxValue"/>.
+    /// </summary>
+    public const long MaxSeconds = MaxUnixMillis / 1000; //  253402300799
 
     /// <summary>
     /// Represents the Unix Epoch (1970-01-01T00:00:00Z). Value is 0.
@@ -121,8 +133,14 @@ public readonly record struct UnixTimestamp :
     /// <summary>
     /// Creates a <see cref="UnixTimestamp"/> from raw seconds.
     /// </summary>
+    /// <param name="seconds">The seconds elapsed since Epoch.</param>
+    /// <returns>A new <see cref="UnixTimestamp"/> instance.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="seconds"/> is outside the valid range (-62,135,596,800 to 253,402,300,799).</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static UnixTimestamp FromSeconds(long seconds) {
-        return new(seconds * 1000);
+        Preca.ThrowIfOutOfRange(seconds, MinSeconds, MaxSeconds);
+
+        return new UnixTimestamp(seconds * 1000);
     }
 
     /// <summary>
@@ -361,12 +379,12 @@ public readonly record struct UnixTimestamp :
 
     /// <inheritdoc cref="IAdditionOperators{TSelf, TOther, TResult}.op_Addition(TSelf, TOther)" />
     public static UnixTimestamp operator +(UnixTimestamp left, TimeSpan right) {
-        return new(left._milliseconds + (long)right.TotalMilliseconds);
+        return new(checked(left._milliseconds + (long)right.TotalMilliseconds));
     }
 
     /// <inheritdoc cref="ISubtractionOperators{TSelf, TOther, TResult}.op_Subtraction(TSelf, TOther)" />
     public static UnixTimestamp operator -(UnixTimestamp left, TimeSpan right) {
-        return new(left._milliseconds - (long)right.TotalMilliseconds);
+        return new(checked(left._milliseconds - (long)right.TotalMilliseconds));
     }
 
     /// <inheritdoc cref="ISubtractionOperators{TSelf, TOther, TResult}.op_Subtraction(TSelf, TOther)" />
@@ -395,7 +413,7 @@ public readonly record struct UnixTimestamp :
     public static bool operator <=(UnixTimestamp left, UnixTimestamp right) {
         return left._milliseconds <= right._milliseconds;
     }
-  
+
     /// <inheritdoc/>
     public int CompareTo(UnixTimestamp other) {
         return this._milliseconds.CompareTo(other._milliseconds);
@@ -452,7 +470,9 @@ public readonly record struct UnixTimestamp :
     /// </list>
     /// </param>
     /// <returns>A formatted string representation of the timestamp.</returns>
-    public string ToString(string? format) => ToString(format, null);
+    public string ToString(string? format) {
+        return ToString(format, null);
+    }
 
     /// <summary>
     /// Formats the value of the current instance using the specified format and format provider.
@@ -485,7 +505,9 @@ public readonly record struct UnixTimestamp :
     /// <param name="destination">The destination character span.</param>
     /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
     /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten) => TryFormat(destination, out charsWritten, default, null);
+    public bool TryFormat(Span<char> destination, out int charsWritten) {
+        return TryFormat(destination, out charsWritten, default, null);
+    }
 
     /// <summary>
     /// Tries to format the timestamp into the destination character span using the specified format.
@@ -494,7 +516,9 @@ public readonly record struct UnixTimestamp :
     /// <param name="charsWritten">When this method returns, contains the number of characters written.</param>
     /// <param name="format">The format span.</param>
     /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) => TryFormat(destination, out charsWritten, format, null);
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format) {
+        return TryFormat(destination, out charsWritten, format, null);
+    }
 
     /// <summary>
     /// Tries to format the timestamp into the destination character span using the specified format and provider.
@@ -525,7 +549,9 @@ public readonly record struct UnixTimestamp :
     /// <param name="utf8Destination">The destination byte span.</param>
     /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
     /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) => TryFormat(utf8Destination, out bytesWritten, default, null);
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten) {
+        return TryFormat(utf8Destination, out bytesWritten, default, null);
+    }
 
     /// <summary>
     /// Tries to format the timestamp into the destination UTF-8 byte span using the specified format.
@@ -534,7 +560,9 @@ public readonly record struct UnixTimestamp :
     /// <param name="bytesWritten">When this method returns, contains the number of bytes written.</param>
     /// <param name="format">The format span.</param>
     /// <returns><see langword="true"/> if formatting succeeded; otherwise, <see langword="false"/>.</returns>
-    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) => TryFormat(utf8Destination, out bytesWritten, format, null);
+    public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format) {
+        return TryFormat(utf8Destination, out bytesWritten, format, null);
+    }
 
     /// <summary>
     /// Tries to format the timestamp into the destination UTF-8 byte span using the specified format and provider.
@@ -569,7 +597,7 @@ public readonly record struct UnixTimestamp :
     /// <param name="s">The string to parse.</param>
     /// <returns>The parsed timestamp.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="s"/> is null.</exception>
-    /// <exception cref="FormatException">Thrown if the string is not a valid integer.</exception>
+    /// <exception cref="FormatException">Thrown if the string is not a valid integer, or is outside <see cref="MinValue"/>…<see cref="MaxValue"/>.</exception>
     public static UnixTimestamp Parse(string s) {
         Preca.ThrowIfNull(s);
         return Parse(s.AsSpan());
@@ -580,10 +608,10 @@ public readonly record struct UnixTimestamp :
     /// </summary>
     /// <param name="s">The span to parse.</param>
     /// <returns>The parsed timestamp.</returns>
-    /// <exception cref="FormatException">Thrown if the span is not a valid integer.</exception>
+    /// <exception cref="FormatException">Thrown if the span is not a valid integer, or is outside <see cref="MinValue"/>…<see cref="MaxValue"/>.</exception>
     public static UnixTimestamp Parse(ReadOnlySpan<char> s) {
-        if(long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out long result)) {
-            return new UnixTimestamp(result);
+        if(TryParse(s, out UnixTimestamp result)) {
+            return result;
         }
         throw new FormatException($"Invalid Unix Timestamp format: '{s}'");
     }
@@ -593,10 +621,10 @@ public readonly record struct UnixTimestamp :
     /// </summary>
     /// <param name="utf8Text">The UTF-8 byte span to parse.</param>
     /// <returns>The parsed timestamp.</returns>
-    /// <exception cref="FormatException">Thrown if the input is not a valid UTF-8 integer sequence.</exception>
+    /// <exception cref="FormatException">Thrown if the input is not a valid UTF-8 integer sequence, or is outside <see cref="MinValue"/>…<see cref="MaxValue"/>.</exception>
     public static UnixTimestamp Parse(ReadOnlySpan<byte> utf8Text) {
-        if(Utf8Parser.TryParse(utf8Text, out long result, out int bytesConsumed) && bytesConsumed == utf8Text.Length) {
-            return new UnixTimestamp(result);
+        if(TryParse(utf8Text, out UnixTimestamp result)) {
+            return result;
         }
         throw new FormatException("Invalid UTF-8 sequence for Unix Timestamp.");
     }
@@ -623,8 +651,10 @@ public readonly record struct UnixTimestamp :
     /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<char> s, out UnixTimestamp result) {
         if(long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out long milliseconds)) {
-            result = new UnixTimestamp(milliseconds);
-            return true;
+            if(milliseconds is >= MinUnixMillis and <= MaxUnixMillis) {
+                result = new UnixTimestamp(milliseconds);
+                return true;
+            }
         }
         result = default;
         return false;
@@ -638,8 +668,10 @@ public readonly record struct UnixTimestamp :
     /// <returns><see langword="true"/> if parsing succeeded; otherwise, <see langword="false"/>.</returns>
     public static bool TryParse(ReadOnlySpan<byte> utf8Text, out UnixTimestamp result) {
         if(Utf8Parser.TryParse(utf8Text, out long milliseconds, out int bytesConsumed) && bytesConsumed == utf8Text.Length) {
-            result = new UnixTimestamp(milliseconds);
-            return true;
+            if(milliseconds is >= MinUnixMillis and <= MaxUnixMillis) {
+                result = new UnixTimestamp(milliseconds);
+                return true;
+            }
         }
         result = default;
         return false;
@@ -649,12 +681,29 @@ public readonly record struct UnixTimestamp :
 
     #region Explicit Interface Implementations (IParsable, ISpanParsable, IUtf8SpanParsable)
 
-    static UnixTimestamp IParsable<UnixTimestamp>.Parse(string s, IFormatProvider? provider) => Parse(s);
-    static bool IParsable<UnixTimestamp>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out UnixTimestamp result) => TryParse(s, out result);
-    static UnixTimestamp ISpanParsable<UnixTimestamp>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => Parse(s);
-    static bool ISpanParsable<UnixTimestamp>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UnixTimestamp result) => TryParse(s, out result);
-    static UnixTimestamp IUtf8SpanParsable<UnixTimestamp>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) => Parse(utf8Text);
-    static bool IUtf8SpanParsable<UnixTimestamp>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out UnixTimestamp result) => TryParse(utf8Text, out result);
+    static UnixTimestamp IParsable<UnixTimestamp>.Parse(string s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool IParsable<UnixTimestamp>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out UnixTimestamp result) {
+        return TryParse(s, out result);
+    }
+
+    static UnixTimestamp ISpanParsable<UnixTimestamp>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        return Parse(s);
+    }
+
+    static bool ISpanParsable<UnixTimestamp>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UnixTimestamp result) {
+        return TryParse(s, out result);
+    }
+
+    static UnixTimestamp IUtf8SpanParsable<UnixTimestamp>.Parse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider) {
+        return Parse(utf8Text);
+    }
+
+    static bool IUtf8SpanParsable<UnixTimestamp>.TryParse(ReadOnlySpan<byte> utf8Text, IFormatProvider? provider, out UnixTimestamp result) {
+        return TryParse(utf8Text, out result);
+    }
 
     #endregion
 
@@ -669,9 +718,13 @@ public readonly record struct UnixTimestamp :
     private sealed class UnixTimestampOrdinalComparer : IEqualityComparer<UnixTimestamp>, IAlternateEqualityComparer<ReadOnlySpan<char>, UnixTimestamp> {
         public static UnixTimestampOrdinalComparer Instance { get; } = new();
 
-        public bool Equals(UnixTimestamp x, UnixTimestamp y) => x._milliseconds == y._milliseconds;
+        public bool Equals(UnixTimestamp x, UnixTimestamp y) {
+            return x._milliseconds == y._milliseconds;
+        }
 
-        public int GetHashCode(UnixTimestamp obj) => obj._milliseconds.GetHashCode();
+        public int GetHashCode(UnixTimestamp obj) {
+            return obj._milliseconds.GetHashCode();
+        }
 
         public bool Equals(ReadOnlySpan<char> alternate, UnixTimestamp other) {
             if(long.TryParse(alternate, NumberStyles.Integer, CultureInfo.InvariantCulture, out long ms)) {
@@ -687,7 +740,9 @@ public readonly record struct UnixTimestamp :
             return 0;
         }
 
-        public UnixTimestamp Create(ReadOnlySpan<char> alternate) => UnixTimestamp.Parse(alternate);
+        public UnixTimestamp Create(ReadOnlySpan<char> alternate) {
+            return UnixTimestamp.Parse(alternate);
+        }
     }
 
     #endregion
