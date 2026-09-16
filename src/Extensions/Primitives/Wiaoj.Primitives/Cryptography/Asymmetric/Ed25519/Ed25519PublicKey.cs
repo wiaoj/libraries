@@ -32,12 +32,13 @@ public readonly record struct Ed25519PublicKey : IEquatable<Ed25519PublicKey> {
     // ── Factories ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates an <see cref="Ed25519PublicKey"/> from a validated <see cref="Base64UrlString"/>.
+    /// Wraps a Base64Url-encoded public key (the JWK <c>x</c> parameter) as an <see cref="Ed25519PublicKey"/>.
     /// </summary>
     /// <param name="x">The Base64Url-encoded 32-byte public key parameter.</param>
     /// <returns>A validated <see cref="Ed25519PublicKey"/> instance.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="x"/> is empty or does not represent 32 bytes.</exception>
-    public static Ed25519PublicKey Create(Base64UrlString x) {
+    /// <remarks>Does not allocate: the key keeps <paramref name="x"/>.</remarks>
+    public static Ed25519PublicKey From(Base64UrlString x) {
         Preca.ThrowIfEmpty(x);
          
         Span<byte> buffer = stackalloc byte[KeySizeInBytes];
@@ -57,12 +58,13 @@ public readonly record struct Ed25519PublicKey : IEquatable<Ed25519PublicKey> {
     }
 
     /// <summary>
-    /// Creates an <see cref="Ed25519PublicKey"/> directly from a 32-byte span.
+    /// Wraps a raw 32-byte public key as an <see cref="Ed25519PublicKey"/>.
     /// </summary>
     /// <param name="publicKeyBytes">The 32-byte span containing the raw public key.</param>
     /// <returns>A validated <see cref="Ed25519PublicKey"/> instance.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="publicKeyBytes"/> is not exactly 32 bytes long.</exception>
-    public static Ed25519PublicKey Create(ReadOnlySpan<byte> publicKeyBytes) {
+    /// <remarks>Allocates the 43-character Base64Url string the key is stored as (112 bytes); nothing else.</remarks>
+    public static Ed25519PublicKey From(ReadOnlySpan<byte> publicKeyBytes) {
         Preca.ThrowIf(
             publicKeyBytes.Length != KeySizeInBytes,
             static () => new ArgumentException($"Ed25519 public key must be exactly {KeySizeInBytes} bytes long.", nameof(publicKeyBytes)));
@@ -83,15 +85,15 @@ public readonly record struct Ed25519PublicKey : IEquatable<Ed25519PublicKey> {
     /// </summary>
     /// <param name="destination">The destination span. Must be at least 32 bytes long.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="destination"/> is shorter than 32 bytes.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when this key is empty (<see langword="default"/>).</exception>
+    /// <remarks>Decodes straight into <paramref name="destination"/> without allocating.</remarks>
     public void CopyTo(Span<byte> destination) {
         Preca.ThrowIfLessThan(destination.Length, KeySizeInBytes);
-        byte[] bytes = this.X.ToBytes();
-        try {
-            bytes.CopyTo(destination);
-        }
-        finally {
-            CryptographicOperations.ZeroMemory(bytes);
-        }
+        Preca.ThrowIf(this.IsEmpty, static () => new InvalidOperationException("An empty Ed25519 public key has no bytes to copy."));
+
+        // A public key is not secret, so there is nothing to wipe. The key decodes to exactly 32 bytes (validated when it
+        // was created), so nothing past them in a larger destination is written.
+        this.X.TryDecode(destination, out _);
     }
 
     /// <summary>

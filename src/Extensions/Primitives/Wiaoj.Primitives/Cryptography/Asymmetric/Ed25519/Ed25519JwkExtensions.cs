@@ -37,6 +37,6 @@ public static class Ed25519JwkExtensions {
         Preca.ThrowIfNotEqual(jwk.Curve, "Ed25519", StringComparison.OrdinalIgnoreCase);
         Preca.ThrowIfNullOrWhiteSpace(jwk.X);
   
-        return Ed25519PublicKey.Create(Base64UrlString.Parse(jwk.X));
+        return Ed25519PublicKey.From(Base64UrlString.Parse(jwk.X));
     }
 }
