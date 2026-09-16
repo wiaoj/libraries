@@ -75,6 +75,13 @@ internal static partial class WebhookLoggerExtensions {
         Message = "Payload for endpoint '{EndpointId}' signed with '{Algorithm}' (timestamp: {Timestamp}).")]
     public static partial void LogSigningCompleted(this ILogger logger, WebhookEndpointId endpointId, string algorithm, long timestamp);
 
+    /// <summary>Logs that a copy of a job was not delivered because the job is leased elsewhere or already finished.</summary>
+    [LoggerMessage(
+        EventId = 2009,
+        Level = LogLevel.Debug,
+        Message = "Job '{JobId}' was not delivered by this copy: it could not be leased (status '{Status}', leased by '{LockedBy}').")]
+    public static partial void LogJobDeliverySkipped(this ILogger logger, WebhookJobId jobId, WebhookJobStatus status, string? lockedBy);
+
     /// <summary>Logs that a job status was updated in the persistent store.</summary>
     [LoggerMessage(
         EventId = 2005,

@@ -85,6 +85,7 @@ public static class WebhookServiceCollectionExtensions {
             return new WebhookPipelineRunner(middleware, deliverer, timeProvider, logger);
         });
 
+        services.TryAddSingleton<WebhookJobExecutionGuard>();
         services.TryAddTransient<IWebhookJobHandler, WebhookJobHandler>();
         services.TryAddSingleton<IWebhookDispatcher, WebhookDispatcher>();
 

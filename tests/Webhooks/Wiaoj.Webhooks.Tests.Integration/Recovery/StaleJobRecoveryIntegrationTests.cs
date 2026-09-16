@@ -119,6 +119,58 @@ public sealed class StaleJobRecoveryIntegrationTests {
         await appPod2.DisposeAsync();
     }
 
+    [Fact]
+    public async Task SweepAndRecoverAsync_DoesNotRedeliver_ARetryStillBeingDeliveredOnALivePod() {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+
+        FakeTimeProvider timeProvider = new();
+        timeProvider.SetUtcNow(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
+
+        InMemoryWebhookStore sharedStore = new(timeProvider);
+        InMemoryTestEndpointResolver endpointResolver = new();
+
+        WebhookEndpointId endpointId = new("ep_recovery_live_01");
+        endpointResolver.Register(new WebhookEndpoint(
+            endpointId,
+            new Uri("http://localhost/api/sim-receiver/ep_recovery_live_01"),
+            this._secretProtector.Protect("whsec_recovery_secret_123")));
+
+        // The second attempt (the scheduled retry) is held at the receiver until released.
+        TaskCompletionSource retryArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseRetry = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        this._beforeSecondAttemptResponds = async () => {
+            retryArrived.TrySetResult();
+            await releaseRetry.Task;
+        };
+
+        WebApplication pod = CreateApp(timeProvider, sharedStore, endpointResolver, instanceId: "k8s-pod-live");
+        await pod.StartAsync(ct);
+
+        WebhookDeliveryHandle handle = await pod.Services.GetRequiredService<IWebhookDispatcher>()
+            .DispatchAsync(endpointId, new RecoveryTestEvent("ORD-LIVE-41", 10m), cancellationToken: ct);
+        Assert.NotNull(await WaitForJobStatusAsync(sharedStore, handle.JobId, WebhookJobStatus.Retrying, TimeSpan.FromSeconds(5), ct));
+
+        // The pod is alive: its delayed scheduler fires the retry, which is now being delivered.
+        timeProvider.Advance(TimeSpan.FromSeconds(10));
+        await retryArrived.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+
+        // A recovery sweep while that delivery is in progress must not enqueue the job a second time.
+        int recovered = await pod.Services.GetRequiredService<StaleJobRecoveryService>().SweepAndRecoverAsync(ct);
+        releaseRetry.SetResult();
+
+        WebhookJobRecord? delivered = await WaitForJobStatusAsync(sharedStore, handle.JobId, WebhookJobStatus.Delivered, TimeSpan.FromSeconds(5), ct);
+        await Task.Delay(500, ct); // let a wrongly re-enqueued copy reach the receiver
+
+        Assert.Equal(0, recovered);
+        Assert.NotNull(delivered);
+        Assert.Equal(2, this._endpointAttemptCounters["ep_recovery_live_01"]);
+
+        await pod.StopAsync(ct);
+        await pod.DisposeAsync();
+    }
+
+    private Func<Task>? _beforeSecondAttemptResponds;
+
     private WebApplication CreateApp(
         TimeProvider timeProvider,
         IWebhookStore store,
@@ -165,12 +217,16 @@ public sealed class StaleJobRecoveryIntegrationTests {
 
         WebApplication app = builder.Build();
 
-        app.MapPost("/api/sim-receiver/{endpointId}", (string endpointId, HttpRequest request) => {
+        app.MapPost("/api/sim-receiver/{endpointId}", async (string endpointId, HttpRequest request) => {
             int attemptCount = this._endpointAttemptCounters.AddOrUpdate(endpointId, 1, (_, current) => current + 1);
 
             // Attempt 1 fails with HTTP 503 Transient Failure
             if(attemptCount == 1) {
                 return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+
+            if(attemptCount == 2 && this._beforeSecondAttemptResponds is not null) {
+                await this._beforeSecondAttemptResponds();
             }
 
             // Attempt 2 succeeds with HTTP 200
