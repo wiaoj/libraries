@@ -188,7 +188,7 @@ public class SnowflakeGenerator : ISnowflakeGenerator {
 
             long nextState = (nextTimestamp << this._sequenceBits) | nextSequence;
 
-            if(Atomic.CompareExchange(ref this._currentState, nextState, current)) {
+            if(Atomic.TryCompareExchange(ref this._currentState, nextState, current)) {
                 long id = ((nextTimestamp - this._epochTicks) << this._timestampShift) |
                           (this._nodeId << this._nodeIdShift) |
                           nextSequence;
