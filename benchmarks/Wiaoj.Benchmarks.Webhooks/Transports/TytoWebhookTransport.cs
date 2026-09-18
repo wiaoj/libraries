@@ -1,4 +1,5 @@
-﻿using Tyto;
+﻿using MemoryPack;
+using Tyto;
 using Wiaoj.Preconditions;
 using Wiaoj.Serialization;
 using Wiaoj.Webhooks;
@@ -6,7 +7,8 @@ using Wiaoj.Webhooks;
 namespace Wiaoj.Benchmarks.Webhooks.Transports;
 
 [Message("webhook.delivery.job", 1)]
-public sealed record TytoWebhookJobEnvelope(
+[MemoryPackable]
+public sealed partial record TytoWebhookJobEnvelope(
     string JobId,
     string EndpointId,
     string PartitionKey,
@@ -71,9 +73,17 @@ public sealed class TytoWebhookTransport(IBus bus, ISerializer<WebhookSerializer
         return this._bus.PublishAsync(envelope, cancellationToken).AsTask();
     }
 
-    public Task EnqueueAsync(WebhookDeliveryJob job) => EnqueueAsync(job, CancellationToken.None);
-    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) => EnqueueAsync(job, CancellationToken.None);
-    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) => EnqueueAsync(job, cancellationToken);
+    public Task EnqueueAsync(WebhookDeliveryJob job) {
+        return EnqueueAsync(job, CancellationToken.None);
+    }
+
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) {
+        return EnqueueAsync(job, CancellationToken.None);
+    }
+
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {
+        return EnqueueAsync(job, cancellationToken);
+    }
 
     public Task EnqueueBatchAsync(IReadOnlyList<WebhookDeliveryJob> jobs, CancellationToken cancellationToken = default) {
         throw new NotImplementedException();

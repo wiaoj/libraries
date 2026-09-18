@@ -11,7 +11,7 @@
 	<ItemGroup>
 		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
 		<PackageReference Include="MassTransit" Version="8.5.10" />
-		<PackageReference Include="Tyto.Transports.InMemory" Version="0.0.1-alpha.102" />
+		<PackageReference Include="Tyto.Transports.InMemory" Version="0.0.1-alpha.106" /> 
 		<!--<PackageReference Include="Wiaoj.Serialization.Abstractions" Version="0.0.1-alpha.83" />
 		<PackageReference Include="Wiaoj.Serialization.DependencyInjection" Version="0.0.1-alpha.83" />
 		<PackageReference Include="Wiaoj.Serialization.SystemTextJson" Version="0.0.1-alpha.83" />--> 
@@ -23,6 +23,8 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\Extensions\Security\Wiaoj.Security.Testing\Wiaoj.Security.Testing.csproj" />
+		<ProjectReference Include="..\..\src\Serialization\Implementations\Wiaoj.Serialization.MemoryPack\Wiaoj.Serialization.MemoryPack.csproj" />
+		<ProjectReference Include="..\..\src\Serialization\Implementations\Wiaoj.Serialization.MessagePack\Wiaoj.Serialization.MessagePack.csproj" />
 		<ProjectReference Include="..\..\src\Serialization\Implementations\Wiaoj.Serialization.Proxy\Wiaoj.Serialization.Proxy.csproj" />
 		<ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
 		<ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Transports.InMemory\Wiaoj.Webhooks.Transports.InMemory.csproj" />
