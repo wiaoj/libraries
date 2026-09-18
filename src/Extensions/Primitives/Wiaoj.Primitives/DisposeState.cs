@@ -45,10 +45,21 @@ public sealed class DisposeState {
     /// </summary>
     /// <remarks>
     /// This MUST be called inside a <c>finally</c> block after all cleanup logic has executed.
+    /// <para>
+    /// Memory ordering: this method does "write <c>_state</c>, then read <c>_tcs</c>", while
+    /// <see cref="WaitForDisposedAsync"/> does "write <c>_tcs</c> (CAS), then read <c>_state</c>".
+    /// This is a store-then-load (Dekker-style) pattern. A volatile write only has release semantics and
+    /// may be reordered after the subsequent read, which could let both sides miss each other and leave
+    /// the waiter hanging forever. The full fence below rules that out.
+    /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDisposed() {
         Atomic.Write(ref this._state, StateDisposed);
+
+        // Full fence: the state write must be globally visible before _tcs is read.
+        Interlocked.MemoryBarrier();
+
         this._tcs?.TrySetResult();
     }
 
@@ -63,6 +74,7 @@ public sealed class DisposeState {
             return ValueTask.CompletedTask;
         }
 
+        // The CAS inside GetOrCreateTcs is a full fence, pairing with the barrier in SetDisposed.
         TaskCompletionSource tcs = GetOrCreateTcs();
 
         // Double-check race condition: SetDisposed might have executed just before TCS assignment

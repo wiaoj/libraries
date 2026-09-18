@@ -130,6 +130,7 @@
   <Folder Name="/src/Serialization/Implementations/">
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Bson/Wiaoj.Serialization.Bson.csproj" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Memory/Wiaoj.Serialization.Memory.csproj" Id="e7892f69-425c-4c61-aa2c-7ce047d2e1a2" />
+    <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.MemoryPack/Wiaoj.Serialization.MemoryPack.csproj" Id="86d370a1-10ef-4a1e-8435-741f11faf922" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.MessagePack/Wiaoj.Serialization.MessagePack.csproj" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.Proxy/Wiaoj.Serialization.Proxy.csproj" Id="c7628768-b569-4679-bcdd-f3f90abe99df" />
     <Project Path="src/Serialization/Implementations/Wiaoj.Serialization.SystemTextJson/Wiaoj.Serialization.SystemTextJson.csproj" />

@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <PackageId>Wiaoj.Serialization.MemoryPack</PackageId>
+	  <Version>0.0.1-alpha.1</Version>
+	  <Title>Wiaoj Serialization MemoryPack</Title>
+	  <IsPackable>true</IsPackable>
+	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MemoryPack" Version="1.21.4" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\Preconditions\Wiaoj.Preconditions\Wiaoj.Preconditions.csproj" />
+		<ProjectReference Include="..\..\Core\Wiaoj.Serialization.Abstractions\Wiaoj.Serialization.Abstractions.csproj" />
+	</ItemGroup>
+</Project>
