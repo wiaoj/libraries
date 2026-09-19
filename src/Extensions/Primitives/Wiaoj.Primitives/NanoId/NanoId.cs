@@ -318,7 +318,7 @@ public readonly partial record struct NanoId :
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public ref readonly char GetPinnableReference() {
-        return ref this._value.GetPinnableReference();
+        return ref this.Value.GetPinnableReference();
     }
 
     /// <summary>
@@ -546,6 +546,11 @@ public sealed class NanoIdJsonConverter : JsonConverter<NanoId> {
     /// <inheritdoc/>
     public override NanoId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if(reader.TokenType == JsonTokenType.String) {
+
+            if(reader.ValueTextEquals(ReadOnlySpan<byte>.Empty)) {
+                return NanoId.Empty;
+            }
+
             if(!reader.ValueIsEscaped && !reader.HasValueSequence) {
                 if(NanoId.TryParse(reader.ValueSpan, out NanoId result)) {
                     return result;

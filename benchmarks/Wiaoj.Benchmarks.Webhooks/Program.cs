@@ -1,5 +1,6 @@
 ﻿using MassTransit;
-using MemoryPack; // ── EKLENDİ ──
+using MemoryPack;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -15,7 +16,6 @@ using Wiaoj.Security;
 using Wiaoj.Security.Testing;
 using Wiaoj.Serialization;
 using Wiaoj.Serialization.DependencyInjection;
-using Wiaoj.Serialization.MemoryPack; // ── EKLENDİ ──
 using Wiaoj.Webhooks;
 using Wolverine;
 
@@ -219,6 +219,17 @@ async Task Run1MillionSoakTest() {
         serializer.UseMemoryPack<TytoJsonSerializerKey>();
     });
 
+    tytoBuilder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> {
+        ["Tyto:Pools:SendMessageContext:MaximumRetained"] = "50000",
+        ["Tyto:Pools:ReceiveMessageContext:MaximumRetained"] = "50000",
+        ["Tyto:Pools:OutgoingMessage:MaximumRetained"] = "50000",
+        ["Tyto:Pools:HeadersDictionary:MaximumRetained"] = "50000",
+        ["Tyto:Pools:HandlerEventData:MaximumRetained"] = "50000",
+        ["Tyto:Pools:ArrayBufferWriter:MaximumRetained"] = "50000",
+        ["Tyto:Pools:ArrayBufferWriter:InitialCapacity"] = "1024",
+        ["Tyto:Pools:ArrayBufferWriter:MaxRetainedCapacity"] = "65536"
+    });
+
     tytoBuilder.AddTyto(tyto => {
         tyto.MessageDefinitions(d => d.Add<UnchainedTytoEnvelope>("unchained.job", 1));
 
@@ -226,7 +237,7 @@ async Task Run1MillionSoakTest() {
             t.AddInMemory("memory", opt => {
                 opt.DefaultConcurrencyLimit = concurrency;
                 opt.FullMode = BoundedChannelFullMode.Wait;
-                opt.ChannelCapacity = 200_000;
+                opt.ChannelCapacity = 1_000_000;
                 opt.Bind("ex.unchained", "q.unchained");
             });
         });
@@ -248,10 +259,17 @@ async Task Run1MillionSoakTest() {
     await tytoHost.StartAsync();
     IWebhookDispatcher tytoDispatcher = tytoHost.Services.GetRequiredService<IWebhookDispatcher>();
 
-    IHost wolvHost = await SetupWolverine(protector, resolver, concurrency);
+    IHost wolvHost = await SetupWolverineUnchained(protector, resolver, concurrency);
     IWebhookDispatcher wolvDispatcher = wolvHost.Services.GetRequiredService<IWebhookDispatcher>();
 
+    Console.WriteLine("🔥 Isınma turu yapılıyor (10.000 mesaj)...");
+    await ExecuteWarmup(tytoDispatcher, wolvDispatcher, null, epId, sampleEvent);
+
+    Console.WriteLine("🔥 Isınma turu yapılıyor (100.000 mesaj)...");
+    await ExecuteWarmup(tytoDispatcher, wolvDispatcher, null, epId, sampleEvent, 100_000);
+
     Console.WriteLine("🔥 1 Milyon Mesaj Testi Başlıyor (MemoryPack & Direct Dispatch)...");
+
     PrintRoundHeader();
 
     RunMetric tMetric = await RunRound(tytoDispatcher, count, epId, sampleEvent);
@@ -295,18 +313,18 @@ async Task<RunMetric> RunRound(IWebhookDispatcher dispatcher, int count, Webhook
     );
 }
 
-async Task ExecuteWarmup(IWebhookDispatcher t, IWebhookDispatcher w, IWebhookDispatcher? m, WebhookEndpointId epId, BenchmarkOrderEvent evt) {
-    BenchmarkCompletionTracker.Reset(10000);
-    for(int i = 0; i < 10000; i++) await t.DispatchAsync(epId, evt, CancellationToken.None);
+async Task ExecuteWarmup(IWebhookDispatcher t, IWebhookDispatcher w, IWebhookDispatcher? m, WebhookEndpointId epId, BenchmarkOrderEvent evt, int count = 10_000) {
+    BenchmarkCompletionTracker.Reset(count);
+    for(int i = 0; i < count; i++) await t.DispatchAsync(epId, evt, CancellationToken.None);
     await BenchmarkCompletionTracker.WaitForCompletionAsync();
 
     BenchmarkCompletionTracker.Reset(10000);
-    for(int i = 0; i < 10000; i++) await w.DispatchAsync(epId, evt, CancellationToken.None);
+    for(int i = 0; i < count; i++) await w.DispatchAsync(epId, evt, CancellationToken.None);
     await BenchmarkCompletionTracker.WaitForCompletionAsync();
 
     if(m != null) {
-        BenchmarkCompletionTracker.Reset(10000);
-        for(int i = 0; i < 10000; i++) await m.DispatchAsync(epId, evt, CancellationToken.None);
+        BenchmarkCompletionTracker.Reset(count);
+        for(int i = 0; i < count; i++) await m.DispatchAsync(epId, evt, CancellationToken.None);
         await BenchmarkCompletionTracker.WaitForCompletionAsync();
     }
 }
@@ -329,6 +347,32 @@ async Task<IHost> SetupWolverine(FakeSecretProtector<WebhookSigningContext> p, I
                 .ToLocalQueue("webhook_jobs")
                 .BufferedInMemory()
                 .MaximumParallelMessages(conc * 2);
+        })
+        .StartAsync();
+}
+
+async Task<IHost> SetupWolverineUnchained(FakeSecretProtector<WebhookSigningContext> p, InMemoryTestEndpointResolver r, int conc) {
+    return await Host.CreateDefaultBuilder()
+        .ConfigureServices(services => {
+            services.AddLogging(l => l.ClearProviders());
+            services.AddSingleton<ISecretProtector<WebhookSigningContext>>(p);
+            services.AddSingleton<IWebhookEndpointResolver>(r);
+            services.AddSingleton<IWebhookJobHandler, NoOpWebhookJobHandler>();
+
+            // Wiaoj Serializer MemoryPack
+            services.AddWiaojSerializer(s => s.UseMemoryPack<WebhookSerializerKey>());
+
+            services.AddWiaojWebhooks(w => {
+                w.Services.AddSingleton<IWebhookTransport, WolverineUnchainedTransport>();
+                w.RegisterEvent<BenchmarkOrderEvent>("order.created");
+            });
+        })
+        .UseWolverine(opts => {
+            // Local Queue'yu Tyto ile aynı concurrency parametrelerine çekiyoruz:
+            opts.PublishMessage<WolverineUnchainedEnvelope>()
+                .ToLocalQueue("unchained_jobs")
+                .BufferedInMemory()
+                .MaximumParallelMessages(conc); // Tyto DefaultConcurrencyLimit ile birebir aynı yap
         })
         .StartAsync();
 }
@@ -466,10 +510,21 @@ public sealed class UnchainedTytoTransport(Tyto.IBus bus) : IWebhookTransport {
 
         return bus.PublishAsync(env, cancellationToken).AsTask();
     }
-    public Task EnqueueAsync(WebhookDeliveryJob job) => EnqueueAsync(job, CancellationToken.None);
-    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) => EnqueueAsync(job, CancellationToken.None);
-    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) => EnqueueAsync(job, cancellationToken);
-    public Task EnqueueBatchAsync(IReadOnlyList<WebhookDeliveryJob> jobs, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public Task EnqueueAsync(WebhookDeliveryJob job) {
+        return EnqueueAsync(job, CancellationToken.None);
+    }
+
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) {
+        return EnqueueAsync(job, CancellationToken.None);
+    }
+
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {
+        return EnqueueAsync(job, cancellationToken);
+    }
+
+    public Task EnqueueBatchAsync(IReadOnlyList<WebhookDeliveryJob> jobs, CancellationToken cancellationToken = default) {
+        throw new NotImplementedException();
+    }
 }
 
 public record RunMetric(long ElapsedMs, double Speed, long AllocMb, int Gen0, int Gen1, int Gen2);
@@ -481,11 +536,75 @@ public partial record BenchmarkOrderEvent(string OrderId, decimal Amount) : IWeb
 public sealed class NoOpWebhookJobHandler : IWebhookJobHandler {
     private static readonly Task<WebhookDeliveryAttempt> Cached = Task.FromResult(
         new WebhookDeliveryAttempt(new WebhookEndpointId("ep_bench"), 1, UnixTimestamp.Now, TimeSpan.Zero, WebhookDeliveryResult.Success()));
-    public Task<WebhookDeliveryAttempt> HandleAsync(WebhookDeliveryJob job, CancellationToken ct = default) => Cached;
+    public Task<WebhookDeliveryAttempt> HandleAsync(WebhookDeliveryJob job, CancellationToken ct = default) {
+        return Cached;
+    }
 }
 public sealed class InMemoryTestEndpointResolver : IWebhookEndpointResolver {
     private readonly Dictionary<WebhookEndpointId, WebhookEndpoint> _endpoints = [];
-    public void Register(WebhookEndpoint endpoint) => _endpoints[endpoint.Id] = endpoint;
-    public ValueTask<WebhookEndpoint?> ResolveAsync(WebhookEndpointId endpointId, CancellationToken ct = default) =>
-        ValueTask.FromResult(_endpoints.GetValueOrDefault(endpointId));
+    public void Register(WebhookEndpoint endpoint) {
+        this._endpoints[endpoint.Id] = endpoint;
+    }
+
+    public ValueTask<WebhookEndpoint?> ResolveAsync(WebhookEndpointId endpointId, CancellationToken ct = default) {
+        return ValueTask.FromResult(this._endpoints.GetValueOrDefault(endpointId));
+    }
+}
+
+[MemoryPackable]
+public partial record WolverineUnchainedEnvelope(
+    string JobId,
+    string EndpointId,
+    string PartitionKey,
+    string EventType,
+    BenchmarkOrderEvent Payload);
+
+// Wolverine Handler'ı: Tyto ile BİREBİR AYNI İŞİ YAPACAK
+public static class WolverineUnchainedHandler {
+    public static async ValueTask Handle(
+        WolverineUnchainedEnvelope msg,
+        IWebhookJobHandler jobHandler,
+        CancellationToken ct) {
+
+        // Tyto'da yaptığın nesne oluşturma masrafının aynısı:
+        WebhookDeliveryJob job = new(
+            WebhookJobId.Parse(msg.JobId),
+            new WebhookEndpointId(msg.EndpointId),
+            new WebhookPartitionKey(msg.PartitionKey),
+            msg.EventType,
+            msg.Payload);
+
+        await jobHandler.HandleAsync(job, ct).ConfigureAwait(false);
+        BenchmarkCompletionTracker.SignalItemCompleted();
+    }
+}
+
+// Wolverine Transport'u:
+public sealed class WolverineUnchainedTransport(IMessageBus bus) : IWebhookTransport {
+    public Task EnqueueAsync(WebhookDeliveryJob job, CancellationToken cancellationToken = default) {
+        WolverineUnchainedEnvelope env = new(
+            job.Id.Value,
+            job.EndpointId.Value,
+            job.PartitionKey.Value,
+            job.EventType,
+            (BenchmarkOrderEvent)job.Payload);
+
+        return bus.PublishAsync(env).AsTask();
+    }
+
+    public Task EnqueueAsync(WebhookDeliveryJob job) {
+        return EnqueueAsync(job, CancellationToken.None);
+    }
+
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay) {
+        return EnqueueAsync(job, CancellationToken.None);
+    }
+
+    public Task EnqueueAsync(WebhookDeliveryJob job, TimeSpan? delay, CancellationToken cancellationToken) {
+        return EnqueueAsync(job, cancellationToken);
+    }
+
+    public Task EnqueueBatchAsync(IReadOnlyList<WebhookDeliveryJob> jobs, CancellationToken cancellationToken = default) {
+        throw new NotImplementedException();
+    }
 }
