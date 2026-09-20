@@ -17,6 +17,7 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
     private WebhookEndpointId _id;
     private Uri? _targetUrl;
     private EncryptedSecret<WebhookSigningContext> _secret;
+    private EncryptedSecret<WebhookSigningContext>? _secondarySecret;
     private IWebhookSigner? _customSigner;
     private Dictionary<string, string>? _customHeaders;
     private bool _validateSsrf = true;
@@ -88,6 +89,32 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
         Preca.ThrowIfNull(secretProtector);
 
         this._secret = secretProtector.Protect(plainSecret);
+        return this;
+    }
+
+    /// <summary>
+    /// Sets a second pre-encrypted signing secret. Every delivery is then signed with both secrets, so the receiver
+    /// accepts either one while the secret is being rotated.
+    /// </summary>
+    /// <param name="secret">The second encrypted secret.</param>
+    /// <returns>This builder instance for fluent chaining.</returns>
+    public WebhookEndpointBuilder WithSecondarySecret(EncryptedSecret<WebhookSigningContext> secret) {
+        Preca.ThrowIfDefault(secret);
+        this._secondarySecret = secret;
+        return this;
+    }
+
+    /// <summary>
+    /// Encrypts a raw plain-text secret and attaches it as the second signing secret, used while rotating the secret.
+    /// </summary>
+    /// <param name="plainSecret">The plain-text secret key.</param>
+    /// <param name="secretProtector">The secret protector instance.</param>
+    /// <returns>This builder instance for fluent chaining.</returns>
+    public WebhookEndpointBuilder WithSecondarySecret(string plainSecret, ISecretProtector<WebhookSigningContext> secretProtector) {
+        Preca.ThrowIfNullOrWhiteSpace(plainSecret);
+        Preca.ThrowIfNull(secretProtector);
+
+        this._secondarySecret = secretProtector.Protect(plainSecret);
         return this;
     }
 
@@ -235,6 +262,6 @@ public sealed class WebhookEndpointBuilder : IAsyncBuilder<WebhookEndpoint> {
         }
 
         return WebhookEndpointBuildResult.Built(
-            new WebhookEndpoint(this._id, this._targetUrl, this._secret, this._customSigner, this._customHeaders));
+            new WebhookEndpoint(this._id, this._targetUrl, this._secret, this._secondarySecret, this._customSigner, this._customHeaders));
     }
 }

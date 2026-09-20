@@ -52,8 +52,18 @@ public sealed class SigningMiddleware : IWebhookMiddleware {
         UnixTimestamp now = this._timeProvider.GetUnixTimestamp();
 
         WebhookSignature signature = activeSigner.Sign(payloadBytes, secretKey, now);
+        string headerValue = signature.HeaderValue;
 
-        context.SetHeader(activeSigner.HeaderName, signature.HeaderValue);
+        // While a secret is being rotated the endpoint carries both, and the delivery is signed with each of them under
+        // the same timestamp: "t=…,v1=<primary>,v1=<secondary>". The receiver accepts whichever one it already holds,
+        // so neither side has to switch at the same instant. Costs nothing when no second secret is set.
+        if(context.Endpoint.SecondarySecret is EncryptedSecret<WebhookSigningContext> secondary) {
+            using Secret<byte> secondaryKey = this._secretProtector.Unprotect(secondary);
+            WebhookSignature secondarySignature = activeSigner.Sign(payloadBytes, secondaryKey, now);
+            headerValue = $"{headerValue},{secondarySignature.Scheme}={secondarySignature.Signature}";
+        }
+
+        context.SetHeader(activeSigner.HeaderName, headerValue);
         context.SetSignature(signature);
 
         this._logger.LogSigningCompleted(context.Endpoint.Id, activeSigner.AlgorithmName, now.TotalSeconds);
