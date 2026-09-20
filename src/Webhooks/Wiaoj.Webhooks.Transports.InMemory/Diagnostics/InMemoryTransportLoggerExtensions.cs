@@ -48,6 +48,15 @@ public static partial class InMemoryTransportLoggerExtensions {
         Message = "Delay expired for job '{JobId}' (endpoint: '{EndpointId}'). Enqueued to active channel.")]
     public static partial void LogDelayedJobFlushed(this ILogger logger, string jobId, string endpointId);
 
+    // ── Warning (4100 - 4199) ─────────────────────────────────────────────────
+
+    /// <summary>Logs that a delayed job was not held in memory because the delayed queue is at capacity.</summary>
+    [LoggerMessage(
+        EventId = 4101,
+        Level = LogLevel.Warning,
+        Message = "Delayed queue is full ({Capacity} jobs): job '{JobId}' for endpoint '{EndpointId}' was dropped from memory under policy '{Policy}'. It is delivered only if stale job recovery is enabled.")]
+    public static partial void LogDelayedQueueFull(this ILogger logger, string jobId, string endpointId, int capacity, string policy);
+
     // ── Information (3100 - 3199) ─────────────────────────────────────────────
 
     /// <summary>Logs that the in-memory consumer background pool started with N concurrent workers.</summary>

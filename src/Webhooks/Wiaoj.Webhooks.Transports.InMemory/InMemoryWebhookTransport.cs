@@ -58,7 +58,12 @@ public sealed class InMemoryWebhookTransport : IWebhookTransport, IDisposable {
             });
         }
 
-        this._delayedScheduler = new InMemoryDelayedScheduler(this._channel.Writer, TimeProvider.System, logger);
+        this._delayedScheduler = new InMemoryDelayedScheduler(
+            this._channel.Writer,
+            TimeProvider.System,
+            logger,
+            options.MaxDelayedCapacity,
+            options.DelayedOverflowPolicy);
     }
 
     /// <summary>
@@ -92,6 +97,8 @@ public sealed class InMemoryWebhookTransport : IWebhookTransport, IDisposable {
 
         if(delay.HasValue && delay.Value > TimeSpan.Zero) {
             // Non-blocking background timer scheduling: returns immediately to the caller in 0ms!
+            // A refused job (queue at capacity, PersistOnlyFallback) is left to the store and recovery; the scheduler
+            // logs it, and Reject throws instead of returning.
             this._delayedScheduler.Schedule(job, delay.Value, cancellationToken);
             return;
         }

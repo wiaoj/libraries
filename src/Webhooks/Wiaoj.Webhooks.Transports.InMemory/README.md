@@ -161,6 +161,22 @@ await transport.EnqueueAsync(job, delay: TimeSpan.FromSeconds(5), cancellationTo
 
 When bounded channels fill up to their configured `Capacity`, `ChannelWriter.WriteAsync` asynchronously yields and applies backpressure to the dispatcher without throwing buffer overflow exceptions.
 
+### The delayed queue is bounded too
+
+Delayed jobs wait in memory until their backoff expires, so an outage at a destination fills that queue with retries. Left unbounded it turns the outage into an out-of-memory crash, losing every job it held. `MaxDelayedCapacity` (default **50,000**) bounds it, and `DelayedOverflowPolicy` decides what happens at the bound:
+
+| Policy | At capacity |
+|---|---|
+| `PersistOnlyFallback` (default) | The job is not held in memory. It keeps the state the store holds — a retry is already `Retrying` with `NextAttemptAt` — and stale job recovery enqueues it when it comes due. |
+| `DropOldest` | The job is admitted and the ones due furthest in the future are dropped, so the most urgent retries survive. Dropped jobs are recovered the same way. |
+| `Reject` | `EnqueueAsync` throws `DelayedQueueFullException`, and the caller decides. |
+
+Every dropped job is logged at `Warning` (event id 4101) with the job, the capacity and the policy.
+
+> **Enable stale job recovery.** The two dropping policies hand the job to the store, so `UseStaleJobRecovery()` must be on. Without it, a job dropped at the limit is never delivered. Set `MaxDelayedCapacity = null` to keep the previous unbounded behaviour.
+
+Sharded transports hold the capacity **per shard**: `shardCount × MaxDelayedCapacity` delayed jobs in total.
+
 ---
 
 ## ⚙️ Configuration Options
@@ -178,6 +194,18 @@ public sealed class InMemoryWebhookTransportOptions {
     /// When null, an unbounded channel is used.
     /// </summary>
     public int? Capacity { get; set; }
+
+    /// <summary>
+    /// Maximum number of delayed (waiting-for-backoff) jobs held in memory.
+    /// Default is 50,000; null holds an unbounded number.
+    /// </summary>
+    public int? MaxDelayedCapacity { get; set; } = 50_000;
+
+    /// <summary>
+    /// What happens to a delayed job scheduled while the queue is at MaxDelayedCapacity.
+    /// Default is PersistOnlyFallback.
+    /// </summary>
+    public DelayedQueueOverflowPolicy DelayedOverflowPolicy { get; set; } = DelayedQueueOverflowPolicy.PersistOnlyFallback;
 
     /// <summary>
     /// Maximum duration to wait for in-flight and buffered jobs to drain during application shutdown.
