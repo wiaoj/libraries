@@ -4,9 +4,13 @@ namespace Wiaoj.Webhooks.Transports.InMemory;
 /// Options for configuring the in-memory webhook transport and background consumer worker pool.
 /// </summary>
 public sealed class InMemoryWebhookTransportOptions {
+    /// <summary>The default number of delayed jobs held in memory (50,000).</summary>
+    public const int DefaultMaxDelayedCapacity = 50_000;
+
     private int _concurrency = Math.Max(Environment.ProcessorCount * 2, 4);
     private int? _capacity;
     private TimeSpan _drainTimeout = TimeSpan.FromSeconds(5);
+    private int? _maxDelayedCapacity = DefaultMaxDelayedCapacity;
 
     /// <summary>
     /// Gets or sets the number of concurrent worker loops actively consuming jobs from the in-memory channel.
@@ -33,6 +37,35 @@ public sealed class InMemoryWebhookTransportOptions {
             this._capacity = value;
         }
     }
+
+    /// <summary>
+    /// Gets or sets the maximum number of delayed (waiting-for-backoff) jobs held in memory.
+    /// Default is <see cref="DefaultMaxDelayedCapacity"/>; <see langword="null"/> holds an unbounded number.
+    /// </summary>
+    /// <remarks>
+    /// The delayed queue holds retries until their backoff expires, so a long outage at the destination fills it. Left
+    /// unbounded it turns that outage into an out-of-memory crash, which loses every job it held. What happens at the
+    /// limit is <see cref="DelayedOverflowPolicy"/>.
+    /// </remarks>
+    public int? MaxDelayedCapacity {
+        get => this._maxDelayedCapacity;
+        set {
+            if(value.HasValue) {
+                Preca.ThrowIfLessThan(value.Value, 1);
+            }
+            this._maxDelayedCapacity = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets what happens to a delayed job scheduled while the queue is at <see cref="MaxDelayedCapacity"/>.
+    /// Default is <see cref="DelayedQueueOverflowPolicy.PersistOnlyFallback"/>.
+    /// </summary>
+    /// <remarks>
+    /// The default leaves the job to the store and the stale job recovery service, so recovery must be enabled
+    /// (<c>UseStaleJobRecovery()</c>). Without it, a job dropped at the limit is never delivered.
+    /// </remarks>
+    public DelayedQueueOverflowPolicy DelayedOverflowPolicy { get; set; } = DelayedQueueOverflowPolicy.PersistOnlyFallback;
 
     /// <summary>
     /// Gets or sets the maximum duration to wait for in-flight and buffered jobs to drain during application shutdown.
