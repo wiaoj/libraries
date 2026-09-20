@@ -18,6 +18,18 @@ public sealed record WebhookEndpoint {
     public EncryptedSecret<WebhookSigningContext> Secret { get; }
 
     /// <summary>
+    /// Gets the optional second signing secret, encrypted at rest. While it is set, every delivery carries a signature
+    /// from each secret, so the receiver accepts either one.
+    /// </summary>
+    /// <remarks>
+    /// This is how a secret is rotated without downtime: publish the new secret as the secondary, wait until the
+    /// receiver has adopted it, then promote it to <see cref="Secret"/> and clear this one. A signature header carrying
+    /// both looks like <c>t=1724190000,v1=&lt;primary&gt;,v1=&lt;secondary&gt;</c>; receivers that check every
+    /// signature in the header — including this library's own verification — accept it.
+    /// </remarks>
+    public EncryptedSecret<WebhookSigningContext>? SecondarySecret { get; init; }
+
+    /// <summary>
     /// Gets the optional endpoint-specific cryptographic signer overriding the global default pipeline signer.
     /// </summary>
     public IWebhookSigner? CustomSigner { get; init; }
@@ -57,13 +69,39 @@ public sealed record WebhookEndpoint {
         Uri targetUrl,
         EncryptedSecret<WebhookSigningContext> secret,
         IWebhookSigner? customSigner,
+        IReadOnlyDictionary<string, string>? customHeaders)
+        : this(id, targetUrl, secret, null, customSigner, customHeaders) {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebhookEndpoint"/> record with a second signing secret, used while
+    /// rotating the secret.
+    /// </summary>
+    /// <param name="id">The identifier of this endpoint.</param>
+    /// <param name="targetUrl">The target destination URI.</param>
+    /// <param name="secret">The pre-encrypted signing secret.</param>
+    /// <param name="secondarySecret">The optional second pre-encrypted signing secret; every delivery is signed with both.</param>
+    /// <param name="customSigner">The optional custom cryptographic signer.</param>
+    /// <param name="customHeaders">The optional custom static HTTP headers.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="targetUrl"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="secret"/> is default, or <paramref name="secondarySecret"/> is given but default.</exception>
+    public WebhookEndpoint(
+        WebhookEndpointId id,
+        Uri targetUrl,
+        EncryptedSecret<WebhookSigningContext> secret,
+        EncryptedSecret<WebhookSigningContext>? secondarySecret,
+        IWebhookSigner? customSigner,
         IReadOnlyDictionary<string, string>? customHeaders) {
         Preca.ThrowIfNull(targetUrl);
         Preca.ThrowIfDefault(secret);
+        if(secondarySecret.HasValue) {
+            Preca.ThrowIfDefault(secondarySecret.Value);
+        }
 
         this.Id = id;
         this.TargetUrl = targetUrl;
         this.Secret = secret;
+        this.SecondarySecret = secondarySecret;
         this.CustomSigner = customSigner;
         this.CustomHeaders = customHeaders;
     }

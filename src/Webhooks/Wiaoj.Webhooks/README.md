@@ -134,6 +134,32 @@ bool isValid = signer.Verify(
     currentTimestamp: UnixTimestamp.Now);
 ```
 
+#### Rotating a secret without downtime
+
+Replacing an endpoint's secret in one step breaks every delivery until the receiver has adopted the new one. Give the endpoint a **second secret** instead: each delivery is then signed with both under one timestamp, and the receiver accepts whichever it already holds.
+
+```csharp
+WebhookEndpoint endpoint = await new WebhookEndpointBuilder()
+    .WithId("ep_acme")
+    .WithTargetUrl("https://acme.example/hooks")
+    .WithSecret(currentSecret, secretProtector)
+    .WithSecondarySecret(newSecret, secretProtector)   // rotation window
+    .BuildAsync(ct);
+```
+
+```http
+Webhook-Signature: t=1724190000,v1=<signed with current>,v1=<signed with new>
+```
+
+The rotation is three steps:
+
+1. **Open the window:** set the new secret as `SecondarySecret` and hand it to the receiver.
+2. **Wait:** until the receiver verifies with the new secret. Both are accepted meanwhile.
+3. **Close the window:** promote the new secret to `Secret` and clear `SecondarySecret`.
+
+- **Verification:** this library's own verification already checks every signature in the header, so a receiver built on it needs no change.
+- **Cost:** with no second secret, nothing changes — one unprotect, one signature, the same header as before.
+
 ### 3. Outbound SSRF Hardening & Egress Proxy
 Protects internal infrastructure from malicious webhook destinations:
 
