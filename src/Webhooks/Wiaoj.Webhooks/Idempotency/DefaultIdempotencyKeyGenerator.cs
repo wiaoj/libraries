@@ -19,6 +19,6 @@ public sealed class DefaultIdempotencyKeyGenerator : IIdempotencyKeyGenerator {
         Preca.ThrowIfNull(serializedPayload);
 
         XxHash128 hash = XxHash128.Compute(serializedPayload);
-        return IdempotencyKey.Create(endpointId, eventType, hash);
+        return WebhookIdempotencyKey.Create(endpointId, eventType, hash);
     } 
 }

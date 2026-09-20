@@ -15,6 +15,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+    <ProjectReference Include="..\..\Idempotency\Wiaoj.Idempotency.Abstractions\Wiaoj.Idempotency.Abstractions.csproj" />
     <ProjectReference Include="..\..\Extensions\Abstractions\Wiaoj.Abstractions\Wiaoj.Abstractions.csproj" />
     <ProjectReference Include="..\..\Extensions\Primitives\Wiaoj.Primitives\Wiaoj.Primitives.csproj" />
     <ProjectReference Include="..\..\Extensions\Security\Wiaoj.Security.Abstractions\Wiaoj.Security.Abstractions.csproj" />

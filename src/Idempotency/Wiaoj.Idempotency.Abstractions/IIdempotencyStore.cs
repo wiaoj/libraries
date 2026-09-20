@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Webhooks;
+﻿namespace Wiaoj.Idempotency;
 
 /// <summary>
 /// Defines a contract for persisting and evaluating idempotency state with time-to-live (TTL) expiration windows.
