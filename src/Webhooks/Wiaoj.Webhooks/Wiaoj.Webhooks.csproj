@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\Serialization\Core\Wiaoj.Serialization.DependencyInjection\Wiaoj.Serialization.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\Serialization\Implementations\Wiaoj.Serialization.SystemTextJson\Wiaoj.Serialization.SystemTextJson.csproj" />
     <ProjectReference Include="..\..\Net\Wiaoj.Net\Wiaoj.Net.csproj" />
+    <ProjectReference Include="..\..\Idempotency\Wiaoj.Idempotency\Wiaoj.Idempotency.csproj" />
     <ProjectReference Include="..\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
   </ItemGroup>
 

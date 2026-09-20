@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Wiaoj.Primitives.Hashing;
 
-namespace Wiaoj.Webhooks;
+namespace Wiaoj.Idempotency;
 
 /// <summary>
 /// Represents an immutable, strongly-typed deterministic idempotency key.
@@ -35,40 +35,6 @@ public readonly record struct IdempotencyKey :
     public IdempotencyKey(string value) {
         Preca.ThrowIfNullOrWhiteSpace(value);
         this._value = value;
-    }
-
-    /// <summary>
-    /// Creates a deterministic idempotency key using endpoint ID, event name, and a 128-bit payload digest.
-    /// </summary>
-    /// <param name="endpointId">The destination endpoint identifier.</param>
-    /// <param name="eventName">The wire-format event name.</param>
-    /// <param name="payloadHash">The 128-bit SIMD hash of the payload.</param>
-    /// <returns>A new <see cref="IdempotencyKey"/> instance.</returns>
-    public static IdempotencyKey Create(WebhookEndpointId endpointId, string eventName, XxHash128 payloadHash) {
-        Preca.ThrowIfNullOrWhiteSpace(eventName);
-
-        int length = 6 + endpointId.Value.Length + 1 + eventName.Length + 1 + (XxHash128.HashSizeInBytes * 2);
-
-        string keyString = string.Create(length, (endpointId.Value, eventName, payloadHash), static (span, state) => {
-            "idemp:".AsSpan().CopyTo(span);
-            span = span[6..];
-
-            state.Value.AsSpan().CopyTo(span);
-            span = span[state.Value.Length..];
-
-            span[0] = ':';
-            span = span[1..];
-
-            state.eventName.AsSpan().CopyTo(span);
-            span = span[state.eventName.Length..];
-
-            span[0] = ':';
-            span = span[1..];
-
-            state.payloadHash.TryFormat(span, out _);
-        });
-
-        return new IdempotencyKey(keyString);
     }
 
     // ── PUBLIC CLEAN API (No IFormatProvider parameter noise) ─────────────────

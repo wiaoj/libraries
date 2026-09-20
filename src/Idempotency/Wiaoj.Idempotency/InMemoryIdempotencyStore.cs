@@ -1,6 +1,6 @@
 ﻿using System.Collections.Concurrent;
 
-namespace Wiaoj.Webhooks.Idempotency;
+namespace Wiaoj.Idempotency;
 
 /// <summary>
 /// Thread-safe in-memory implementation of <see cref="IIdempotencyStore"/> with atomic time-to-live (TTL) expiration window evaluation.

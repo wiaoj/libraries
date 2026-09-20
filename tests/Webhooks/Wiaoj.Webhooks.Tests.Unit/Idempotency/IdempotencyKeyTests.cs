@@ -17,7 +17,7 @@ public sealed class IdempotencyKeyTests {
             const string eventName = "invoice.paid";
             XxHash128 hash = XxHash128.Compute("{\"id\":100}");
 
-            IdempotencyKey key = IdempotencyKey.Create(endpointId, eventName, hash);
+            IdempotencyKey key = WebhookIdempotencyKey.Create(endpointId, eventName, hash);
 
             string expected = $"idemp:customer-1:invoice.paid:{hash}";
             Assert.Equal(expected, key.Value);
@@ -30,7 +30,7 @@ public sealed class IdempotencyKeyTests {
             XxHash128 hash = XxHash128.Compute("test");
 
             Assert.ThrowsAny<ArgumentException>(() =>
-                IdempotencyKey.Create(endpointId, "", hash));
+                WebhookIdempotencyKey.Create(endpointId, "", hash));
         }
     }
 
