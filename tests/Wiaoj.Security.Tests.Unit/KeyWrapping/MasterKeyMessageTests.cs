@@ -1,41 +1,79 @@
+using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using Wiaoj.Primitives;
+using Wiaoj.Security.MasterKeyProviders;
 
 namespace Wiaoj.Security.Tests.Unit.KeyWrapping;
 
 /// <summary>
-/// What the master key errors say, which is the only part of them anyone acts on.
+/// How a master key may be written, and what the failures say.
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Feature", "KeyWrapping")]
 public class MasterKeyMessageTests {
-    [Fact]
-    public async Task AMissingKeySaysWhichEncodingItWants() {
-        // It said "Base64-encoded" and parsed Base64Url, so a key generated exactly as instructed
-        // was rejected — by a message that repeated the instruction.
+    private static readonly byte[] Key = RandomNumberGenerator.GetBytes(32);
+
+    private static string Base64 => Convert.ToBase64String(Key);
+
+    private static string Base64Url => Convert.ToBase64String(Key).Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheEnvironmentTakesEitherEncoding(bool url) {
+        // openssl rand -base64 32 produces standard Base64, and this library writes Base64Url. A
+        // provider that took one and not the other rejected a key generated exactly as instructed.
         string variable = $"WIAOJ_TEST_KEY_{Guid.NewGuid():N}";
-        EnvironmentMasterKeyProvider provider = new(variable);
+        Environment.SetEnvironmentVariable(variable, url ? Base64Url : Base64);
 
-        InvalidOperationException missing = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => provider.GetMasterKeyAsync().AsTask());
+        try {
+            MasterKey masterKey = await new EnvironmentMasterKeyProvider(variable).GetMasterKeyAsync();
+            using (masterKey) {
+                Assert.True(masterKey.Expose(key => key.SequenceEqual(Key)));
+            }
+        }
+        finally {
+            Environment.SetEnvironmentVariable(variable, null);
+        }
+    }
 
-        Assert.Contains("Base64Url", missing.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("Base64-encoded", missing.Message, StringComparison.Ordinal);
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ConfigurationTakesEitherEncoding(bool url) {
+        // And the same two, because they used to disagree: configuration took Base64 and the
+        // environment took Base64Url, so one key stopped working when it moved between them.
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Security:MasterKey"] = url ? Base64Url : Base64 })
+            .Build();
+
+        MasterKey masterKey = await new ConfigurationMasterKeyProvider(configuration).GetMasterKeyAsync();
+        using (masterKey) {
+            Assert.True(masterKey.Expose(key => key.SequenceEqual(Key)));
+        }
     }
 
     [Fact]
-    public async Task AKeyInPlainBase64SaysWhatIsDifferentAboutBase64Url() {
+    public async Task AMissingKeySaysHowToMakeOne() {
         string variable = $"WIAOJ_TEST_KEY_{Guid.NewGuid():N}";
-        // '+' and '/' are what Base64 produces and Base64Url does not accept.
-        Environment.SetEnvironmentVariable(variable, "++//++//++//++//++//++//++//++//++//++//++//");
+
+        InvalidOperationException missing = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new EnvironmentMasterKeyProvider(variable).GetMasterKeyAsync().AsTask());
+
+        Assert.Contains("openssl rand -base64 32", missing.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AKeyOfTheWrongLengthSaysWhichLengthsAreAllowed() {
+        string variable = $"WIAOJ_TEST_KEY_{Guid.NewGuid():N}";
+        Environment.SetEnvironmentVariable(variable, Convert.ToBase64String(RandomNumberGenerator.GetBytes(20)));
 
         try {
-            EnvironmentMasterKeyProvider provider = new(variable);
+            InvalidOperationException wrongLength = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new EnvironmentMasterKeyProvider(variable).GetMasterKeyAsync().AsTask());
 
-            InvalidOperationException malformed = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => provider.GetMasterKeyAsync().AsTask());
-
-            Assert.Contains("Base64Url", malformed.Message, StringComparison.Ordinal);
+            Assert.Contains("16, 24, or 32 bytes", wrongLength.Message, StringComparison.Ordinal);
+            Assert.Contains("20 bytes", wrongLength.Message, StringComparison.Ordinal);
         }
         finally {
             Environment.SetEnvironmentVariable(variable, null);
@@ -45,7 +83,7 @@ public class MasterKeyMessageTests {
     [Fact]
     public void AKeyThatCannotUnwrapTheRingSaysSoRatherThanBlamingCorruption() {
         // "AES-GCM authentication tag mismatch" reads as corruption, and the first thing anyone did
-        // was look for corruption. It is almost always a host holding a different key.
+        // was go looking for corruption. It is almost always a host holding a different key.
         MasterKey original = new(Secret.From(RandomNumberGenerator.GetBytes(32)));
         MasterKey different = new(Secret.From(RandomNumberGenerator.GetBytes(32)));
 
