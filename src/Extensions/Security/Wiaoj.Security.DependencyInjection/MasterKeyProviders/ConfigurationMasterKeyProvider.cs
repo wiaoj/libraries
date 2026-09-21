@@ -22,7 +22,18 @@ public sealed class ConfigurationMasterKeyProvider : IMasterKeyProvider {
 
         byte[]? keyBytes = null;
         try {
-            keyBytes = Convert.FromBase64String(value);
+            // Base64 or Base64Url, the same as every other provider. They used to disagree —
+            // configuration took Base64 and the environment took Base64Url — so one key stopped
+            // working the moment it moved from one to the other.
+            if(!MasterKeyEncoding.TryDecode(value, out keyBytes))
+                throw new InvalidOperationException(
+                    $"Configuration key '{this._configKey}' is neither valid Base64 nor Base64Url.");
+
+            if(keyBytes.Length is not (16 or 24 or 32))
+                throw new InvalidOperationException(
+                    $"Master key must be 16, 24, or 32 bytes (128/192/256-bit AES). " +
+                    $"Got {keyBytes.Length} bytes from '{this._configKey}'.");
+
             return ValueTask.FromResult(new MasterKey(Secret<byte>.From(keyBytes)));
         }
         finally {
