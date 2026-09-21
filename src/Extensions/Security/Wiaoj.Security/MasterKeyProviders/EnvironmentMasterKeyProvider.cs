@@ -4,7 +4,7 @@ using Wiaoj.Primitives;
 namespace Wiaoj.Security;
 
 /// <summary>
-/// Master key provider that reads a Base64-encoded key from an environment variable.
+/// Master key provider that reads a Base64Url-encoded key from an environment variable.
 /// Suitable for development and staging. For production use a cloud KMS provider.
 /// </summary>
 public sealed class EnvironmentMasterKeyProvider : IMasterKeyProvider {
@@ -22,7 +22,9 @@ public sealed class EnvironmentMasterKeyProvider : IMasterKeyProvider {
         if(string.IsNullOrWhiteSpace(value))
             throw new InvalidOperationException(
                 $"Master key environment variable '{this._variableName}' is not set or empty. " +
-                "Set it to a Base64-encoded 32-byte (256-bit) random value.");
+                "Set it to a Base64Url-encoded 16, 24 or 32 byte random value — Base64Url, not " +
+                "Base64: '-' and '_' rather than '+' and '/', and no '=' padding. For example: " +
+                "head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '='");
 
         byte[]? keyBytes = null;
         try {
@@ -35,8 +37,11 @@ public sealed class EnvironmentMasterKeyProvider : IMasterKeyProvider {
             return ValueTask.FromResult(new MasterKey(Secret.From(keyBytes)));
         }
         catch(FormatException ex) {
+            // Named precisely, because the difference is one character class and a key generated as
+            // "Base64" is rejected here without ever saying which encoding was meant.
             throw new InvalidOperationException(
-                $"Environment variable '{this._variableName}' is not valid Base64.", ex);
+                $"Environment variable '{this._variableName}' is not valid Base64Url. " +
+                "Base64Url uses '-' and '_' where Base64 uses '+' and '/', and carries no '=' padding.", ex);
         }
         finally {
             // Zero the same array we decoded into — ToBytes() is called only once above,

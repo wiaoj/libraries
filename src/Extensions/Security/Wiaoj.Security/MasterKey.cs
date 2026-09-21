@@ -59,9 +59,15 @@ public readonly struct MasterKey(Secret<byte> secret) : IDisposable {
                     return aesKey.Decrypt(packet);
                 }
                 catch(CryptographicException ex) {
+                    // What this almost always is: a host started with a different master key than
+                    // the one the stored ring was wrapped with. Reported as "authentication tag
+                    // mismatch", it reads as corruption, and the first thing anyone does is go
+                    // looking for corruption.
                     throw new CryptographicException(
-                        "Master key authentication failed while unwrapping a key. " +
-                        "The master key may be incorrect or the stored blob may be corrupt.", ex);
+                        "This master key cannot unwrap the stored key ring: the ring was wrapped with a " +
+                        "different key. Nothing here is corrupt — the key changed, or this host was given " +
+                        "the wrong one. Restore the original key, or, if nothing encrypted under it is " +
+                        "worth keeping, clear the stored keys so a new ring is wrapped with this one.", ex);
                 }
             });
         }
