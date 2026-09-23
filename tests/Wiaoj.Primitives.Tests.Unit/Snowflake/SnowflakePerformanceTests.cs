@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Wiaoj.Primitives.Snowflake;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Wiaoj.Primitives.Tests.Unit.Snowflake;
 

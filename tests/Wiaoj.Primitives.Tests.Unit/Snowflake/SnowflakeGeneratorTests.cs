@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Time.Testing;
 using Wiaoj.Primitives.Snowflake;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Wiaoj.Primitives.Tests.Unit.Snowflake;
 public class SnowflakeGeneratorTests {

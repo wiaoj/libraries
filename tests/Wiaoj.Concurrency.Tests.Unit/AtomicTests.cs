@@ -18,12 +18,12 @@ public class AtomicTests {
         int value = 10;
 
         // Başarılı senaryo: Değer 10 ise 20 yap.
-        bool result1 = Atomic.CompareExchange(ref value, 20, 10);
+        bool result1 = Atomic.TryCompareExchange(ref value, 20, 10);
         Assert.True(result1);
         Assert.Equal(20, value);
 
         // Başarısız senaryo: Değer artık 20, ama biz 10 sanıp 30 yapmaya çalışıyoruz.
-        bool result2 = Atomic.CompareExchange(ref value, 30, 10);
+        bool result2 = Atomic.TryCompareExchange(ref value, 30, 10);
         Assert.False(result2);
         Assert.Equal(20, value); // Değişmemeli
     }

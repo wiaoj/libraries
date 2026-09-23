@@ -1,5 +1,4 @@
 ﻿using Wiaoj.Primitives.Snowflake;
-using Xunit.Abstractions;
 
 namespace Wiaoj.Primitives.Tests.Unit.Snowflake;
 
