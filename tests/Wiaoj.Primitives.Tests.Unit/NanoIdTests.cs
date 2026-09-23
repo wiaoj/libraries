@@ -244,4 +244,23 @@ public class NanoIdTests {
     }
 
     #endregion
+
+    [Fact]
+    public void Digit_Alphabet_Is_Uniform() {
+        const int Iterations = 100_000;
+        const int Length = 20;
+
+        var counts = new int[10];
+
+        for(int i = 0; i < Iterations; i++) {
+            foreach(var c in NanoId.NewId(NanoId.Alphabets.Numeric, Length).Value)
+                counts[c - '0']++;
+        }
+
+        double expected = Iterations * Length / 10.0D;
+
+        foreach(int c in counts) {
+            Assert.InRange(c, expected * .99, expected * 1.01);
+        }
+    }
 }
