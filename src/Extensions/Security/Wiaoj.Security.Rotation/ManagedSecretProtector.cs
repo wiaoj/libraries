@@ -150,16 +150,12 @@ public sealed class ManagedSecretProtector<TContext> : ISecretProtector<TContext
     /// <summary>
     /// Synchronously disposes the protector and securely clears active key ring resources.
     /// </summary>
-    public void Dispose() {
-        if(this._disposeState.TryBeginDispose()) {
-            try {
-                DisposeAsync().AsTask().GetAwaiter().GetResult();
-            }
-            finally {
-                this._disposeState.SetDisposed();
-            }
-        }
-    }
+    /// <remarks>
+    /// Delegates to <see cref="DisposeAsync"/>, which owns the dispose state. Beginning disposal here first made
+    /// <see cref="DisposeAsync"/> see it already begun and wait for it to finish — forever, since it only finished
+    /// after <see cref="DisposeAsync"/> returned.
+    /// </remarks>
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
     // ── Private Helpers ───────────────────────────────────────────────────────
 
