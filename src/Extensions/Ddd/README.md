@@ -101,12 +101,10 @@ using Wiaoj.Serialization.DependencyInjection; // For UseSystemTextJson
 var builder = WebApplication.CreateBuilder(args);
 
 // Register DDD Services
-builder.Services.AddDdd(ddd =>
-{
+builder.Services.AddDdd()
     // Auto-scan assemblies for Event Handlers
-    ddd.ScanAssemblies(ServiceLifetime.Scoped, typeof(Program).Assembly);
-})
-.AddEntityFrameworkCore<MyDbContext>(
+    .ScanDomainEventHandlers(ServiceLifetime.Scoped, typeof(Program).Assembly)
+    .AddEntityFrameworkCore<MyDbContext>(
     // 1. Configure Serialization (Mandatory for flexibility)
     configureSerializer: serializer => 
     {

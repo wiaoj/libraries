@@ -217,6 +217,7 @@
     <Project Path="tests/Results/Wiaoj.Results.Tests.Unit/Wiaoj.Results.Tests.Unit.csproj" />
   </Folder>
   <Folder Name="/tests/Serialization/">
+    <Project Path="tests/Serialization/Wiaoj.Serialization.DependencyInjection.Tests.Unit/Wiaoj.Serialization.DependencyInjection.Tests.Unit.csproj" />
     <Project Path="tests/Serialization/Wiaoj.Serialization.Memory.Tests.Unit/Wiaoj.Serialization.Memory.Tests.Unit.csproj" Id="063bdb25-945b-4204-8f44-66e063fc31b8" />
     <Project Path="tests/Serialization/Wiaoj.Serialization.Proxy.Tests.Unit/Wiaoj.Serialization.Proxy.Tests.Unit.csproj" Id="031114b7-f281-462d-90ce-4109115fe3aa" />
   </Folder>

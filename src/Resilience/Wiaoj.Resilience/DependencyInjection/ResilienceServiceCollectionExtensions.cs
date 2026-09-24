@@ -12,13 +12,12 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </summary>
 public static class ResilienceServiceCollectionExtensions {
     /// <summary>
-    /// Adds resilience infrastructure and configures circuit breaker policies.
+    /// Adds resilience infrastructure and returns a builder to register circuit breaker and timeout policies on.
     /// </summary>
-    public static IServiceCollection AddWiaojResilience(
-        this IServiceCollection services,
-        Action<IResilienceBuilder> configure) {
+    /// <param name="services">The service collection.</param>
+    /// <returns>The resilience builder.</returns>
+    public static IResilienceBuilder AddWiaojResilience(this IServiceCollection services) {
         Preca.ThrowIfNull(services);
-        Preca.ThrowIfNull(configure);
 
         services.AddOptions<ResilienceOptions>();
         services.TryAddSingleton(TimeProvider.System);
@@ -27,9 +26,22 @@ public static class ResilienceServiceCollectionExtensions {
         services.TryAddSingleton<ITimeoutStrategyFactory, DefaultTimeoutStrategyFactory>(); 
         services.TryAddTransient(typeof(ITimeoutStrategy<>), typeof(TypedTimeoutStrategyWrapper<>));
 
-        ResilienceBuilder builder = new(services);
-        configure(builder);
+        return new ResilienceBuilder(services);
+    }
 
+    /// <summary>
+    /// Adds resilience infrastructure and configures circuit breaker and timeout policies.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">Registers the policies on the builder.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    public static IServiceCollection AddWiaojResilience(
+        this IServiceCollection services,
+        Action<IResilienceBuilder> configure) {
+        Preca.ThrowIfNull(services);
+        Preca.ThrowIfNull(configure);
+
+        configure(services.AddWiaojResilience());
         return services;
     }
 }

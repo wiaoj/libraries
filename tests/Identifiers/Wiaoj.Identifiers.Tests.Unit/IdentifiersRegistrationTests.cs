@@ -170,6 +170,27 @@ public sealed class IdentifiersRegistrationTests : IDisposable {
 
         Assert.Same(custom, IdCodec.Current);
     }
+
+    [Fact]
+    public void Should_Choose_The_Codec_In_The_Callback_Overload() {
+        ServiceCollection services = new();
+
+        IServiceCollection returned = services.AddIdentifiers(identifiers => identifiers.UsePlainCodec());
+        using ServiceProvider provider = services.BuildServiceProvider();
+        provider.UseIdentifiers();
+
+        Assert.Same(services, returned);
+        Assert.Same(PlainIdCodec.Instance, IdCodec.Current);
+    }
+
+    [Fact]
+    public void Should_Fail_On_The_Registration_Line_When_The_Callback_Chooses_No_Codec() {
+        ServiceCollection services = new();
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => services.AddIdentifiers(_ => { }));
+
+        Assert.Contains("chose no codec", error.Message);
+    }
 }
 
 file static class CustomCodecExtensions {

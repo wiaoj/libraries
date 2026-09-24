@@ -53,48 +53,37 @@ internal sealed class SerializationBuilder : ISerializationBuilder, IServiceColl
     }
 
     /// <summary>
-    /// Finalizes the serializer configuration and registers a default <see cref="ISerializer"/> alias.
+    /// Chooses the serializer resolved as the non-keyed <see cref="ISerializer"/>: the keyless registration when there is
+    /// one, otherwise the only registered serializer; with several and no keyless one there is no default.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown if no serializers were registered, or if multiple serializers exist and no default was specified.
-    /// </exception>
-    internal void Build() {
-        // Check for explicitly registered keyless (default) serializer
-        bool hasKeyless = this.Services.Any(sd => sd.ServiceType == typeof(ISerializer<KeylessRegistration>));
-
-        if(hasKeyless) {
-            this.Services.AddSingleton<ISerializer>(sp => sp.GetRequiredService<ISerializer<KeylessRegistration>>());
-            return;
+    /// <param name="provider">The service provider resolving the default.</param>
+    /// <param name="services">The service collection the serializers were registered in.</param>
+    /// <returns>The default serializer, or <see langword="null"/> when there is none.</returns>
+    /// <remarks>
+    /// Runs when <see cref="ISerializer"/> is first resolved rather than when <c>AddWiaojSerializer</c> returns, so
+    /// serializers registered after it — fluent calls on the returned builder — are taken into account.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The only registered serializer's key does not implement <see cref="ISerializerKey"/>.</exception>
+    internal static ISerializer? ResolveDefault(IServiceProvider provider, IServiceCollection services) {
+        if(services.Any(static sd => sd.ServiceType == typeof(ISerializer<KeylessRegistration>))) {
+            return provider.GetRequiredService<ISerializer<KeylessRegistration>>();
         }
 
-        // Gather all ISerializer<T> registrations
-        List<ServiceDescriptor> serializerRegistrations = [.. this.Services
-            .Where(sd =>
-                sd.ServiceType.IsGenericType &&
-                sd.ServiceType.GetGenericTypeDefinition() == typeof(ISerializer<>))];
+        List<Type> serializerTypes = [.. services
+            .Select(static sd => sd.ServiceType)
+            .Where(static type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ISerializer<>))
+            .Distinct()];
 
-        // Use the only registered serializer as default if it exists and is valid
-        if(serializerRegistrations.Count is 1) {
-            Type genericArg = serializerRegistrations[0].ServiceType.GetGenericArguments()[0];
-
-            Preca.ThrowIfFalse(
-                typeof(ISerializerKey).IsAssignableFrom(genericArg),
-                () => new InvalidOperationException($"Registered serializer type '{genericArg.FullName}' does not implement ISerializerKey and cannot be used as default."));
-
-            Type serializerType = typeof(ISerializer<>).MakeGenericType(genericArg);
-
-            this.Services.AddSingleton(typeof(ISerializer), sp => sp.GetRequiredService(serializerType));
-            return;
+        if(serializerTypes.Count is not 1) {
+            return null;
         }
 
+        Type key = serializerTypes[0].GetGenericArguments()[0];
+        Preca.ThrowIfFalse(
+            typeof(ISerializerKey).IsAssignableFrom(key),
+            () => new InvalidOperationException($"Registered serializer type '{key.FullName}' does not implement ISerializerKey and cannot be used as default."));
 
-        //Preca.ThrowIf(
-        //    serializerRegistrations.Count > 1,
-        //    () => new InvalidOperationException("Multiple serializers were registered, but no default (keyless) serializer was configured. Please register one using AddSerializer(...)."));
-
-        //Preca.ThrowIf(
-        //    serializerRegistrations.Count == 0,
-        //    () => new InvalidOperationException("No serializers have been registered. Please call AddSerializer(...) first.")); 
+        return (ISerializer)provider.GetRequiredService(serializerTypes[0]);
     }
 
     public ISerializerConfigurator<TKey> ReplaceSerializer<TKey>(Func<IServiceProvider, ISerializer<TKey>> factory) where TKey : ISerializerKey {

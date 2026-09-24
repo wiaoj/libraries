@@ -41,6 +41,14 @@ public static class ModulithServiceCollectionExtensions {
     ///         modules => modules.AddModulesFromAssemblyContaining&lt;Program&gt;()));
     /// </code>
     /// </example>
+    /// <remarks>
+    /// There is deliberately no overload that returns an <see cref="IModulithBuilder"/>: when
+    /// <paramref name="configureModules"/> returns, the active modules are resolved and each one registers its
+    /// services into this collection. That has to happen while the collection is still being built, so the list of
+    /// modules must be complete at this point — which only the callback guarantees. See CONTRIBUTING.md,
+    /// "Registration shape".
+    /// </remarks>
+    /// </example>
     public static IServiceCollection AddModulith(
         this IServiceCollection services,
         IConfiguration configuration,

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Serialization;
 using Wiaoj.Serialization.DependencyInjection;
 
@@ -10,28 +11,35 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </summary>
 public static class ServiceCollectionExtensions {
     /// <summary>
-    /// Adds Wiaoj serializer support to the service collection.
+    /// Adds Wiaoj serializer support and returns a builder to register serializers on.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
-    /// <param name="configurationBuilder">A delegate to configure serializers using <see cref="SerializationBuilder"/>.</param>
-    /// <returns>The updated service collection.</returns>
-    public static IServiceCollection AddWiaojSerializer(this IServiceCollection services, Action<ISerializationBuilder> configurationBuilder) {
+    /// <returns>The serialization builder.</returns>
+    /// <remarks>
+    /// The non-keyed <see cref="ISerializer"/> is chosen when it is first resolved: the keyless serializer when one is
+    /// registered, otherwise the only registered serializer. With several and no keyless one, there is none.
+    /// </remarks>
+    public static ISerializationBuilder AddWiaojSerializer(this IServiceCollection services) {
         Preca.ThrowIfNull(services);
-        Preca.ThrowIfNull(configurationBuilder);
-        SerializationBuilder builder = new(services);
-        configurationBuilder(builder);
-        builder.AddSerializerProvider();
-        builder.Build();
 
-        return services;
+        SerializationBuilder builder = new(services);
+        builder.AddSerializerProvider();
+        services.TryAddSingleton<ISerializer>(provider => SerializationBuilder.ResolveDefault(provider, services)!);
+
+        return builder;
     }
 
     /// <summary>
-    /// Adds Wiaoj serializer support to the service collection with default configuration.
+    /// Adds Wiaoj serializer support and registers serializers inside <paramref name="configurationBuilder"/>.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
-    /// <returns>The updated service collection.</returns>
-    public static IServiceCollection AddWiaojSerializer(this IServiceCollection services) {
-        return AddWiaojSerializer(services, (_) => { });
+    /// <param name="configurationBuilder">Registers serializers on the builder.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    public static IServiceCollection AddWiaojSerializer(this IServiceCollection services, Action<ISerializationBuilder> configurationBuilder) {
+        Preca.ThrowIfNull(services);
+        Preca.ThrowIfNull(configurationBuilder);
+
+        configurationBuilder(services.AddWiaojSerializer());
+        return services;
     }
 }

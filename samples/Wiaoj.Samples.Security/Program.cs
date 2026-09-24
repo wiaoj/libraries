@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text;
 using Wiaoj.Primitives;
 using Wiaoj.Security;
-using Wiaoj.Security.DependencyInjection;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
@@ -10,7 +9,8 @@ HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 Environment.SetEnvironmentVariable("MASTER_KEY", "r4_V1rtjRmgZDnYZZSYLXx7yFKP_4sA7E_o9y0O87Cc");
 
 // 2. Kütüphane servislerini ayağa kaldır
-builder.Services.AddWiaojSecurity(opts => {
+builder.Services.AddWiaojSecurity()
+.ConfigureKeyRotation(opts => {
     opts.KeySizeInBits = 256;
     opts.RotationInterval = TimeSpan.FromMinutes(1);
 })
