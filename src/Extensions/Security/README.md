@@ -176,7 +176,8 @@ Console.WriteLine(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
 ```csharp
 // Program.cs
 builder.Services
-    .AddWiaojSecurity(opts =>
+    .AddWiaojSecurity()
+    .ConfigureKeyRotation(opts =>
     {
         opts.RotationInterval      = TimeSpan.FromDays(90);
         opts.CheckInterval         = TimeSpan.FromHours(6);
@@ -195,7 +196,8 @@ You can also bind options from `appsettings.json`:
 
 ```csharp
 builder.Services
-    .AddWiaojSecurity(builder.Configuration.GetSection("Security"))
+    .AddWiaojSecurity()
+    .ConfigureKeyRotation(builder.Configuration.GetSection("Security"))
     .AddEnvironmentMasterKey()
     .AddEntityFrameworkKeyStore<AppDbContext>()
     .AddManagedProtector<WebhookSigningContext>();

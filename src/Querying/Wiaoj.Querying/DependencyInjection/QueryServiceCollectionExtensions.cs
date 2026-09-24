@@ -35,14 +35,12 @@ public static class QueryServiceCollectionExtensions {
     /// </summary>
     /// <param name="services">The target service collection.</param>
     /// <param name="configure">The configuration delegate to set up schemas, options, and payload parsers.</param>
-    /// <returns>An <see cref="IQueryingBuilder"/> instance for fluent chaining.</returns>
-    public static IQueryingBuilder AddQuerying(this IServiceCollection services, Action<IQueryingBuilder> configure) {
+    /// <returns>The service collection, for chaining.</returns>
+    public static IServiceCollection AddQuerying(this IServiceCollection services, Action<IQueryingBuilder> configure) {
         Preca.ThrowIfNull(services);
         Preca.ThrowIfNull(configure);
 
-        IQueryingBuilder builder = services.AddQuerying();
-        configure(builder);
-
-        return builder;
+        configure(services.AddQuerying());
+        return services;
     }
 }

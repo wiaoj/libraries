@@ -40,9 +40,8 @@ public sealed class SmallPayloadLimitApplicationFixture : IAsyncLifetime {
             options.UseInMemoryDatabase(databaseName));
 
         builder.Services
-            .AddQuerying(options => {
-                options.Configure(x => x.MaxPayloadBytes = 50);
-            })
+            .AddQuerying()
+            .Configure(x => x.MaxPayloadBytes = 50)
             .AddSchema<Product>(schema => {
                 schema.AllowFilter(x => x.Id, x => x.Category, x => x.Status);
                 schema.Property(x => x.Price, p => p.AllowFilter(

@@ -41,6 +41,32 @@ public static class IdentifiersServiceCollectionExtensions {
     }
 
     /// <summary>
+    /// Registers identifier support and chooses the codec inside <paramref name="configure"/>.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">Chooses the codec on the builder.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="configure"/> chose no codec.</exception>
+    /// <remarks>
+    /// Unlike <see cref="AddIdentifiers(IServiceCollection)"/>, whose configuration can continue after it returns, the
+    /// configuration here is complete when <paramref name="configure"/> returns, so a missing codec fails on this line
+    /// rather than when the host starts.
+    /// </remarks>
+    public static IServiceCollection AddIdentifiers(this IServiceCollection services, Action<IIdentifiersBuilder> configure) {
+        Preca.ThrowIfNull(services);
+        Preca.ThrowIfNull(configure);
+
+        configure(services.AddIdentifiers());
+
+        if(!services.Any(static d => d.ServiceType == typeof(IdCodec))) {
+            throw new InvalidOperationException(
+                "AddIdentifiers(configure) chose no codec. Call UsePlainCodec(), UseAesCodec() or UseCodec(...) on the builder.");
+        }
+
+        return services;
+    }
+
+    /// <summary>
     /// Installs the registered <see cref="IdCodec"/> as <see cref="IdCodec.Current"/> — for an application that builds a
     /// service provider without a host.
     /// </summary>

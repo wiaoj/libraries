@@ -10,6 +10,7 @@ using Wiaoj.BloomFilter.Engine;
 using Wiaoj.BloomFilter.Seeder;
 using Wiaoj.BloomFilter.Seeding;
 using Wiaoj.BloomFilter.Storage;
+using Wiaoj.Preconditions;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -18,18 +19,29 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </summary>
 public static class BloomFilterServiceCollectionExtensions {
     /// <summary>
-    /// Registers core Bloom Filter infrastructure.
+    /// Registers core Bloom Filter infrastructure and configures filters inside <paramref name="setupAction"/>.
     /// </summary>
-    public static IServiceCollection AddBloomFilter(this IServiceCollection services) {
-        return services.AddBloomFilter(_ => { });
-    }
-
-    /// <summary>
-    /// Registers core Bloom Filter infrastructure and configures filters via builder.
-    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="setupAction">Registers filters and lifecycle features on the builder.</param>
+    /// <returns>The service collection, for chaining.</returns>
     public static IServiceCollection AddBloomFilter(
         this IServiceCollection services,
         Action<IBloomFilterBuilder> setupAction) {
+        Preca.ThrowIfNull(services);
+        Preca.ThrowIfNull(setupAction);
+
+        setupAction(services.AddBloomFilter());
+        return services;
+    }
+
+    /// <summary>
+    /// Registers core Bloom Filter infrastructure and returns a builder to register filters on.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The Bloom Filter builder.</returns>
+    public static IBloomFilterBuilder AddBloomFilter(this IServiceCollection services) {
+        Preca.ThrowIfNull(services);
+
 
         services.AddOptions<BloomFilterOptions>()
             .Validate(opts => {
@@ -43,8 +55,9 @@ public static class BloomFilterServiceCollectionExtensions {
         services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<FileSystemStorageOptions>, OptionalFileSystemStorageConfigurationBinder>());
 
         BloomFilterBuilder builder = new(services);
-        setupAction(builder);
 
+        // Read when the options are resolved, so filters and lifecycle features added after this method returns
+        // (fluent calls, or the setupAction overload) are included.
         services.Configure<BloomFilterOptions>(options => {
             options.Lifecycle.AutoSaveInterval = builder.Options.Lifecycle.AutoSaveInterval;
             options.Lifecycle.EnableIntegrityCheck = builder.Options.Lifecycle.EnableIntegrityCheck;
@@ -80,7 +93,7 @@ public static class BloomFilterServiceCollectionExtensions {
 
         services.TryAddSingleton<RecyclableMemoryStreamManager>();
 
-        return services;
+        return builder;
     }
 
     private sealed class OptionalConfigurationBinder(IServiceProvider serviceProvider) : IConfigureOptions<BloomFilterOptions> {

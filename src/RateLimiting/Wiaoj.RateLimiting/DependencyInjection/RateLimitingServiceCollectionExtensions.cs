@@ -13,6 +13,22 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </summary>
 public static class RateLimitingServiceCollectionExtensions {
     /// <summary>
+    /// Adds rate limiting infrastructure and returns a builder to register policies on.
+    /// </summary>
+    /// <param name="services">The target service collection.</param>
+    /// <returns>The rate limiting builder.</returns>
+    public static IRateLimitingBuilder AddWiaojRateLimiting(this IServiceCollection services) {
+        Preca.ThrowIfNull(services);
+
+        services.AddOptions<RateLimitingOptions>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IRateLimiter, DefaultRateLimiter>();
+        services.TryAddTransient(typeof(IRateLimiter<>), typeof(TypedRateLimiterWrapper<>));
+
+        return new RateLimitingBuilder(services);
+    }
+
+    /// <summary>
     /// Adds rate limiting infrastructure and configures policies via a builder action.
     /// </summary>
     /// <param name="services">The target service collection.</param>
@@ -24,14 +40,7 @@ public static class RateLimitingServiceCollectionExtensions {
         Preca.ThrowIfNull(services);
         Preca.ThrowIfNull(configure);
 
-        services.AddOptions<RateLimitingOptions>();
-        services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<IRateLimiter, DefaultRateLimiter>();
-        services.TryAddTransient(typeof(IRateLimiter<>), typeof(TypedRateLimiterWrapper<>));
-
-        RateLimitingBuilder builder = new(services);
-        configure(builder);
-
+        configure(services.AddWiaojRateLimiting());
         return services;
     }
 }

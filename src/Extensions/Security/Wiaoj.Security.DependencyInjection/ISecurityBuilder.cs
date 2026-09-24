@@ -1,10 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 
-namespace Wiaoj.Security.DependencyInjection;
+namespace Wiaoj.Security;
 
 /// <summary>
 /// A builder for configuring the Wiaoj security system.
-/// Returned by <see cref="SecurityServiceExtensions.AddWiaojSecurity"/>.
+/// Returned by <c>AddWiaojSecurity()</c>; <c>AddWiaojSecurity(configure)</c> passes it to the callback.
 /// </summary>
 /// <remarks>
 /// <para>
