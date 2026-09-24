@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wiaoj.Net;
+using Wiaoj.Serialization;
 using Wiaoj.Serialization.DependencyInjection;
 using Wiaoj.Webhooks;
 using Wiaoj.Webhooks.Internal;

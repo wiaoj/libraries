@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Serialization.Transcoding.Abstractions;
+﻿namespace Wiaoj.Serialization.Transcoding;
 
 public interface ITranscoder {
     /// <summary>

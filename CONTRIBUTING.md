@@ -74,4 +74,3 @@ These predate the rules above. Align them when you next change their public API,
 
 - `Wiaoj.Mediator`: `AddMediator` offers only the callback overload.
 - `Wiaoj.Webhooks.AspNetCore`: `AddInbound(Action<WebhookInboundBuilder>? configure = null)` is a nested builder that takes an optional callback, and `WebhookInboundBuilder` is a class, not an interface. `WebhookBuilderInboundExtensions` is in `Microsoft.Extensions.DependencyInjection` rather than `Wiaoj.Webhooks`.
-- `Wiaoj.Serialization.*`: the serializer extensions (`UseSystemTextJson`, `UseMemoryPack`, …) extend `ISerializationBuilder`, which is in `Wiaoj.Serialization`, but they live in `Wiaoj.Serialization.DependencyInjection`.

@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Serialization.Compression.Exceptions;
+﻿namespace Wiaoj.Serialization.Compression;
 /// <summary>
 /// Thrown when a decompression operation fails. This typically indicates that the
 /// input data is corrupted, not in the expected compression format (e.g., trying to decompress Gzip data with Brotli),

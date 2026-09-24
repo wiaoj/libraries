@@ -2,7 +2,6 @@
 using System.Buffers;
 using System.Buffers.Text;
 using System.Text;
-using Wiaoj.Serialization.Compression.Abstractions;
 
 namespace Wiaoj.Serialization.Compression;
 /// <summary>

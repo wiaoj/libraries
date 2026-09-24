@@ -1,6 +1,6 @@
 ﻿using Microsoft.IO;
 using System.IO.Compression;
-using Wiaoj.Serialization.Compression.Abstractions;
+using Wiaoj.Serialization.Compression;
 
 namespace Wiaoj.Serialization.Compression.Compressors;
 /// <summary>

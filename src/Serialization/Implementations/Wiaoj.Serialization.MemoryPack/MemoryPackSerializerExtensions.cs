@@ -3,7 +3,7 @@ using Wiaoj.Preconditions;
 using Wiaoj.Serialization.MemoryPack;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Wiaoj.Serialization.DependencyInjection;
+namespace Wiaoj.Serialization;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
