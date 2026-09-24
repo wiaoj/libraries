@@ -7,6 +7,8 @@
 	  <PackageId>Wiaoj.Serialization.MemoryPack</PackageId>
 	  <Version>0.0.1-alpha.1</Version>
 	  <Title>Wiaoj Serialization MemoryPack</Title>
+	  <Description>MemoryPack implementation for Wiaoj Serialization: compact binary for data exchanged between .NET applications. Types must be [MemoryPackable]; mark them [MemoryPackable(GenerateType.VersionTolerant)] when the data outlives a deployment.</Description>
+	  <PackageTags>serialization;memorypack;binary;performance;wiaoj</PackageTags>
 	  <IsPackable>true</IsPackable>
 	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>

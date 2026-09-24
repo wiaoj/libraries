@@ -37,6 +37,7 @@ dotnet add package Wiaoj.Serialization
 # Providers (Choose what you need)
 dotnet add package Wiaoj.Serialization.SystemTextJson
 dotnet add package Wiaoj.Serialization.MessagePack
+dotnet add package Wiaoj.Serialization.MemoryPack
 dotnet add package Wiaoj.Serialization.Bson
 dotnet add package Wiaoj.Serialization.YamlDotNet
 ```
@@ -191,10 +192,18 @@ Flow:
 
 ---
 
+## MemoryPack
+
+`UseMemoryPack<TKey>()` writes a compact binary format with very little work per value, but it only suits data exchanged between .NET applications:
+
+- Every type it serializes must be `[MemoryPackable]` and `partial` (a source generator writes the serializer).
+- By default, members are read by position. Adding, removing or reordering a member makes data written earlier unreadable. For anything that outlives a deployment, such as outbox rows, cache entries or messages in a queue, declare the type `[MemoryPackable(GenerateType.VersionTolerant)]` and number its members with `[MemoryPackOrder]`, or use JSON.
+- There are no readers outside .NET. Use MessagePack when another language reads the data.
+
 ## ❓ FAQ
 
 **Q: Can I use this with Newtonsoft.Json?**
-A: Support is planned. Currently, we support System.Text.Json, MessagePack, YamlDotNet, and MongoDB.Bson.
+A: Support is planned. Currently, we support System.Text.Json, MessagePack, MemoryPack, YamlDotNet, and MongoDB.Bson.
 
 **Q: What is the performance overhead?**
 A: The abstraction layer is extremely thin. It is designed to delegate directly to the underlying library's `Stream` methods. When using Source Generators (planned for v2), the overhead will be effectively zero.
