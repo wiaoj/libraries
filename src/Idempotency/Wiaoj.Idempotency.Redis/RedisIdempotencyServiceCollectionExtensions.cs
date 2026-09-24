@@ -1,9 +1,10 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using StackExchange.Redis;
+using Wiaoj.Idempotency;
+using Wiaoj.Idempotency.Redis;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Wiaoj.Idempotency.Redis;
+namespace Microsoft.Extensions.DependencyInjection;
 #pragma warning restore IDE0130
 
 /// <summary>

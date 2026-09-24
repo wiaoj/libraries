@@ -1,11 +1,9 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.Preconditions;
 using Wiaoj.RateLimiting.AspNetCore;
-using Wiaoj.RateLimiting;
 
-#pragma warning disable IDE0130
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130
+namespace Wiaoj.RateLimiting;
 
 /// <summary>
 /// ASP.NET Core extension methods for <see cref="IRateLimitingBuilder"/>.
