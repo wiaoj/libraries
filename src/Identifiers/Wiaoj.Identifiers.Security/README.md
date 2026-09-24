@@ -11,6 +11,8 @@ dotnet add package Wiaoj.Identifiers.Security
 ## Usage
 
 ```csharp
+using Wiaoj.Identifiers;
+
 public sealed class IdentifierContext : ISecretContext;
 
 builder.Services.AddWiaojSecurity()

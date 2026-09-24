@@ -1,11 +1,9 @@
-using Wiaoj.Identifiers;
+using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.Identifiers.Security;
 using Wiaoj.Preconditions;
 using Wiaoj.Security;
 
-#pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Identifiers;
 
 /// <summary>Keys identifier encryption by a Wiaoj.Security key ring.</summary>
 public static class IdentifiersBuilderSecurityExtensions {

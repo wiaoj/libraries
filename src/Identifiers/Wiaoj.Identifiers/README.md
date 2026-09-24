@@ -27,7 +27,7 @@ dotnet add Domain package Wiaoj.Identifiers.Abstractions
 dotnet add Api package Wiaoj.Identifiers
 ```
 
-- **Namespace:** every type is in the `Wiaoj.Identifiers` namespace.
+- **Namespace:** every type is in the `Wiaoj.Identifiers` namespace, including the codec choices (`UseAesCodec`, `UsePlainCodec`, `UseKeyRingCodec`). Only `AddIdentifiers` itself is in `Microsoft.Extensions.DependencyInjection`, like every `Add…` method.
 - **Generator:** it comes with every package in the family. A single-project application can reference only `Wiaoj.Identifiers`.
 
 ## Setup
@@ -35,6 +35,8 @@ dotnet add Api package Wiaoj.Identifiers
 Choose a codec. It is installed as `IdCodec.Current` when the host starts:
 
 ```csharp
+using Wiaoj.Identifiers;
+
 // Encrypted: the text reveals nothing and forged identifiers are refused
 builder.Services.AddIdentifiers().UseAesCodec();
 builder.Services.Configure<IdentifiersOptions>(builder.Configuration.GetSection("Identifiers"));

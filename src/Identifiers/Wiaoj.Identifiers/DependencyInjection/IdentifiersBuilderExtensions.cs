@@ -1,11 +1,9 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using Wiaoj.Identifiers;
 using Wiaoj.Preconditions;
 
-#pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Microsoft.Extensions.DependencyInjection;
-#pragma warning restore IDE0130 // Namespace does not match folder structure
+namespace Wiaoj.Identifiers;
 
 /// <summary>The codecs Wiaoj.Identifiers provides, chosen on an <see cref="IIdentifiersBuilder"/>.</summary>
 public static class IdentifiersBuilderExtensions {
