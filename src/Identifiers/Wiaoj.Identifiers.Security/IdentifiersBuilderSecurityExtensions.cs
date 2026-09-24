@@ -1,3 +1,4 @@
+using Wiaoj.Identifiers;
 using Wiaoj.Identifiers.Security;
 using Wiaoj.Preconditions;
 using Wiaoj.Security;
@@ -28,7 +29,7 @@ public static class IdentifiersBuilderSecurityExtensions {
     /// services.AddIdentifiers().UseKeyRingCodec&lt;IdentifierContext&gt;();
     /// </code>
     /// </example>
-    public static IdentifiersBuilder UseKeyRingCodec<TContext>(this IdentifiersBuilder builder) where TContext : ISecretContext {
+    public static IIdentifiersBuilder UseKeyRingCodec<TContext>(this IIdentifiersBuilder builder) where TContext : ISecretContext {
         Preca.ThrowIfNull(builder);
         return builder.UseCodec(static services => new KeyRingIdCodec<TContext>(services.GetRequiredService<ISubkeyDeriver<TContext>>()));
     }
