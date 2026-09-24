@@ -146,4 +146,33 @@ public sealed class IdentifiersRegistrationTests : IDisposable {
         Assert.Single(services, d => d.ServiceType == typeof(IHostedService));
         Assert.Single(services, d => d.ServiceType == typeof(IdCodec));
     }
+
+    [Fact]
+    public void Should_Return_A_Builder_Over_The_Same_Service_Collection() {
+        ServiceCollection services = new();
+
+        IIdentifiersBuilder builder = services.AddIdentifiers();
+
+        Assert.Same(services, builder.Services);
+        Assert.Same(builder, builder.UsePlainCodec());
+        Assert.Same(builder, builder.UseAesCodec(o => o.AesKey = Base64Key));
+    }
+
+    [Fact]
+    public void Should_Let_Another_Package_Choose_The_Codec_Through_The_Interface() {
+        // A codec from outside this package (like UseKeyRingCodec) is an extension over UseCodec.
+        ServiceCollection services = new();
+        AesIdCodec custom = TestCodecs.Aes('c');
+        services.AddIdentifiers().UsePlainCodec().UseCustomCodec(custom);
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        provider.UseIdentifiers();
+
+        Assert.Same(custom, IdCodec.Current);
+    }
+}
+
+file static class CustomCodecExtensions {
+    public static IIdentifiersBuilder UseCustomCodec(this IIdentifiersBuilder builder, IdCodec codec) =>
+        builder.UseCodec(_ => codec);
 }

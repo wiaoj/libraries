@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Wiaoj.Identifiers;
+using Wiaoj.Identifiers.DependencyInjection;
 using Wiaoj.Preconditions;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
@@ -32,7 +33,7 @@ public static class IdentifiersServiceCollectionExtensions {
     /// Starting the host without choosing a codec fails, rather than writing identifiers with a codec nobody chose.
     /// Without a host, call <see cref="UseIdentifiers(IServiceProvider)"/> on the built provider.
     /// </remarks>
-    public static IdentifiersBuilder AddIdentifiers(this IServiceCollection services) {
+    public static IIdentifiersBuilder AddIdentifiers(this IServiceCollection services) {
         Preca.ThrowIfNull(services);
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, IdCodecInstaller>());
@@ -55,62 +56,7 @@ public static class IdentifiersServiceCollectionExtensions {
     }
 }
 
-/// <summary>Chooses the <see cref="IdCodec"/> registered by <c>AddIdentifiers</c>.</summary>
-public sealed class IdentifiersBuilder {
-    internal IdentifiersBuilder(IServiceCollection services) {
-        this.Services = services;
-    }
-
-    /// <summary>Gets the service collection.</summary>
-    public IServiceCollection Services { get; }
-
-    /// <summary>
-    /// Uses <see cref="PlainIdCodec"/>: the Snowflake value in base62. Readable without a key, and reveals when each
-    /// identifier was created.
-    /// </summary>
-    /// <returns>The builder, for chaining.</returns>
-    public IdentifiersBuilder UsePlainCodec() {
-        return this.UseCodec(static _ => PlainIdCodec.Instance);
-    }
-
-    /// <summary>
-    /// Uses <see cref="AesIdCodec"/> with the key in <see cref="IdentifiersOptions"/> — typically bound from
-    /// configuration, with the key kept in a secret store.
-    /// </summary>
-    /// <returns>The builder, for chaining.</returns>
-    /// <remarks>A missing or short key fails at startup; there is no default key.</remarks>
-    public IdentifiersBuilder UseAesCodec() {
-        return this.UseAesCodec(static _ => { });
-    }
-
-    /// <summary>Uses <see cref="AesIdCodec"/> with the key <paramref name="configure"/> sets.</summary>
-    /// <param name="configure">Sets <see cref="IdentifiersOptions.AesKey"/> and optionally the version.</param>
-    /// <returns>The builder, for chaining.</returns>
-    public IdentifiersBuilder UseAesCodec(Action<IdentifiersOptions> configure) {
-        Preca.ThrowIfNull(configure);
-
-        this.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<IdentifiersOptions>, IdentifiersOptionsValidator>());
-        this.Services.AddOptions<IdentifiersOptions>().Configure(configure).ValidateOnStart();
-
-        return this.UseCodec(static services => {
-            IdentifiersOptions options = services.GetRequiredService<IOptions<IdentifiersOptions>>().Value;
-            return new AesIdCodec(Convert.FromBase64String(options.AesKey!), options.AesKeyVersion);
-        });
-    }
-
-    /// <summary>Uses the codec <paramref name="factory"/> creates, such as one whose key comes from a key ring.</summary>
-    /// <param name="factory">Creates the codec from the container.</param>
-    /// <returns>The builder, for chaining.</returns>
-    /// <remarks>Choosing a codec again replaces the previous choice.</remarks>
-    public IdentifiersBuilder UseCodec(Func<IServiceProvider, IdCodec> factory) {
-        Preca.ThrowIfNull(factory);
-
-        this.Services.Replace(ServiceDescriptor.Singleton(factory));
-        return this;
-    }
-}
-
-/// <summary>Options for <see cref="IdentifiersBuilder.UseAesCodec()"/>.</summary>
+/// <summary>Options for <see cref="IdentifiersBuilderExtensions.UseAesCodec(IIdentifiersBuilder)"/>.</summary>
 public sealed class IdentifiersOptions {
     /// <summary>
     /// Gets or sets the AES codec key as base64: at least 16 bytes of random data, for example from
