@@ -11,11 +11,12 @@ namespace Wiaoj.Serialization.Tests.Unit;
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Component", "SerializerContract")]
-public abstract class SerializerContractTests : IDisposable {
+public abstract class SerializerContractTests : IAsyncDisposable {
     private readonly ServiceProvider _provider;
 
     protected SerializerContractTests() {
         ServiceCollection services = new();
+        this.ConfigureServices(services);
         services.AddWiaojSerializer(this.Register);
         this._provider = services.BuildServiceProvider();
         this.Serializer = this._provider.GetRequiredService<ISerializer<ContractKey>>();
@@ -23,6 +24,14 @@ public abstract class SerializerContractTests : IDisposable {
 
     /// <summary>Registers the serializer under test for <see cref="ContractKey"/>.</summary>
     protected abstract void Register(ISerializationBuilder builder);
+
+    /// <summary>Adds what the serializer under test needs besides itself, such as a secret protector.</summary>
+    protected virtual void ConfigureServices(IServiceCollection services) { }
+
+    /// <summary>
+    /// Whether serializing the same value twice gives the same bytes. Encryption does not: every call uses a fresh nonce.
+    /// </summary>
+    protected virtual bool IsDeterministic => true;
 
     protected ISerializer<ContractKey> Serializer { get; }
 
@@ -57,7 +66,9 @@ public abstract class SerializerContractTests : IDisposable {
         this.Serializer.Serialize(writer, order);
         Order? back = this.Serializer.Deserialize<Order>(new ReadOnlySequence<byte>(writer.WrittenMemory));
 
-        Assert.Equal(this.Serializer.Serialize(order), writer.WrittenSpan.ToArray());
+        if(this.IsDeterministic) {
+            Assert.Equal(this.Serializer.Serialize(order), writer.WrittenSpan.ToArray());
+        }
         Assert.Equivalent(order, back, strict: true);
     }
 
@@ -111,6 +122,29 @@ public abstract class SerializerContractTests : IDisposable {
     }
 
     [Fact]
+    public void TryDeserialize_Malformed_Returns_False_For_Bytes_Sequence_And_String() {
+        Assert.False(this.Serializer.TryDeserialize(Malformed, out Order? fromBytes));
+        Assert.False(this.Serializer.TryDeserialize(new ReadOnlySequence<byte>(Malformed), out Order? fromSequence));
+        Assert.False(this.Serializer.TryDeserializeFromString("{not valid", out Order? fromString));
+        Assert.Null(fromBytes);
+        Assert.Null(fromSequence);
+        Assert.Null(fromString);
+    }
+
+    [Fact]
+    public void TryDeserialize_Valid_Returns_The_Value_For_Bytes_Sequence_And_String() {
+        Order order = Order.Sample();
+        byte[] bytes = this.Serializer.Serialize(order);
+
+        Assert.True(this.Serializer.TryDeserialize(bytes, out Order? fromBytes));
+        Assert.True(this.Serializer.TryDeserialize(Segmented(bytes, parts: 2), out Order? fromSequence));
+        Assert.True(this.Serializer.TryDeserializeFromString(this.Serializer.SerializeToString(order), out Order? fromString));
+        Assert.Equivalent(order, fromBytes, strict: true);
+        Assert.Equivalent(order, fromSequence, strict: true);
+        Assert.Equivalent(order, fromString, strict: true);
+    }
+
+    [Fact]
     public async Task TryDeserializeAsync_Malformed_Returns_False() {
         using MemoryStream stream = new(Malformed);
 
@@ -152,8 +186,9 @@ public abstract class SerializerContractTests : IDisposable {
         }
     }
 
-    public void Dispose() {
-        this._provider.Dispose();
+    // Async: services such as ManagedSecretProtector release their keys asynchronously.
+    public async ValueTask DisposeAsync() {
+        await this._provider.DisposeAsync();
         GC.SuppressFinalize(this);
     }
 }

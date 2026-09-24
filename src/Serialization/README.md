@@ -20,7 +20,7 @@ Modern applications often require different serialization strategies for differe
 
 *   **Polyglot Serialization:** Use System.Text.Json, MessagePack, BSON, and YAML side-by-side.
 *   **Context-Aware Registry:** Register different configurations for different purposes using `ISerializerKey` (e.g., `ICacheSerializer`, `IApiSerializer`).
-*   **Pipeline Decorators:** Easily chain behaviors like **Gzip/Brotli Compression** and **AES-GCM Encryption** without changing your business logic.
+*   **Pipeline Decorators:** Easily chain behaviors like **Gzip/Brotli Compression** and **AES-GCM Encryption** (keyed by Wiaoj.Security) without changing your business logic.
 *   **Async-First:** Built from the ground up for `Stream` and `IAsyncEnumerable` efficiency.
 *   **Dependency Injection Friendly:** seamless integration with `Microsoft.Extensions.DependencyInjection`.
 
@@ -123,26 +123,26 @@ public class ProductController : ControllerBase
 
 ## 🛠 Advanced Scenarios
 
-### 🔐 Authenticated Encryption (AES-GCM)
-Secure your sensitive data at rest or in transit transparently. The serializer handles encryption during serialization and decryption during deserialization.
+### 🔐 Encryption with a Wiaoj.Security key ring
+Encrypt everything a serializer writes with the `ISecretProtector<TContext>` of a Wiaoj.Security context: authenticated AES-GCM, keys kept in your key store under a master key, and rotation without re-encrypting on the spot. Data written under an older key stays readable while the key ring holds that key.
 
 ```csharp
-// Define a key for secure data
 public struct SecureDataKey : ISerializerKey;
+public sealed class SecureDataContext : ISecretContext;
 
-// Generate a secure key (store this safely in KeyVault/Env Vars!)
-var secretKey = Secret.From(Base64String.Parse("...your-32-byte-base64-key..."));
+builder.Services.AddWiaojSecurity()
+    .AddEnvironmentMasterKey()
+    .AddEntityFrameworkKeyStore<AppDbContext>()
+    .AddManagedProtector<SecureDataContext>();
 
-builder.Services.AddWiaojSerializer(config =>
-{
-    config.UseSystemTextJson<SecureDataKey>()
-          .WithAesGcmEncryption(secretKey);
-});
-
-// Usage
-// _secureSerializer.Serialize(data) -> Returns Encrypted JSON bytes
-// _secureSerializer.Deserialize(bytes) -> Decrypts and returns Object
+builder.Services.AddWiaojSerializer(config => config
+    .UseSystemTextJson<SecureDataKey>()
+    .WithEncryption<SecureDataKey, SecureDataContext>());
 ```
+
+- **Bytes** are the key version (4 bytes, big-endian) followed by the ciphertext. **Text** is the `EncryptedSecret` compact form, `v{version}.{blob}`.
+- Anything that cannot be decrypted — tampered, truncated, another context, or a key the ring no longer holds — throws `DecryptionFailedException`.
+- Encryption is not deterministic: the same value gives different bytes each time, so encrypted output cannot be used as a cache key or compared for equality.
 
 ### 📄 YAML and BSON Support
 Easily handle configuration files or MongoDB documents.

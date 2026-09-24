@@ -25,6 +25,9 @@
 		<ProjectReference Include="..\..\..\src\Serialization\Implementations\Wiaoj.Serialization.YamlDotNet\Wiaoj.Serialization.YamlDotNet.csproj" />
 		<ProjectReference Include="..\..\..\src\Serialization\Features\Wiaoj.Serialization.Compression\Wiaoj.Serialization.Compression.csproj" />
 		<ProjectReference Include="..\..\..\src\Serialization\Features\Wiaoj.Serialization.Transcoding\Wiaoj.Serialization.Transcoding.csproj" />
+		<ProjectReference Include="..\..\..\src\Serialization\Features\Wiaoj.Serialization.Security\Wiaoj.Serialization.Security.csproj" />
+		<ProjectReference Include="..\..\..\src\Extensions\Security\Wiaoj.Security.Rotation\Wiaoj.Security.Rotation.csproj" />
+		<ProjectReference Include="..\..\..\src\Extensions\Security\Wiaoj.Security.Testing\Wiaoj.Security.Testing.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
