@@ -7,7 +7,7 @@ using MongoDB.Bson.Serialization.Serializers;
 using Wiaoj.Serialization.Bson;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Wiaoj.Serialization.DependencyInjection;
+namespace Wiaoj.Serialization;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 /// <summary>
 /// Extension methods to register BSON serializers in ISerializationBuilder.

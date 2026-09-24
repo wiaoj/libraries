@@ -1,6 +1,4 @@
-﻿using Wiaoj.Serialization.Transcoding.Abstractions;
-
-namespace Wiaoj.Serialization.Transcoding;
+﻿namespace Wiaoj.Serialization.Transcoding;
 
 internal sealed class Transcoder(ISerializerProvider serializerProvider) : ITranscoder {
     public ITranscodingContext From<TSourceKey>(byte[] sourceData) where TSourceKey : notnull, ISerializerKey {

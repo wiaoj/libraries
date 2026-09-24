@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Serialization.Compression.Exceptions;
+﻿namespace Wiaoj.Serialization.Compression;
 /// <summary>
 /// The base exception for all compression or decompression errors that occur
 /// within the Wiaoj.Serialization ecosystem.

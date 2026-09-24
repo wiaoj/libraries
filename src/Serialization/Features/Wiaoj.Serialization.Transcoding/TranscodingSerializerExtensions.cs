@@ -1,9 +1,8 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wiaoj.Serialization.Transcoding;
-using Wiaoj.Serialization.Transcoding.Abstractions;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
-namespace Wiaoj.Serialization.DependencyInjection;
+namespace Wiaoj.Serialization;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 public static class TranscodingSerializerExtensions {
     /// <summary>

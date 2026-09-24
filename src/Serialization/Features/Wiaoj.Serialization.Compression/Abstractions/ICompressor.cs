@@ -1,4 +1,4 @@
-﻿namespace Wiaoj.Serialization.Compression.Abstractions;
+﻿namespace Wiaoj.Serialization.Compression;
 /// <summary>
 /// Defines the contract for a compression and decompression algorithm.
 /// </summary>
