@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
-using Wiaoj.Serialization.Memory;
 using Wiaoj.Webhooks.Publishing.Internal;
 using Wiaoj.Webhooks.Publishing.Tests.Unit.Fakes;
 using Wiaoj.Webhooks.Internal;

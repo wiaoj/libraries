@@ -25,7 +25,6 @@
 		<ProjectReference Include="..\..\src\Extensions\Security\Wiaoj.Security.Testing\Wiaoj.Security.Testing.csproj" />
 		<ProjectReference Include="..\..\src\Serialization\Implementations\Wiaoj.Serialization.MemoryPack\Wiaoj.Serialization.MemoryPack.csproj" />
 		<ProjectReference Include="..\..\src\Serialization\Implementations\Wiaoj.Serialization.MessagePack\Wiaoj.Serialization.MessagePack.csproj" />
-		<ProjectReference Include="..\..\src\Serialization\Implementations\Wiaoj.Serialization.Proxy\Wiaoj.Serialization.Proxy.csproj" />
 		<ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
 		<ProjectReference Include="..\..\src\Webhooks\Wiaoj.Webhooks.Transports.InMemory\Wiaoj.Webhooks.Transports.InMemory.csproj" />
 	</ItemGroup>

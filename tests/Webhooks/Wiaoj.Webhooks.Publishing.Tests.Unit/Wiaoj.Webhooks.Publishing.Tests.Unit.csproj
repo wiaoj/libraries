@@ -16,7 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Serialization\Implementations\Wiaoj.Serialization.Memory\Wiaoj.Serialization.Memory.csproj" />
     <ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks.Publishing\Wiaoj.Webhooks.Publishing.csproj" />
     <ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks.Transports.InMemory\Wiaoj.Webhooks.Transports.InMemory.csproj" />
     <ProjectReference Include="..\..\..\src\Webhooks\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
