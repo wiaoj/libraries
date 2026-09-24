@@ -4,7 +4,7 @@ using System.Text.Json.Serialization.Metadata;
 using Wiaoj.Serialization.SystemTextJson;
 
 #pragma warning disable IDE0130
-namespace Wiaoj.Serialization.DependencyInjection;
+namespace Wiaoj.Serialization;
 #pragma warning restore IDE0130
 
 /// <summary>

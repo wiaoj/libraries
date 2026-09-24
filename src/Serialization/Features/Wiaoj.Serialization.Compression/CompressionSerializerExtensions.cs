@@ -4,7 +4,6 @@ using Microsoft.IO;
 using System.IO.Compression;
 using Wiaoj.Extensions.DependencyInjection;
 using Wiaoj.Serialization.Compression;
-using Wiaoj.Serialization.Compression.Abstractions;
 using Wiaoj.Serialization.Compression.Compressors;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure

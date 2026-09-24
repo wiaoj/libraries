@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.Serialization.DependencyInjection;
-using Wiaoj.Serialization.Transcoding.Abstractions;
+using Wiaoj.Serialization.Transcoding;
 
 namespace Wiaoj.Serialization.Tests.Unit;
 
