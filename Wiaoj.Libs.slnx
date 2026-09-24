@@ -216,6 +216,7 @@
   </Folder>
   <Folder Name="/tests/Serialization/">
     <Project Path="tests/Serialization/Wiaoj.Serialization.DependencyInjection.Tests.Unit/Wiaoj.Serialization.DependencyInjection.Tests.Unit.csproj" />
+    <Project Path="tests/Serialization/Wiaoj.Serialization.Tests.Unit/Wiaoj.Serialization.Tests.Unit.csproj" />
   </Folder>
   <Folder Name="/tests/Webhooks/">
     <Project Path="tests/Webhooks/Wiaoj.Webhooks.Publishing.Tests.Unit/Wiaoj.Webhooks.Publishing.Tests.Unit.csproj" />
