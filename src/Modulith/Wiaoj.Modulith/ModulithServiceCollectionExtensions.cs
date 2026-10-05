@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -48,7 +48,6 @@ public static class ModulithServiceCollectionExtensions {
     /// modules must be complete at this point — which only the callback guarantees. See CONTRIBUTING.md,
     /// "Registration shape".
     /// </remarks>
-    /// </example>
     public static IServiceCollection AddModulith(
         this IServiceCollection services,
         IConfiguration configuration,
