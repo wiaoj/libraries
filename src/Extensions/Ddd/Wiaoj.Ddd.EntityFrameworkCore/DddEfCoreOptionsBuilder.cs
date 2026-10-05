@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text.Json;
 using Wiaoj.Ddd.EntityFrameworkCore.Internal;
@@ -16,6 +16,21 @@ public sealed class DddEfCoreOptionsBuilder(IServiceCollection services) {
     private readonly OutboxOptions _outboxOptions = new();
     private bool _isSerializerConfigured; 
     private string _instanceId = $"{Environment.MachineName}_{NanoId.NewId(8)}";
+    private bool _enableOutboxProcessor = true;
+
+    /// <summary>
+    /// Gets whether the background <c>OutboxProcessor</c> hosted service will be registered for this context.
+    /// </summary>
+    public bool IsOutboxProcessorEnabled => this._enableOutboxProcessor;
+
+    /// <summary>
+    /// Disables the background <c>OutboxProcessor</c> hosted service for this context.
+    /// Useful when this DbContext does not need to poll or process outbox messages.
+    /// </summary>
+    public DddEfCoreOptionsBuilder DisableOutboxProcessor() {
+        this._enableOutboxProcessor = false;
+        return this;
+    }
 
     /// <summary>
     /// Configures the Outbox settings (polling interval, batch size, locking, etc.).

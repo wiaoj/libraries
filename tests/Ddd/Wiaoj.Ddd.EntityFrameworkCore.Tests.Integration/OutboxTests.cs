@@ -263,6 +263,35 @@ public sealed class OutboxTests {
 
             Assert.Contains("Some.Exotic.Provider", failure.Message, StringComparison.Ordinal);
         }
+
+        [Fact]
+        public async Task Should_Throw_When_OutboxMessage_Is_Not_In_Model_For_InMemory() {
+            DbContextOptions<ContextWithoutOutbox> options = new DbContextOptionsBuilder<ContextWithoutOutbox>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+
+            await using ContextWithoutOutbox context = new(options);
+            InMemoryOutboxClaimStrategy strategy = new();
+
+            InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                strategy.ClaimAsync(context, 10, "worker", 0, 0, null, TestContext.Current.CancellationToken));
+
+            Assert.Contains("Call modelBuilder.ApplyDddOutbox() from OnModelCreating", failure.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Should_Not_Register_OutboxProcessor_When_Disabled() {
+            ServiceCollection services = new();
+            services.AddDdd(ddd => {
+                ddd.AddEntityFrameworkCore<OutboxTestContext>(options => {
+                    options.DisableOutboxProcessor();
+                });
+            });
+
+            Assert.DoesNotContain(services, d => d.ImplementationType == typeof(OutboxProcessor<OutboxTestContext>));
+        }
+
+        private sealed class ContextWithoutOutbox(DbContextOptions<ContextWithoutOutbox> options) : DbContext(options);
     }
 }
 

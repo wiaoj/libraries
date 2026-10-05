@@ -81,7 +81,9 @@ public static class DddEfCoreBuilderExtensions {
 
             optionsBuilder.Build();
 
-            builder.Services.AddHostedService<OutboxProcessor<TContext>>();
+            if(optionsBuilder.IsOutboxProcessorEnabled) {
+                builder.Services.AddHostedService<OutboxProcessor<TContext>>();
+            }
 
             return builder;
         }

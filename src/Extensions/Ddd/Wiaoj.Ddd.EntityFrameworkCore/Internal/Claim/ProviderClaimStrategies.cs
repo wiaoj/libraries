@@ -156,6 +156,12 @@ internal sealed class InMemoryOutboxClaimStrategy : IOutboxClaimStrategy {
         string? partitionKey,
         CancellationToken cancellationToken) {
 
+        if(dbContext.Model.FindEntityType(typeof(OutboxMessage)) is null) {
+            throw new InvalidOperationException(
+                $"'{typeof(OutboxMessage).Name}' is not part of the model for '{dbContext.GetType().Name}'. " +
+                "Call modelBuilder.ApplyDddOutbox() from OnModelCreating.");
+        }
+
         await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try {
