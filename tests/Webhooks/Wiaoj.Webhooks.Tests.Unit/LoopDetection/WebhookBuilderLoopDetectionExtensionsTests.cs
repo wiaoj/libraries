@@ -45,7 +45,7 @@ public sealed class WebhookBuilderLoopDetectionExtensionsTests {
             // Arrange
             ServiceCollection services = new();
             IWebhookBuilder builder = services.AddWiaojWebhooks();
-            LoopDetectionOptions custom = new() { MaxHops = 12, InstanceId = "node-custom" };
+            LoopDetectionOptions custom = new() { MaxHops = 12, ServiceName = "node-custom" };
 
             // Act
             builder.UseLoopDetection(custom);
@@ -54,7 +54,7 @@ public sealed class WebhookBuilderLoopDetectionExtensionsTests {
             // Assert
             LoopDetectionOptions options = sp.GetRequiredService<LoopDetectionOptions>();
             Assert.Equal(12, options.MaxHops);
-            Assert.Equal("node-custom", options.InstanceId);
+            Assert.Equal("node-custom", options.ServiceName);
         }
 
         [Fact]
@@ -66,7 +66,7 @@ public sealed class WebhookBuilderLoopDetectionExtensionsTests {
             // Act
             builder.UseLoopDetection(options => {
                 options.MaxHops = 10;
-                options.InstanceId = "custom-test-node";
+                options.ServiceName = "custom-test-node";
             });
 
             ServiceProvider sp = services.BuildServiceProvider();
@@ -74,7 +74,7 @@ public sealed class WebhookBuilderLoopDetectionExtensionsTests {
             // Assert
             LoopDetectionOptions options = sp.GetRequiredService<LoopDetectionOptions>();
             Assert.Equal(10, options.MaxHops);
-            Assert.Equal("custom-test-node", options.InstanceId);
+            Assert.Equal("custom-test-node", options.ServiceName);
         }
 
         [Fact]

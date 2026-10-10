@@ -45,4 +45,10 @@ public static class WebhookDeliveryContextItemKeys {
     /// so it can persist <see cref="WebhookJobRecord.NextAttemptAt"/> atomically with the status transition.
     /// </summary>
     public const string ScheduledRetryDelay = "__wiaoj.webhooks.scheduled_retry_delay";
+
+    /// <summary>
+    /// Key under which the <see cref="WebhookCausality"/> the job inherited from the webhook that caused it is stored in
+    /// <see cref="WebhookDeliveryContext.Items"/>, so loop detection can extend it and a retry can carry it forward.
+    /// </summary>
+    public const string Causality = "__wiaoj.webhooks.causality";
 }

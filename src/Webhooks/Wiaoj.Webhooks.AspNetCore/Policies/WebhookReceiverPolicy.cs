@@ -91,13 +91,18 @@ public sealed class WebhookReceiverPolicy {
     public bool IgnoreUnhandledEvents { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets a value indicating whether inbound loop detection and hop count threshold enforcement is active.
-    /// Default is <see langword="false"/>.
+    /// Gets or sets a value indicating whether inbound loop detection is active. Default is <see langword="true"/>.
     /// </summary>
-    public bool EnableLoopDetection { get; set; }
+    /// <remarks>
+    /// When active, a request whose hop count exceeds <see cref="MaxHops"/> is rejected with 422, and the hop count and
+    /// causal chain of an accepted request are made the ambient <see cref="WebhookCausalityScope"/> while its handler runs,
+    /// so webhooks the handler publishes carry them forward. When inactive, neither happens.
+    /// </remarks>
+    public bool EnableLoopDetection { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the maximum allowable hop count before inbound requests are rejected. Default is 5.
+    /// Gets or sets the largest hop count an inbound request may carry; requests with a higher count are rejected. Default is 5,
+    /// the same as the outbound <c>LoopDetectionOptions.MaxHops</c>.
     /// </summary>
     public int MaxHops { get; set; } = 5;
 
@@ -112,9 +117,21 @@ public sealed class WebhookReceiverPolicy {
     public string CausalChainHeaderName { get; set; } = WebhookHeaderNames.WebhookCausalChain;
 
     /// <summary>
-    /// Gets or sets the engine instance ID used for inbound causal cycle detection.
+    /// Gets or sets the service name that, when found in an inbound request's causal chain, rejects the request as a loop.
+    /// Default is <see langword="null"/>: no request is rejected for its chain. A request that merely comes back (A → B → A,
+    /// such as an acknowledgement) is then accepted, and the outbound loop detection drops anything its handler re-publishes.
     /// </summary>
     public string? InstanceId { get; set; }
+
+    /// <summary>
+    /// Turns inbound loop detection off: no request is rejected for its hop count or chain, and handlers run without the
+    /// request's causality, so webhooks they publish start a new causal chain.
+    /// </summary>
+    /// <returns>This policy instance for fluent chaining.</returns>
+    public WebhookReceiverPolicy WithoutLoopDetection() {
+        this.EnableLoopDetection = false;
+        return this;
+    }
 
     /// <summary>
     /// Enables inbound loop detection and hop count limit enforcement using the default limit of 5 hops.

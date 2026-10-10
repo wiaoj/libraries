@@ -40,7 +40,7 @@ public sealed class LoopDetectionIntegrationTests : IAsyncLifetime {
                     .AllowPrivateNetworks()
                     .UseLoopDetection(options => {
                         options.MaxHops = 3;
-                        options.InstanceId = "node-integration-test";
+                        options.ServiceName = "node-integration-test";
                         options.TrackCausalChain = true;
                         options.Behavior = LoopDetectedBehavior.DropAndLog;
                     })

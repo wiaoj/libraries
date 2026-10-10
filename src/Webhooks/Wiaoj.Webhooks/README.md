@@ -20,6 +20,7 @@ The core execution engine, extensible outbound delivery pipeline, cryptographic 
   - [5. Resilient Retries & HTTP Status Classifier](#5-resilient-retries--http-status-classifier)
   - [6. Stale In-Flight Job Recovery](#6-stale-in-flight-job-recovery)
   - [7. Outbound Idempotency](#7-outbound-idempotency)
+  - [8. Loop Detection](#8-loop-detection)
 - [OpenTelemetry Tracing & Metrics](#-opentelemetry-tracing--metrics)
 - [Ecosystem Packages](#-ecosystem-packages)
 
@@ -258,6 +259,25 @@ Prevents duplicate event transmissions within a sliding window:
 ```csharp
 webhooks.UseIdempotency(TimeSpan.FromHours(24));
 ```
+
+### 8. Loop Detection
+Two services whose handlers react to each other's webhooks (A → B → A → …) can loop forever. Loop detection is **on by default** and stops them.
+
+- **Outbound:** every delivery carries `Webhook-Hop-Count` and `Webhook-Causal-Chain` (the service names it passed through). A delivery is dropped as `LoopDetected` when its hop count has reached `MaxHops` (default 5) or this service is already in its chain.
+- **Inbound** (`Wiaoj.Webhooks.AspNetCore`): the receiver rejects a request whose hop count exceeds the policy's `MaxHops` with 422, and runs the handler inside a `WebhookCausalityScope` holding the request's hop count and chain. Webhooks the handler dispatches inherit them; the job stores them (`WebhookJobRecord.HopCount` / `CausalChain`), so they survive the queue, retries, replay and recovery.
+- **Service name:** the chain holds a *service* name, the same on every pod, so a webhook that leaves pod 1 and returns to pod 2 is still recognised. It defaults to `OTEL_SERVICE_NAME`, then the entry assembly name.
+
+```csharp
+webhooks.UseLoopDetection(options => {
+    options.ServiceName = "billing";
+    options.MaxHops = 8;
+});
+
+webhooks.DisableLoopDetection();             // opt out (outbound)
+policy.WithoutLoopDetection();               // opt out (inbound receiver policy)
+```
+
+Code that handles a webhook's effects outside the receiver, such as a message consumer, can carry the causality on with `using var scope = WebhookCausalityScope.Begin(new WebhookCausality(hops, chain));`.
 
 ---
 

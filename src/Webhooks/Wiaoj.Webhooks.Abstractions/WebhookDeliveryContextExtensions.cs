@@ -737,6 +737,35 @@ public static class WebhookDeliveryContextExtensions {
     }
 
     // ────────────────────────────────────────────────────────────────────────
+    // CAUSALITY CONTEXT ACCESSORS
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sets the causality the delivered job inherited from the webhook that caused it.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <param name="causality">The inherited hop count and causal chain.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void SetCausality(this WebhookDeliveryContext context, WebhookCausality causality) {
+        Preca.ThrowIfNull(context);
+        context.Items[WebhookDeliveryContextItemKeys.Causality] = causality;
+    }
+
+    /// <summary>
+    /// Gets the causality the delivered job inherited, or <see cref="WebhookCausality.None"/> when none was set.
+    /// This is the history <em>before</em> this delivery; the loop detection middleware adds this hop to the outbound headers.
+    /// </summary>
+    /// <param name="context">The delivery context.</param>
+    /// <returns>The inherited causality.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static WebhookCausality GetCausality(this WebhookDeliveryContext context) {
+        Preca.ThrowIfNull(context);
+        return context.GetItem<WebhookCausality>(WebhookDeliveryContextItemKeys.Causality);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // 10. GENERIC SAFE ITEMS ACCESSORS & FACTORY
     // ────────────────────────────────────────────────────────────────────────
 

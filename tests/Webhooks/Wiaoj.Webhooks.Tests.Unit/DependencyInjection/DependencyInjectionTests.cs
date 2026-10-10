@@ -4,6 +4,7 @@ using Wiaoj.Security;
 using Wiaoj.Security.Testing;
 using Wiaoj.Serialization;
 using Wiaoj.Webhooks.Internal;
+using Wiaoj.Webhooks.LoopDetection;
 using Wiaoj.Webhooks.Retries;
 using Wiaoj.Webhooks.Signing;
 using Wiaoj.Webhooks.Tests.Unit.Fakes;
@@ -42,7 +43,9 @@ public sealed class DependencyInjectionTests {
         Assert.IsType<InMemoryWebhookStore>(store);
         Assert.IsType<HmacSha256WebhookSigner>(signer);
         Assert.IsType<ExponentialBackoffPolicy>(retryPolicy);
-        Assert.Equal(2, middlewares.Count()); // SigningMiddleware + RetryMiddleware
+        // LoopDetectionMiddleware is registered by default and runs first, then SigningMiddleware + RetryMiddleware.
+        Assert.Equal(3, middlewares.Count());
+        Assert.IsType<LoopDetectionMiddleware>(middlewares.First());
     }
 
     [Fact]

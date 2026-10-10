@@ -134,7 +134,10 @@ internal sealed class StaleJobRecoveryService : BackgroundService {
                     job.EndpointId,
                     WebhookPartitionKey.Parse(job.PartitionKey),
                     job.EventType,
-                    domainEvent);
+                    domainEvent) {
+                    HopCount = job.HopCount,
+                    CausalChain = job.CausalChain
+                };
 
                 await this._store.UpdateStatusAsync(job.Id, WebhookJobStatus.Queued, null, cancellationToken).ConfigureAwait(false);
                 await this._transport.EnqueueAsync(deliveryJob, cancellationToken).ConfigureAwait(false);

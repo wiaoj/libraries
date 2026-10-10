@@ -25,6 +25,24 @@ public sealed record WebhookDeliveryJob {
     /// </summary>
     public bool IsReplay { get; init; } = false;
 
+    /// <summary>
+    /// Gets the number of webhook hops that caused this job, inherited from the <see cref="WebhookCausalityScope"/> it was
+    /// published in. <c>0</c> when it was not caused by an inbound webhook.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is negative.</exception>
+    public int HopCount {
+        get;
+        init {
+            Preca.ThrowIfNegative(value);
+            field = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets the comma-separated service names the causing webhooks passed through, oldest first, inherited from the
+    /// <see cref="WebhookCausalityScope"/> it was published in; <see langword="null"/> when there are none.
+    /// </summary>
+    public string? CausalChain { get; init; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebhookDeliveryJob"/> record with explicit routing, metadata, and domain payload details.
@@ -79,8 +97,11 @@ public sealed record WebhookDeliveryJob {
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
     public static WebhookDeliveryJob FromContext(WebhookDeliveryContext context) {
         Preca.ThrowIfNull(context);
+        WebhookCausality causality = context.GetCausality();
         return new(context.JobId, context.Endpoint.Id, context.PartitionKey, context.EventType, context.Event) {
-            IsReplay = context.IsReplay()
+            IsReplay = context.IsReplay(),
+            HopCount = causality.HopCount,
+            CausalChain = causality.CausalChain
         };
     }
 }
