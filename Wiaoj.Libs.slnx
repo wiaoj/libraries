@@ -148,6 +148,7 @@
     <File Path="src/Webhooks/docs/ARCHITECTURE.md" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.Abstractions/Wiaoj.Webhooks.Abstractions.csproj" Id="73037a10-7883-4f3c-880a-4ed6910ecf33" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.AspNetCore/Wiaoj.Webhooks.AspNetCore.csproj" Id="c889539a-5240-4346-be30-ad1c106a7d19" />
+    <Project Path="src/Webhooks/Wiaoj.Webhooks.EntityFrameworkCore/Wiaoj.Webhooks.EntityFrameworkCore.csproj" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.BloomFilter/Wiaoj.Webhooks.BloomFilter.csproj" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.Publishing/Wiaoj.Webhooks.Publishing.csproj" />
     <Project Path="src/Webhooks/Wiaoj.Webhooks.RateLimiting/Wiaoj.Webhooks.RateLimiting.csproj" Id="de8eb093-7633-4975-959c-2576f1d6ca8c" />
@@ -219,6 +220,7 @@
     <Project Path="tests/Serialization/Wiaoj.Serialization.Tests.Unit/Wiaoj.Serialization.Tests.Unit.csproj" />
   </Folder>
   <Folder Name="/tests/Webhooks/">
+    <Project Path="tests/Webhooks/Wiaoj.Webhooks.EntityFrameworkCore.Tests.Integration/Wiaoj.Webhooks.EntityFrameworkCore.Tests.Integration.csproj" />
     <Project Path="tests/Webhooks/Wiaoj.Webhooks.Publishing.Tests.Unit/Wiaoj.Webhooks.Publishing.Tests.Unit.csproj" />
     <Project Path="tests/Webhooks/Wiaoj.Webhooks.Signing.Asymmetric.Tests.Unit/Wiaoj.Webhooks.Signing.Asymmetric.Tests.Unit.csproj" Id="22275efb-65f2-43ef-b2bf-707b99d0b6be" />
     <Project Path="tests/Webhooks/Wiaoj.Webhooks.Tests.Integration/Wiaoj.Webhooks.Tests.Integration.csproj" />

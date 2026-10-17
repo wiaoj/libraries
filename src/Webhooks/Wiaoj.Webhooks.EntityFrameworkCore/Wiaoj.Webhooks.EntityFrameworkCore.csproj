@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Wiaoj.Webhooks.EntityFrameworkCore</RootNamespace>
+    <AssemblyName>Wiaoj.Webhooks.EntityFrameworkCore</AssemblyName>
+    <PackageId>Wiaoj.Webhooks.EntityFrameworkCore</PackageId>
+    <Description>Durable EF Core stores for Wiaoj.Webhooks jobs, publishing subscriptions and publish batches, mapped into the application's own DbContext.</Description>
+    <PackageTags>webhooks;efcore;entityframework;store;wiaoj</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Wiaoj.Webhooks.Abstractions\Wiaoj.Webhooks.Abstractions.csproj" />
+    <ProjectReference Include="..\Wiaoj.Webhooks\Wiaoj.Webhooks.csproj" />
+    <ProjectReference Include="..\Wiaoj.Webhooks.Publishing\Wiaoj.Webhooks.Publishing.csproj" />
+  </ItemGroup>
+
+</Project>
