@@ -42,6 +42,12 @@ public sealed class WebhookJobEntity {
     /// <summary>Gets or sets the lease expiry in UTC ticks (<see cref="WebhookJobRecord.LockExpiresAt"/>).</summary>
     public long? LockExpiresAtTicks { get; set; }
 
+    /// <summary>Gets or sets the number of webhook hops that caused the job; <c>0</c> when none did.</summary>
+    public int HopCount { get; set; }
+
+    /// <summary>Gets or sets the comma-separated service names the causing webhooks passed through, or <see langword="null"/>.</summary>
+    public string? CausalChain { get; set; }
+
     /// <summary>Gets or sets the recorded delivery attempts (<see cref="WebhookJobRecord.Attempts"/>).</summary>
     public List<WebhookDeliveryAttemptEntity> Attempts { get; set; } = [];
 }
