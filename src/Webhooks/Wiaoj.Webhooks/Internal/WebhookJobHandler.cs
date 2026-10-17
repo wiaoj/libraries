@@ -132,6 +132,8 @@ internal sealed class WebhookJobHandler : IWebhookJobHandler {
             context.MarkReplay(true);
         }
 
+        context.SetCausality(new WebhookCausality(job.HopCount, job.CausalChain));
+
         WebhookDeliveryAttempt attempt = await this._pipelineRunner.RunAsync(context, cancellationToken);
 
         await this._store.RecordAttemptAsync(job.Id, attempt, cancellationToken);

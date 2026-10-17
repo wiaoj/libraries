@@ -68,24 +68,12 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
         }
 
         // 3. Loop Detection: Fast Inbound Hop Limit & Causal Cycle Check
+        WebhookCausality causality = WebhookCausality.None;
         if(policy.EnableLoopDetection) {
-            string hopHeader = httpContext.Request.Headers[policy.HopCountHeaderName].ToString();
-            if(!string.IsNullOrWhiteSpace(hopHeader)) {
-                int hops = ParseMaxHopCount(hopHeader);
-                if(hops >= policy.MaxHops) {
-                    WebhookInboundMeter.LoopDetectedCount.Add(1, telemetryTags);
-                    activity?.SetStatus(ActivityStatusCode.Error, "Inbound hop limit exceeded");
-                    return WebhookReceiverResponses.LoopDetected(policy.MaxHops, hops, httpContext.Request.Path);
-                }
-            }
-
-            if(!string.IsNullOrWhiteSpace(policy.InstanceId)) {
-                string chainHeader = httpContext.Request.Headers[policy.CausalChainHeaderName].ToString();
-                if(!string.IsNullOrWhiteSpace(chainHeader) && ContainsCausalNode(chainHeader, policy.InstanceId)) {
-                    WebhookInboundMeter.LoopDetectedCount.Add(1, telemetryTags);
-                    activity?.SetStatus(ActivityStatusCode.Error, "Inbound causal cycle detected");
-                    return WebhookReceiverResponses.LoopDetected(policy.MaxHops, policy.MaxHops, httpContext.Request.Path);
-                }
+            causality = InboundLoopDetection.Capture(httpContext.Request, policy);
+            IResult? loopRejection = InboundLoopDetection.Check(causality, policy, httpContext.Request, telemetryTags, activity);
+            if(loopRejection is not null) {
+                return loopRejection;
             }
         }
 
@@ -196,7 +184,8 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             Headers = httpContext.Request.Headers
         };
 
-        // 7. Handler Execution
+        // 7. Handler Execution: webhooks the handler publishes inherit this request's hop count and causal chain.
+        using IDisposable causalityScope = WebhookCausalityScope.Begin(causality);
         try {
             if(this._delegateHandler is not null) {
                 object? result = await InvokeDelegateHandlerAsync(this._delegateHandler, receiverContext, sp, httpContext.RequestAborted).ConfigureAwait(false);
@@ -322,47 +311,5 @@ public sealed class WebhookReceiverEndpointFilter<TEvent> : IEndpointFilter wher
             default:
                 return result;
         }
-    }
-
-    private static int ParseMaxHopCount(string rawHeader) {
-        ReadOnlySpan<char> span = rawHeader.AsSpan();
-        int maxParsed = 0;
-        while(!span.IsEmpty) {
-            int commaIndex = span.IndexOf(',');
-            ReadOnlySpan<char> token = commaIndex >= 0 ? span[..commaIndex] : span;
-            token = token.Trim();
-
-            if(!token.IsEmpty && int.TryParse(token, out int parsed) && parsed > maxParsed) {
-                maxParsed = parsed;
-            }
-
-            if(commaIndex < 0) {
-                break;
-            }
-
-            span = span[(commaIndex + 1)..];
-        }
-        return maxParsed;
-    }
-
-    private static bool ContainsCausalNode(string chain, string instanceId) {
-        ReadOnlySpan<char> chainSpan = chain.AsSpan();
-        while(!chainSpan.IsEmpty) {
-            int commaIndex = chainSpan.IndexOf(',');
-            ReadOnlySpan<char> token = commaIndex >= 0 ? chainSpan[..commaIndex] : chainSpan;
-            token = token.Trim().Trim('"');
-
-            if(token.Equals(instanceId.AsSpan(), StringComparison.OrdinalIgnoreCase)) {
-                return true;
-            }
-
-            if(commaIndex < 0) {
-                break;
-            }
-
-            chainSpan = chainSpan[(commaIndex + 1)..];
-        }
-
-        return false;
     }
 }

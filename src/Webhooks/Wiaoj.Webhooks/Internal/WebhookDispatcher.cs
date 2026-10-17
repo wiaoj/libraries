@@ -68,17 +68,26 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
 
             cancellationToken.ThrowIfCancellationRequested();
 
+            // A job published while an inbound webhook is being handled inherits its hop count and causal chain.
+            WebhookCausality causality = WebhookCausalityScope.Current;
+
             WebhookJobRecord jobRecord = new(
                 jobId,
                 endpointId,
                 partitionKey.Value,
                 eventName,
                 serializedPayload,
-                this._timeProvider.GetUtcNow());
+                this._timeProvider.GetUtcNow()) {
+                HopCount = causality.HopCount,
+                CausalChain = causality.CausalChain
+            };
 
             await this._store.SaveAsync(jobRecord, cancellationToken).ConfigureAwait(false);
 
-            WebhookDeliveryJob job = new(jobId, endpointId, partitionKey, eventName, payload);
+            WebhookDeliveryJob job = new(jobId, endpointId, partitionKey, eventName, payload) {
+                HopCount = causality.HopCount,
+                CausalChain = causality.CausalChain
+            };
             await this._transport.EnqueueAsync(job, cancellationToken).ConfigureAwait(false);
 
             WebhookMeter.DispatchedEventsCount.Add(1, new TagList {
@@ -126,6 +135,7 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
         string eventName = this._eventRegistry.GetEventName<TEvent>();
         string batchId = $"batch_{Guid.CreateVersion7():N}";
         DateTimeOffset now = this._timeProvider.GetUtcNow();
+        WebhookCausality causality = WebhookCausalityScope.Current;
 
         this._logger.LogBatchDispatchStarting(batchId, eventArray.Length, endpointId);
         using Activity? activity = WebhookActivitySource.StartBatchDispatchActivity(endpointId, batchId, eventArray.Length);
@@ -146,10 +156,15 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
                 string serialized = this._serializer.SerializeToString(payload, payload.GetType());
 
                 records[i] = new WebhookJobRecord(jobId, endpointId, partitionKey.Value, eventName, serialized, now) {
-                    BatchId = batchId
+                    BatchId = batchId,
+                    HopCount = causality.HopCount,
+                    CausalChain = causality.CausalChain
                 };
 
-                deliveryJobs[i] = new WebhookDeliveryJob(jobId, endpointId, partitionKey, eventName, payload);
+                deliveryJobs[i] = new WebhookDeliveryJob(jobId, endpointId, partitionKey, eventName, payload) {
+                    HopCount = causality.HopCount,
+                    CausalChain = causality.CausalChain
+                };
                 handles[i] = new WebhookDeliveryHandle(jobId);
             }
 
@@ -207,7 +222,9 @@ internal sealed class WebhookDispatcher : IWebhookDispatcher {
                                      WebhookPartitionKey.Parse(jobRecord.PartitionKey),
                                      jobRecord.EventType,
                                      domainEvent) {
-            IsReplay = true
+            IsReplay = true,
+            HopCount = jobRecord.HopCount,
+            CausalChain = jobRecord.CausalChain
         };
 
         await this._transport.EnqueueAsync(job, cancellationToken).ConfigureAwait(false);

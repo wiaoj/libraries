@@ -548,7 +548,7 @@ public sealed class WebhookReceiverEndpointFilterTests {
             }
 
             (DefaultHttpContext httpContext, _, _) = CreateContext(body, configureServices: configureOptions);
-            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "3";
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "4";
 
             WebhookReceiverEndpointMetadata metadata = new() {
                 PolicyName = "Stripe"
@@ -640,7 +640,7 @@ public sealed class WebhookReceiverEndpointFilterTests {
             }
 
             (DefaultHttpContext httpContext, _, _) = CreateContext(body, configureServices: configureOptions);
-            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "1, 3";
+            httpContext.Request.Headers[WebhookHeaderNames.WebhookHopCount] = "1, 4";
 
             WebhookReceiverEndpointMetadata metadata = new() {
                 PolicyName = "Stripe"

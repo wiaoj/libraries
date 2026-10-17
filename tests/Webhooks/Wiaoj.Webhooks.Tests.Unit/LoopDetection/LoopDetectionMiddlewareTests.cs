@@ -15,7 +15,7 @@ public sealed class LoopDetectionMiddlewareTests {
         [Fact]
         public async Task InvokeAsync_WhenHeaderMissing_SetsInitialHopCount_AndCallsNext() {
             // Arrange
-            LoopDetectionOptions options = new() { MaxHops = 5, InstanceId = "node-1" };
+            LoopDetectionOptions options = new() { MaxHops = 5, ServiceName = "node-1" };
             LoopDetectionMiddleware middleware = new(options, NullLogger<LoopDetectionMiddleware>.Instance);
 
             WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
@@ -37,7 +37,7 @@ public sealed class LoopDetectionMiddlewareTests {
         [Fact]
         public async Task InvokeAsync_WhenHopCountBelowMax_IncrementsHopCount_AndCallsNext() {
             // Arrange
-            LoopDetectionOptions options = new() { MaxHops = 5, InstanceId = "node-2" };
+            LoopDetectionOptions options = new() { MaxHops = 5, ServiceName = "node-2" };
             LoopDetectionMiddleware middleware = new(options, NullLogger<LoopDetectionMiddleware>.Instance);
 
             WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
@@ -106,11 +106,11 @@ public sealed class LoopDetectionMiddlewareTests {
     public sealed class TheCausalCycleEvaluation {
 
         [Fact]
-        public async Task InvokeAsync_WhenCausalChainContainsSelfInstanceId_ShortCircuits() {
+        public async Task InvokeAsync_WhenCausalChainContainsOwnServiceName_ShortCircuits() {
             // Arrange
             LoopDetectionOptions options = new() {
                 MaxHops = 10,
-                InstanceId = "node-alpha",
+                ServiceName = "node-alpha",
                 TrackCausalChain = true,
                 Behavior = LoopDetectedBehavior.DropAndLog
             };
@@ -144,7 +144,7 @@ public sealed class LoopDetectionMiddlewareTests {
         public async Task InvokeAsync_WhenCausalChainContainsQuotedOrMixedCaseTokens_DetectsCycle(string chainWithQuotes) {
             // Arrange
             LoopDetectionOptions options = new() {
-                InstanceId = "node-alpha",
+                ServiceName = "node-alpha",
                 TrackCausalChain = true,
                 Behavior = LoopDetectedBehavior.DropAndLog
             };
@@ -171,10 +171,10 @@ public sealed class LoopDetectionMiddlewareTests {
         }
 
         [Fact]
-        public async Task InvokeAsync_WhenInstanceIdIsSubstringOfAnotherNode_DoesNotTriggerFalsePositive() {
+        public async Task InvokeAsync_WhenServiceNameIsSubstringOfAnotherNode_DoesNotTriggerFalsePositive() {
             // Arrange: Current node is "node1", chain has "node10" and "node100" -> MUST NOT false-positive!
             LoopDetectionOptions options = new() {
-                InstanceId = "node1",
+                ServiceName = "node1",
                 TrackCausalChain = true,
                 MaxHops = 10,
                 Behavior = LoopDetectedBehavior.DropAndLog
@@ -207,7 +207,7 @@ public sealed class LoopDetectionMiddlewareTests {
         public async Task InvokeAsync_WhenCausalChainHasIrregularSeparatorsAndSpaces_ParsesCleanly(string dirtyChain) {
             // Arrange
             LoopDetectionOptions options = new() {
-                InstanceId = "node-target",
+                ServiceName = "node-target",
                 TrackCausalChain = true,
                 Behavior = LoopDetectedBehavior.DropAndLog
             };
@@ -316,7 +316,7 @@ public sealed class LoopDetectionMiddlewareTests {
         [Fact]
         public async Task InvokeAsync_WhenHopCountHeaderIsMalformed_TreatsAsInitialHopAndContinues() {
             // Arrange
-            LoopDetectionOptions options = new() { MaxHops = 5, InstanceId = "node-1" };
+            LoopDetectionOptions options = new() { MaxHops = 5, ServiceName = "node-1" };
             LoopDetectionMiddleware middleware = new(options, NullLogger<LoopDetectionMiddleware>.Instance);
 
             WebhookDeliveryContext context = WebhookTestFactory.CreateContext();
@@ -350,7 +350,7 @@ public sealed class LoopDetectionMiddlewareTests {
             string hugeChain = string.Join(", ", nodes);
 
             LoopDetectionOptions options = new() {
-                InstanceId = "my-target-node",
+                ServiceName = "my-target-node",
                 TrackCausalChain = true,
                 MaxHops = 500,
                 Behavior = LoopDetectedBehavior.DropAndLog

@@ -38,13 +38,27 @@ public sealed class LoopDetectionMiddleware : IWebhookMiddleware {
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A delivery starts from the hop count and causal chain its job inherited from the webhook that caused it
+    /// (<see cref="WebhookDeliveryContextExtensions.GetCausality"/>), combined with any hop or chain header an earlier
+    /// middleware already set. It is dropped when that hop count has reached <see cref="LoopDetectionOptions.MaxHops"/> or
+    /// the chain already contains <see cref="LoopDetectionOptions.ServiceName"/>; otherwise it is sent with the hop count
+    /// plus one and the chain plus this service.
+    /// </remarks>
     public async Task InvokeAsync(WebhookDeliveryContext context, WebhookDelegate next, CancellationToken cancellationToken = default) {
         Preca.ThrowIfNull(context);
         Preca.ThrowIfNull(next);
 
+        if(!this._options.Enabled) {
+            await next(context, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        WebhookCausality inherited = context.GetCausality();
+
         // 1. Evaluate Integer Hop Limit
-        int rawHops = context.GetHeader<int>(this._options.HopCountHeaderName, defaultValue: 0);
-        int currentHops = Math.Max(0, rawHops);
+        int headerHops = Math.Max(0, context.GetHeader<int>(this._options.HopCountHeaderName, defaultValue: 0));
+        int currentHops = Math.Max(inherited.HopCount, headerHops);
         if(currentHops >= this._options.MaxHops) {
             string reason = $"Exceeded maximum allowable hop count of {this._options.MaxHops} (Current: {currentHops}).";
             this.HandleLoopDetected(context, reason, currentHops);
@@ -52,10 +66,11 @@ public sealed class LoopDetectionMiddleware : IWebhookMiddleware {
         }
 
         // 2. Evaluate Causal Execution Graph Cycle
+        string? existingChain = null;
         if(this._options.TrackCausalChain) {
-            string? existingChain = context.GetHeader(this._options.CausalChainHeaderName);
-            if(!string.IsNullOrWhiteSpace(existingChain) && ContainsNode(existingChain, this._options.InstanceId)) {
-                string reason = $"Cycle detected: instance '{this._options.InstanceId}' already present in chain '{existingChain}'.";
+            existingChain = JoinChains(inherited.CausalChain, context.GetHeader(this._options.CausalChainHeaderName));
+            if(WebhookCausality.ChainContains(existingChain, this._options.ServiceName)) {
+                string reason = $"Cycle detected: service '{this._options.ServiceName}' already present in chain '{existingChain}'.";
                 this.HandleLoopDetected(context, reason, currentHops);
                 return;
             }
@@ -66,7 +81,7 @@ public sealed class LoopDetectionMiddleware : IWebhookMiddleware {
         context.SetHeader(this._options.HopCountHeaderName, nextHop.ToString());
 
         if(this._options.TrackCausalChain) {
-            context.AppendHeader(this._options.CausalChainHeaderName, this._options.InstanceId);
+            context.SetHeader(this._options.CausalChainHeaderName, JoinChains(existingChain, this._options.ServiceName)!);
         }
 
         Activity.Current?.SetTag("webhook.hop_count", nextHop);
@@ -87,7 +102,7 @@ public sealed class LoopDetectionMiddleware : IWebhookMiddleware {
                 { "reason", reason },
                 { "webhook.hop_count", currentHops },
                 { "webhook.max_hops", this._options.MaxHops },
-                { "webhook.instance_id", this._options.InstanceId }
+                { "webhook.service_name", this._options.ServiceName }
             }));
         }
 
@@ -104,24 +119,11 @@ public sealed class LoopDetectionMiddleware : IWebhookMiddleware {
         context.SetResult(WebhookDeliveryResult.LoopDetected(reason));
     }
 
-    private static bool ContainsNode(string chain, string instanceId) {
-        ReadOnlySpan<char> chainSpan = chain.AsSpan();
-        while(!chainSpan.IsEmpty) {
-            int commaIndex = chainSpan.IndexOf(',');
-            ReadOnlySpan<char> token = commaIndex >= 0 ? chainSpan[..commaIndex] : chainSpan;
-            token = token.Trim().Trim('"');
-
-            if(token.Equals(instanceId.AsSpan(), StringComparison.OrdinalIgnoreCase)) {
-                return true;
-            }
-
-            if(commaIndex < 0) {
-                break;
-            }
-
-            chainSpan = chainSpan[(commaIndex + 1)..];
+    private static string? JoinChains(string? first, string? second) {
+        if(string.IsNullOrWhiteSpace(first)) {
+            return string.IsNullOrWhiteSpace(second) ? null : second.Trim();
         }
 
-        return false;
+        return string.IsNullOrWhiteSpace(second) ? first.Trim() : $"{first.Trim()}, {second.Trim()}";
     }
 }

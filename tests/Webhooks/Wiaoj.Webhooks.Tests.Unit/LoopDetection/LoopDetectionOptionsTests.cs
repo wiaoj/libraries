@@ -20,7 +20,7 @@ public sealed class LoopDetectionOptionsTests {
             Assert.Equal(WebhookHeaderNames.WebhookCausalChain, options.CausalChainHeaderName);
             Assert.True(options.TrackCausalChain);
             Assert.Equal(LoopDetectedBehavior.DropAndLog, options.Behavior);
-            Assert.False(string.IsNullOrWhiteSpace(options.InstanceId));
+            Assert.False(string.IsNullOrWhiteSpace(options.ServiceName));
         }
     }
 

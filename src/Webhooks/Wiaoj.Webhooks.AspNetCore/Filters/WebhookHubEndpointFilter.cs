@@ -51,6 +51,17 @@ public sealed class WebhookHubEndpointFilter : IEndpointFilter {
             return WebhookReceiverResponses.PayloadTooLarge(policy.MaxRequestBodyBytes, httpContext.Request.Path);
         }
 
+        // 2b. Loop Detection: Fast Inbound Hop Limit & Causal Cycle Check
+        WebhookCausality causality = WebhookCausality.None;
+        if(policy.EnableLoopDetection) {
+            causality = InboundLoopDetection.Capture(httpContext.Request, policy);
+            TagList telemetryTags = new() { { "webhook.policy", policy.Name } };
+            IResult? loopRejection = InboundLoopDetection.Check(causality, policy, httpContext.Request, telemetryTags, Activity.Current);
+            if(loopRejection is not null) {
+                return loopRejection;
+            }
+        }
+
         // 3. DoS Protection: Bounded Stream Reading
         httpContext.Request.EnableBuffering();
         await using AsyncValueBuffer<byte> buffer = new(policy.MaxRequestBodyBytes + 1);
@@ -158,7 +169,9 @@ public sealed class WebhookHubEndpointFilter : IEndpointFilter {
             return WebhookReceiverResponses.DeserializationFailed(eventName, httpContext.Request.Path);
         }
 
-        // 9. Handler Execution (Minimal API Delegate or DI Class Handler)
+        // 9. Handler Execution (Minimal API Delegate or DI Class Handler): webhooks the handler publishes inherit this
+        //    request's hop count and causal chain.
+        using IDisposable causalityScope = WebhookCausalityScope.Begin(causality);
         try {
             if(registration.DelegateHandler is not null) {
                 object? result = await InvokeDelegateAsync(registration.DelegateHandler, registration.EventType, payload, rawPayload, parsedSignature, idempotencyKey, eventName, httpContext, sp).ConfigureAwait(false);
@@ -225,7 +238,12 @@ public sealed class WebhookHubEndpointFilter : IEndpointFilter {
             EventExtractor = this._metadata.EventExtractor ?? basePolicy.EventExtractor,
             IgnoreUnhandledEvents = this._metadata.IgnoreUnhandledEvents ?? basePolicy.IgnoreUnhandledEvents,
             IdempotencyKeyExtractor = basePolicy.IdempotencyKeyExtractor,
-            PayloadPath = this._metadata.PayloadPath ?? basePolicy.PayloadPath
+            PayloadPath = this._metadata.PayloadPath ?? basePolicy.PayloadPath,
+            EnableLoopDetection = basePolicy.EnableLoopDetection,
+            MaxHops = basePolicy.MaxHops,
+            HopCountHeaderName = basePolicy.HopCountHeaderName,
+            CausalChainHeaderName = basePolicy.CausalChainHeaderName,
+            InstanceId = basePolicy.InstanceId
         };
     }
 

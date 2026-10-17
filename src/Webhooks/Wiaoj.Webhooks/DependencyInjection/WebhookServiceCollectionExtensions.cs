@@ -90,7 +90,12 @@ public static class WebhookServiceCollectionExtensions {
         services.TryAddTransient<IWebhookJobHandler, WebhookJobHandler>();
         services.TryAddSingleton<IWebhookDispatcher, WebhookDispatcher>();
 
-        return new WebhookBuilder(services);
+        WebhookBuilder builder = new(services);
+
+        // Loop detection is on by default and runs first, so a looping delivery is dropped before any other work is done.
+        WebhookBuilderLoopDetectionExtensions.AddLoopDetection(builder);
+
+        return builder;
     }
 
     /// <summary>

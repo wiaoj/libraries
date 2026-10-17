@@ -31,6 +31,25 @@ public sealed class WebhookJobRecord : ICopyFrom<WebhookJobRecord> {
     /// <summary>Gets the pre-serialized event payload (typically JSON).</summary>
     public string SerializedPayload { get; }
 
+    /// <summary>
+    /// Gets the number of webhook hops that caused this job, inherited from the <see cref="WebhookCausalityScope"/> it was
+    /// published in. <c>0</c> when it was not caused by an inbound webhook.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is negative.</exception>
+    public int HopCount {
+        get;
+        init {
+            Preca.ThrowIfNegative(value);
+            field = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets the comma-separated service names the causing webhooks passed through, oldest first;
+    /// <see langword="null"/> when there are none.
+    /// </summary>
+    public string? CausalChain { get; init; }
+
     /// <summary>Gets the current lifecycle execution status of the job.</summary>
     public WebhookJobStatus Status { get; set; }
 
