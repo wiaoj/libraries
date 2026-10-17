@@ -41,7 +41,9 @@ internal static class WebhookEntityMapper {
             PartitionKey = record.PartitionKey,
             EventType = record.EventType,
             SerializedPayload = record.SerializedPayload,
-            CreatedAtTicks = ToTicks(record.CreatedAt)
+            CreatedAtTicks = ToTicks(record.CreatedAt),
+            HopCount = record.HopCount,
+            CausalChain = record.CausalChain
         };
 
         CopyState(record, entity);
@@ -72,7 +74,9 @@ internal static class WebhookEntityMapper {
             entity.EventType,
             entity.SerializedPayload,
             FromTicks(entity.CreatedAtTicks)) {
-            BatchId = entity.BatchId
+            BatchId = entity.BatchId,
+            HopCount = entity.HopCount,
+            CausalChain = entity.CausalChain
         };
 
         record.Status = entity.Status;

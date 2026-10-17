@@ -64,6 +64,10 @@ public static class WebhookModelBuilderExtensions {
             entity.Property(x => x.SerializedPayload).IsRequired();
             entity.Property(x => x.LockedBy).HasMaxLength(options.IdentifierMaxLength);
 
+            // Never changes after the job is created. The chain has at most MaxHops entries, so it is left unbounded rather than
+            // risking a save that fails on a long service name.
+            entity.Property(x => x.HopCount).HasDefaultValue(0);
+
             entity.HasMany(x => x.Attempts)
                 .WithOne()
                 .HasForeignKey(x => x.JobId)
