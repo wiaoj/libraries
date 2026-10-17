@@ -63,8 +63,21 @@ internal sealed class CircuitBreakerMiddleware : IWebhookMiddleware {
         if(context.HasSuccessResult()) {
             await this._circuitBreaker.OnSuccessAsync(endpointKey, cancellationToken).ConfigureAwait(false);
         }
-        else if(context.TryGetResult(out WebhookDeliveryResult? result) && result is WebhookDeliveryResult.TransientFailure) {
+        else if(context.TryGetResult(out WebhookDeliveryResult? result)
+            && result is WebhookDeliveryResult.TransientFailure failure
+            && !IsLocalDecision(failure.Reason)) {
             await this._circuitBreaker.OnFailureAsync(endpointKey, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Whether a transient failure is this process declining to send, rather than the endpoint failing to answer.
+    /// </summary>
+    /// <remarks>
+    /// A rate limiter or another breaker that holds a delivery back never reached the remote end, so counting it would open
+    /// the circuit of a healthy endpoint just because it is busy.
+    /// </remarks>
+    private static bool IsLocalDecision(TransientFailureReason reason) {
+        return reason is TransientFailureReason.RateLimitThrottled or TransientFailureReason.CircuitBreakerOpen;
     }
 }
