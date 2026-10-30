@@ -102,7 +102,7 @@ public sealed class ResultPartitionTests {
 
     public sealed class WhenSourceHasSpecialValues {
         [Fact]
-        public void Partition_NullableReferenceTypeWithNullSuccessValue_IncludesNullInSuccesses() {
+        public void Partition_NullableReferenceTypeWithNullValue_CountsTheNullAsAFailure() {
             // Arrange
             List<Result<string?>> source = [
                 Result.Success<string?>("valid"),
@@ -113,12 +113,13 @@ public sealed class ResultPartitionTests {
             // Act
             var (successes, failures) = source.Partition();
 
-            // Assert
-            Assert.Equal(2, successes.Count);
+            // Assert - the null element is now a failure (Result.NullValue): only "valid" is a success,
+            // and the null's Result.NullValue error lands in the failure bucket alongside SomeError.
+            Assert.Single(successes);
             Assert.Equal("valid", successes[0]);
-            Assert.Null(successes[1]);
-            Assert.Single(failures);
-            Assert.Equal(SomeError, failures[0]);
+            Assert.Equal(2, failures.Count);
+            Assert.Contains(failures, error => error.Code == "Result.NullValue");
+            Assert.Contains(failures, error => error.Equals(SomeError));
         }
     }
 
