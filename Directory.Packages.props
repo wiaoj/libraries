@@ -1,0 +1,135 @@
+<Project>
+
+  <!--
+    Central Package Management (CPM).
+
+    Every NuGet dependency version in this repository is declared here, once, as a
+    <PackageVersion> item. The <PackageReference> items in the csproj files carry only the
+    package identity plus per-project flow metadata (PrivateAssets, IncludeAssets); a Version
+    attribute on a PackageReference is not allowed any more.
+
+    Bumping a dependency is a one line change in this file, so a version move always shows up
+    as a deliberate diff instead of being hidden inside a single project.
+
+    One entry per package id. Where two projects used to pin different versions of the same id,
+    the entry here is the version that leaves the most projects on what they already resolve to,
+    and never lower than the floor a package in the graph demands: with transitive pinning on,
+    NuGet rejects a central version below a dependency demand (NU1109), so that floor is not a
+    style choice. Two ids cannot take a single version at all and carry a Condition instead;
+    see the notes on Microsoft.CodeAnalysis.CSharp and Tyto.Abstractions below.
+
+    Microsoft.AspNetCore.OpenApi and Microsoft.AspNetCore.Authentication.JwtBearer keep their
+    floating 10.0.* version strings. NuGet rejects a floating PackageVersion with NU1011 unless
+    CentralPackageFloatingVersionsEnabled is on, so the switch below is what lets this PR move
+    those versions without also pinning them.
+
+    Do not move the version properties of the packages this repository produces (<Version>,
+    <AssemblyVersion>, <PackageValidationBaselineVersion>) in here. Those are not dependencies;
+    they live in src/Directory.Build.props and in the two Results csproj files on purpose.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+
+    <!-- Build tooling: Roslyn analyzers and source generators -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+    <!--
+      Two projects reference this directly and have to stay on 4.14.0: Wiaoj.Identifiers.Generators
+      is published, and compiling a source generator against Roslyn 5 raises the minimum Roslyn host
+      its consumers need. Wiaoj.Benchmarks.Webhooks pulls Roslyn 5.0.0 transitively through
+      WolverineFx.RuntimeCompilation, so an unconditional central 4.14.0 is a downgrade there and
+      NuGet refuses it (NU1107 and NU1109, both measured). Scoping the entry by project name leaves
+      every project on the version it already resolves to, which is what this PR is supposed to do.
+    -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" Condition="'$(MSBuildProjectName)' == 'Wiaoj.Identifiers.Generators' Or '$(MSBuildProjectName)' == 'Wiaoj.Identifiers.Tests.Unit'" />
+
+    <!-- ASP.NET Core -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.*" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.*" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+
+    <!-- Benchmarking -->
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.2" />
+    <PackageVersion Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.0.36313.1" />
+
+    <!-- Data access: Entity Framework Core and providers -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+
+    <!-- Microsoft.Extensions: configuration, dependency injection, hosting, logging, options, time -->
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.9.0" />
+
+    <!-- External Wiaoj and Tyto packages consumed from the feed (not built in this repository) -->
+    <!--
+      Same shape as the Roslyn entry. Wiaoj.Ddd.Tyto references 0.0.1-alpha.20 directly and its nupkg
+      declares that floor, so a central alpha.106 would rewrite the dependency of a published package.
+      Wiaoj.Benchmarks.Webhooks resolves alpha.106 transitively through Tyto.Transports.InMemory and
+      refuses a central alpha.20 (NU1109, measured). Excluding that one project keeps both graphs on
+      the versions they already resolve to today.
+    -->
+    <PackageVersion Include="Tyto.Abstractions" Version="0.0.1-alpha.20" Condition="'$(MSBuildProjectName)' != 'Wiaoj.Benchmarks.Webhooks'" />
+    <PackageVersion Include="Tyto.Transports.InMemory" Version="0.0.1-alpha.106" />
+    <PackageVersion Include="Wiaoj.Preconditions" Version="0.1.0-alpha.9" />
+    <PackageVersion Include="Wiaoj.Primitives" Version="0.1.0-alpha.9" />
+    <PackageVersion Include="Wiaoj.Serialization.Abstractions" Version="0.0.1-alpha.83" />
+    <PackageVersion Include="Wiaoj.Serialization.DependencyInjection" Version="0.0.1-alpha.83" />
+    <PackageVersion Include="Wiaoj.Serialization.SystemTextJson" Version="0.0.1-alpha.83" />
+
+    <!-- Identifiers and primitives -->
+    <PackageVersion Include="IdGen" Version="3.0.7" />
+    <PackageVersion Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+    <PackageVersion Include="Snowflake.Core" Version="2.0.0" />
+    <PackageVersion Include="System.IO.Hashing" Version="10.0.2" />
+    <PackageVersion Include="Ulid" Version="1.4.1" />
+
+    <!-- Messaging and workflow -->
+    <PackageVersion Include="MassTransit" Version="8.5.10" />
+    <PackageVersion Include="MediatR" Version="12.1.1" />
+    <PackageVersion Include="WolverineFx" Version="6.29.2" />
+    <PackageVersion Include="WolverineFx.RuntimeCompilation" Version="6.29.2" />
+
+    <!-- Redis client and Redis test containers -->
+    <PackageVersion Include="StackExchange.Redis" Version="2.10.1" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.14.0" />
+
+    <!-- Serialization -->
+    <PackageVersion Include="MemoryPack" Version="1.21.4" />
+    <PackageVersion Include="MessagePack" Version="3.1.8" />
+    <PackageVersion Include="MongoDB.Bson" Version="3.11.2" />
+
+    <!-- Testing -->
+    <PackageVersion Include="Bogus" Version="35.6.5" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="FsCheck.Xunit.v3" Version="3.4.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+
+    <!-- YAML -->
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+  </ItemGroup>
+
+</Project>

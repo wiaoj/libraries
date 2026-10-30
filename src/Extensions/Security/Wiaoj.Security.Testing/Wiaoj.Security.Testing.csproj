@@ -6,7 +6,7 @@
   
   <ItemGroup>
     <ProjectReference Include="..\Wiaoj.Security\Wiaoj.Security.csproj" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
 </Project>
