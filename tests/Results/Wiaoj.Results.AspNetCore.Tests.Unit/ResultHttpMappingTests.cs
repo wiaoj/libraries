@@ -29,6 +29,7 @@ public sealed class ResultHttpMappingTests {
         [InlineData("NotImplemented", StatusCodes.Status501NotImplemented)]
         [InlineData("Unavailable", StatusCodes.Status503ServiceUnavailable)]
         [InlineData("Unexpected", StatusCodes.Status500InternalServerError)]
+        [InlineData("Uninitialized", StatusCodes.Status500InternalServerError)]
         [InlineData("Failure", StatusCodes.Status400BadRequest)]
         public void ToStatusCode_BuiltInErrorTypes_ReturnsExpectedHttpStatus(string typeName, int expectedStatusCode) {
             // Arrange
@@ -75,15 +76,49 @@ public sealed class ResultHttpMappingTests {
         }
 
         [Fact]
-        public void ToStatusCode_UninitializedErrorType_ThrowsAndSaysSo() {
-            // Arrange
+        public void ToStatusCode_UninitializedErrorType_AnswersInternalServerError() {
+            // Arrange - #226 turns the nameless default value into ErrorType.Uninitialized, so reaching a
+            // response with an uninitialized result is a mapped server fault, not an unmapped type.
             ErrorType uninitialized = default;
 
             // Act
-            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => uninitialized.ToStatusCode());
+            int statusCode = uninitialized.ToStatusCode();
 
             // Assert
-            Assert.Contains("<uninitialized>", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(StatusCodes.Status500InternalServerError, statusCode);
+        }
+
+        [Fact]
+        public void TryMap_UninitializedErrorType_ReturnsTheBuiltInRowWithoutThrowing() {
+            // Act
+            bool mapped = ErrorTypeHttpMapper.TryMap(default, out int statusCode);
+
+            // Assert
+            Assert.True(mapped);
+            Assert.Equal(StatusCodes.Status500InternalServerError, statusCode);
+        }
+
+        [Fact]
+        public void ToStatusCode_SentinelUninitializedError_AnswersFiveHundredLikeBefore() {
+            // Arrange & Act - Error.Uninitialized used ErrorType.Unexpected (500) and now uses
+            // ErrorType.Uninitialized; the answer a caller sees must not move with the repoint.
+            int viaUnexpected = ErrorType.Unexpected.ToStatusCode();
+            int viaSentinel = Error.Uninitialized.Type.ToStatusCode();
+
+            // Assert
+            Assert.Equal(StatusCodes.Status500InternalServerError, viaUnexpected);
+            Assert.Equal(viaUnexpected, viaSentinel);
+        }
+
+        [Fact]
+        public void ToProblemDetails_SentinelUninitializedError_KeepsTheFiveHundredShape() {
+            // Act
+            ProblemDetails problem = Error.Uninitialized.ToProblemDetails();
+
+            // Assert
+            Assert.Equal(StatusCodes.Status500InternalServerError, problem.Status);
+            Assert.Equal("https://httpstatuses.io/500", problem.Type);
+            Assert.Equal("Result.Uninitialized", problem.Title);
         }
 
         [Fact]
@@ -150,6 +185,14 @@ public sealed class ResultHttpMappingTests {
             Assert.False(ErrorTypeHttpMapper.Unregister(new("NeverRegistered")));
         }
 
+        [Fact]
+        public void Unregister_UninitializedErrorType_ReturnsFalse() {
+            // Assert - the name is never null any more, so this is an ordinary "nothing registered here"
+            // answer rather than a null short-circuit.
+            Assert.False(ErrorTypeHttpMapper.Unregister(default));
+            Assert.False(ErrorTypeHttpMapper.Unregister(ErrorType.Uninitialized));
+        }
+
         [Theory]
         [InlineData(99)]
         [InlineData(600)]
@@ -164,6 +207,18 @@ public sealed class ResultHttpMappingTests {
         public void Register_UninitializedErrorType_IsRejected() {
             Assert.ThrowsAny<ArgumentException>(
                 () => ErrorTypeHttpMapper.Register(default, StatusCodes.Status409Conflict));
+        }
+
+        [Fact]
+        public void Register_UninitializedErrorType_MessageNamesTheTypeAndSaysWhy() {
+            // Act - the placeholder is gone: the type has a real name now, so the message can use it
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => ErrorTypeHttpMapper.Register(ErrorType.Uninitialized, StatusCodes.Status409Conflict));
+
+            // Assert - a producer must not be able to re-key the uninitialized state to a client error
+            Assert.Equal("errorType", exception.ParamName);
+            Assert.Contains(nameof(ErrorType.Uninitialized), exception.Message, StringComparison.Ordinal);
+            Assert.Equal(StatusCodes.Status500InternalServerError, default(ErrorType).ToStatusCode());
         }
 
         [Fact]
