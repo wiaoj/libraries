@@ -25,7 +25,7 @@ public sealed class ResultHttpMappingTests {
         [InlineData("PreconditionRequired", StatusCodes.Status428PreconditionRequired)] // RFC 6585
         [InlineData("RateLimit", StatusCodes.Status429TooManyRequests)]
         [InlineData("Timeout", StatusCodes.Status408RequestTimeout)]
-        [InlineData("Cancelled", 499)] // nginx "Client Closed Request"; not a StatusCodes constant
+        [InlineData("Cancelled", StatusCodes.Status499ClientClosedRequest)] // nginx "Client Closed Request"; not IANA-registered
         [InlineData("NotImplemented", StatusCodes.Status501NotImplemented)]
         [InlineData("Unavailable", StatusCodes.Status503ServiceUnavailable)]
         [InlineData("Unexpected", StatusCodes.Status500InternalServerError)]
