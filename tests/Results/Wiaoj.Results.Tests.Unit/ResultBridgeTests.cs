@@ -47,16 +47,18 @@ public sealed class ResultBridgeTests {
         }
 
         [Fact]
-        public void EnsureNotNull_WhenValueIsNull_ReturnsFailureResult() {
-            // Arrange
+        public void EnsureNotNull_WhenValueIsNull_StillGuardsItAsAFailure() {
+            // Arrange - under the current rule the null input is already a failure (Result.NullValue),
+            // so EnsureNotNull receives a failed result and propagates it rather than inventing SomeError.
             Result<string?> input = (string?)null;
 
             // Act
             Result<string> result = input.EnsureNotNull(SomeError);
 
-            // Assert
+            // Assert - the combinator still never turns a null value into a successful non-null result;
+            // the failure now simply originates at construction, so the guard's own error is superseded.
             Assert.True(result.IsFailure);
-            Assert.Equal(SomeError, result.FirstError);
+            Assert.Equal("Result.NullValue", result.FirstError.Code);
         }
     }
 

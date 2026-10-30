@@ -106,13 +106,14 @@ public sealed class ResultStateAndInvariantTests {
         }
 
         [Fact]
-        public void Value_WhenSuccessWithNullableTypeAndNullValue_ReturnsNull() {
-            // Arrange
+        public void Success_WhenNullableTypeValueIsNull_IsAFailureAndValueAccessThrows() {
+            // Arrange - a null value is no longer a success; it is a broken promise (Result.NullValue).
             Result<string?> result = Result.Success<string?>(null);
 
             // Act & Assert
-            Assert.True(result.IsSuccess);
-            Assert.Null(result.Value);
+            Assert.False(result.IsSuccess);
+            Assert.True(result.IsFailure);
+            Assert.Throws<InvalidOperationException>(() => _ = result.Value);
         }
     }
 

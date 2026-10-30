@@ -109,10 +109,26 @@ public readonly record struct Result<TValue> : IResult {
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private Result(TValue value) {
-        this._isSuccess = true;
-        this._value = value;
-        this._singleError = default;
-        this._multipleErrors = null;
+        // A "value constructor" can still produce a failure: a value was promised to the caller, so a
+        // null here is a broken contract rather than a legitimate empty success. Both public success
+        // entry points (the implicit operator and Success) route through this constructor, so the check
+        // lives in one place and any future success path inherits it. `value is null` on an unconstrained
+        // generic never boxes a value type, so a non-nullable default (Result<int> from 0) stays a
+        // success: zero is a value, not an absence.
+        if(value is null) {
+            this._isSuccess = false;
+            this._value = default;
+            this._singleError = Error.Unexpected(
+                "Result.NullValue",
+                "A success value was promised, but the provided value is null.");
+            this._multipleErrors = null;
+        }
+        else {
+            this._isSuccess = true;
+            this._value = value;
+            this._singleError = default;
+            this._multipleErrors = null;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -193,7 +209,9 @@ public readonly record struct Result<TValue> : IResult {
     // ── Implicit operators ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Implicitly converts a success value to a successful <see cref="Result{TValue}"/>.
+    /// Implicitly converts a value to a <see cref="Result{TValue}"/>. A non-null value yields a successful
+    /// result; a <see langword="null"/> value (for a reference type or a nullable value type) yields a failed
+    /// result carrying the <c>Result.NullValue</c> error, since a value was promised but is absent.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator Result<TValue>(TValue value) {
@@ -228,7 +246,9 @@ public readonly record struct Result<TValue> : IResult {
     // ── Factory methods ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates a successful <see cref="Result{TValue}"/> containing the specified value.
+    /// Creates a <see cref="Result{TValue}"/> from the specified value. A non-null value produces a successful
+    /// result; a <see langword="null"/> value (for a reference type or a nullable value type) produces a failed
+    /// result carrying the <c>Result.NullValue</c> error, matching the implicit conversion.
     /// </summary>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
