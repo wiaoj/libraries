@@ -216,9 +216,103 @@ public sealed class ErrorTests {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() => Error.FromException(null!));
         }
+
+        [Fact]
+        public void FromException_KeepsTheOriginatingExceptionAsCause() {
+            // Arrange
+            InvalidOperationException exception = new("Invalid operation");
+
+            // Act
+            Error error = Error.FromException(exception);
+
+            // Assert
+            Assert.Same(exception, error.Cause);
+        }
+
+        [Fact]
+        public void FromException_CauseRetainsTheStackTrace() {
+            // Arrange
+            Exception exception = Capture(new InvalidOperationException("with a stack"));
+
+            // Act
+            Error error = Error.FromException(exception);
+
+            // Assert - the point of keeping the exception: the frames survive
+            Assert.NotNull(error.Cause?.StackTrace);
+            Assert.Contains(nameof(Capture), error.Cause!.StackTrace!, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void FromException_OperationCanceledException_MapsToCancelledNotUnexpected() {
+            // Arrange - a cancellation is not a server fault
+            using CancellationTokenSource source = new();
+            OperationCanceledException exception = new("cancelled", source.Token);
+
+            // Act
+            Error error = Error.FromException(exception);
+
+            // Assert
+            Assert.Equal(ErrorType.Cancelled, error.Type);
+            Assert.Equal("Exception.Cancelled", error.Code);
+            Assert.Same(exception, error.Cause);
+        }
+
+        [Fact]
+        public void FromException_TaskCanceledException_MapsToCancelledNotUnexpected() {
+            // Arrange - what HttpClient throws when the request is abandoned
+            TaskCanceledException exception = new("the request was canceled", innerException: null);
+
+            // Act
+            Error error = Error.FromException(exception);
+
+            // Assert
+            Assert.Equal(ErrorType.Cancelled, error.Type);
+        }
+
+        [Fact]
+        public void FromException_WithIncludeTypeTrue_KeepsBothMetadataAndCause() {
+            // Arrange
+            InvalidOperationException exception = new("Invalid operation");
+
+            // Act
+            Error error = Error.FromException(exception, includeType: true);
+
+            // Assert
+            Assert.NotNull(error.Metadata);
+            Assert.Equal(typeof(InvalidOperationException).FullName, error.Metadata["ExceptionType"]);
+            Assert.Same(exception, error.Cause);
+        }
+
+        [Fact]
+        public void WithCause_Null_IsRejected() {
+            Assert.Throws<ArgumentNullException>(() => Error.Failure().WithCause(null!));
+        }
+
+        private static Exception Capture(Exception exception) {
+            try {
+                throw exception;
+            }
+            catch(Exception caught) {
+                return caught;
+            }
+        }
     }
 
     public sealed class TheWithMetadataMethod {
+        [Fact]
+        public void WithMetadata_PreservesTheCause() {
+            // Arrange
+            InvalidOperationException exception = new("Invalid operation");
+            Error error = Error.FromException(exception);
+
+            // Act
+            Error updated = error.WithMetadata("TraceId", "tx-999");
+
+            // Assert - fluent decoration must not drop the stack trace
+            Assert.Same(exception, updated.Cause);
+            Assert.Equal("tx-999", updated.Metadata!["TraceId"]);
+        }
+
         [Fact]
         public void WithMetadata_AddsNewEntryWithoutMutatingOriginal() {
             // Arrange
@@ -307,6 +401,42 @@ public sealed class ErrorTests {
     }
 
     public sealed class TheEqualityAndComparison {
+        [Fact]
+        public void Equals_WhenErrorsDifferOnlyByCause_ReturnsTrue() {
+            // Arrange - the cause is diagnostic payload, not identity
+            Error first = Error.FromException(ThrowAway(new InvalidOperationException("one")));
+            Error second = Error.FromException(ThrowAway(new InvalidOperationException("one")));
+
+            // Act & Assert
+            Assert.NotSame(first.Cause, second.Cause);
+            Assert.Equal(first, second);
+            Assert.True(first == second);
+            Assert.Equal(first.GetHashCode(), second.GetHashCode());
+        }
+
+        [Fact]
+        public void ToString_PrintsTheShapeButNeverTheStackTrace() {
+            // Arrange
+            Error error = Error.FromException(ThrowAway(new InvalidOperationException("boom")));
+
+            // Act
+            string printed = error.ToString();
+
+            // Assert
+            Assert.Contains("Code = Exception.InvalidOperationException", printed, StringComparison.Ordinal);
+            Assert.DoesNotContain("Cause", printed, StringComparison.Ordinal);
+            Assert.DoesNotContain("at Wiaoj", printed, StringComparison.Ordinal);
+        }
+
+        private static Exception ThrowAway(Exception exception) {
+            try {
+                throw exception;
+            }
+            catch(Exception caught) {
+                return caught;
+            }
+        }
+
         [Fact]
         public void Equals_WhenBothErrorsHaveSameValuesWithoutMetadata_ReturnsTrue() {
             // Arrange

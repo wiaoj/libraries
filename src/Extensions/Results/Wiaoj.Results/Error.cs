@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json.Serialization;
 
 namespace Wiaoj.Results;
@@ -23,13 +24,33 @@ public readonly record struct Error : IEquatable<Error> {
     public IReadOnlyDictionary<string, object?>? Metadata { get; }
 
     /// <summary>
+    /// Gets the <see cref="Exception"/> this error was produced from, when it came from
+    /// <see cref="FromException(Exception)"/> or <see cref="WithCause"/>. <see langword="null"/> otherwise.
+    /// </summary>
+    /// <remarks>
+    /// The cause keeps the stack trace for logging (<c>logger.LogError(error.Cause, "...")</c>). It is not part of
+    /// <see cref="Equals(Error)"/>, and it is never serialized: <c>ErrorJsonConverter</c> writes only code,
+    /// description, type and metadata, so a stack trace cannot reach a response body by accident.
+    /// </remarks>
+    public Exception? Cause { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Error"/> record struct.
     /// </summary>
-    public Error(string code, string description, ErrorType type, IReadOnlyDictionary<string, object?>? metadata = null) {
+    public Error(string code, string description, ErrorType type, IReadOnlyDictionary<string, object?>? metadata = null)
+        : this(code, description, type, metadata, cause: null) {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Error"/> record struct, keeping <paramref name="cause"/>
+    /// for logging. Kept as a separate overload so the four-argument constructor stays binary-compatible.
+    /// </summary>
+    public Error(string code, string description, ErrorType type, IReadOnlyDictionary<string, object?>? metadata, Exception? cause) {
         this.Code = code;
         this.Description = description;
         this.Type = type;
         this.Metadata = metadata;
+        this.Cause = cause;
     }
 
     // ── Built-in factory methods ──────────────────────────────────────────────
@@ -110,6 +131,14 @@ public readonly record struct Error : IEquatable<Error> {
         string description = "The operation timed out.") =>
         new(code, description, ErrorType.Timeout);
 
+    /// <summary>Creates a cancelled error (HTTP 499).</summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Error Cancelled(
+        string code = "Request.Cancelled",
+        string description = "The operation was cancelled.") =>
+        new(code, description, ErrorType.Cancelled);
+
     /// <summary>Creates a service unavailable error (HTTP 503).</summary>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -132,17 +161,20 @@ public readonly record struct Error : IEquatable<Error> {
     public static Error UnprocessableEntity(string code, string description) =>
         new(code, description, ErrorType.UnprocessableEntity);
 
-    /// <summary>Converts an <see cref="Exception"/> to an <see cref="Error"/>.</summary>
+    /// <summary>Converts an <see cref="Exception"/> to an <see cref="Error"/>, keeping the exception as its cause.</summary>
     [Pure]
     public static Error FromException(Exception exception) {
         ArgumentNullException.ThrowIfNull(exception);
 
-        return exception switch {
+        Error error = exception switch {
+            OperationCanceledException => Cancelled("Exception.Cancelled", exception.Message),
             TimeoutException => Timeout("Exception.Timeout", exception.Message),
             UnauthorizedAccessException => Unauthorized("Exception.Unauthorized", exception.Message),
             ArgumentException => Validation("Exception.Argument", exception.Message),
             _ => Unexpected($"Exception.{exception.GetType().Name}", exception.Message)
         };
+
+        return error.WithCause(exception);
     }
 
     /// <summary>Converts an <see cref="Exception"/> to an <see cref="Error"/> attaching exception type metadata.</summary>
@@ -174,7 +206,18 @@ public readonly record struct Error : IEquatable<Error> {
         description: "The result is in an uninitialized default state.",
         type: ErrorType.Unexpected);
 
-    // ── Fluent Metadata ───────────────────────────────────────────────────────
+    // ── Fluent Metadata & Cause ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns a new <see cref="Error"/> carrying <paramref name="cause"/> as its originating exception.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Error WithCause(Exception cause) {
+        ArgumentNullException.ThrowIfNull(cause);
+
+        return new Error(this.Code, this.Description, this.Type, this.Metadata, cause);
+    }
 
     /// <summary>
     /// Returns a new <see cref="Error"/> with an additional metadata entry.
@@ -188,7 +231,7 @@ public readonly record struct Error : IEquatable<Error> {
             : new(this.Metadata);
 
         newMetadata[key] = value;
-        return new Error(this.Code, this.Description, this.Type, newMetadata);
+        return new Error(this.Code, this.Description, this.Type, newMetadata, this.Cause);
     }
 
     // ── Equality & HashCode ───────────────────────────────────────────────────
@@ -214,6 +257,27 @@ public readonly record struct Error : IEquatable<Error> {
 
             if(!Equals(value, otherValue))
                 return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Supplies the members the record-struct <see cref="object.ToString()"/> prints.
+    /// <see cref="Cause"/> is excluded deliberately: an exception's <c>ToString</c> is its type, message and
+    /// stack trace, and an <see cref="Error"/> gets interpolated into log messages and diagnostics far more
+    /// often than it is handed to a logger as an exception. Log the cause with the <c>ILogger</c> overloads.
+    /// </summary>
+    private bool PrintMembers(StringBuilder builder) {
+        builder.Append("Code = ").Append(this.Code)
+               .Append(", Description = ").Append(this.Description)
+               .Append(", Type = ").Append(this.Type.Name)
+               .Append(", Metadata = ");
+
+        if(this.Metadata is null) {
+            builder.Append("null");
+        } else {
+            builder.AppendJoin(", ", this.Metadata.Select(m => $"{m.Key} = {m.Value}"));
         }
 
         return true;

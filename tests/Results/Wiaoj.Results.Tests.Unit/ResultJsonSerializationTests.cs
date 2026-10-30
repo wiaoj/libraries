@@ -42,6 +42,20 @@ public sealed class ResultJsonSerializationTests {
         }
 
         [Fact]
+        public void Serialize_ErrorWithCause_NeverWritesTheCause() {
+            // Arrange - Error.Cause exists now, so the converter has something it could leak
+            Result<int> result = Result.Failure<int>(Error.FromException(new InvalidOperationException("boom")));
+
+            // Act
+            string json = JsonSerializer.Serialize(result, SerializerOptions);
+
+            // Assert - the cause is for loggers; a response body carries code, description, type, metadata only
+            Assert.Contains("\"code\":\"Exception.InvalidOperationException\"", json);
+            Assert.DoesNotContain("cause", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("StackTrace", json, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void Serialize_ResultOfSuccess_ProducesCleanJson() {
             // Arrange
             Result<Success> result = Result.Success();

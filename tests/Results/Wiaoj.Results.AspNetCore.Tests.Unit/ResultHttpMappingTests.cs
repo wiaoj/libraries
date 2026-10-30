@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using System.Reflection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
@@ -20,6 +21,7 @@ public sealed class ResultHttpMappingTests {
         [InlineData("UnprocessableEntity", StatusCodes.Status422UnprocessableEntity)]
         [InlineData("RateLimit", StatusCodes.Status429TooManyRequests)]
         [InlineData("Timeout", StatusCodes.Status408RequestTimeout)]
+        [InlineData("Cancelled", 499)] // nginx "Client Closed Request"; not a StatusCodes constant
         [InlineData("Unavailable", StatusCodes.Status503ServiceUnavailable)]
         [InlineData("Unexpected", StatusCodes.Status500InternalServerError)]
         [InlineData("Failure", StatusCodes.Status400BadRequest)]
@@ -32,6 +34,26 @@ public sealed class ResultHttpMappingTests {
 
             // Assert
             Assert.Equal(expectedStatusCode, actualStatusCode);
+        }
+
+        [Fact]
+        public void ToStatusCode_EveryBuiltInErrorType_HasAMapping() {
+            // Arrange - before 0.4.0 a built-in with no row folded silently into 500; this guard
+            // makes the next ErrorType added without a mapping a test failure instead.
+            ErrorType[] builtIn = typeof(ErrorType)
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(field => field.FieldType == typeof(ErrorType))
+                .Select(field => (ErrorType)field.GetValue(null)!)
+                .ToArray();
+
+            Assert.NotEmpty(builtIn);
+
+            foreach(ErrorType type in builtIn) {
+                // Act & Assert
+                Assert.True(ErrorTypeHttpMapper.TryMap(type, out int statusCode),
+                    $"ErrorType.{type.Name} has no HTTP status code mapping in {nameof(ErrorTypeHttpMapper)}.");
+                Assert.InRange(statusCode, 100, 599);
+            }
         }
 
         [Fact]
