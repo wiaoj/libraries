@@ -34,7 +34,7 @@ public readonly record struct Error : IEquatable<Error> {
 
     // ── Built-in factory methods ──────────────────────────────────────────────
 
-    /// <summary>Creates a general failure error.</summary>
+    /// <summary>Creates a general failure error (HTTP 400).</summary>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Error Failure(
@@ -102,7 +102,7 @@ public readonly record struct Error : IEquatable<Error> {
         string description = "Too many requests. Please try again later.") =>
         new(code, description, ErrorType.RateLimit);
 
-    /// <summary>Creates a timeout error (HTTP 408 / 504).</summary>
+    /// <summary>Creates a timeout error (HTTP 408).</summary>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Error Timeout(

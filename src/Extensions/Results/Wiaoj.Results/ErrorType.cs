@@ -40,7 +40,7 @@ public readonly record struct ErrorType {
 
     // ── Built-in types ────────────────────────────────────────────────────────
 
-    /// <summary>A generic failure. Default when no specific type applies.</summary>
+    /// <summary>A generic failure the producer declares. Maps to HTTP 400; use <see cref="Unexpected"/> for a server fault (500).</summary>
     public static readonly ErrorType Failure = new(nameof(Failure));
 
     /// <summary>Input validation failure (HTTP 400).</summary>
@@ -64,7 +64,7 @@ public readonly record struct ErrorType {
     /// <summary>Rate limit exceeded (HTTP 429).</summary>
     public static readonly ErrorType RateLimit = new(nameof(RateLimit));
 
-    /// <summary>Operation timed out (HTTP 408 / 504).</summary>
+    /// <summary>Operation timed out (HTTP 408). A gateway or proxy timeout is 504: register it, or use <see cref="Unavailable"/>.</summary>
     public static readonly ErrorType Timeout = new(nameof(Timeout));
 
     /// <summary>Service temporarily unavailable (HTTP 503).</summary>

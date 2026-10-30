@@ -8,6 +8,7 @@ namespace Wiaoj.Results.AspNetCore.Tests;
 [Trait("Category", "HttpMapping")]
 public sealed class ResultHttpMappingTests {
 
+    [Collection("ErrorTypeHttpMapper")]
     public sealed class TheErrorTypeToStatusCodeMapping {
         [Theory]
         [InlineData("Validation", StatusCodes.Status400BadRequest)]
@@ -18,10 +19,10 @@ public sealed class ResultHttpMappingTests {
         [InlineData("Gone", StatusCodes.Status410Gone)]
         [InlineData("UnprocessableEntity", StatusCodes.Status422UnprocessableEntity)]
         [InlineData("RateLimit", StatusCodes.Status429TooManyRequests)]
-        [InlineData("Timeout", StatusCodes.Status504GatewayTimeout)]
+        [InlineData("Timeout", StatusCodes.Status408RequestTimeout)]
         [InlineData("Unavailable", StatusCodes.Status503ServiceUnavailable)]
         [InlineData("Unexpected", StatusCodes.Status500InternalServerError)]
-        [InlineData("Failure", StatusCodes.Status500InternalServerError)]
+        [InlineData("Failure", StatusCodes.Status400BadRequest)]
         public void ToStatusCode_BuiltInErrorTypes_ReturnsExpectedHttpStatus(string typeName, int expectedStatusCode) {
             // Arrange
             ErrorType errorType = new(typeName);
@@ -34,15 +35,128 @@ public sealed class ResultHttpMappingTests {
         }
 
         [Fact]
-        public void ToStatusCode_CustomUnknownErrorType_DefaultsTo500InternalServerError() {
+        public void ToStatusCode_CustomUnmappedErrorType_ThrowsByDefault() {
             // Arrange
             ErrorType customType = new("CustomDomainFailure");
 
             // Act
-            int statusCode = customType.ToStatusCode();
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => customType.ToStatusCode());
 
             // Assert
-            Assert.Equal(StatusCodes.Status500InternalServerError, statusCode);
+            Assert.Contains("CustomDomainFailure", exception.Message, StringComparison.Ordinal);
+            Assert.Contains(nameof(ErrorTypeHttpMapper.Register), exception.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void ToStatusCode_UninitializedErrorType_ThrowsAndSaysSo() {
+            // Arrange
+            ErrorType uninitialized = default;
+
+            // Act
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => uninitialized.ToStatusCode());
+
+            // Assert
+            Assert.Contains("<uninitialized>", exception.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void TryMap_UnmappedErrorType_ReturnsFalseWithoutThrowing() {
+            // Act
+            bool mapped = ErrorTypeHttpMapper.TryMap(new("UnmappedProbe"), out int statusCode);
+
+            // Assert
+            Assert.False(mapped);
+            Assert.Equal(0, statusCode);
+        }
+
+        [Fact]
+        public void ToStatusCode_WithExplicitFallback_AnswersInsteadOfThrowing() {
+            // Arrange
+            ErrorType customType = new("FallbackProbe");
+
+            // Act
+            int statusCode = customType.ToStatusCode(StatusCodes.Status418ImATeapot);
+
+            // Assert
+            Assert.Equal(StatusCodes.Status418ImATeapot, statusCode);
+        }
+    }
+
+    [Collection("ErrorTypeHttpMapper")]
+    public sealed class TheProducerSuppliedMapping {
+
+        [Fact]
+        public void Register_CustomErrorType_UsedByToStatusCode() {
+            // Arrange
+            ErrorType locked = new("Locked");
+
+            // Act
+            ErrorTypeHttpMapper.Register(locked, StatusCodes.Status423Locked);
+            int statusCode = locked.ToStatusCode();
+
+            // Assert
+            Assert.Equal(StatusCodes.Status423Locked, statusCode);
+
+            // Cleanup
+            Assert.True(ErrorTypeHttpMapper.Unregister(locked));
+            Assert.Throws<InvalidOperationException>(() => locked.ToStatusCode());
+        }
+
+        [Fact]
+        public void Register_BuiltInErrorType_OverridesTheDefaultMapping() {
+            // Arrange
+            ErrorType timeout = ErrorType.Timeout;
+
+            // Act
+            ErrorTypeHttpMapper.Register(timeout, StatusCodes.Status504GatewayTimeout);
+
+            // Assert
+            Assert.Equal(StatusCodes.Status504GatewayTimeout, timeout.ToStatusCode());
+
+            // Cleanup - the built-in table must be reachable again
+            ErrorTypeHttpMapper.Unregister(timeout);
+            Assert.Equal(StatusCodes.Status408RequestTimeout, timeout.ToStatusCode());
+        }
+
+        [Fact]
+        public void Unregister_WithoutRegistration_ReturnsFalse() {
+            Assert.False(ErrorTypeHttpMapper.Unregister(new("NeverRegistered")));
+        }
+
+        [Theory]
+        [InlineData(99)]
+        [InlineData(600)]
+        public void Register_StatusCodeOutsideHttpStatusRange_IsRejected(int statusCode) {
+            ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(
+                () => ErrorTypeHttpMapper.Register(new("RejectedRange"), statusCode));
+
+            Assert.Equal("statusCode", exception.ParamName);
+        }
+
+        [Fact]
+        public void Register_UninitializedErrorType_IsRejected() {
+            Assert.ThrowsAny<ArgumentException>(
+                () => ErrorTypeHttpMapper.Register(default, StatusCodes.Status409Conflict));
+        }
+
+        [Fact]
+        public void ToStatusCode_WithLenientPolicy_KeepsTheLegacyFallThrough() {
+            // Arrange
+            ErrorType customType = new("LenientProbe");
+            UnmappedErrorTypePolicy previous = ErrorTypeHttpMapper.OnUnmapped;
+
+            try {
+                ErrorTypeHttpMapper.OnUnmapped = UnmappedErrorTypePolicy.InternalServerError;
+
+                // Act
+                int statusCode = customType.ToStatusCode();
+
+                // Assert
+                Assert.Equal(StatusCodes.Status500InternalServerError, statusCode);
+            }
+            finally {
+                ErrorTypeHttpMapper.OnUnmapped = previous;
+            }
         }
     }
 
