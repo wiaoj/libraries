@@ -218,6 +218,62 @@ public sealed class ResultStateAndInvariantTests {
             Assert.Single(errors);
             Assert.Equal(Error.Uninitialized, errors[0]);
         }
+
+        [Fact]
+        public void Errors_WhenCallerMutatesTheirList_KeepsTheErrorsItWasBuiltWith() {
+            // Arrange - the result was built from a list the caller still holds
+            List<Error> errors = [SomeError, AnotherError];
+            Result<int> result = errors;
+
+            // Act - every mutation the caller can still perform on their own list
+            errors.Add(NotFoundError);
+            errors[0] = Error.Unexpected("Test.Late", "Replaced after the result was built.");
+            errors.Clear();
+
+            // Assert
+            Assert.Equal(2, result.Errors.Count);
+            Assert.Equal(SomeError, result.Errors[0]);
+            Assert.Equal(AnotherError, result.Errors[1]);
+            Assert.Equal(ErrorType.Failure, result.FirstError.Type);
+        }
+
+        [Fact]
+        public void Errors_WhenMultiple_CannotBeCastToAMutableList() {
+            // Arrange
+            Result<int> result = new List<Error> { SomeError, AnotherError };
+
+            // Act & Assert - IReadOnlyList<Error> backed by a List<Error> is one cast from a writable result
+            InvalidCastException exception = Assert.Throws<InvalidCastException>(
+                () => ((List<Error>)result.Errors).Add(NotFoundError));
+
+            Assert.NotNull(exception);
+            Assert.Equal(2, result.Errors.Count);
+        }
+
+        [Fact]
+        public void Errors_FromArrayConversion_CannotBeCastToAMutableList() {
+            // Arrange
+            Result<int> result = new Error[] { SomeError, AnotherError };
+
+            // Act & Assert
+            Assert.Throws<InvalidCastException>(() => ((List<Error>)result.Errors).Add(NotFoundError));
+        }
+
+        [Fact]
+        public void Errors_AfterMappingAFailedResult_StillHoldEveryErrorAndStayReadOnly() {
+            // Arrange
+            List<Error> errors = [SomeError, AnotherError];
+            Result<int> source = errors;
+
+            // Act - the failure propagates through Map, which carries the error set along
+            Result<string> mapped = source.Map(value => value.ToString());
+            errors.Clear();
+
+            // Assert
+            Assert.Equal(2, mapped.Errors.Count);
+            Assert.Equal(SomeError, mapped.Errors[0]);
+            Assert.Throws<InvalidCastException>(() => ((List<Error>)mapped.Errors).Add(NotFoundError));
+        }
     }
 
     public sealed class TheImplicitConversions {

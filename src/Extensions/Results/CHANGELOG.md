@@ -9,6 +9,11 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
 `PackageReference` version, so nothing updates until a consumer opts in.
 
 ### Fixed
+- `Result<T>.Errors` was read-only in the type and mutable in fact. A result built from a `List<Error>` stored that
+  same list, so `errors.Add(...)`, `errors.Clear()` or `errors[0] = ...` after the result was returned changed what
+  the result reported — including turning a failed result into one with zero errors. The cast
+  `(List<Error>)result.Errors` also reached the internal list directly. Multi-error results now keep a copy of their
+  own behind a `ReadOnlyCollection<Error>`, so the cast throws instead of opening the struct up.
 - `Error.FromException` threw the exception away. It copied the type name and message into an `Error` and returned,
   so the stack trace was gone before the first log line could use it: `logger.LogError(error, ...)` had nothing to
   unwrap. `Error.Cause` now carries the originating exception.
