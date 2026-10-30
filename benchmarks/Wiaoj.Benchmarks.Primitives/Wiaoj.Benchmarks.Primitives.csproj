@@ -6,11 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.15.2" />
-    <PackageReference Include="IdGen" Version="3.0.7" />
-    <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.0.36313.1" />
-    <PackageReference Include="Snowflake.Core" Version="2.0.0" />
-    <PackageReference Include="Ulid" Version="1.4.1" />
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="IdGen" />
+    <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" />
+    <PackageReference Include="Snowflake.Core" />
+    <PackageReference Include="Ulid" />
   </ItemGroup>
 
 <PropertyGroup>
