@@ -1,0 +1,17 @@
+<Project>
+
+  <!--
+    One place for the two properties every sample project in this repository already sets: all 7 projects under
+    samples/ carry ImplicitUsings=enable and Nullable=enable. A project still wins over this file, so an
+    intentional exception is a line in that csproj.
+
+    Not here: OutputType and UserSecretsId, which are per-sample facts, and TargetFramework, which stays in the
+    csproj like it does under tests/.
+  -->
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
