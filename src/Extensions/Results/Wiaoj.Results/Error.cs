@@ -176,6 +176,59 @@ public readonly record struct Error : IEquatable<Error> {
     public static Error UnprocessableEntity(string code, string description) =>
         new(code, description, ErrorType.UnprocessableEntity);
 
+    /// <summary>
+    /// Creates a conditional-request precondition failure (HTTP 412) for an <c>If-Match</c>,
+    /// <c>If-Unmodified-Since</c> or <c>If-None-Match</c> condition the client sent that did not hold.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Error PreconditionFailed(
+        string code = "Request.PreconditionFailed",
+        string description = "A precondition given in the request headers was not met by the current resource state.") =>
+        new(code, description, ErrorType.PreconditionFailed);
+
+    /// <summary>
+    /// Creates a missing-precondition error (HTTP 428, RFC 6585) for a resource that requires the request to be
+    /// conditional and got a plain, unconditional one.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Error PreconditionRequired(
+        string code = "Request.PreconditionRequired",
+        string description = "The request must be conditional; send it with an If-Match or If-Unmodified-Since precondition.") =>
+        new(code, description, ErrorType.PreconditionRequired);
+
+    /// <summary>Creates an unsupported media type error (HTTP 415) for a payload the resource cannot read.</summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Error UnsupportedMediaType(
+        string code = "Request.UnsupportedMediaType",
+        string description = "The media type of the request payload is not supported by the resource.") =>
+        new(code, description, ErrorType.UnsupportedMediaType);
+
+    /// <summary>
+    /// Creates a method-not-allowed error (HTTP 405) for a verb the server knows but this resource does not offer.
+    /// The response must also carry an <c>Allow</c> header listing the accepted methods; setting it is the
+    /// endpoint's job, not this factory's.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Error MethodNotAllowed(
+        string code = "Request.MethodNotAllowed",
+        string description = "The request method is known by the server but is not allowed for the requested resource.") =>
+        new(code, description, ErrorType.MethodNotAllowed);
+
+    /// <summary>
+    /// Creates a not-implemented error (HTTP 501) for functionality the server does not support at all. Use
+    /// <see cref="ServiceUnavailable"/> (HTTP 503) instead when the functionality exists but is temporarily down.
+    /// </summary>
+    [Pure]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Error NotImplemented(
+        string code = "Service.NotImplemented",
+        string description = "The server does not support the functionality required to fulfill the request.") =>
+        new(code, description, ErrorType.NotImplemented);
+
     /// <summary>Converts an <see cref="Exception"/> to an <see cref="Error"/>, keeping the exception as its cause.</summary>
     [Pure]
     public static Error FromException(Exception exception) {

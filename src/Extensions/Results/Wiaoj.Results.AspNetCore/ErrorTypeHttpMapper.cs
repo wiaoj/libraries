@@ -54,12 +54,17 @@ public static class ErrorTypeHttpMapper {
         [nameof(ErrorType.Unauthorized)] = StatusCodes.Status401Unauthorized,
         [nameof(ErrorType.Forbidden)] = StatusCodes.Status403Forbidden,
         [nameof(ErrorType.NotFound)] = StatusCodes.Status404NotFound,
+        [nameof(ErrorType.MethodNotAllowed)] = StatusCodes.Status405MethodNotAllowed,
         [nameof(ErrorType.Conflict)] = StatusCodes.Status409Conflict,
         [nameof(ErrorType.Gone)] = StatusCodes.Status410Gone,
+        [nameof(ErrorType.PreconditionFailed)] = StatusCodes.Status412PreconditionFailed,
+        [nameof(ErrorType.UnsupportedMediaType)] = StatusCodes.Status415UnsupportedMediaType,
         [nameof(ErrorType.UnprocessableEntity)] = StatusCodes.Status422UnprocessableEntity,
+        [nameof(ErrorType.PreconditionRequired)] = StatusCodes.Status428PreconditionRequired, // RFC 6585
         [nameof(ErrorType.RateLimit)] = StatusCodes.Status429TooManyRequests,
         [nameof(ErrorType.Timeout)] = StatusCodes.Status408RequestTimeout,
         [nameof(ErrorType.Cancelled)] = Status499ClientClosedRequest,
+        [nameof(ErrorType.NotImplemented)] = StatusCodes.Status501NotImplemented,
         [nameof(ErrorType.Unavailable)] = StatusCodes.Status503ServiceUnavailable,
         [nameof(ErrorType.Unexpected)] = StatusCodes.Status500InternalServerError,
         [nameof(ErrorType.Failure)] = StatusCodes.Status400BadRequest

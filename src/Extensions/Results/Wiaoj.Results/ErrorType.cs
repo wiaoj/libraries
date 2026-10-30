@@ -91,4 +91,51 @@ public readonly record struct ErrorType {
     /// Different from <see cref="Validation"/>: Validation is for format/schema errors.
     /// </summary>
     public static readonly ErrorType UnprocessableEntity = new(nameof(UnprocessableEntity));
+
+    /// <summary>
+    /// A conditional-request precondition the client sent did not hold (HTTP 412).
+    /// Use when an <c>If-Match</c>, <c>If-Unmodified-Since</c> or <c>If-None-Match</c> header the client
+    /// supplied evaluates false against the current resource state - typically a lost optimistic-concurrency
+    /// race against an ETag the client read earlier.
+    /// Different from <see cref="PreconditionRequired"/>: here the precondition exists and failed; there the
+    /// client sent no conditional header at all.
+    /// </summary>
+    public static readonly ErrorType PreconditionFailed = new(nameof(PreconditionFailed));
+
+    /// <summary>
+    /// The server requires the request to be conditional, and it was not (HTTP 428, RFC 6585).
+    /// Use when a resource refuses to act on a request that carries no <c>If-Match</c>/<c>If-Unmodified-Since</c>
+    /// precondition at all, so a blind write cannot silently overwrite a concurrent change.
+    /// Different from <see cref="PreconditionFailed"/>: 412 is about a precondition that failed, 428 is about a
+    /// precondition that was missing. The two blame different omissions, so the two need different codes.
+    /// </summary>
+    public static readonly ErrorType PreconditionRequired = new(nameof(PreconditionRequired));
+
+    /// <summary>
+    /// The payload's <c>Content-Type</c> is not one the resource accepts (HTTP 415).
+    /// Use when the media type itself is unsupported - a <c>text/plain</c> body sent to an endpoint that only
+    /// reads <c>application/json</c>.
+    /// Different from <see cref="Validation"/>, which says the body was parsed and rejected, and from
+    /// <see cref="UnprocessableEntity"/>, which says the parsed content broke a business rule.
+    /// </summary>
+    public static readonly ErrorType UnsupportedMediaType = new(nameof(UnsupportedMediaType));
+
+    /// <summary>
+    /// The method is known to the server but is not allowed for this resource (HTTP 405).
+    /// Use when the route exists - <c>DELETE /orders/1</c> is understood - but that verb is not offered for it,
+    /// as opposed to <see cref="NotFound"/>, which says no such resource exists at all.
+    /// A 405 response must carry an <c>Allow</c> header listing the methods the resource does accept. That is
+    /// the endpoint's responsibility, not the mapper's: a status-code lookup has no way to know which verbs a
+    /// given route offers, so the endpoint has to set <c>Allow</c> itself.
+    /// </summary>
+    public static readonly ErrorType MethodNotAllowed = new(nameof(MethodNotAllowed));
+
+    /// <summary>
+    /// The server does not support the functionality required to fulfill the request (HTTP 501).
+    /// Use for a verb or capability that is not implemented anywhere, such as answering a <c>PUT</c> on a
+    /// read-only resource model.
+    /// Different from <see cref="Unavailable"/> (HTTP 503): 503 says "supported, but not right now" and
+    /// invites a retry, while 501 says "never, as deployed" - retrying a 501 does not help.
+    /// </summary>
+    public static readonly ErrorType NotImplemented = new(nameof(NotImplemented));
 }
