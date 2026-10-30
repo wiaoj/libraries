@@ -37,7 +37,10 @@ public sealed class ResultEndpointFilterTests {
             // Assert
             ProblemHttpResult problemResult = Assert.IsType<ProblemHttpResult>(result);
             Assert.Equal(StatusCodes.Status404NotFound, problemResult.StatusCode);
-            Assert.Equal("User.NotFound", problemResult.ProblemDetails.Title);
+            Assert.Equal(nameof(ErrorType.NotFound), problemResult.ProblemDetails.Title);
+            Assert.Equal(
+                "User.NotFound",
+                problemResult.ProblemDetails.Extensions[ResultProblemDetailsExtensions.CodeExtensionKey]);
         }
 
         [Fact]
