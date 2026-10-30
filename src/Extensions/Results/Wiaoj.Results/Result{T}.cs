@@ -84,7 +84,8 @@ public readonly record struct Result<TValue> : IResult {
     /// Mutating what this returns never changes the result. A multi-error result hands out a
     /// <see cref="ReadOnlyCollection{T}"/> over storage it created itself, so casting the result back to
     /// <see cref="List{T}"/> throws instead of opening the struct up; a single-error result hands out a fresh
-    /// one-item list. Neither is affected by what the caller does to the list that was passed in.
+    /// one-item collection on every call, which is a throwaway. Neither is affected by what the caller does to
+    /// the list that was passed in.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the result is in an uninitialized default state.
