@@ -22,7 +22,7 @@ internal static class Category {
 internal static class Fixtures {
     public static Error SomeError => Error.Failure("Test.Failure", "A test failure occurred.");
     public static Error AnotherError => Error.Validation("Test.Validation", "A test validation error occurred.");
-    public static Error NotFoundError => Error.NotFound("Test.NotFound", 42);
+    public static Error NotFoundError => Error.NotFoundById("Test", 42);
 
     public static Result<int> SuccessInt(int value = 42) {
         return value;

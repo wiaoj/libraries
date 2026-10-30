@@ -78,6 +78,13 @@ public readonly record struct Error : IEquatable<Error> {
         new(code, description, ErrorType.Validation);
 
     /// <summary>Creates a not found error.</summary>
+    /// <remarks>
+    /// This is the <c>code, description</c> factory used by every other member of this class: both parameters are
+    /// strings and both are stored verbatim, so <c>Error.NotFound("User", "berta")</c> gives the code <c>"User"</c>
+    /// (no <c>.NotFound</c> suffix is added) and the description <c>"berta"</c>. That surprises a caller who means
+    /// "resource <c>User</c> with id <c>berta</c>", because an identifier written as text is still a string. For
+    /// resource-with-id semantics, call <see cref="NotFoundById(string, object)"/> instead.
+    /// </remarks>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Error NotFound(
@@ -85,10 +92,18 @@ public readonly record struct Error : IEquatable<Error> {
         string description = "Resource not found.") =>
         new(code, description, ErrorType.NotFound);
 
-    /// <summary>Creates a not found error with a resource name and identifier.</summary>
+    /// <summary>
+    /// Creates a not found error from a resource name and an identifier, with code
+    /// <c>ResourceName.NotFound</c> and a description naming the identifier.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="NotFound(string, string)"/> by name, deliberately: an id-taking overload of
+    /// <c>NotFound</c> would be hidden by the <c>code, description</c> overload whenever the id is a string, which
+    /// is the common case for guid and snowflake identifiers rendered as text.
+    /// </remarks>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Error NotFound(string resourceName, object id) =>
+    public static Error NotFoundById(string resourceName, object id) =>
         new($"{resourceName}.NotFound", $"{resourceName} with id '{id}' was not found.", ErrorType.NotFound);
 
     /// <summary>Creates a conflict error (HTTP 409).</summary>
