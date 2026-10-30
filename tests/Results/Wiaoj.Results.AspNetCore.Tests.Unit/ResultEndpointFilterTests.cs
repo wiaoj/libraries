@@ -7,6 +7,8 @@ namespace Wiaoj.Results.AspNetCore.Tests.Unit;
 [Trait("Category", "EndpointFilter")]
 public sealed class ResultEndpointFilterTests {
 
+    // Reads the ambient projection default through the filter path; same collection as the tests that assign it.
+    [Collection("ProblemDetailsProjection")]
     public sealed class TheResultEndpointFilter {
         [Fact]
         public async Task InvokeAsync_WhenEndpointReturnsSuccessfulResult_ConvertsToOkResult() {
