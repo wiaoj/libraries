@@ -7,6 +7,24 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// <summary>
 /// General extension methods for <see cref="IServiceCollection"/>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Shadowing hazard.</b> This class is deliberately declared in the framework namespace
+/// <c>Microsoft.Extensions.DependencyInjection</c> so consumers see these extensions with only
+/// <c>using Microsoft.Extensions.DependencyInjection;</c>. Inside that namespace, this class's own methods are
+/// closer candidates than framework extensions that are visible only through a <c>using</c> directive
+/// (for example <see cref="Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions"/>).
+/// A same-name call such as <c>services.Replace(descriptor)</c> therefore binds back to this class instead of the
+/// framework and used to recurse until the process died with a stack overflow (issue #217).
+/// </para>
+/// <para>
+/// <b>Rule for any method added here:</b> if its name matches an extension method that the framework (or another
+/// using-imported namespace) declares for <see cref="IServiceCollection"/>, never call that framework method with
+/// extension-method syntax from inside this class or namespace — call it as an explicit static invocation, e.g.
+/// <c>ServiceCollectionDescriptorExtensions.Replace(services, descriptor)</c>, so the framework overload is selected
+/// regardless of namespace proximity.
+/// </para>
+/// </remarks>
 public static class ServiceCollectionExtensions {
     /// <summary>
     /// Replaces an existing service registration with a new implementation.
@@ -22,7 +40,8 @@ public static class ServiceCollectionExtensions {
         where TImplementation : class, TService {
 
         ServiceDescriptor descriptor = new(typeof(TService), typeof(TImplementation), lifetime);
-        services.Replace(descriptor);
+        // Explicit static call: inside this namespace services.Replace(descriptor) binds back to this class (issue #217).
+        ServiceCollectionDescriptorExtensions.Replace(services, descriptor);
         return services;
     }
 
@@ -32,7 +51,8 @@ public static class ServiceCollectionExtensions {
     public static IServiceCollection Replace<TService>(this IServiceCollection services, TService instance)
         where TService : class {
 
-        services.Replace(ServiceDescriptor.Singleton(typeof(TService), instance));
+        // Explicit static call: inside this namespace services.Replace(...) would bind back to this overload and recurse (issue #217).
+        ServiceCollectionDescriptorExtensions.Replace(services, ServiceDescriptor.Singleton(typeof(TService), instance));
         return services;
     }
 
@@ -46,7 +66,8 @@ public static class ServiceCollectionExtensions {
         ServiceLifetime lifetime)
         where TService : class {
 
-        services.Replace(new ServiceDescriptor(typeof(TService), sp => implementationFactory(sp), lifetime));
+        // Explicit static call: inside this namespace services.Replace(...) would bind back to this class and recurse (issue #217).
+        ServiceCollectionDescriptorExtensions.Replace(services, new ServiceDescriptor(typeof(TService), sp => implementationFactory(sp), lifetime));
         return services;
     }
 
