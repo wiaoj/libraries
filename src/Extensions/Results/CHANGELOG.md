@@ -64,9 +64,7 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
   entry points — the implicit conversion and `Success` — and every combinator that routes through them (`Map` and
   friends) agree. Two things deliberately did not change: `Result<int>` from `0` is still a success (`value is null`
   on an unconstrained generic does not box a value type, and zero is a value, not an absence), and
-  `default(Result<T>)` is still the same uninitialized failure it always was. Consequence for the API surface:
-  `EnsureNotNull(error)` can no longer be handed a success whose value is null, so its own error is superseded by
-  `Result.NullValue` and the combinator now only ever propagates a failure that already exists.
+  `default(Result<T>)` is still the same uninitialized failure it always was.
 - **BREAKING** `default(ErrorType).ToStatusCode()` answers HTTP 500 instead of throwing. The nameless default value
   was an un-mapped type, so it hit the loud `UnmappedErrorTypePolicy.Throw` path added in this same line; an
   uninitialized result now reaches the client as a server fault, which is what the `BuiltIn` row for
@@ -93,6 +91,15 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
   `TypeStyle = ProblemTypeStyle.HttpStatusIo` plus its own `Titles` map. Announced as
   [wiaoj/verba#469](https://github.com/wiaoj/verba/issues/469) and
   [wiaoj/prism#477](https://github.com/wiaoj/prism/issues/477).
+- **BREAKING** `EnsureNotNull` and `EnsureNotNullAsync` are removed — all eight overloads, both the reference-type
+  and the nullable-value-type pair, error and error-factory forms. Their central branch read
+  `if (result.Value is null) return error;`, and after the null rule above a `Result<T?>` cannot be a success that
+  holds null, so the error a caller supplied was unreachable and the combinator's documented promise ("pass the
+  error to use when the value is missing") described a branch that no longer exists. What survives is only the
+  `Result<T?> → Result<T>` narrowing, which is now explicit at the call site:
+  `nullableResult.Map(u => u!)`. `ToResult` — the other direction, a bare `T?` becoming a `Result` with a
+  caller-supplied error — is unaffected and stays. A caller still passing the old shape gets a compile error rather
+  than a silent behaviour change. Recorded as eight `CP0002` entries in `CompatibilitySuppressions.xml`.
 - The built-in table is now a name-keyed lookup instead of an 11-comparison chain. Same codes, one hash instead of
   a worst-case eleven string comparisons per mapped error.
 

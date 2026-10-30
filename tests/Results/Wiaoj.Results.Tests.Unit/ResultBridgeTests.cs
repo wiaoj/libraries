@@ -32,36 +32,6 @@ public sealed class ResultBridgeTests {
         }
     }
 
-    public sealed class TheEnsureNotNullMethod {
-        [Fact]
-        public void EnsureNotNull_WhenValueIsNotNull_ReturnsNonNullableSuccessResult() {
-            // Arrange
-            Result<string?> input = (string?)"value";
-
-            // Act
-            Result<string> result = input.EnsureNotNull(SomeError);
-
-            // Assert
-            Assert.True(result.IsSuccess);
-            Assert.Equal("value", result.Value);
-        }
-
-        [Fact]
-        public void EnsureNotNull_WhenValueIsNull_StillGuardsItAsAFailure() {
-            // Arrange - under the current rule the null input is already a failure (Result.NullValue),
-            // so EnsureNotNull receives a failed result and propagates it rather than inventing SomeError.
-            Result<string?> input = (string?)null;
-
-            // Act
-            Result<string> result = input.EnsureNotNull(SomeError);
-
-            // Assert - the combinator still never turns a null value into a successful non-null result;
-            // the failure now simply originates at construction, so the guard's own error is superseded.
-            Assert.True(result.IsFailure);
-            Assert.Equal("Result.NullValue", result.FirstError.Code);
-        }
-    }
-
     public sealed class TheMapErrorAndMapSuccessMethods {
         [Fact]
         public void MapError_WhenFailure_ReplacesErrorWithNewError() {
