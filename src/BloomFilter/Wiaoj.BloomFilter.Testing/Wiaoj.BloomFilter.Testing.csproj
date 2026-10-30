@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.BloomFilter.Testing</RootNamespace>
 		<AssemblyName>Wiaoj.BloomFilter.Testing</AssemblyName>
 		<PackageId>Wiaoj.BloomFilter.Testing</PackageId>

@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.Idempotency.Redis</RootNamespace>
 		<AssemblyName>Wiaoj.Idempotency.Redis</AssemblyName>
 		<PackageId>Wiaoj.Idempotency.Redis</PackageId>

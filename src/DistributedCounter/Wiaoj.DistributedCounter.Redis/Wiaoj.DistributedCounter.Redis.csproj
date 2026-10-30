@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.DistributedCounter.Redis</RootNamespace>
 		<AssemblyName>Wiaoj.DistributedCounter.Redis</AssemblyName>
 		<PackageId>Wiaoj.DistributedCounter.Redis</PackageId>

@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <!--
       The types here are the query language itself — the request, its nodes, its parsers and its validation
       result — so they keep the root namespace. A contract assembly writes `using Wiaoj.Querying;` and gets

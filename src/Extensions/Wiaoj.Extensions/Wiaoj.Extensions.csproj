@@ -2,30 +2,18 @@
 
 	<PropertyGroup>							 
 		<TargetFramework>net10.0</TargetFramework>				   
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>					  
 		<RootNamespace>Wiaoj.Extensions</RootNamespace> 
 		<AssemblyName>Wiaoj.Extensions</AssemblyName>
 		
 		<PackageId>Wiaoj.Extensions</PackageId>
-		<Version>0.0.1-alpha.1</Version>			   
-		<Authors>wiaoj</Authors>
 		<Title>Wiaoj General Extensions</Title>
 		<Description>High-performance, general-purpose extension methods for the Wiaoj ecosystem. Built on top of Wiaoj.Primitives and Preconditions.</Description>
 		<PackageTags>extensions;utilities;helpers;dotnet;wiaoj</PackageTags>
-		<PackageProjectUrl>https://github.com/wiaoj/libraries</PackageProjectUrl>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
 
-		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
-		<RepositoryType>git</RepositoryType>
-		<RepositoryBranch>master</RepositoryBranch>
 
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
 		<IsPackable>true</IsPackable>
-		<IncludeSymbols>true</IncludeSymbols>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
 		<Optimize>true</Optimize>
 		<IsAotCompatible>true</IsAotCompatible>

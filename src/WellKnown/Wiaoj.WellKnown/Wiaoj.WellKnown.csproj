@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.WellKnown</RootNamespace>
 		<AssemblyName>Wiaoj.WellKnown</AssemblyName>
 		<PackageId>Wiaoj.WellKnown</PackageId>

@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.BloomFilter.Redis</RootNamespace>
 		<AssemblyName>Wiaoj.BloomFilter.Redis</AssemblyName>
 		<PackageId>Wiaoj.BloomFilter.Redis</PackageId>

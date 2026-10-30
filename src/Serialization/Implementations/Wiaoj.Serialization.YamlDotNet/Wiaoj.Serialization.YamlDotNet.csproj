@@ -2,22 +2,16 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 							    
 		<PackageId>Wiaoj.Serialization.YamlDotNet</PackageId>
-		<Version>0.0.1-alpha.1</Version>
-		<Authors>wiaoj</Authors>
 		<Title>Wiaoj Serialization YamlDotNet</Title>
 		<Description>YAML serialization implementation for Wiaoj Serialization using YamlDotNet.</Description>
 		<PackageTags>serialization;yaml;yamldotnet;wiaoj</PackageTags>
 									  
 		<IsPackable>true</IsPackable>
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
 																					  
-		<Optimize>true</Optimize>
+	<Optimize>true</Optimize>
 	</PropertyGroup>
 
 	<ItemGroup>

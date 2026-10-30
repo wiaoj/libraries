@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
 	  <RootNamespace>Wiaoj.Webhooks.Signing.Asymmetric</RootNamespace>
 	  <AssemblyName>Wiaoj.Webhooks.Signing.Asymmetric</AssemblyName>
 	  <PackageId>Wiaoj.Webhooks.Signing.Asymmetric</PackageId>

@@ -3,34 +3,22 @@
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
 		<LangVersion>preview</LangVersion>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 
 		<RootNamespace>Wiaoj.Abstractions</RootNamespace>
 		<AssemblyName>Wiaoj.Abstractions</AssemblyName>
 		
 		<!-- Package Info -->
 		<PackageId>Wiaoj.Abstractions</PackageId>
-		<Version>0.0.1-alpha.1</Version>
-		<Authors>wiaoj</Authors>
 
 		<Title>Wiaoj Abstractions - Standard Interfaces &amp; Patterns</Title>
 		<Description>A foundational library providing standardized, type-safe interfaces for common architectural patterns in .NET. Includes generic support for Deep/Shallow Cloning, State Copying (CopyFrom/CopyTo), and Asynchronous Object Factories to promote loose coupling and clear contracts.</Description>
 		<PackageTags>abstractions;interfaces;cloneable;deep-clone;shallow-clone;copy;factory;async-factory;patterns;architecture;dependency-injection</PackageTags>
 
-		<PackageProjectUrl>https://github.com/wiaoj/libraries</PackageProjectUrl>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
 
-		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
-		<RepositoryType>git</RepositoryType>
-		<RepositoryBranch>master</RepositoryBranch>
 
 		<!-- Build & Pack Settings -->
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
 		<IsPackable>true</IsPackable>
-		<IncludeSymbols>true</IncludeSymbols>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
 		<!-- Optimization & AOT -->
 		<Optimize>true</Optimize>
