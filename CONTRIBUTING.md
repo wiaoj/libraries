@@ -95,8 +95,14 @@ Three things that produce confidently wrong answers here, all measured in this r
   `--no-build` after an explicit build; otherwise the failure is `NU5026 … dll not found`, not an API finding.
 - **A zero exit code is not evidence.** `RunPackageValidation` skips itself when the project looks up to date, so
   `touch` the csproj and grep `-v normal` output for `RunPackageValidation:`. And `Wiaoj.Identifiers.Generators`
-  sits in the publish filter with `IsPackable=false` (it ships inside `Wiaoj.Identifiers`), so packing it does
-  nothing at all and succeeds.
+  sits in the publish filter with `IsPackable=false`, so packing it does nothing at all and succeeds. It is not its
+  own package: the source generator travels as a file inside `Wiaoj.Identifiers.Abstractions`, which packs
+  `…\bin\$(Configuration)\netstandard2.0\Wiaoj.Identifiers.Generators.dll` into `analyzers/dotnet/cs`, and
+  `Wiaoj.Identifiers` then passes it on with `PrivateAssets="none"`. Verified against the feed —
+  `Wiaoj.Identifiers.Abstractions 0.3.0-alpha.1` contains `analyzers/dotnet/cs/Wiaoj.Identifiers.Generators.dll`,
+  while `wiaoj.identifiers.generators` itself returns `BlobNotFound`. Because that path is hardcoded per
+  configuration, building the generator before packing Abstractions is not optional (the same reason as the first
+  bullet above).
 - **On a Turkish-locale Windows machine, restore the invariant flag.** ApiCompat lowercases the package id with the
   current culture and looks for `wiaoj.ıdempotency` (dotless `ı`), which fails for every id containing a capital `I`
   with `FileNotFoundException: … nupkg not found`. Run local packs with
