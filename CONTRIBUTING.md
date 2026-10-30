@@ -68,6 +68,45 @@ namespace Microsoft.Extensions.DependencyInjection;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 ```
 
+## Packing and API validation
+
+Every project in `Wiaoj.Publish.slnf` that is a package carries:
+
+```xml
+<EnablePackageValidation>true</EnablePackageValidation>
+<PackageValidationBaselineVersion>0.3.0-alpha.1</PackageValidationBaselineVersion>
+```
+
+`dotnet pack` then compares the produced package's public API against that version on nuget.org and fails on a
+break (`CP0001` type removed, `CP0002` member removed, `CP0008` interface implementation lost, `CP0021` constraint
+added, `CP0003` assembly version lower than the baseline). A break is allowed only as a decision: generate the
+record, read it, commit it.
+
+```bash
+touch <project>.csproj                                    # otherwise pack may skip validation as up to date
+dotnet pack <project>.csproj -c Release \
+  -p:ApiCompatGenerateSuppressionFile=true                # writes CompatibilitySuppressions.xml
+# read the generated file, keep only what you intend to break, then pack again to confirm it is clean
+```
+
+Three things that produce confidently wrong answers here, all measured in this repo:
+
+- **`dotnet pack` does not compile.** Build first — `dotnet build ./Wiaoj.Publish.slnf -c Release` — or pack with
+  `--no-build` after an explicit build; otherwise the failure is `NU5026 … dll not found`, not an API finding.
+- **A zero exit code is not evidence.** `RunPackageValidation` skips itself when the project looks up to date, so
+  `touch` the csproj and grep `-v normal` output for `RunPackageValidation:`. And `Wiaoj.Identifiers.Generators`
+  sits in the publish filter with `IsPackable=false` (it ships inside `Wiaoj.Identifiers`), so packing it does
+  nothing at all and succeeds.
+- **On a Turkish-locale Windows machine, restore the invariant flag.** ApiCompat lowercases the package id with the
+  current culture and looks for `wiaoj.ıdempotency` (dotless `ı`), which fails for every id containing a capital `I`
+  with `FileNotFoundException: … nupkg not found`. Run local packs with
+  `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`; CI is unaffected because runners use an invariant culture.
+
+The baseline is the release train's previous version, one value for all packages: the repository publishes every
+package at the same version (`publish.yml` passes a single `-p:Version` to `Wiaoj.Publish.slnf`), and each id in the
+publish filter carries `0.3.0-alpha.1` on the feed. When `0.4.0-alpha.1` ships, move the baseline forward in the same
+change. Do not point the baseline at a version that is not on the feed.
+
 ## Not yet aligned
 
 These predate the rules above. Align them when you next change their public API, and remove them from this list.
