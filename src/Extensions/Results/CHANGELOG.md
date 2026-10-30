@@ -81,6 +81,18 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
   `new ErrorType("Uninitialized") == ErrorType.Uninitialized`, spelling the name out is now rejected too, where it
   used to register. It could not stay allowed: registering it would let one producer re-key every other producer's
   uninitialized state to a client status code.
+- **BREAKING** `ToProblemDetails()` now fills the RFC 9457 roles instead of the RFC 7807 ones it was documented as.
+  `title` was `Error.Code` and `type` was `https://httpstatuses.io/{status}` — the machine key in the human field and
+  somebody else's site in the field the spec says the producer owns. Now `title` is the `ErrorType` name (stable per
+  problem type, which is what §3.2 asks for), `type` is `{ProblemDetailsProjection.TypeNamespace}/{Error.Code}` or
+  `about:blank` while no namespace is configured, and the error code travels in the new `code` extension member.
+  The multi-error key `errors` became `violations`, because `errors[]` is already bound to a `{pointer, message}`
+  shape by the validation surface in this ecosystem and one key with two schemas is a consumer trap. `status`,
+  `detail` and `instance` did not move. Two consumer-side notes: a client reading `problem.code || problem.title`
+  keeps working because `code` is now written first, and a client that truly cannot migrate gets
+  `TypeStyle = ProblemTypeStyle.HttpStatusIo` plus its own `Titles` map. Announced as
+  [wiaoj/verba#469](https://github.com/wiaoj/verba/issues/469) and
+  [wiaoj/prism#477](https://github.com/wiaoj/prism/issues/477).
 - The built-in table is now a name-keyed lookup instead of an 11-comparison chain. Same codes, one hash instead of
   a worst-case eleven string comparisons per mapped error.
 
@@ -111,6 +123,12 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
 - `ErrorType.Uninitialized`, the named default value, and a `BuiltIn` row mapping it to HTTP 500. It is a value like
   any other built-in — reflectable, comparable, dictionary-keyable, serializable — which is what makes
   `ToStatusCode_EveryBuiltInErrorType_HasAMapping` cover the state that used to fall outside it.
+- `ProblemDetailsProjection`, the rules that produce the `type` and `title` members, as an instance passed per call
+  with a process-wide `Default` for paths that cannot take an argument (the endpoint filter, `ToHttpResult`). It is a
+  record with `TypeStyle`, `TypeNamespace` and `Titles`, plus `BuildType`/`BuildTitle`; `ToProblemDetails` grew
+  three-argument overloads rather than an optional parameter, because adding a parameter to an existing signature is
+  the binary break APICompat reports as `CP0002`. `ResultProblemDetailsExtensions.CodeExtensionKey` and
+  `.ViolationsExtensionKey` name the two extension members so a consumer does not have to hard-code the strings.
 - `Error.ToString()` prints `Code`, `Description`, `Type` and `Metadata` and never the cause. An `Error` is
   interpolated into log messages and assertion failure text far more often than it is handed to a logger, so the
   record-struct `PrintMembers` is overridden rather than left to the generated member list.
