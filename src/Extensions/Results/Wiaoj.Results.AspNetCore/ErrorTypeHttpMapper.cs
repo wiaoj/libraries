@@ -49,17 +49,28 @@ public static class ErrorTypeHttpMapper {
     /// </summary>
     private const int Status499ClientClosedRequest = 499;
 
+    /// <summary>
+    /// RFC 6585's "Precondition Required". Absent from <see cref="StatusCodes"/>, which never grew past the
+    /// original RFC 7231 set, so the constant lives here.
+    /// </summary>
+    private const int Status428PreconditionRequired = 428;
+
     private static readonly Dictionary<string, int> BuiltIn = new(StringComparer.Ordinal) {
         [nameof(ErrorType.Validation)] = StatusCodes.Status400BadRequest,
         [nameof(ErrorType.Unauthorized)] = StatusCodes.Status401Unauthorized,
         [nameof(ErrorType.Forbidden)] = StatusCodes.Status403Forbidden,
         [nameof(ErrorType.NotFound)] = StatusCodes.Status404NotFound,
+        [nameof(ErrorType.MethodNotAllowed)] = StatusCodes.Status405MethodNotAllowed,
         [nameof(ErrorType.Conflict)] = StatusCodes.Status409Conflict,
         [nameof(ErrorType.Gone)] = StatusCodes.Status410Gone,
+        [nameof(ErrorType.PreconditionFailed)] = StatusCodes.Status412PreconditionFailed,
+        [nameof(ErrorType.UnsupportedMediaType)] = StatusCodes.Status415UnsupportedMediaType,
         [nameof(ErrorType.UnprocessableEntity)] = StatusCodes.Status422UnprocessableEntity,
+        [nameof(ErrorType.PreconditionRequired)] = Status428PreconditionRequired,
         [nameof(ErrorType.RateLimit)] = StatusCodes.Status429TooManyRequests,
         [nameof(ErrorType.Timeout)] = StatusCodes.Status408RequestTimeout,
         [nameof(ErrorType.Cancelled)] = Status499ClientClosedRequest,
+        [nameof(ErrorType.NotImplemented)] = StatusCodes.Status501NotImplemented,
         [nameof(ErrorType.Unavailable)] = StatusCodes.Status503ServiceUnavailable,
         [nameof(ErrorType.Unexpected)] = StatusCodes.Status500InternalServerError,
         [nameof(ErrorType.Failure)] = StatusCodes.Status400BadRequest

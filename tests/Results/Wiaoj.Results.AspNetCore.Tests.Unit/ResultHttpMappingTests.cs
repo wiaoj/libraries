@@ -16,12 +16,17 @@ public sealed class ResultHttpMappingTests {
         [InlineData("Unauthorized", StatusCodes.Status401Unauthorized)]
         [InlineData("Forbidden", StatusCodes.Status403Forbidden)]
         [InlineData("NotFound", StatusCodes.Status404NotFound)]
+        [InlineData("MethodNotAllowed", StatusCodes.Status405MethodNotAllowed)]
         [InlineData("Conflict", StatusCodes.Status409Conflict)]
         [InlineData("Gone", StatusCodes.Status410Gone)]
+        [InlineData("PreconditionFailed", StatusCodes.Status412PreconditionFailed)]
+        [InlineData("UnsupportedMediaType", StatusCodes.Status415UnsupportedMediaType)]
         [InlineData("UnprocessableEntity", StatusCodes.Status422UnprocessableEntity)]
+        [InlineData("PreconditionRequired", 428)] // RFC 6585; not a StatusCodes constant
         [InlineData("RateLimit", StatusCodes.Status429TooManyRequests)]
         [InlineData("Timeout", StatusCodes.Status408RequestTimeout)]
         [InlineData("Cancelled", 499)] // nginx "Client Closed Request"; not a StatusCodes constant
+        [InlineData("NotImplemented", StatusCodes.Status501NotImplemented)]
         [InlineData("Unavailable", StatusCodes.Status503ServiceUnavailable)]
         [InlineData("Unexpected", StatusCodes.Status500InternalServerError)]
         [InlineData("Failure", StatusCodes.Status400BadRequest)]
