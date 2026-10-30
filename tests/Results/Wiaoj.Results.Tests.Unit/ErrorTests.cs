@@ -49,15 +49,60 @@ public sealed class ErrorTests {
         }
 
         [Fact]
-        public void NotFound_WithResourceAndId_FormatsDescriptionCorrectly() {
+        public void NotFoundById_ResourceAndIntId_FormatsCodeAndDescription() {
             // Arrange & Act
-            Error error = Error.NotFound("User", 42);
+            Error error = Error.NotFoundById("User", 42);
 
             // Assert
             Assert.Equal("User.NotFound", error.Code);
-            Assert.Contains("User", error.Description);
-            Assert.Contains("42", error.Description);
+            Assert.Equal("User with id '42' was not found.", error.Description);
             Assert.Equal(ErrorType.NotFound, error.Type);
+        }
+
+        [Fact]
+        public void NotFoundById_ResourceAndStringId_FormatsCodeAndDescription() {
+            // A string id is the argument shape that used to be swallowed by the code/description factory.
+            // Arrange & Act
+            Error error = Error.NotFoundById("User", "berta");
+
+            // Assert
+            Assert.Equal("User.NotFound", error.Code);
+            Assert.Equal("User with id 'berta' was not found.", error.Description);
+            Assert.Equal(ErrorType.NotFound, error.Type);
+        }
+
+        [Fact]
+        public void NotFound_TwoStringArguments_IsTheCodeDescriptionFactory() {
+            // Pins the overload resolution that made the old id-taking factory a trap: with both arguments
+            // string, the code/description factory wins, so no ".NotFound" suffix is added.
+            // Arrange & Act
+            Error error = Error.NotFound("User", "berta");
+
+            // Assert
+            Assert.Equal("User", error.Code);
+            Assert.Equal("berta", error.Description);
+            Assert.Equal(ErrorType.NotFound, error.Type);
+        }
+
+        [Fact]
+        public void NotFound_DefaultParameters_SetsDefaultValues() {
+            // Arrange & Act
+            Error error = Error.NotFound();
+
+            // Assert
+            Assert.Equal("Resource.NotFound", error.Code);
+            Assert.Equal("Resource not found.", error.Description);
+            Assert.Equal(ErrorType.NotFound, error.Type);
+        }
+
+        [Fact]
+        public void NotFound_FixtureCarriesTheCodeItsNamePromises() {
+            // Arrange & Act
+            Error error = Fixtures.NotFoundError;
+
+            // Assert
+            Assert.Equal("Test.NotFound", error.Code);
+            Assert.Equal("Test with id '42' was not found.", error.Description);
         }
 
         [Fact]
