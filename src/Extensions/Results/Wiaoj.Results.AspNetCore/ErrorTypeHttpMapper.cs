@@ -49,12 +49,6 @@ public static class ErrorTypeHttpMapper {
     /// </summary>
     private const int Status499ClientClosedRequest = 499;
 
-    /// <summary>
-    /// RFC 6585's "Precondition Required". Absent from <see cref="StatusCodes"/>, which never grew past the
-    /// original RFC 7231 set, so the constant lives here.
-    /// </summary>
-    private const int Status428PreconditionRequired = 428;
-
     private static readonly Dictionary<string, int> BuiltIn = new(StringComparer.Ordinal) {
         [nameof(ErrorType.Validation)] = StatusCodes.Status400BadRequest,
         [nameof(ErrorType.Unauthorized)] = StatusCodes.Status401Unauthorized,
@@ -66,7 +60,7 @@ public static class ErrorTypeHttpMapper {
         [nameof(ErrorType.PreconditionFailed)] = StatusCodes.Status412PreconditionFailed,
         [nameof(ErrorType.UnsupportedMediaType)] = StatusCodes.Status415UnsupportedMediaType,
         [nameof(ErrorType.UnprocessableEntity)] = StatusCodes.Status422UnprocessableEntity,
-        [nameof(ErrorType.PreconditionRequired)] = Status428PreconditionRequired,
+        [nameof(ErrorType.PreconditionRequired)] = StatusCodes.Status428PreconditionRequired, // RFC 6585
         [nameof(ErrorType.RateLimit)] = StatusCodes.Status429TooManyRequests,
         [nameof(ErrorType.Timeout)] = StatusCodes.Status408RequestTimeout,
         [nameof(ErrorType.Cancelled)] = Status499ClientClosedRequest,

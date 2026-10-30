@@ -22,7 +22,7 @@ public sealed class ResultHttpMappingTests {
         [InlineData("PreconditionFailed", StatusCodes.Status412PreconditionFailed)]
         [InlineData("UnsupportedMediaType", StatusCodes.Status415UnsupportedMediaType)]
         [InlineData("UnprocessableEntity", StatusCodes.Status422UnprocessableEntity)]
-        [InlineData("PreconditionRequired", 428)] // RFC 6585; not a StatusCodes constant
+        [InlineData("PreconditionRequired", StatusCodes.Status428PreconditionRequired)] // RFC 6585
         [InlineData("RateLimit", StatusCodes.Status429TooManyRequests)]
         [InlineData("Timeout", StatusCodes.Status408RequestTimeout)]
         [InlineData("Cancelled", 499)] // nginx "Client Closed Request"; not a StatusCodes constant
