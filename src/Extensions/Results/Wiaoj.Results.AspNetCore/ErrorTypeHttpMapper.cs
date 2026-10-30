@@ -44,13 +44,6 @@ public static class ErrorTypeHttpMapper {
 
     private static readonly ConcurrentDictionary<string, int> Registered = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// nginx's "Client Closed Request". Not IANA-registered and absent from <see cref="StatusCodes"/>,
-    /// but it is the convention for a request the caller abandoned, and it keeps that outcome out of the
-    /// 5xx budget the way 499 was designed to.
-    /// </summary>
-    private const int Status499ClientClosedRequest = 499;
-
     private static readonly Dictionary<string, int> BuiltIn = new(StringComparer.Ordinal) {
         [nameof(ErrorType.Validation)] = StatusCodes.Status400BadRequest,
         [nameof(ErrorType.Unauthorized)] = StatusCodes.Status401Unauthorized,
@@ -65,7 +58,7 @@ public static class ErrorTypeHttpMapper {
         [nameof(ErrorType.PreconditionRequired)] = StatusCodes.Status428PreconditionRequired, // RFC 6585
         [nameof(ErrorType.RateLimit)] = StatusCodes.Status429TooManyRequests,
         [nameof(ErrorType.Timeout)] = StatusCodes.Status408RequestTimeout,
-        [nameof(ErrorType.Cancelled)] = Status499ClientClosedRequest,
+        [nameof(ErrorType.Cancelled)] = StatusCodes.Status499ClientClosedRequest, // nginx "Client Closed Request"; not IANA-registered
         [nameof(ErrorType.NotImplemented)] = StatusCodes.Status501NotImplemented,
         [nameof(ErrorType.Unavailable)] = StatusCodes.Status503ServiceUnavailable,
         [nameof(ErrorType.Unexpected)] = StatusCodes.Status500InternalServerError,
