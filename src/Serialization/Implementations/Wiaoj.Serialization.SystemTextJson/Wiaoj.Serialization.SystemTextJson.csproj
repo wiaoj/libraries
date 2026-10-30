@@ -2,20 +2,14 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 							    
 		<PackageId>Wiaoj.Serialization.SystemTextJson</PackageId>
-		<Version>0.0.1-alpha.1</Version>
-		<Authors>wiaoj</Authors>
 		<Title>Wiaoj Serialization System.Text.Json</Title>
 		<Description>High-performance System.Text.Json implementation for Wiaoj Serialization with configurable options and telemetry support.</Description>
 		<PackageTags>serialization;json;systemtextjson;performance;wiaoj</PackageTags>
 									 
 		<IsPackable>true</IsPackable>
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
 													    
 		<Optimize>true</Optimize>
 		<IsAotCompatible>true</IsAotCompatible>

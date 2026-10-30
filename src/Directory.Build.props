@@ -1,0 +1,52 @@
+<Project>
+
+  <!--
+    One place for the metadata every Wiaoj.* package should carry.
+    A project still wins over this file, so an intentional exception is a line in that csproj,
+    not a fork of the convention. Values here are the ones that were already unanimous where set.
+
+    Scope note: compilation-affecting switches (TreatWarningsAsErrors, IsAotCompatible, IsTrimmable,
+    GenerateDocumentationFile) are deliberately NOT centralized. They are per-project commitments and
+    turning them on repo-wide would break builds that currently pass.
+    Optimize is excluded for the same reason: ten projects carry <Optimize>true</Optimize> unconditionally
+    and are optimised in Debug on purpose. Wiaoj.Preconditions is load-bearing for the zero-allocation
+    asserts in Wiaoj.Primitives.Tests.Unit, which regress to 7 failures when it stops being optimised.
+  -->
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      The whole solution ships as one release train: publish.yml passes a single -p:Version to
+      Wiaoj.Publish.slnf, and the feed shows every package at the same version. This value is the
+      local-development default only; a tag or workflow_dispatch input still overrides it.
+      Bump it here when the release train moves, nowhere else.
+    -->
+    <Version>0.4.0-alpha.1</Version>
+
+    <Authors>wiaoj</Authors>
+    <PackageProjectUrl>https://github.com/wiaoj/libraries</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+
+    <RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- The repository default branch; "master" produced packages pointing at a branch that does not exist. -->
+    <RepositoryBranch>main</RepositoryBranch>
+
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!--
+    Packing is a Release concern. Debug builds used to produce .nupkg files as a build side effect.
+    Projects that want pack-on-build keep a Release-conditioned line in their own csproj.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+</Project>

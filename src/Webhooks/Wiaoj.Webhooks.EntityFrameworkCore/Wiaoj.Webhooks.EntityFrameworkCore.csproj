@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <RootNamespace>Wiaoj.Webhooks.EntityFrameworkCore</RootNamespace>
     <AssemblyName>Wiaoj.Webhooks.EntityFrameworkCore</AssemblyName>
     <PackageId>Wiaoj.Webhooks.EntityFrameworkCore</PackageId>

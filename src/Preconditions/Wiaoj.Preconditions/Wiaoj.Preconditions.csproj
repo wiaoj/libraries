@@ -2,9 +2,6 @@
 
 	<PropertyGroup>											 
 		<TargetFrameworks>net10.0</TargetFrameworks>
-		<Version>0.0.1-alpha.1</Version>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.Preconditions</RootNamespace>
 
 		<!-- Package Configuration -->
@@ -12,20 +9,19 @@
 		<Title>Wiaoj Preconditions - High-Performance Guard Clauses</Title>
 		<Description>Zero-dependency, high-performance guard clauses for defensive programming in .NET. AOT-Compatible and highly optimized.</Description>
 		<PackageTags>guard;defensive-programming;preconditions;validation;performance;zero-dependency;dotnet;aot</PackageTags>
-		<PackageProjectUrl>https://github.com/wiaoj/libraries</PackageProjectUrl>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
-		<RepositoryType>git</RepositoryType>
-		<RepositoryBranch>master</RepositoryBranch>
 
 		<!-- Build & Pack Configuration -->
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
 		<IsPackable>true</IsPackable>
-		<IncludeSymbols>true</IncludeSymbols>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
 		<!-- Performance & AOT Compatibility -->
+		<!--
+			Deliberately not configuration-conditional, unlike the rest of the repository.
+			Wiaoj.Primitives.Tests.Unit asserts zero allocations on paths that call these guards,
+			and the assertions only hold while the callee assembly is optimised: with Optimize=false
+			in Debug the guard IL grows past the inline budget and each Compute() call allocates 32 bytes.
+			Removing this line makes 7 tests fail in Debug. See wiaoj/libraries PR for evidence.
+		-->
 		<Optimize>true</Optimize>
 		<IsAotCompatible>true</IsAotCompatible>
 		<IsTrimmable>true</IsTrimmable>

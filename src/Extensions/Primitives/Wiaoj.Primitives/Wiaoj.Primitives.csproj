@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>	 
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<DefineConstants>$(DefineConstants);WIAOJ_PRIMITIVES</DefineConstants>
 		
@@ -11,27 +9,14 @@
 		<AssemblyName>Wiaoj.Primitives</AssemblyName>
 		
 		<PackageId>Wiaoj.Primitives</PackageId>
-		<Version>0.0.1-alpha.2</Version>
-		<Authors>wiaoj</Authors>
 		<Title>Wiaoj Primitives - High Performance Value Objects</Title>
 		<Description>A set of high-performance, zero-allocation, and secure primitive types (Secret, Base64String, SemVer, Percentage) to combat primitive obsession in .NET.</Description>
 		<PackageTags>primitives;value-objects;zero-allocation;performance;security;secret;semver;base64</PackageTags>
-		<PackageProjectUrl>https://github.com/wiaoj/libraries</PackageProjectUrl>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
 
-		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
-		<RepositoryType>git</RepositoryType>
-		<RepositoryBranch>master</RepositoryBranch>
 
-		<GeneratePackageOnBuild Condition="'$(Configuration)' == 'Debug'">false</GeneratePackageOnBuild>
 		<GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
 		<IsPackable>true</IsPackable>
-		<IncludeSymbols>true</IncludeSymbols>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		
-		<Optimize Condition="'$(Configuration)' == 'Debug'">false</Optimize>
-		<Optimize Condition="'$(Configuration)' == 'Release'">true</Optimize> 
 		<IsAotCompatible Condition="'$(Configuration)' == 'Debug'">false</IsAotCompatible>
 		<IsAotCompatible Condition="'$(Configuration)' == 'Release'">true</IsAotCompatible>
 		<IsTrimmable>true</IsTrimmable>

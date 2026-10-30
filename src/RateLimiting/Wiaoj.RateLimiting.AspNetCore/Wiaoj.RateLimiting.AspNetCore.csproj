@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.RateLimiting.AspNetCore</RootNamespace>
 		<AssemblyName>Wiaoj.RateLimiting.AspNetCore</AssemblyName>
 		<PackageId>Wiaoj.RateLimiting.AspNetCore</PackageId>

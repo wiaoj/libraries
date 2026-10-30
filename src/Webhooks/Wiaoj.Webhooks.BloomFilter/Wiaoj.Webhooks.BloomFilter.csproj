@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <RootNamespace>Wiaoj.Webhooks.BloomFilter</RootNamespace>
     <AssemblyName>Wiaoj.Webhooks.BloomFilter</AssemblyName>
     <PackageId>Wiaoj.Webhooks.BloomFilter</PackageId>

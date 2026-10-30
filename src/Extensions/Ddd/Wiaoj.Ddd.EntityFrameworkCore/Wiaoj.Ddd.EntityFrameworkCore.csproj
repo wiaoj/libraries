@@ -2,22 +2,16 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 
 		<PackageId>Wiaoj.Ddd.EntityFrameworkCore</PackageId>
 		<RootNamespace>Wiaoj.Ddd.EntityFrameworkCore</RootNamespace>
 		<AssemblyName>Wiaoj.Ddd.EntityFrameworkCore</AssemblyName>
-		<Version>0.0.1-alpha.1</Version>
-		<Authors>wiaoj</Authors>
 		<Title>Wiaoj DDD Entity Framework Core</Title>
 		<Description>EF Core integration for Wiaoj DDD, providing Transactional Outbox, Audit Logging, and Domain Event Dispatching interceptors.</Description>
 		<PackageTags>ddd;efcore;entityframework;outbox;audit;wiaoj</PackageTags>
 
 		<IsPackable>true</IsPackable>
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-		<RepositoryUrl>https://github.com/wiaoj/libraries</RepositoryUrl>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 

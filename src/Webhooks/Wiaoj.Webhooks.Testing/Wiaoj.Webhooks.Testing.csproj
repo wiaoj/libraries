@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.Webhooks.Testing</RootNamespace>
 		<AssemblyName>Wiaoj.Webhooks.Testing</AssemblyName>
 		<PackageId>Wiaoj.Webhooks.Testing</PackageId>

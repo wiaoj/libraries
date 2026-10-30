@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
 	  <RootNamespace>Wiaoj.Webhooks.Publishing</RootNamespace>
 	  <AssemblyName>Wiaoj.Webhooks.Publishing</AssemblyName>
 	  <PackageId>Wiaoj.Webhooks.Publishing</PackageId>

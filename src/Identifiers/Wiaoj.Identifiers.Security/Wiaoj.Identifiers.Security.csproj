@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.Identifiers.Security</RootNamespace>
 		<AssemblyName>Wiaoj.Identifiers.Security</AssemblyName>
 		<PackageId>Wiaoj.Identifiers.Security</PackageId>

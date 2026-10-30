@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<RootNamespace>Wiaoj.Querying.OpenApi</RootNamespace>
 		<AssemblyName>Wiaoj.Querying.OpenApi</AssemblyName>
 		<PackageId>Wiaoj.Querying.OpenApi</PackageId>

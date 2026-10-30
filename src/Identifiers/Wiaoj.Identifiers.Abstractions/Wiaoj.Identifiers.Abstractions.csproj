@@ -2,8 +2,6 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
 		<!-- Types stay in the Wiaoj.Identifiers namespace: the package split is about dependencies, not about names. -->
 		<RootNamespace>Wiaoj.Identifiers</RootNamespace>
 		<AssemblyName>Wiaoj.Identifiers.Abstractions</AssemblyName>
