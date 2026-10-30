@@ -21,8 +21,22 @@ namespace Wiaoj.Results;
 [JsonConverter(typeof(ErrorTypeJsonConverter))]
 public readonly record struct ErrorType {
 
+    /// <summary>
+    /// The name the default value reports. It never runs the constructor, so its field is null while
+    /// <see cref="Name"/> is annotated non-nullable; naming that state is what keeps the annotation true.
+    /// </summary>
+    private const string UninitializedName = "Uninitialized";
+
+    private readonly string? name;
+
     /// <summary>The unique name of this error type.</summary>
-    public string Name { get; }
+    /// <remarks>
+    /// A name given to the constructor is stored verbatim. The default value of the struct, which reaches
+    /// this state without running the constructor, reports <see cref="Uninitialized"/> instead of
+    /// <see langword="null"/>: every reader of a name — <c>ToString()</c>, equality, hashing, the HTTP
+    /// mapping lookups, JSON — then sees one state for it rather than a nameless one.
+    /// </remarks>
+    public string Name => string.IsNullOrWhiteSpace(this.name) ? UninitializedName : this.name;
 
     /// <summary>
     /// Creates a custom error type with the specified name.
@@ -30,7 +44,22 @@ public readonly record struct ErrorType {
     /// <param name="name">A unique, human-readable name. Example: <c>"RateLimit"</c>.</param>
     public ErrorType(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        this.Name = name;
+        this.name = name;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Compares the normalized <see cref="Name"/>, not the field: the synthesized record-struct comparison
+    /// reads the field, which would leave <c>default(ErrorType)</c> unequal to <see cref="Uninitialized"/>
+    /// while both printed the same name.
+    /// </remarks>
+    public readonly bool Equals(ErrorType other) {
+        return string.Equals(this.Name, other.Name, StringComparison.Ordinal);
+    }
+
+    /// <inheritdoc/>
+    public override readonly int GetHashCode() {
+        return StringComparer.Ordinal.GetHashCode(this.Name);
     }
 
     /// <inheritdoc/>
@@ -138,4 +167,17 @@ public readonly record struct ErrorType {
     /// invites a retry, while 501 says "never, as deployed" - retrying a 501 does not help.
     /// </summary>
     public static readonly ErrorType NotImplemented = new(nameof(NotImplemented));
+
+    /// <summary>
+    /// The value was never assigned: this is <c>default(ErrorType)</c>, named (HTTP 500).
+    /// </summary>
+    /// <remarks>
+    /// Not a category a producer hands back on purpose - it says a struct was left at its default, which is
+    /// a bug on the side that produced the response. It is a value like any other for equality, hashing and
+    /// JSON: <c>default(ErrorType) == ErrorType.Uninitialized</c>, and both print <c>"Uninitialized"</c>.
+    /// Different from <see cref="Unexpected"/>: Unexpected is a declared server fault, this is the absence of
+    /// a declaration. Both map to 500, which is why repointing <see cref="Error.Uninitialized"/> here moves
+    /// no wire behaviour.
+    /// </remarks>
+    public static readonly ErrorType Uninitialized = new(nameof(Uninitialized));
 }

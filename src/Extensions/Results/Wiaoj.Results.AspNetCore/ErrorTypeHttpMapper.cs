@@ -36,7 +36,9 @@ public enum UnmappedErrorTypePolicy {
 /// <code>
 /// ErrorTypeHttpMapper.Register(AppErrorTypes.Locked, StatusCodes.Status423Locked);
 /// </code>
-/// A registration also overrides a built-in mapping for the same type name.
+/// A registration also overrides a built-in mapping for the same type name, with one exception:
+/// <see cref="ErrorType.Uninitialized"/> is the state a result is in when nobody assigned it a type at all,
+/// and <see cref="Register"/> refuses it so that a producer cannot answer a client code for its own bug.
 /// </summary>
 public static class ErrorTypeHttpMapper {
 
@@ -67,6 +69,10 @@ public static class ErrorTypeHttpMapper {
         [nameof(ErrorType.NotImplemented)] = StatusCodes.Status501NotImplemented,
         [nameof(ErrorType.Unavailable)] = StatusCodes.Status503ServiceUnavailable,
         [nameof(ErrorType.Unexpected)] = StatusCodes.Status500InternalServerError,
+
+        // The result was never assigned: a bug on the producer's side, so it is reported as a server fault
+        // exactly like the Unexpected it used to be carried under.
+        [nameof(ErrorType.Uninitialized)] = StatusCodes.Status500InternalServerError,
         [nameof(ErrorType.Failure)] = StatusCodes.Status400BadRequest
     };
 
@@ -80,14 +86,20 @@ public static class ErrorTypeHttpMapper {
     /// Maps <paramref name="errorType"/> to <paramref name="statusCode"/>, replacing any earlier
     /// registration or built-in mapping for the same type name.
     /// </summary>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="errorType"/> is the default value, so it carries no name to key on.
+    /// <exception cref="ArgumentException">
+    /// <paramref name="errorType"/> is <see cref="ErrorType.Uninitialized"/> - the value a result carries
+    /// when nobody assigned a type to it. The built-in table answers 500 for it, and a producer that
+    /// re-keyed that name would be choosing a client error for a bug on its own side.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="statusCode"/> is not in the 100..599 range.
     /// </exception>
     public static void Register(ErrorType errorType, int statusCode) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(errorType.Name);
+        if(errorType == ErrorType.Uninitialized)
+            throw new ArgumentException(
+                $"ErrorType '{errorType.Name}' is the uninitialized state, not a category a producer hands back "
+                + "on purpose; it is mapped by the built-in table and cannot be registered.",
+                nameof(errorType));
 
         if(statusCode is < 100 or > 599)
             throw new ArgumentOutOfRangeException(
@@ -103,7 +115,7 @@ public static class ErrorTypeHttpMapper {
     /// </summary>
     /// <returns><see langword="true"/> if a registration was removed; otherwise, <see langword="false"/>.</returns>
     public static bool Unregister(ErrorType errorType) {
-        return errorType.Name is not null && Registered.TryRemove(errorType.Name, out _);
+        return Registered.TryRemove(errorType.Name, out _);
     }
 
     /// <summary>
@@ -113,12 +125,10 @@ public static class ErrorTypeHttpMapper {
     /// <returns><see langword="true"/> when a registration or built-in mapping exists.</returns>
     [Pure]
     public static bool TryMap(ErrorType errorType, out int statusCode) {
-        string? name = errorType.Name;
+        string name = errorType.Name;
 
-        if(name is not null
-            && (Registered.TryGetValue(name, out statusCode) || BuiltIn.TryGetValue(name, out statusCode))) {
+        if(Registered.TryGetValue(name, out statusCode) || BuiltIn.TryGetValue(name, out statusCode))
             return true;
-        }
 
         statusCode = default;
         return false;
@@ -158,14 +168,9 @@ public static class ErrorTypeHttpMapper {
     [DoesNotReturn]
     private static void ThrowUnmapped(ErrorType errorType) {
         throw new InvalidOperationException(
-            $"ErrorType '{errorType.NameOrDefault()}' has no HTTP status code mapping. "
+            $"ErrorType '{errorType.Name}' has no HTTP status code mapping. "
             + $"Register one with ErrorTypeHttpMapper.Register(errorType, statusCode), "
             + $"or set ErrorTypeHttpMapper.OnUnmapped = {nameof(UnmappedErrorTypePolicy.InternalServerError)} "
             + "to keep answering with 500 instead of failing.");
     }
-}
-
-file static class ErrorTypeNameOrDefault {
-    internal static string NameOrDefault(this ErrorType errorType) =>
-        string.IsNullOrWhiteSpace(errorType.Name) ? "<uninitialized>" : errorType.Name!;
 }

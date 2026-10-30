@@ -268,11 +268,20 @@ public readonly record struct Error : IEquatable<Error> {
         description: "No error.",
         type: ErrorType.Failure);
 
-    /// <summary>A sentinel error representing an uninitialized default struct state.</summary>
+    /// <summary>
+    /// A sentinel error representing an uninitialized default struct state.
+    /// </summary>
+    /// <remarks>
+    /// Its type is <see cref="ErrorType.Uninitialized"/>, the named default value, not
+    /// <see cref="ErrorType.Unexpected"/>: an uninitialized result is not a server fault, it is a struct that
+    /// was never assigned. The HTTP answer is 500 either way, so this repoint changes no status code - what it
+    /// changes is the serialized <c>type</c>, which now reads <c>"Uninitialized"</c> instead of naming a fault
+    /// that never happened.
+    /// </remarks>
     public static readonly Error Uninitialized = new(
         code: "Result.Uninitialized",
         description: "The result is in an uninitialized default state.",
-        type: ErrorType.Unexpected);
+        type: ErrorType.Uninitialized);
 
     // ── Fluent Metadata & Cause ───────────────────────────────────────────────
 
