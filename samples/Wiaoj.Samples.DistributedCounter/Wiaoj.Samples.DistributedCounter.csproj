@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-Wiaoj.Samples.DistributedCounter-51e59af7-7732-4577-9b50-fa8f90255ced</UserSecretsId>
   </PropertyGroup>
 

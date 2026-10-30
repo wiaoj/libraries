@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-Wiaoj.Samples.Concurrency-d4f7d2d7-c937-4ca9-90a1-870ac43514ce</UserSecretsId>
   </PropertyGroup>
 

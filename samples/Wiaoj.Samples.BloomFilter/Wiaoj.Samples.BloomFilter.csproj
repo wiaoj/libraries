@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PublishAot>true</PublishAot>
     <UserSecretsId>dotnet-Wiaoj.Samples.BloomFilter-da4664ac-49ef-46cc-b3e6-5db5034b9c90</UserSecretsId>

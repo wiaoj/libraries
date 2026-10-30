@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-Wiaoj.Samples.Security-ca7ca9c3-7794-4793-8ea8-bf40121a69b1</UserSecretsId>
   </PropertyGroup>
 

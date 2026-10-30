@@ -1,0 +1,24 @@
+<Project>
+
+  <!--
+    One place for the metadata every test project in this repository carries. Measured before writing:
+    all 40 projects under tests/ set ImplicitUsings=enable, Nullable=enable and IsPackable=false in their own
+    csproj, and 39 of 40 set IsTestProject=true. A project still wins over this file, so an intentional
+    exception is a line in that csproj.
+
+    Deliberately NOT here:
+      - TargetFramework: the per-project line stays, so a future multi-target test project is a csproj edit
+        rather than a fight with an inherited value.
+      - TreatWarningsAsErrors: no test project sets it today, and switching it on would fail the build on
+        warnings that are already there (31 xUnit1051 in the Results suite alone).
+      - OutputType: only 7 of 40 test projects declare it; the rest take the SDK default.
+  -->
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+</Project>

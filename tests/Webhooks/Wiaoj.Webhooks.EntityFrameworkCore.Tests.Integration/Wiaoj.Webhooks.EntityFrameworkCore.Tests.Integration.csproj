@@ -2,10 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
     <OutputType>Exe</OutputType>
     <!-- The stores live in Wiaoj.Webhooks.EntityFrameworkCore.Internal, which EF Core's analyzer takes for its own internals. -->
     <NoWarn>$(NoWarn);EF1001</NoWarn>
