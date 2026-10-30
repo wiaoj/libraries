@@ -9,6 +9,12 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
 `PackageReference` version, so nothing updates until a consumer opts in.
 
 ### Fixed
+- `Error.FromException` threw the exception away. It copied the type name and message into an `Error` and returned,
+  so the stack trace was gone before the first log line could use it: `logger.LogError(error, ...)` had nothing to
+  unwrap. `Error.Cause` now carries the originating exception.
+- `OperationCanceledException` and `TaskCanceledException` mapped to `ErrorType.Unexpected`, which mapped to HTTP 500.
+  A request the caller abandoned was reported as a server fault and charged to the 5xx budget. They now map to the
+  new `ErrorType.Cancelled` (HTTP 499).
 - `ErrorTypeHttpMapper.ToStatusCode` no longer folds an un-mapped `ErrorType` into HTTP 500. `ErrorType` is
   extensible, so a producer-defined type such as `Locked` used to be reported as a server fault: 5xx alerting got
   noise, and the client got a status that blamed the wrong party. Un-mapped types now fail loudly (see Added).
@@ -29,6 +35,20 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
   a worst-case eleven string comparisons per mapped error.
 
 ### Added
+- `Error.Cause`: the exception an error was produced from, for `logger.LogError(error.Cause, ...)`. It is deliberately
+  outside `Equals`/`GetHashCode` (two errors describing the same failure are the same error regardless of which
+  throw produced them) and outside serialization (`ErrorJsonConverter` writes code, description, type and metadata
+  only), so a stack trace cannot reach a response body by accident. The cause arrives through a new five-argument
+  `Error` constructor overload rather than an optional parameter on the existing one: adding a parameter to a
+  constructor — even an optional one — removes the four-argument signature, and `dotnet pack` APICompat says so.
+- `Error.WithCause(Exception)` for attaching a cause to an error that was not built by `FromException`;
+  `WithMetadata` keeps an existing cause.
+- `ErrorType.Cancelled` and the `Error.Cancelled(code, description)` factory. `ErrorTypeHttpMapper` maps it to 499 —
+  the nginx "Client Closed Request" convention, which is not IANA-registered and has no `StatusCodes` constant;
+  register 400 if you would rather answer with a registered code.
+- `Error.ToString()` prints `Code`, `Description`, `Type` and `Metadata` and never the cause. An `Error` is
+  interpolated into log messages and assertion failure text far more often than it is handed to a logger, so the
+  record-struct `PrintMembers` is overridden rather than left to the generated member list.
 - `ErrorTypeHttpMapper.Register(ErrorType, int)` / `Unregister(ErrorType)` so producers map their own error types,
   and override built-ins, instead of editing a switch in a library.
 - `ErrorTypeHttpMapper.TryMap(ErrorType, out int)` and the `ToStatusCode(int fallbackStatusCode)` overload for call

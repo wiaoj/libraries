@@ -67,6 +67,15 @@ public readonly record struct ErrorType {
     /// <summary>Operation timed out (HTTP 408). A gateway or proxy timeout is 504: register it, or use <see cref="Unavailable"/>.</summary>
     public static readonly ErrorType Timeout = new(nameof(Timeout));
 
+    /// <summary>
+    /// The operation was cancelled before it completed (HTTP 499).
+    /// Different from <see cref="Timeout"/>: nobody waited too long, the caller went away.
+    /// 499 is the nginx "Client Closed Request" convention - the client is already gone, so the
+    /// status exists to keep this out of the 5xx error budget. Register 400 if you would rather
+    /// answer with a registered code.
+    /// </summary>
+    public static readonly ErrorType Cancelled = new(nameof(Cancelled));
+
     /// <summary>Service temporarily unavailable (HTTP 503).</summary>
     public static readonly ErrorType Unavailable = new(nameof(Unavailable));
 
