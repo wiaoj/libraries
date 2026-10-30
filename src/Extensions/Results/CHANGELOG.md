@@ -9,6 +9,17 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
 `PackageReference` version, so nothing updates until a consumer opts in.
 
 ### Fixed
+- `ErrorType` could escape its own constructor. `ArgumentException.ThrowIfNullOrWhiteSpace` guards the constructor,
+  but `default(ErrorType)` never runs it, so the struct's default value carried a null `Name` on a member annotated
+  `string` (not `string?`), printed null from an override declared to return `string`, and serialized as
+  `"type": null` inside a `problem+json` body. Three call sites patched around the hole instead of naming it — a
+  null-check before the mapper lookup, a `ErrorTypeNameOrDefault` helper that invented the placeholder
+  `<uninitialized>` for error messages, and an `Unregister` that returned `false` on a null name. The default value
+  is now a named state: `default(ErrorType)` **is** `ErrorType.Uninitialized`, equal to it, same hash, same JSON
+  name, and mapped to HTTP 500. Normalizing `Name` in the getter was not sufficient on its own: the synthesized
+  `record struct` comparison reads the backing field, so `Equals`/`GetHashCode` are overridden against the
+  normalized name. `Error.Uninitialized` was reporting `ErrorType.Unexpected` — a declared server fault — and now
+  reports `ErrorType.Uninitialized`; both map to 500, so the status a caller sees does not move.
 - `Result<T>.Errors` was read-only in the type and mutable in fact. A result built from a `List<Error>` stored that
   same list, so `errors.Add(...)`, `errors.Clear()` or `errors[0] = ...` after the result was returned changed what
   the result reported — including turning a failed result into one with zero errors. The cast
@@ -56,6 +67,20 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
   `default(Result<T>)` is still the same uninitialized failure it always was. Consequence for the API surface:
   `EnsureNotNull(error)` can no longer be handed a success whose value is null, so its own error is superseded by
   `Result.NullValue` and the combinator now only ever propagates a failure that already exists.
+- **BREAKING** `default(ErrorType).ToStatusCode()` answers HTTP 500 instead of throwing. The nameless default value
+  was an un-mapped type, so it hit the loud `UnmappedErrorTypePolicy.Throw` path added in this same line; an
+  uninitialized result now reaches the client as a server fault, which is what the `BuiltIn` row for
+  `ErrorType.Uninitialized` says. A type that is genuinely un-mapped still throws — only the uninitialized state
+  changed sides.
+- **BREAKING** an error whose type was never assigned serializes with `"type": "Uninitialized"`, not `"type": null`.
+  This is a wire-format change for exactly one value — the one that today produces a null type — and nothing else in
+  the JSON shape moves.
+- **BREAKING** `ErrorTypeHttpMapper.Register` refuses the uninitialized name. `Register(default, …)` threw
+  `ArgumentNullException` before (no name to key on) and now throws `ArgumentException` naming the parameter — still
+  caught by any handler for the base type. The visible consequence is the one equality forces: because
+  `new ErrorType("Uninitialized") == ErrorType.Uninitialized`, spelling the name out is now rejected too, where it
+  used to register. It could not stay allowed: registering it would let one producer re-key every other producer's
+  uninitialized state to a client status code.
 - The built-in table is now a name-keyed lookup instead of an 11-comparison chain. Same codes, one hash instead of
   a worst-case eleven string comparisons per mapped error.
 
@@ -83,6 +108,9 @@ The `0.4.0` line is deliberately allowed to carry breaking changes: every consum
   the endpoint's job) and `ErrorType.NotImplemented` (HTTP 501 — "never, as deployed", where `Unavailable`/503 means
   "supported, retry later"). `ToStatusCode_EveryBuiltInErrorType_HasAMapping` reflects the built-in fields, so a new
   `ErrorType` without a mapper row now fails the suite instead of falling through.
+- `ErrorType.Uninitialized`, the named default value, and a `BuiltIn` row mapping it to HTTP 500. It is a value like
+  any other built-in — reflectable, comparable, dictionary-keyable, serializable — which is what makes
+  `ToStatusCode_EveryBuiltInErrorType_HasAMapping` cover the state that used to fall outside it.
 - `Error.ToString()` prints `Code`, `Description`, `Type` and `Metadata` and never the cause. An `Error` is
   interpolated into log messages and assertion failure text far more often than it is handed to a logger, so the
   record-struct `PrintMembers` is overridden rather than left to the generated member list.
