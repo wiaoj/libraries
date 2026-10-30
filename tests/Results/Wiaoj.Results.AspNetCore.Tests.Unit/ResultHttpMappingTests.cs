@@ -111,20 +111,6 @@ public sealed class ResultHttpMappingTests {
         }
 
         [Fact]
-        public void ToProblemDetails_SentinelUninitializedError_KeepsTheFiveHundredShape() {
-            // Act
-            ProblemDetails problem = Error.Uninitialized.ToProblemDetails();
-
-            // Assert - the status is the part that must not move: Error.Uninitialized mapped to 500 before #226
-            // and still does. Type and Title now follow the RFC 9457 roles (#210): about:blank because no
-            // producer namespace is configured, and the type name as the human title.
-            Assert.Equal(StatusCodes.Status500InternalServerError, problem.Status);
-            Assert.Equal("about:blank", problem.Type);
-            Assert.Equal(nameof(ErrorType.Uninitialized), problem.Title);
-            Assert.Equal("Result.Uninitialized", problem.Extensions[ResultProblemDetailsExtensions.CodeExtensionKey]);
-        }
-
-        [Fact]
         public void TryMap_UnmappedErrorType_ReturnsFalseWithoutThrowing() {
             // Act
             bool mapped = ErrorTypeHttpMapper.TryMap(new("UnmappedProbe"), out int statusCode);
@@ -245,7 +231,26 @@ public sealed class ResultHttpMappingTests {
         }
     }
 
+    /// <summary>
+    /// Reads the ambient <see cref="ProblemDetailsProjection.Default"/>, so it shares the
+    /// <c>ProblemDetailsProjection</c> collection with the tests that assign it.
+    /// </summary>
+    [Collection("ProblemDetailsProjection")]
     public sealed class TheProblemDetailsCreation {
+        [Fact]
+        public void ToProblemDetails_SentinelUninitializedError_KeepsTheFiveHundredShape() {
+            // Act
+            ProblemDetails problem = Error.Uninitialized.ToProblemDetails();
+
+            // Assert - the status is the part that must not move: Error.Uninitialized mapped to 500 before #226
+            // and still does. Type and Title now follow the RFC 9457 roles (#210): about:blank because no producer
+            // namespace is configured, and the type name as the human title.
+            Assert.Equal(StatusCodes.Status500InternalServerError, problem.Status);
+            Assert.Equal("about:blank", problem.Type);
+            Assert.Equal(nameof(ErrorType.Uninitialized), problem.Title);
+            Assert.Equal("Result.Uninitialized", problem.Extensions[ResultProblemDetailsExtensions.CodeExtensionKey]);
+        }
+
         [Fact]
         public void ToProblemDetails_SingleError_PopulatesStandardRfcFields() {
             // Arrange
@@ -291,6 +296,8 @@ public sealed class ResultHttpMappingTests {
         }
     }
 
+    // Reads the ambient projection default; same collection as the tests that assign it.
+    [Collection("ProblemDetailsProjection")]
     public sealed class TheToHttpResultExtension {
         [Fact]
         public void ToHttpResult_SuccessWithValue_ReturnsOkResult() {

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics.Contracts;
 using Wiaoj.Results.AspNetCore;
 
@@ -11,11 +11,12 @@ namespace Wiaoj.Results;
 /// </summary>
 /// <remarks>
 /// The member roles follow RFC 9457: <c>type</c> identifies the problem type and belongs to whoever produced it
-/// (see <see cref="ResultProblemDetailsProjection.TypeNamespace"/>), <c>title</c> is a short human summary that
-/// repeats for every occurrence of that type, and the machine-readable <see cref="Error.Code"/> travels in the
-/// <c>code</c> extension member. Before 0.4.0 the code sat in <c>title</c> and <c>type</c> was a
-/// third-party status site — the two roles swapped — which is what
-/// <see cref="ProblemTypeStyle.HttpStatusIo"/> remains available to reproduce.
+/// (see <see cref="ProblemDetailsProjection.TypeNamespace"/>), <c>title</c> is a short human summary that repeats
+/// for every occurrence of that type, and the machine-readable <see cref="Error.Code"/> travels in the
+/// <c>code</c> extension member. Before 0.4.0 the code sat in <c>title</c> and <c>type</c> was a third-party status
+/// site — the two roles swapped — which is what <see cref="ProblemTypeStyle.HttpStatusIo"/> remains available to
+/// reproduce. The argument-taking overloads exist for a caller that wants its own projection; the parameterless
+/// path reads <see cref="ProblemDetailsProjection.Default"/>, which is what an endpoint filter can reach.
 /// </remarks>
 public static class ResultProblemDetailsExtensions {
 
@@ -26,7 +27,7 @@ public static class ResultProblemDetailsExtensions {
     public const string CodeExtensionKey = "code";
 
     /// <summary>
-    /// The extension member carrying the errors past the first one of a multi-error result.
+    /// The extension member carrying the errors of a multi-error result.
     /// </summary>
     /// <remarks>
     /// Named <c>violations</c> rather than <c>errors</c>: <c>errors[]</c> is already bound to a
@@ -36,18 +37,29 @@ public static class ResultProblemDetailsExtensions {
     public const string ViolationsExtensionKey = "violations";
 
     /// <summary>
-    /// Converts a single <see cref="Error"/> into a <see cref="ProblemDetails"/> instance.
+    /// Converts a single <see cref="Error"/> into a <see cref="ProblemDetails"/> instance, using
+    /// <see cref="ProblemDetailsProjection.Default"/>.
     /// </summary>
     [Pure]
-    public static ProblemDetails ToProblemDetails(this Error error, string? instance = null) {
+    public static ProblemDetails ToProblemDetails(this Error error, string? instance = null) =>
+        error.ToProblemDetails(instance, ProblemDetailsProjection.Default);
+
+    /// <summary>
+    /// Converts a single <see cref="Error"/> into a <see cref="ProblemDetails"/> instance with an explicit
+    /// projection, leaving <see cref="ProblemDetailsProjection.Default"/> alone.
+    /// </summary>
+    [Pure]
+    public static ProblemDetails ToProblemDetails(this Error error, string? instance, ProblemDetailsProjection projection) {
+        ArgumentNullException.ThrowIfNull(projection);
+
         int statusCode = error.Type.ToStatusCode();
 
         ProblemDetails problem = new() {
             Status = statusCode,
-            Title = ResultProblemDetailsProjection.BuildTitle(error),
+            Title = projection.BuildTitle(error),
             Detail = error.Description,
             Instance = instance,
-            Type = ResultProblemDetailsProjection.BuildType(error, statusCode)
+            Type = projection.BuildType(error, statusCode)
         };
 
         if(error.Metadata is not null && error.Metadata.Count > 0) {
@@ -64,15 +76,24 @@ public static class ResultProblemDetailsExtensions {
     }
 
     /// <summary>
-    /// Converts a failed <see cref="IResult"/> into a <see cref="ProblemDetails"/> instance.
+    /// Converts a failed <see cref="IResult"/> into a <see cref="ProblemDetails"/> instance, using
+    /// <see cref="ProblemDetailsProjection.Default"/>.
     /// </summary>
     [Pure]
-    public static ProblemDetails ToProblemDetails(this IResult result, string? instance = null) {
+    public static ProblemDetails ToProblemDetails(this IResult result, string? instance = null) =>
+        result.ToProblemDetails(instance, ProblemDetailsProjection.Default);
+
+    /// <summary>
+    /// Converts a failed <see cref="IResult"/> into a <see cref="ProblemDetails"/> instance with an explicit
+    /// projection, leaving <see cref="ProblemDetailsProjection.Default"/> alone.
+    /// </summary>
+    [Pure]
+    public static ProblemDetails ToProblemDetails(this IResult result, string? instance, ProblemDetailsProjection projection) {
         if(result.IsSuccess)
             throw new InvalidOperationException("Cannot generate ProblemDetails from a successful result.");
 
         Error firstError = result.FirstError;
-        ProblemDetails problem = firstError.ToProblemDetails(instance);
+        ProblemDetails problem = firstError.ToProblemDetails(instance, projection);
 
         if(result.Errors.Count > 1) {
             problem.Extensions[ViolationsExtensionKey] = result.Errors.Select(e => new {

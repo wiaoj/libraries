@@ -279,15 +279,15 @@ The body is RFC 9457-shaped, with the members in the roles the spec gives them:
 
 | Member | Comes from | Notes |
 | :--- | :--- | :--- |
-| `type` | `ResultProblemDetailsProjection.TypeNamespace` + `Error.Code`, else `about:blank` | Set `TypeNamespace` once at startup (e.g. `https://errors.example.com`) and every problem class gets its own identity. Leaving it unset is honest: `about:blank`, not somebody else's status site. |
-| `title` | the `ErrorType` name, or your override in `ResultProblemDetailsProjection.Titles` | Stable per problem type, which is what §3.2 asks for. It is **not** the error code any more. |
+| `type` | `ProblemDetailsProjection.TypeNamespace` + `Error.Code`, else `about:blank` | Set `ProblemDetailsProjection.Default = new() { TypeNamespace = "https://errors.example.com" };` once at startup and every problem class gets its own identity. Leaving it unset is honest: `about:blank`, not somebody else's status site. |
+| `title` | the `ErrorType` name, or your override in `ProblemDetailsProjection.Titles` | Stable per problem type, which is what §3.2 asks for. It is **not** the error code any more. |
 | `status` | `ErrorTypeHttpMapper.ToStatusCode(error.Type)` | Un-mapped custom types throw by default so you notice them; `ToStatusCode(int fallback)` answers instead. |
 | `detail` | `Error.Description` | Unchanged. |
 | `instance` | the `instance` argument (often `HttpContext.Request.Path`) | Unchanged. |
 | `code` (extension) | `Error.Code` | The machine key a client acts on. Written after metadata, so it always means the projected error's code. |
 | `violations` (extension) | every error of a multi-error result | Named `violations` because `errors[]` is already bound to a `{pointer, message}` shape by the validation surface. |
 
-`ProblemTypeStyle.HttpStatusIo` reproduces the pre-9457 `type` (`https://httpstatuses.io/{status}`) for a consumer
+`TypeStyle = ProblemTypeStyle.HttpStatusIo` reproduces the pre-9457 `type` (`https://httpstatuses.io/{status}`) for a consumer
 that cannot migrate in the same release; the `code` extension is present in that mode too, which is what most
 clients actually needed the old `title` for.
 
