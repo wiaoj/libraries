@@ -13,7 +13,7 @@ public static class ResultHttpExtensions {
     // ── ToHttpResult (Base Overloads) ─────────────────────────────────────────
 
     /// <summary>
-    /// Converts a <see cref="Result{TValue}"/> into an HTTP response (<c>200 OK</c>, <c>204 NoContent</c>, or RFC 7807 <c>ProblemDetails</c>).
+    /// Converts a <see cref="Result{TValue}"/> into an HTTP response (<c>200 OK</c>, <c>204 NoContent</c>, or RFC 9457 <c>ProblemDetails</c>).
     /// </summary>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

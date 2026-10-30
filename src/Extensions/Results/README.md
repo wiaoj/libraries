@@ -259,6 +259,38 @@ private static int GetStatusCode(ErrorType type) => type.Name switch
 };
 ```
 
+### The Package's Own Projection (`ToProblemDetails` / `ToHttpResult`)
+
+The switch above is what `Wiaoj.Results.AspNetCore` already does, including the extensible registry
+(`ErrorTypeHttpMapper.Register`) for your own `ErrorType`s. Prefer the package entry points so the problem body is
+produced from one rule set:
+
+```csharp
+[HttpGet("{id}")]
+public async Task<IResult> GetUser(int id)
+{
+    Result<User> result = await _userService.GetUserAsync(id);
+
+    return result.ToHttpResult(instance: $"/api/users/{id}");   // 200, 204, or an RFC 9457 problem body
+}
+```
+
+The body is RFC 9457-shaped, with the members in the roles the spec gives them:
+
+| Member | Comes from | Notes |
+| :--- | :--- | :--- |
+| `type` | `ResultProblemDetailsProjection.TypeNamespace` + `Error.Code`, else `about:blank` | Set `TypeNamespace` once at startup (e.g. `https://errors.example.com`) and every problem class gets its own identity. Leaving it unset is honest: `about:blank`, not somebody else's status site. |
+| `title` | the `ErrorType` name, or your override in `ResultProblemDetailsProjection.Titles` | Stable per problem type, which is what §3.2 asks for. It is **not** the error code any more. |
+| `status` | `ErrorTypeHttpMapper.ToStatusCode(error.Type)` | Un-mapped custom types throw by default so you notice them; `ToStatusCode(int fallback)` answers instead. |
+| `detail` | `Error.Description` | Unchanged. |
+| `instance` | the `instance` argument (often `HttpContext.Request.Path`) | Unchanged. |
+| `code` (extension) | `Error.Code` | The machine key a client acts on. Written after metadata, so it always means the projected error's code. |
+| `violations` (extension) | every error of a multi-error result | Named `violations` because `errors[]` is already bound to a `{pointer, message}` shape by the validation surface. |
+
+`ProblemTypeStyle.HttpStatusIo` reproduces the pre-9457 `type` (`https://httpstatuses.io/{status}`) for a consumer
+that cannot migrate in the same release; the `code` extension is present in that mode too, which is what most
+clients actually needed the old `title` for.
+
 ## Contributing
 
 Contributions, bug reports, and feature requests are welcome. Feel free to open an issue or submit a pull request on the GitHub repository.

@@ -115,10 +115,13 @@ public sealed class ResultHttpMappingTests {
             // Act
             ProblemDetails problem = Error.Uninitialized.ToProblemDetails();
 
-            // Assert
+            // Assert - the status is the part that must not move: Error.Uninitialized mapped to 500 before #226
+            // and still does. Type and Title now follow the RFC 9457 roles (#210): about:blank because no
+            // producer namespace is configured, and the type name as the human title.
             Assert.Equal(StatusCodes.Status500InternalServerError, problem.Status);
-            Assert.Equal("https://httpstatuses.io/500", problem.Type);
-            Assert.Equal("Result.Uninitialized", problem.Title);
+            Assert.Equal("about:blank", problem.Type);
+            Assert.Equal(nameof(ErrorType.Uninitialized), problem.Title);
+            Assert.Equal("Result.Uninitialized", problem.Extensions[ResultProblemDetailsExtensions.CodeExtensionKey]);
         }
 
         [Fact]
@@ -252,17 +255,21 @@ public sealed class ResultHttpMappingTests {
             // Act
             ProblemDetails problem = error.ToProblemDetails();
 
-            // Assert
+            // Assert - RFC 9457 roles: title is the problem type, the machine key travels in the code extension,
+            // and metadata keeps its own members. Re-pointed from the pre-9457 shape, where Title was the code
+            // ("User.NotFound") and Type was "https://httpstatuses.io/404".
             Assert.Equal(StatusCodes.Status404NotFound, problem.Status);
-            Assert.Equal("User.NotFound", problem.Title);
+            Assert.Equal(nameof(ErrorType.NotFound), problem.Title);
             Assert.Equal("User with id '42' was not found.", problem.Detail);
+            Assert.Equal("about:blank", problem.Type);
             Assert.NotNull(problem.Extensions);
             Assert.True(problem.Extensions.ContainsKey("UserId"));
             Assert.Equal(42, problem.Extensions["UserId"]);
+            Assert.Equal("User.NotFound", problem.Extensions[ResultProblemDetailsExtensions.CodeExtensionKey]);
         }
 
         [Fact]
-        public void ToProblemDetails_MultipleErrors_PopulatesErrorsExtensionList() {
+        public void ToProblemDetails_MultipleErrors_PopulatesViolationsExtensionList() {
             // Arrange
             List<Error> errors = [
                 Error.Validation("Email.Invalid", "Email is not valid."),
@@ -273,11 +280,14 @@ public sealed class ResultHttpMappingTests {
             // Act
             ProblemDetails problem = failureResult.ToProblemDetails();
 
-            // Assert
+            // Assert - the key is `violations`, not `errors`: `errors[]` is already bound to a
+            // {pointer, message} shape by the validation surface in this ecosystem.
             Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
-            Assert.Equal("Email.Invalid", problem.Title); // First error title
+            Assert.Equal(nameof(ErrorType.Validation), problem.Title); // first error's type
+            Assert.Equal("Email.Invalid", problem.Extensions[ResultProblemDetailsExtensions.CodeExtensionKey]);
             Assert.NotNull(problem.Extensions);
-            Assert.True(problem.Extensions.ContainsKey("errors"));
+            Assert.True(problem.Extensions.ContainsKey(ResultProblemDetailsExtensions.ViolationsExtensionKey));
+            Assert.False(problem.Extensions.ContainsKey("errors"));
         }
     }
 
@@ -320,8 +330,11 @@ public sealed class ResultHttpMappingTests {
             // Assert
             ProblemHttpResult problemResult = Assert.IsType<ProblemHttpResult>(httpResult);
             Assert.Equal(StatusCodes.Status409Conflict, problemResult.StatusCode);
-            Assert.Equal("Order.AlreadyExists", problemResult.ProblemDetails.Title);
+            Assert.Equal(nameof(ErrorType.Conflict), problemResult.ProblemDetails.Title);
             Assert.Equal("Order is duplicate.", problemResult.ProblemDetails.Detail);
+            Assert.Equal(
+                "Order.AlreadyExists",
+                problemResult.ProblemDetails.Extensions[ResultProblemDetailsExtensions.CodeExtensionKey]);
         }
     }
 
