@@ -176,18 +176,23 @@ Result<int> parsed = Result.Try(
 );
 ```
 
-### Nullability Bridges (`ToResult` / `EnsureNotNull`)
+### Null Returns (`ToResult`)
 
-Convert `null` reference returns from existing APIs (like Entity Framework) into strict `Result` types.
+Convert `null` reference returns from existing APIs (like Entity Framework) into a `Result`.
 
 ```csharp
 var user = await dbContext.Users.FindAsync(id);
 
 // If user is null, returns the provided NotFound error.
 return user.ToResult(Error.NotFound("User.NotFound", "User not found."));
+```
 
-// Or chaining on an existing Result<T?>:
-Result<User> strictResult = nullableResult.EnsureNotNull(Error.NotFound());
+A `Result<T?>` that already exists needs no guard: since 0.4.0 a `null` success value is a failure
+(`Result.NullValue`) at construction, so the success path of `Result<T?>` cannot carry null. To narrow the type
+argument when you want `Result<T>`, map it:
+
+```csharp
+Result<User> strictResult = nullableResult.Map(u => u!);
 ```
 
 ### Collection Combinators (`Combine`, `Partition`)
