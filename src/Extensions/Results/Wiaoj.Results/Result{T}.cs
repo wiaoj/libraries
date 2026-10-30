@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
@@ -15,7 +16,7 @@ namespace Wiaoj.Results;
 public readonly record struct Result<TValue> : IResult {
     private readonly TValue? _value;
     private readonly Error _singleError;
-    private readonly List<Error>? _multipleErrors;
+    private readonly ReadOnlyCollection<Error>? _multipleErrors;
     private readonly bool _isSuccess;
 
     /// <summary>
@@ -79,6 +80,12 @@ public readonly record struct Result<TValue> : IResult {
     /// <summary>
     /// Gets the list of errors. Returns an empty collection when <see cref="IsSuccess"/> is <see langword="true"/>.
     /// </summary>
+    /// <remarks>
+    /// Mutating what this returns never changes the result. A multi-error result hands out a
+    /// <see cref="ReadOnlyCollection{T}"/> over storage it created itself, so casting the result back to
+    /// <see cref="List{T}"/> throws instead of opening the struct up; a single-error result hands out a fresh
+    /// one-item list. Neither is affected by what the caller does to the list that was passed in.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the result is in an uninitialized default state.
     /// </exception>
@@ -125,11 +132,25 @@ public readonly record struct Result<TValue> : IResult {
         if(errors.Count == 1) {
             this._singleError = errors[0];
             this._multipleErrors = null;
+            return;
         }
-        else {
-            this._singleError = default;
-            this._multipleErrors = errors;
-        }
+
+        // The caller keeps its list, so the result stores a copy of its own behind a read-only shell:
+        // a List<Error> kept in the field and handed out as IReadOnlyList<Error> is one cast away from
+        // letting whoever built the result - or anyone holding the same list - rewrite its error set.
+        this._singleError = default;
+        this._multipleErrors = new ReadOnlyCollection<Error>([.. errors]);
+    }
+
+    /// <summary>
+    /// Adopts an error set this struct created and no caller can reach. Used by <see cref="ToFailure{TNew}"/> so
+    /// propagating a failure through <c>Map</c>/<c>Then</c> does not rebuild the list on every hop.
+    /// </summary>
+    private Result(ReadOnlyCollection<Error> ownedErrors) {
+        this._isSuccess = false;
+        this._value = default;
+        this._singleError = default;
+        this._multipleErrors = ownedErrors;
     }
 
     // ── Pattern Matching & TryGetters ─────────────────────────────────────────
@@ -199,7 +220,8 @@ public readonly record struct Result<TValue> : IResult {
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator Result<TValue>(Error[] errors) {
-        return new([.. errors]);
+        // The copy is made here, so the read-only shell can adopt it: nobody outside holds the backing list.
+        return new(new ReadOnlyCollection<Error>([.. errors]));
     }
 
     // ── Factory methods ───────────────────────────────────────────────────────
