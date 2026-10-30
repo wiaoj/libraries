@@ -69,9 +69,9 @@ public sealed class ResultAwaitableParityTests {
         "DoAsync(AWAIT<Result<_>>,Func`2<CancellationToken,AWAIT>,CancellationToken)->AWAIT<Result<_>>",
         "DoAsync(Result<_>,Func`2<CancellationToken,AWAIT>,CancellationToken)->AWAIT<Result<_>>",
         "DoAsync(Result<_>,Func`3<_,CancellationToken,AWAIT>,CancellationToken)->AWAIT<Result<_>>",
-        "EnsureAsync(AWAIT<Result<_>>,Func`2<_,AWAIT<_>>,Func`2<_,AWAIT<Error>>)->AWAIT<Result<_>>",
-        "EnsureAsync(Result<_>,Func`2<_,AWAIT<_>>,Error)->AWAIT<Result<_>>",
-        "EnsureAsync(Result<_>,Func`2<_,AWAIT<_>>,Func`2<_,AWAIT<Error>>)->AWAIT<Result<_>>",
+        "EnsureAsync(AWAIT<Result<_>>,Func`2<_,AWAIT<Boolean>>,Func`2<_,AWAIT<Error>>)->AWAIT<Result<_>>",
+        "EnsureAsync(Result<_>,Func`2<_,AWAIT<Boolean>>,Error)->AWAIT<Result<_>>",
+        "EnsureAsync(Result<_>,Func`2<_,AWAIT<Boolean>>,Func`2<_,AWAIT<Error>>)->AWAIT<Result<_>>",
         "IfFailureAsync(AWAIT<Result<_>>,Func`3<IReadOnlyList<Error>,CancellationToken,AWAIT>,CancellationToken)->AWAIT<Result<_>>",
         "IfFailureAsync(Result<_>,Func`3<IReadOnlyList<Error>,CancellationToken,AWAIT>,CancellationToken)->AWAIT<Result<_>>",
         "IfSuccessAsync(AWAIT<Result<_>>,Func`3<_,CancellationToken,AWAIT>,CancellationToken)->AWAIT<Result<_>>",
@@ -98,9 +98,10 @@ public sealed class ResultAwaitableParityTests {
     ];
 
     // A shape key is name(params)->return. Task<T> and ValueTask<T> both render as AWAIT<T> and
-    // IAsyncEnumerable<T> as STREAM<T>, which is what makes the two families comparable; closed types
-    // outside the vocabulary render as _, and delegates keep their arity so Func<T,R> and
-    // Func<T,CancellationToken,R> remain distinct shapes.
+    // IAsyncEnumerable<T> as STREAM<T>, which is what makes the two families comparable; a method's own
+    // generic parameters render as _ because their names differ per family, while closed types keep
+    // their simple name. Delegates keep their arity so Func<T,R> and Func<T,CancellationToken,R> stay
+    // distinct shapes.
     private static IEnumerable<string> Shapes(string family) =>
         Methods(family).Select(Key);
 
@@ -148,11 +149,9 @@ public sealed class ResultAwaitableParityTests {
     }
 
     private static string Token(string name) => name switch {
-        "Result" or "Error" or "ErrorType" or "Success" or "CancellationToken" or "IReadOnlyList"
-            or "IReadOnlyCollection" or "IEnumerable" or "List" or "Func" or "Action" => name,
         "Task" or "ValueTask" => "AWAIT",
-        "IAsyncEnumerable" => "STREAM",
-        _ => "_"
+        "IAsyncEnumerable" or "IAsyncEnumerator" => "STREAM",
+        _ => name
     };
 
     private static IEnumerable<MethodInfo> Methods(string family) {
