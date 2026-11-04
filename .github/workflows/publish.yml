@@ -20,7 +20,10 @@ on:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -76,10 +79,17 @@ jobs:
           -p:FileVersion=$FILE_VERSION \
           -p:InformationalVersion=$VERSION
 
+    - name: NuGet Login (OIDC)
+      if: ${{ github.event_name == 'push' || inputs.skip_push == false }}
+      id: login
+      uses: NuGet/login@v1
+      with:
+        user: wiaoj
+
     - name: Push to NuGet
       if: ${{ github.event_name == 'push' || inputs.skip_push == false }}
       run: |
         dotnet nuget push "./nupkgs/*.nupkg" \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
           --source https://api.nuget.org/v3/index.json \
           --skip-duplicate
