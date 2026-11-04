@@ -233,7 +233,8 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
             if(string.Equals(pair.Key, PaginationParameters.Page, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            sb.Append(separator).Append(pair.Key).Append('=').Append(pair.Value);
+            sb.Append(separator);
+            AppendPair(sb, pair.Key, pair.Value);
             separator = '&';
         }
 
@@ -251,7 +252,8 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
                string.Equals(pair.Key, PaginationParameters.Direction, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            sb.Append(separator).Append(pair.Key).Append('=').Append(pair.Value);
+            sb.Append(separator);
+            AppendPair(sb, pair.Key, pair.Value);
             separator = '&';
         }
 
@@ -260,4 +262,61 @@ internal sealed class PaginationEndpointFilter : IEndpointFilter {
 
         return sb.ToString();
     }
+
+    /// <summary>Appends one <c>name=value</c> pair with the escaping the transport requires.</summary>
+    private static void AppendPair(StringBuilder builder, string name, StringValues value) {
+        AppendEncoded(builder, name);
+        builder.Append('=');
+        AppendEncoded(builder, value.ToString());
+    }
+
+    /// <summary>
+    /// Percent-encodes only what cannot be written raw in a <c>Link</c> value: non-ASCII (Kestrel rejects it in
+    /// a header — a search term like <c>?q=Türkçe</c> used to throw while writing the header), control
+    /// characters and space, <c>"</c> <c>&lt;</c> <c>&gt;</c> <c>\</c> (excluded from a field value by
+    /// RFC 9110) and <c>#</c> (it would end the URI at a fragment).
+    /// </summary>
+    /// <remarks>
+    /// Everything else is emitted byte-for-byte as before, so a request whose parameters are plain ASCII gets
+    /// the identical <c>Link</c> header it always got — the escaping exists to stop a crash, not to restyle
+    /// working URLs.
+    /// </remarks>
+    private static void AppendEncoded(StringBuilder builder, string? value) {
+        if(string.IsNullOrEmpty(value)) {
+            return;
+        }
+
+        bool needsEscaping = false;
+        foreach(char character in value) {
+            if(ShouldEscape(character)) {
+                needsEscaping = true;
+                break;
+            }
+        }
+
+        if(!needsEscaping) {
+            builder.Append(value);
+            return;
+        }
+
+        Span<char> utf16 = stackalloc char[2];
+        Span<byte> utf8 = stackalloc byte[4];
+
+        foreach(Rune rune in value.EnumerateRunes()) {
+            if(rune.Value < 0x80 && !ShouldEscape((char)rune.Value)) {
+                builder.Append((char)rune.Value);
+                continue;
+            }
+
+            int charsWritten = rune.EncodeToUtf16(utf16);
+            int bytesWritten = Encoding.UTF8.GetBytes(utf16[..charsWritten], utf8);
+
+            for(int index = 0; index < bytesWritten; index++) {
+                builder.Append('%').Append(utf8[index].ToString("X2"));
+            }
+        }
+    }
+
+    private static bool ShouldEscape(char character)
+        => character < '!' || character >= '\x7F' || character is '"' or '<' or '>' or '\\' or '#';
 }
