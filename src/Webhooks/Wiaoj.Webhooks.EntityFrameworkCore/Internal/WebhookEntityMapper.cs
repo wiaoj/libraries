@@ -57,6 +57,7 @@ internal static class WebhookEntityMapper {
         entity.BatchId = record.BatchId;
         entity.Status = record.Status;
         entity.NextAttemptAtTicks = ToTicks(record.NextAttemptAt);
+        entity.CompletedAtTicks = ToTicks(record.CompletedAt);
         entity.LockedBy = record.LockedBy;
         entity.LockExpiresAtTicks = ToTicks(record.LockExpiresAt);
 
@@ -81,6 +82,7 @@ internal static class WebhookEntityMapper {
 
         record.Status = entity.Status;
         record.NextAttemptAt = FromTicks(entity.NextAttemptAtTicks);
+        record.CompletedAt = FromTicks(entity.CompletedAtTicks);
         record.LockedBy = entity.LockedBy;
         record.LockExpiresAt = FromTicks(entity.LockExpiresAtTicks);
 

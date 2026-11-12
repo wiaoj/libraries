@@ -67,4 +67,9 @@ public sealed class NullWebhookStore : IWebhookStore {
     public Task<IReadOnlyList<WebhookJobRecord>> GetDeadLetteredJobsAsync(WebhookEndpointId endpointId, int maxCount, CancellationToken cancellationToken = default) {
         return Task.FromResult<IReadOnlyList<WebhookJobRecord>>([]);
     }
+
+    /// <inheritdoc/>
+    public Task<int> PruneJobsAsync(DateTimeOffset deliveredBefore, DateTimeOffset deadLetteredBefore, int batchSize, CancellationToken cancellationToken = default) {
+        return Task.FromResult(0);
+    }
 }

@@ -77,6 +77,8 @@ public static class WebhookModelBuilderExtensions {
             entity.HasIndex(x => new { x.Status, x.LockExpiresAtTicks }).HasDatabaseName($"IX_{options.JobsTableName}_Status_LockExpires");
             entity.HasIndex(x => new { x.Status, x.CreatedAtTicks }).HasDatabaseName($"IX_{options.JobsTableName}_Status_Created");
             entity.HasIndex(x => new { x.Status, x.NextAttemptAtTicks }).HasDatabaseName($"IX_{options.JobsTableName}_Status_NextAttempt");
+            // Retention deletes finished jobs by status and completion time.
+            entity.HasIndex(x => new { x.Status, x.CompletedAtTicks }).HasDatabaseName($"IX_{options.JobsTableName}_Status_Completed");
             entity.HasIndex(x => new { x.EndpointId, x.Status }).HasDatabaseName($"IX_{options.JobsTableName}_Endpoint_Status");
         });
 

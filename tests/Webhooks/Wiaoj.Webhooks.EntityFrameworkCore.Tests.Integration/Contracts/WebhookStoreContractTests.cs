@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Wiaoj.Primitives;
 using Wiaoj.Webhooks.EntityFrameworkCore.Tests.Integration.Infrastructure;
 
@@ -406,6 +408,120 @@ public abstract class WebhookStoreContractTests : StoreTestBase {
         Assert.Equal([a.Id], forA.Select(j => j.Id));
         Assert.Single(limited);
     }
+
+    // ── Retention ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Finishes one job per entry, each <c>ago</c> before the moment the clock is left at. The fake clock only moves
+    /// forward, so the oldest is finished first and the clock is advanced between them.
+    /// </summary>
+    private async Task<WebhookJobRecord[]> FinishedJobsAsync(params (WebhookJobStatus Status, TimeSpan Ago, string Endpoint)[] jobs) {
+        DateTimeOffset start = this.Time.GetUtcNow();
+        TimeSpan oldest = jobs.Max(j => j.Ago);
+        WebhookJobRecord[] records = new WebhookJobRecord[jobs.Length];
+
+        foreach(int i in Enumerable.Range(0, jobs.Length).OrderByDescending(i => jobs[i].Ago)) {
+            this.Time.SetUtcNow(start + (oldest - jobs[i].Ago));
+            records[i] = await SavedJobAsync(jobs[i].Endpoint);
+            await this.JobStore.UpdateStatusAsync(records[i].Id, jobs[i].Status, TestContext.Current.CancellationToken);
+        }
+
+        this.Time.SetUtcNow(start + oldest);
+        return records;
+    }
+
+    [Theory]
+    [InlineData(WebhookJobStatus.Delivered)]
+    [InlineData(WebhookJobStatus.DeadLettered)]
+    public async Task UpdateStatusAsync_ToAFinishedStatus_CompletesAtTheStoresTime(WebhookJobStatus finished) {
+        WebhookJobRecord job = await SavedJobAsync();
+        Assert.Null((await ReloadAsync(job.Id)).CompletedAt);
+
+        await this.JobStore.UpdateStatusAsync(job.Id, finished, TestContext.Current.CancellationToken);
+
+        Assert.Equal(this.Time.GetUtcNow(), (await ReloadAsync(job.Id)).CompletedAt);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_ToRetrying_DoesNotComplete() {
+        WebhookJobRecord job = await SavedJobAsync();
+
+        await this.JobStore.UpdateStatusAsync(job.Id, WebhookJobStatus.Retrying, this.Time.GetUtcNow().AddMinutes(1), TestContext.Current.CancellationToken);
+
+        Assert.Null((await ReloadAsync(job.Id)).CompletedAt);
+    }
+
+    [Fact]
+    public async Task PruneJobsAsync_DeletesEachFinishedStatusByItsOwnWindow() {
+        WebhookJobRecord[] jobs = await FinishedJobsAsync(
+            (WebhookJobStatus.Delivered, TimeSpan.FromDays(8), "ep-1"),
+            (WebhookJobStatus.Delivered, TimeSpan.FromDays(6), "ep-1"),
+            (WebhookJobStatus.DeadLettered, TimeSpan.FromDays(31), "ep-1"),
+            (WebhookJobStatus.DeadLettered, TimeSpan.FromDays(8), "ep-1"));
+        (WebhookJobRecord oldDelivered, WebhookJobRecord newDelivered, WebhookJobRecord oldDead, WebhookJobRecord newDead) = (jobs[0], jobs[1], jobs[2], jobs[3]);
+        DateTimeOffset now = this.Time.GetUtcNow();
+
+        int deleted = await this.JobStore.PruneJobsAsync(now.AddDays(-7), now.AddDays(-30), 100, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, deleted);
+        Assert.Null(await this.JobStore.GetJobAsync(oldDelivered.Id, TestContext.Current.CancellationToken));
+        Assert.Null(await this.JobStore.GetJobAsync(oldDead.Id, TestContext.Current.CancellationToken));
+        Assert.NotNull(await this.JobStore.GetJobAsync(newDelivered.Id, TestContext.Current.CancellationToken));
+        Assert.NotNull(await this.JobStore.GetJobAsync(newDead.Id, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(WebhookJobStatus.Queued)]
+    [InlineData(WebhookJobStatus.InFlight)]
+    [InlineData(WebhookJobStatus.Retrying)]
+    public async Task PruneJobsAsync_NeverTouchesAJobThatIsNotFinished(WebhookJobStatus active) {
+        WebhookJobRecord job = await SavedJobAsync(age: TimeSpan.FromDays(365));
+        await this.JobStore.UpdateStatusAsync(job.Id, active, TestContext.Current.CancellationToken);
+        DateTimeOffset future = this.Time.GetUtcNow().AddYears(10);
+
+        int deleted = await this.JobStore.PruneJobsAsync(future, future, 100, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, deleted);
+        Assert.NotNull(await this.JobStore.GetJobAsync(job.Id, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task PruneJobsAsync_DeletesTheJobsAttemptsAndHistoryWithIt() {
+        WebhookJobRecord job = (await FinishedJobsAsync((WebhookJobStatus.Delivered, TimeSpan.FromDays(10), "ep-pruned")))[0];
+        await this.JobStore.RecordAttemptAsync(job.Id, WebhookDeliveryAttempt.Create(job.EndpointId, 1, UnixTimestamp.From(this.Time.GetUtcNow()),
+            TimeSpan.FromMilliseconds(10), new WebhookDeliveryResult.Delivered(200, "ok")), TestContext.Current.CancellationToken);
+        DateTimeOffset now = this.Time.GetUtcNow();
+
+        int deleted = await this.JobStore.PruneJobsAsync(now.AddDays(-7), now.AddDays(-30), 100, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, deleted);
+        Assert.Empty(await this.JobStore.GetHistoryByEndpointAsync(new WebhookEndpointId("ep-pruned"), TestContext.Current.CancellationToken));
+        await this.AssertNoAttemptsRemainAsync(job.Id);
+    }
+
+    /// <summary>Asserts that no attempt row of <paramref name="jobId"/> remains; a store with no rows of its own has nothing to check.</summary>
+    protected virtual Task AssertNoAttemptsRemainAsync(WebhookJobId jobId) {
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task PruneJobsAsync_DeletesAtMostTheBatchSize_AndDrainsOnTheNextCall() {
+        await FinishedJobsAsync([.. Enumerable.Repeat((WebhookJobStatus.Delivered, TimeSpan.FromDays(10), "ep-1"), 5)]);
+        DateTimeOffset now = this.Time.GetUtcNow();
+
+        int first = await this.JobStore.PruneJobsAsync(now.AddDays(-7), now.AddDays(-30), 2, TestContext.Current.CancellationToken);
+        int second = await this.JobStore.PruneJobsAsync(now.AddDays(-7), now.AddDays(-30), 2, TestContext.Current.CancellationToken);
+        int third = await this.JobStore.PruneJobsAsync(now.AddDays(-7), now.AddDays(-30), 2, TestContext.Current.CancellationToken);
+        int fourth = await this.JobStore.PruneJobsAsync(now.AddDays(-7), now.AddDays(-30), 2, TestContext.Current.CancellationToken);
+
+        Assert.Equal([2, 2, 1, 0], new[] { first, second, third, fourth });
+    }
+
+    [Fact]
+    public async Task PruneJobsAsync_InvalidBatchSize_Throws() {
+        DateTimeOffset now = this.Time.GetUtcNow();
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => this.JobStore.PruneJobsAsync(now, now, 0, TestContext.Current.CancellationToken));
+    }
 }
 
 public sealed class InMemoryWebhookStoreContractTests : WebhookStoreContractTests {
@@ -414,8 +530,21 @@ public sealed class InMemoryWebhookStoreContractTests : WebhookStoreContractTest
 
 public sealed class SqliteWebhookStoreContractTests : WebhookStoreContractTests {
     protected override StoreBackend CreateBackend() => new SqliteStoreBackend();
+
+    protected override Task AssertNoAttemptsRemainAsync(WebhookJobId jobId) => EfCoreAttempts.AssertNoneRemainAsync(this.Services, jobId);
 }
 
 public sealed class PostgreSqlWebhookStoreContractTests : WebhookStoreContractTests {
     protected override StoreBackend CreateBackend() => new PostgreSqlStoreBackend();
+
+    protected override Task AssertNoAttemptsRemainAsync(WebhookJobId jobId) => EfCoreAttempts.AssertNoneRemainAsync(this.Services, jobId);
+}
+
+internal static class EfCoreAttempts {
+    public static async Task AssertNoneRemainAsync(IServiceProvider services, WebhookJobId jobId) {
+        await using AsyncServiceScope scope = services.CreateAsyncScope();
+        TestWebhookDbContext context = scope.ServiceProvider.GetRequiredService<TestWebhookDbContext>();
+        string id = jobId.Value;
+        Assert.False(await context.Set<WebhookDeliveryAttemptEntity>().AnyAsync(a => a.JobId == id, TestContext.Current.CancellationToken));
+    }
 }

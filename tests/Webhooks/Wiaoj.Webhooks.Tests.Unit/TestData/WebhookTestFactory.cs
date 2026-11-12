@@ -314,4 +314,19 @@ internal static class WebhookTestFactory {
             Microsoft.Extensions.Options.Options.Create(recoveryOptions ?? new WebhookRecoveryOptions()),
             logger ?? NullLogger<StaleJobRecoveryService>.Instance);
     }
+
+    public static WebhookRetentionCleanerService CreateRetentionCleanerService(
+        IWebhookStore? store = null,
+        TimeProvider? timeProvider = null,
+        WebhookRetentionOptions? retentionOptions = null,
+        ILogger<WebhookRetentionCleanerService>? logger = null) {
+
+        TimeProvider provider = timeProvider ?? TimeProvider.System;
+
+        return new WebhookRetentionCleanerService(
+            store ?? new InMemoryWebhookStore(provider),
+            provider,
+            Microsoft.Extensions.Options.Options.Create(retentionOptions ?? new WebhookRetentionOptions()),
+            logger ?? NullLogger<WebhookRetentionCleanerService>.Instance);
+    }
 }

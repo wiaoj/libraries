@@ -25,6 +25,19 @@ public static partial class WebhookBuilderSigningExtensions {
     }
 
     /// <summary>
+    /// Signs every delivery as <see href="https://www.standardwebhooks.com/">Standard Webhooks</see> do
+    /// (<see cref="StandardWebhooksSigningMiddleware"/>): <c>webhook-id</c>, <c>webhook-timestamp</c> and
+    /// <c>webhook-signature: v1,{base64}</c> over <c>id.timestamp.body</c>. Instead of, not beside, an <see cref="IWebhookSigner"/>.
+    /// </summary>
+    /// <param name="builder">The webhook builder being configured.</param>
+    /// <returns>The <see cref="IWebhookBuilder"/> instance for fluent method chaining.</returns>
+    public static IWebhookBuilder UseStandardWebhooksSigning(this IWebhookBuilder builder) {
+        Preca.ThrowIfNull(builder);
+        builder.AddMiddleware<StandardWebhooksSigningMiddleware>();
+        return builder;
+    }
+
+    /// <summary>
     /// Configures HMAC-SHA512 (scheme prefix <c>"v2"</c>) cryptographic signing and registers <see cref="SigningMiddleware"/> in the pipeline.
     /// </summary>
     /// <param name="builder">The webhook builder being configured.</param>

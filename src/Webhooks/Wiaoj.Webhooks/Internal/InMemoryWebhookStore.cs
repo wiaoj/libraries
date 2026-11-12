@@ -102,8 +102,11 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
         return Task.CompletedTask;
     }
 
-    private static void SetStatus(WebhookJobRecord job, WebhookJobStatus status) {
+    private void SetStatus(WebhookJobRecord job, WebhookJobStatus status) {
         job.Status = status;
+        if(status is WebhookJobStatus.Delivered or WebhookJobStatus.DeadLettered) {
+            job.CompletedAt = this._timeProvider.GetUtcNow();
+        }
         if(status is WebhookJobStatus.Retrying or WebhookJobStatus.Delivered or WebhookJobStatus.DeadLettered) {
             job.LockedBy = null;
             job.LockExpiresAt = null;
@@ -229,5 +232,48 @@ internal sealed class InMemoryWebhookStore : IWebhookStore {
         }
 
         return Task.FromResult<IReadOnlyList<WebhookJobRecord>>(deadLettered);
+    }
+
+    /// <inheritdoc/>
+    public Task<int> PruneJobsAsync(DateTimeOffset deliveredBefore, DateTimeOffset deadLetteredBefore, int batchSize, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfLessThan(batchSize, 1);
+
+        int deleted = 0;
+
+        lock(this._lock) {
+            List<WebhookJobRecord> expired = [];
+            foreach(KeyValuePair<WebhookJobId, WebhookJobRecord> kvp in this._jobs) {
+                WebhookJobRecord job = kvp.Value;
+                bool isExpired;
+                lock(job) {
+                    isExpired = job.CompletedAt is { } completedAt
+                        && ((job.Status == WebhookJobStatus.Delivered && completedAt < deliveredBefore)
+                            || (job.Status == WebhookJobStatus.DeadLettered && completedAt < deadLetteredBefore));
+                }
+
+                if(isExpired) {
+                    expired.Add(job);
+                    if(expired.Count >= batchSize) {
+                        break;
+                    }
+                }
+            }
+
+            foreach(WebhookJobRecord job in expired) {
+                if(!this._jobs.TryRemove(job.Id, out _)) {
+                    continue;
+                }
+
+                deleted++;
+                if(this._endpointIndex.TryGetValue(job.EndpointId, out List<WebhookJobId>? jobIds)) {
+                    jobIds.RemoveAll(id => WebhookJobId.OrdinalComparer.Equals(id, job.Id));
+                    if(jobIds.Count == 0) {
+                        this._endpointIndex.TryRemove(job.EndpointId, out _);
+                    }
+                }
+            }
+        }
+
+        return Task.FromResult(deleted);
     }
 }

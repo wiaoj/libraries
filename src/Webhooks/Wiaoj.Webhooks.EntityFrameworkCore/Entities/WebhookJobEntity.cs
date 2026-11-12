@@ -36,6 +36,9 @@ public sealed class WebhookJobEntity {
     /// <summary>Gets or sets the next scheduled attempt in UTC ticks (<see cref="WebhookJobRecord.NextAttemptAt"/>).</summary>
     public long? NextAttemptAtTicks { get; set; }
 
+    /// <summary>Gets or sets the completion time in UTC ticks (<see cref="WebhookJobRecord.CompletedAt"/>).</summary>
+    public long? CompletedAtTicks { get; set; }
+
     /// <summary>Gets or sets the lease holder (<see cref="WebhookJobRecord.LockedBy"/>).</summary>
     public string? LockedBy { get; set; }
 

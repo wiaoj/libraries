@@ -16,7 +16,7 @@ namespace Wiaoj.Webhooks.Internal;
 /// <see cref="WebhookDeliveryAttempt"/>, but the underlying <see cref="WebhookDeliveryResult"/>
 /// reflects whatever the last middleware to touch <see cref="WebhookDeliveryContext.Items"/> recorded.
 /// </remarks>
-internal sealed class WebhookPipelineRunner {
+internal sealed class WebhookPipelineRunner : IWebhookDeliveryPipeline {
     private readonly WebhookDelegate _pipeline;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<WebhookPipelineRunner> _logger;
