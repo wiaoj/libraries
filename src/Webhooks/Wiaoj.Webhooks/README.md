@@ -161,6 +161,28 @@ The rotation is three steps:
 - **Verification:** this library's own verification already checks every signature in the header, so a receiver built on it needs no change.
 - **Cost:** with no second secret, nothing changes — one unprotect, one signature, the same header as before.
 
+#### Standard Webhooks
+
+`UseStandardWebhooksSigning()` signs as the [Standard Webhooks](https://www.standardwebhooks.com/) specification does, so
+a receiver can verify with any of its libraries. `webhook-id` is the job's id (the same on every attempt), `webhook-timestamp`
+the Unix seconds it was signed at, and `webhook-signature` is `v1,{base64}`: HMAC-SHA256 over `{id}.{timestamp}.{body}`.
+The key is the secret after `whsec_`, base64-decoded. `StandardWebhooksSignature.FormatSecret(key)` writes one to show the
+receiver once. While a secret is rotated, the header carries one signature per secret, space separated.
+
+```csharp
+webhooks.UseStandardWebhooksSigning();   // instead of UseHmacSha256Signing()
+
+bool valid = StandardWebhooksSignature.Verify(id, timestamp, body, signatureHeader,
+    StandardWebhooksSignature.KeyOf(secretBytes), TimeSpan.FromMinutes(5), DateTimeOffset.UtcNow);
+```
+
+#### One attempt, without the engine's queue
+
+A host that already has a queue and a retry of its own (an outbox, a broker's scheduled redelivery) resolves
+`IWebhookDeliveryPipeline` and runs one attempt per message: the middleware and the deliverer, with no store, lease,
+transport or retry around it. It builds the `WebhookDeliveryContext` itself and decides what a transient failure means.
+`AddWiaojWebhooks()` starts no background service until a transport, recovery or retention is chosen.
+
 ### 3. Outbound SSRF Hardening & Egress Proxy
 Protects internal infrastructure from malicious webhook destinations:
 
