@@ -59,6 +59,12 @@ public sealed class WebhookJobRecord : ICopyFrom<WebhookJobRecord> {
     /// <summary>Gets or sets the timestamp when the next execution attempt should occur.</summary>
     public DateTimeOffset? NextAttemptAt { get; set; }
 
+    /// <summary>
+    /// Gets or sets when the job finished, as <see cref="WebhookJobStatus.Delivered"/> or
+    /// <see cref="WebhookJobStatus.DeadLettered"/>; <see langword="null"/> while it has not. Retention measures from it.
+    /// </summary>
+    public DateTimeOffset? CompletedAt { get; set; }
+
     /// <summary>Gets or sets the instance/pod identifier that currently holds the execution lease on this job.</summary>
     public string? LockedBy { get; set; }
 
@@ -125,6 +131,7 @@ public sealed class WebhookJobRecord : ICopyFrom<WebhookJobRecord> {
 
         this.Status = source.Status;
         this.NextAttemptAt = source.NextAttemptAt;
+        this.CompletedAt = source.CompletedAt;
         this.LockedBy = source.LockedBy;
         this.LockExpiresAt = source.LockExpiresAt;
 

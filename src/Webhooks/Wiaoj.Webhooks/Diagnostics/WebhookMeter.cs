@@ -154,4 +154,20 @@ internal static class WebhookMeter {
             "wiaoj.webhooks.recovery.jobs_recovered.count",
             unit: "{jobs}",
             description: "Total number of stale in-flight jobs recovered and re-enqueued.");
+
+    // ── Retention Metrics ─────────────────────────────────────────────────────
+
+    /// <summary>Duration of a background retention sweep in milliseconds.</summary>
+    public static readonly Histogram<double> RetentionSweepDuration =
+        _meter.CreateHistogram<double>(
+            "wiaoj.webhooks.retention.sweep.duration",
+            unit: "ms",
+            description: "Duration of a background retention sweep that prunes finished webhook jobs, in milliseconds.");
+
+    /// <summary>Total number of finished jobs deleted by retention pruning.</summary>
+    public static readonly Counter<long> PrunedJobsCount =
+        _meter.CreateCounter<long>(
+            "wiaoj.webhooks.retention.jobs_pruned.count",
+            unit: "{jobs}",
+            description: "Total number of finished webhook jobs deleted by retention pruning.");
 }

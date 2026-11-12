@@ -110,6 +110,13 @@ internal static partial class WebhookLoggerExtensions {
         Message = "Starting stale in-flight job recovery sweep with threshold '{Threshold}'.")]
     public static partial void LogRecoverySweepStarting(this ILogger logger, DateTimeOffset threshold);
 
+    /// <summary>Logs that a background retention sweep is starting.</summary>
+    [LoggerMessage(
+        EventId = 2010,
+        Level = LogLevel.Debug,
+        Message = "Starting webhook job retention sweep at '{Now}'.")]
+    public static partial void LogRetentionSweepStarting(this ILogger logger, DateTimeOffset now);
+
     // ── Information (3000 - 3999) ─────────────────────────────────────────────
 
     /// <summary>Logs that a webhook event has been dispatched.</summary>
@@ -139,6 +146,13 @@ internal static partial class WebhookLoggerExtensions {
         Level = LogLevel.Information,
         Message = "Successfully recovered {RecoveredCount} stale in-flight webhook jobs and re-enqueued them for delivery.")]
     public static partial void LogRecoverySweepCompleted(this ILogger logger, int recoveredCount);
+
+    /// <summary>Logs that a retention sweep deleted finished jobs.</summary>
+    [LoggerMessage(
+        EventId = 3006,
+        Level = LogLevel.Information,
+        Message = "Retention sweep deleted {PrunedCount} finished webhook jobs past their retention window.")]
+    public static partial void LogRetentionSweepCompleted(this ILogger logger, int prunedCount);
 
     /// <summary>Logs that a batch dispatch operation completed successfully.</summary>
     [LoggerMessage(
@@ -248,6 +262,13 @@ internal static partial class WebhookLoggerExtensions {
         Level = LogLevel.Error,
         Message = "Unexpected error occurred during background stale job recovery sweep.")]
     public static partial void LogRecoverySweepFailed(this ILogger logger, Exception exception);
+
+    /// <summary>Logs that an error occurred during the background retention sweep.</summary>
+    [LoggerMessage(
+        EventId = 5008,
+        Level = LogLevel.Error,
+        Message = "Unexpected error occurred during background webhook job retention sweep.")]
+    public static partial void LogRetentionSweepFailed(this ILogger logger, Exception exception);
 
     /// <summary>Logs that a batch dispatch operation failed.</summary>
     [LoggerMessage(

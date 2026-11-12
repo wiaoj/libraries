@@ -42,7 +42,9 @@ public interface IWebhookStore {
     /// <remarks>
     /// Moving a job to <see cref="WebhookJobStatus.Retrying"/>, <see cref="WebhookJobStatus.Delivered"/> or
     /// <see cref="WebhookJobStatus.DeadLettered"/> releases its lease (<see cref="WebhookJobRecord.LockedBy"/> and
-    /// <see cref="WebhookJobRecord.LockExpiresAt"/> are cleared); other statuses keep it.
+    /// <see cref="WebhookJobRecord.LockExpiresAt"/> are cleared); other statuses keep it. Moving it to
+    /// <see cref="WebhookJobStatus.Delivered"/> or <see cref="WebhookJobStatus.DeadLettered"/> also sets
+    /// <see cref="WebhookJobRecord.CompletedAt"/> to the store's current time, which retention measures from.
     /// </remarks>
     /// <param name="jobId">The job identifier.</param>
     /// <param name="status">The new status.</param>
@@ -125,6 +127,29 @@ public interface IWebhookStore {
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A read-only collection of dead-lettered job records for the endpoint.</returns>
     Task<IReadOnlyList<WebhookJobRecord>> GetDeadLetteredJobsAsync(WebhookEndpointId endpointId, int maxCount, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes up to <paramref name="batchSize"/> finished jobs whose retention window has passed, together with their
+    /// delivery attempts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only <see cref="WebhookJobStatus.Delivered"/> jobs completed before <paramref name="deliveredBefore"/> and
+    /// <see cref="WebhookJobStatus.DeadLettered"/> jobs completed before <paramref name="deadLetteredBefore"/> are
+    /// deleted, each measured from <see cref="WebhookJobRecord.CompletedAt"/>. A job that is not finished, or a finished
+    /// one with no <see cref="WebhookJobRecord.CompletedAt"/>, is never deleted, whatever the cutoffs.
+    /// </para>
+    /// <para>
+    /// One call is one bounded unit of work: a store that has transactions deletes the batch in one. A result equal to
+    /// <paramref name="batchSize"/> means more may be eligible, and the caller calls again.
+    /// </para>
+    /// </remarks>
+    /// <param name="deliveredBefore">Delivered jobs completed strictly before this instant are eligible.</param>
+    /// <param name="deadLetteredBefore">Dead-lettered jobs completed strictly before this instant are eligible.</param>
+    /// <param name="batchSize">The maximum number of jobs to delete in this call; at least 1.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The number of jobs deleted.</returns>
+    Task<int> PruneJobsAsync(DateTimeOffset deliveredBefore, DateTimeOffset deadLetteredBefore, int batchSize, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

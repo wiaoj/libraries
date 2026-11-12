@@ -136,6 +136,8 @@ internal sealed class EfCoreWebhookStore<TDbContext> : IWebhookStore where TDbCo
 
         string id = jobId.Value;
         bool releasesLease = ReleasesLease(status);
+        bool completes = status is WebhookJobStatus.Delivered or WebhookJobStatus.DeadLettered;
+        long completedAt = WebhookEntityMapper.ToTicks(this._timeProvider.GetUtcNow());
         long? nextAttemptTicks = WebhookEntityMapper.ToTicks(nextAttemptAt);
 
         await lease.Context.Set<WebhookJobEntity>()
@@ -145,6 +147,10 @@ internal sealed class EfCoreWebhookStore<TDbContext> : IWebhookStore where TDbCo
                 if(releasesLease) {
                     setters.SetProperty(j => j.LockedBy, (string?)null);
                     setters.SetProperty(j => j.LockExpiresAtTicks, (long?)null);
+                }
+
+                if(completes) {
+                    setters.SetProperty(j => j.CompletedAtTicks, (long?)completedAt);
                 }
 
                 if(setNextAttempt) {
@@ -292,6 +298,53 @@ internal sealed class EfCoreWebhookStore<TDbContext> : IWebhookStore where TDbCo
             .ConfigureAwait(false);
 
         return ToRecords(entities);
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> PruneJobsAsync(DateTimeOffset deliveredBefore, DateTimeOffset deadLetteredBefore, int batchSize, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfLessThan(batchSize, 1);
+
+        await using WebhookDbContextLease<TDbContext> lease = Open();
+        DbContext context = lease.Context;
+
+        long delivered = WebhookEntityMapper.ToTicks(deliveredBefore);
+        long deadLettered = WebhookEntityMapper.ToTicks(deadLetteredBefore);
+
+        // One batch is one transaction: the ids are chosen, their attempts deleted and then the jobs, or none of it.
+        // The attempts are deleted explicitly rather than left to the foreign key, so a provider that does not
+        // enforce cascades (SQLite without foreign keys on) leaves no orphans either.
+        await using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction =
+            await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        List<string> ids = await context.Set<WebhookJobEntity>()
+            .Where(j => j.CompletedAtTicks != null
+                && ((j.Status == WebhookJobStatus.Delivered && j.CompletedAtTicks < delivered)
+                    || (j.Status == WebhookJobStatus.DeadLettered && j.CompletedAtTicks < deadLettered)))
+            .OrderBy(static j => j.CompletedAtTicks)
+            .ThenBy(static j => j.Id)
+            .Select(static j => j.Id)
+            .Take(batchSize)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if(ids.Count == 0) {
+            return 0;
+        }
+
+        await context.Set<WebhookDeliveryAttemptEntity>()
+            .Where(a => ids.Contains(a.JobId))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // The status is checked again: a job cannot leave a finished state, but the rule stays with the statement.
+        int deleted = await context.Set<WebhookJobEntity>()
+            .Where(j => ids.Contains(j.Id)
+                && (j.Status == WebhookJobStatus.Delivered || j.Status == WebhookJobStatus.DeadLettered))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return deleted;
     }
 
     private static WebhookJobRecord[] ToRecords(List<WebhookJobEntity> entities) {

@@ -63,6 +63,8 @@ public sealed class WebhookRetentionOptions {
         if(this.DeadLetterRetention < TimeSpan.Zero) {
             throw new ArgumentOutOfRangeException(nameof(this.DeadLetterRetention), "Dead-letter retention cannot be negative.");
         }
-        Preca.ThrowIfLessThan(this.BatchSize, 1);
+        if(this.BatchSize < 1) {
+            throw new ArgumentOutOfRangeException(nameof(this.BatchSize), this.BatchSize, "Batch size must be at least 1.");
+        }
     }
 }
