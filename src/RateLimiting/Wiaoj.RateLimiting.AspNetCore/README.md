@@ -90,6 +90,39 @@ app.MapGet("/healthz", () => Results.Ok("OK"))
    .DisableRateLimiting();
 ```
 
+### Two limits these APIs cannot cross
+
+Both are observable in the shipped code, and both bite as soon as one endpoint serves verbs
+that do not cost the same.
+
+**1. A resolved cost can never be zero.** The middleware floors it —
+`cost = Math.Max(1, metadata.DynamicCostResolver(context))` and the same clamp on
+`DefaultCostResolver` (`Middleware/RateLimitingMiddleware.cs:54` and `:63`). A resolver that returns
+`0` to mean "this request is free" is silently recorded as `1`. The static path refuses the value even
+earlier: `WithRateLimitCost(int cost)` throws `ArgumentOutOfRangeException` for `cost <= 0`
+(`Metadata/RateLimitEndpointConventionBuilderExtensions.cs:18`). So "free" is unreachable through either
+overload — note that example 2 above already defends itself with `Math.Max(1, count)` rather than
+returning a raw count; that is the floor, not a style choice.
+
+**2. Exemption is endpoint-wide, not per-verb.** `[DisableRateLimiting]` /
+`RateLimitMetadata.IsDisabled` short-circuit the whole endpoint
+(`Middleware/RateLimitingMiddleware.cs:45`). Minimal APIs let one endpoint answer several methods
+(`app.MapMethods("/items", [HttpMethods.Get, HttpMethods.Query], handler)`), and those methods rarely cost
+the same: a `GET` on a cacheable read model may be answered from cache semantics and return `304` without
+producing a body, while `QUERY` (RFC 10008) parses a payload, validates it against a schema and runs
+projections. On such a route the only available switches are "count both identically" or "limit neither" —
+neither expresses "count only the non-`GET` traffic".
+
+**What to do today** if you need verb-level accounting: consume `Wiaoj.RateLimiting`'s `IRateLimiter`
+directly from an `IEndpointFilter` that returns early for the methods you want free and calls
+`TryAcquireAsync(policy, key, cost, cancellationToken)` for the rest. Policies registered through
+`AddWiaojRateLimiting` and the returned `RateLimitDecision` stay the package's, so only the trigger point
+lives in your service — and it can move back into endpoint metadata as soon as the verb-level gap closes.
+
+Tracked as [wiaoj/libraries#252](https://github.com/wiaoj/libraries/issues/252), which proposes either a
+`Func<HttpContext, bool> ShouldEvaluate` on `RateLimiterAspNetCoreOptions`, or dropping the floors and
+documenting `0` as "consumes no quota".
+
 ---
 
 ## Key Selectors
