@@ -9,7 +9,7 @@ namespace Wiaoj.RateLimiting;
 /// <summary>
 /// A distributed weighted sliding-window <see cref="IRateLimitAlgorithm"/> approximating a rolling lookback window.
 /// </summary>
-public sealed class SlidingWindowRateLimiter : IRateLimitAlgorithm {
+public sealed class SlidingWindowRateLimiter : IRateLimitAlgorithm, IRateLimitHeadroom {
     private const string AlgorithmName = "SlidingWindowWeighted";
     private readonly IDistributedCounterFactory _counterFactory;
     private readonly string _policyName;
@@ -127,13 +127,42 @@ public sealed class SlidingWindowRateLimiter : IRateLimitAlgorithm {
 
             TimeSpan retryAfter = TimeSpan.FromTicks(windowTicks - elapsedTicks);
             RateLimitDecision deniedDecision = RateLimitDecision.Denied(retryAfter, remaining: 0);
-            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision);
+            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision, this._policyName);
             return deniedDecision;
         }
 
         long remaining = (long)Math.Max(0, this._limit - estimatedTotal);
         RateLimitDecision allowedDecision = RateLimitDecision.Allowed(remaining);
-        RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision);
+        RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision, this._policyName);
         return allowedDecision;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Reads the current and previous windows' counters as <see cref="TryAcquireAsync"/> does and writes neither: the
+    /// remaining cost is the limit less the same weighted estimate an acquire is refused by.
+    /// </remarks>
+    public async ValueTask<RateLimitHeadroom> PeekAsync(string key, CancellationToken cancellationToken = default) {
+        Preca.ThrowIfNullOrEmpty(key);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        long windowTicks = this._window.Ticks;
+        long nowTicks = this._timeProvider.GetUtcNow().UtcTicks;
+
+        long currentWindowId = nowTicks / windowTicks;
+        long elapsedTicks = nowTicks - (currentWindowId * windowTicks);
+        double previousWeight = 1.0 - ((double)elapsedTicks / windowTicks);
+
+        IDistributedCounter currentCounter = this._counterFactory.Create(this._policyName, $"{key}:{currentWindowId}");
+        IDistributedCounter previousCounter = this._counterFactory.Create(this._policyName, $"{key}:{currentWindowId - 1}");
+
+        long previousCount = (await previousCounter.GetValueAsync(cancellationToken).ConfigureAwait(false)).Value;
+        long currentCount = (await currentCounter.GetValueAsync(cancellationToken).ConfigureAwait(false)).Value;
+
+        double estimatedTotal = (previousCount * previousWeight) + currentCount;
+        long remaining = (long)Math.Max(0, this._limit - estimatedTotal);
+
+        return RateLimitHeadroom.Of(this._limit, remaining, TimeSpan.FromTicks(windowTicks - elapsedTicks));
     }
 }

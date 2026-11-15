@@ -88,13 +88,13 @@ public sealed class FixedWindowRateLimiter : IRateLimitAlgorithm {
 
         if(result.IsAllowed) {
             RateLimitDecision allowedDecision = RateLimitDecision.Allowed(result.Remaining);
-            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision);
+            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision, this._policyName);
             return allowedDecision;
         }
 
         TimeSpan retryAfter = result.Ttl is { } ttl && ttl > TimeSpan.Zero ? ttl : this._window;
         RateLimitDecision deniedDecision = RateLimitDecision.Denied(retryAfter, result.Remaining);
-        RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision);
+        RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision, this._policyName);
 
         return deniedDecision;
     }

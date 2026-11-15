@@ -286,6 +286,17 @@ app.MapGet("/health", () => Results.Ok("Healthy"))
 - `rate_limit.cost.consumed` (`Counter<long>`): Total units consumed by permitted requests.
 - `rate_limit.queue.wait_duration` (`Histogram<double>` in `ms`): Duration requests waited in `LeakyBucketQueueRateLimiter`.
 
+`rate_limit.policy` on the metrics is the policy name the algorithm was built with (`FixedWindowRateLimiter`,
+`SlidingWindowRateLimiter`, `GcraRateLimiter`); an algorithm built without one records `Default`.
+
+### Reading headroom without spending it
+
+`TryAcquireAsync` spends what it asks for, so a gauge drawn through it takes a request from the budget it shows.
+`SlidingWindowRateLimiter` also implements `IRateLimitHeadroom`: `PeekAsync(key)` reads the same counters, writes
+nothing, records no decision and answers `RateLimitHeadroom(Limit, Remaining, ResetAfter)` — the remaining cost by the
+same weighted estimate an acquire is refused by, and the time until the current window closes. It is a snapshot; a
+concurrent acquire may spend it at once.
+
 ### OpenTelemetry Tracing (`Wiaoj.RateLimiting`):
 
 `IRateLimiter.TryAcquireAsync` emits a `rate_limit.acquire` span tagged with `rate_limit.policy`, `rate_limit.key`, `rate_limit.cost`, `rate_limit.decision`, `rate_limit.remaining`, and `rate_limit.retry_after_ms` when denied.
