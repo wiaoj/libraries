@@ -109,7 +109,7 @@ public sealed class GcraRateLimiter : IRateLimitAlgorithm {
 
         if(cost > this._limit) {
             RateLimitDecision overLimitDecision = RateLimitDecision.Denied(this._period, remaining: this._limit);
-            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, overLimitDecision);
+            RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, overLimitDecision, this._policyName);
             return overLimitDecision;
         }
 
@@ -131,7 +131,7 @@ public sealed class GcraRateLimiter : IRateLimitAlgorithm {
             if(nowTicks < allowAtTicks) {
                 TimeSpan retryAfter = TimeSpan.FromTicks(Math.Max(0, allowAtTicks - nowTicks));
                 RateLimitDecision deniedDecision = RateLimitDecision.Denied(retryAfter, remaining: 0);
-                RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision);
+                RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, deniedDecision, this._policyName);
                 return deniedDecision;
             }
 
@@ -145,7 +145,7 @@ public sealed class GcraRateLimiter : IRateLimitAlgorithm {
                 DateTimeOffset newTat = new(newTatTicks, TimeSpan.Zero);
                 long remaining = GcraMath.ComputeRemaining(newTat, now, this._burstToleranceTicks, this._emissionIntervalTicks);
                 RateLimitDecision allowedDecision = RateLimitDecision.Allowed(remaining);
-                RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision);
+                RateLimitingDiagnostics.RecordDecision(this._logger, AlgorithmName, key, cost, allowedDecision, this._policyName);
                 return allowedDecision;
             }
         }
