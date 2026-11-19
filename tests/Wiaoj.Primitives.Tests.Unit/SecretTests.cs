@@ -61,6 +61,15 @@ public sealed class SecretTests {
         });
     }
 
+    [Fact]
+    public unsafe void From_Span_ShouldRejectByteCountOverflowBeforeAccessingSource() {
+        Assert.Throws<OverflowException>(() => {
+            // Only the length is needed to exercise the checked size calculation.
+            ReadOnlySpan<Guid> source = new((void*)null, int.MaxValue);
+            Secret<Guid>.From(source).Dispose();
+        });
+    }
+
     #endregion
 
     #region 2. Generators & Creation
@@ -116,6 +125,55 @@ public sealed class SecretTests {
             Assert.Equal(10, span[0]);
             Assert.Equal(30, span[2]);
         });
+    }
+
+    [Fact]
+    public void From_Stream_ShouldReadAllRemainingBytesAcrossBufferGrowth() {
+        byte[] data = new byte[10001];
+        new Random(42).NextBytes(data);
+        using MemoryStream stream = new(data);
+        stream.Position = 1;
+
+        using Secret<byte> secret = Secret.From(stream);
+
+        Assert.True(secret.Equals(data.AsSpan(1)));
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void From_Stream_ShouldClearReadBuffer(bool throwOnEnd) {
+        byte[] data = new byte[1000];
+        data.AsSpan().Fill(0xA5);
+        using ShortReadStream stream = new(data, throwOnEnd);
+
+        if(throwOnEnd) {
+            Assert.Throws<IOException>(() => Secret.From(stream).Dispose());
+        }
+        else {
+            using Secret<byte> secret = Secret.From(stream);
+            Assert.True(secret.Equals(data));
+        }
+
+        Assert.NotNull(stream.ReadBuffer);
+        Assert.Equal(-1, stream.ReadBuffer.AsSpan().IndexOfAnyExcept((byte)0));
+    }
+
+    private sealed class ShortReadStream(byte[] data, bool throwOnEnd) : MemoryStream(data) {
+        public override bool CanSeek => false;
+        public byte[]? ReadBuffer { get; private set; }
+
+        public override int Read(byte[] buffer, int offset, int count) {
+            this.ReadBuffer = buffer;
+            int bytesRead = base.Read(buffer, offset, Math.Min(count, 64));
+            if(bytesRead == 0 && throwOnEnd) {
+                buffer[offset] = 0xA5;
+                throw new IOException("Read failed after writing to the buffer.");
+            }
+
+            return bytesRead;
+        }
     }
 
     #endregion

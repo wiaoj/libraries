@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -93,35 +94,75 @@ public readonly unsafe partial struct Secret<T> :
     /// <summary>
     /// Creates a new instance of <see cref="Secret{T}"/> from a source span. The data is copied into secure, unmanaged memory.
     /// </summary>
+    /// <exception cref="OverflowException">The source size in bytes exceeds <see cref="int.MaxValue"/>.</exception>
     public static Secret<T> From(ReadOnlySpan<T> source) {
         if(source.IsEmpty) return Empty;
 
-        int byteCount = source.Length * sizeof(T);
+        // Disposal and equality require the secret to fit in a single byte span.
+        int byteCount = checked(source.Length * sizeof(T));
         T* ptr = (T*)NativeMemory.AllocZeroed((nuint)byteCount);
+        Span<T> destination = new(ptr, source.Length);
 
         try {
-            Span<T> destinationSpan = new(ptr, source.Length);
-            source.CopyTo(destinationSpan);
+            source.CopyTo(destination);
+            return new Secret<T>(ptr, source.Length);
         }
         catch {
+            CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(destination));
             NativeMemory.Free(ptr);
             throw;
         }
-
-        return new Secret<T>(ptr, source.Length);
-    } 
+    }
 
     /// <summary>
     /// Creates a new <see cref="Secret{T}"/> by reading all bytes from a stream.
     /// This method is only available when <typeparamref name="T"/> is <see cref="byte"/>.
     /// </summary>
+    /// <exception cref="OverflowException">The number of bytes read exceeds <see cref="int.MaxValue"/>.</exception>
     public static Secret<byte> From(Stream stream) {
-        using MemoryStream ms = new();
-        stream.CopyTo(ms);
-        Span<byte> span = ms.GetBuffer().AsSpan(0, (int)ms.Length);
-        Secret<byte> result = Secret<byte>.From(span);
-        CryptographicOperations.ZeroMemory(span);
-        return result;
+        Preca.ThrowIfNull(stream);
+
+        const int readBufferSize = 4096;
+        byte[] readBuffer = ArrayPool<byte>.Shared.Rent(readBufferSize);
+        byte* buffer = null;
+        int length = 0;
+        int capacity = 0;
+
+        try {
+            int bytesRead;
+            while((bytesRead = stream.Read(readBuffer, 0, readBufferSize)) != 0) {
+                ReadOnlySpan<byte> chunk = readBuffer.AsSpan(0, bytesRead);
+                int requiredLength = checked(length + chunk.Length);
+                if(requiredLength > capacity) {
+                    int newCapacity = Math.Max(requiredLength, (int)Math.Min(2L * capacity, int.MaxValue));
+                    byte* newBuffer = (byte*)NativeMemory.Alloc((nuint)newCapacity);
+                    Span<byte> written = new(buffer, length);
+                    written.CopyTo(new Span<byte>(newBuffer, length));
+                    CryptographicOperations.ZeroMemory(written);
+                    NativeMemory.Free(buffer);
+                    buffer = newBuffer;
+                    capacity = newCapacity;
+                }
+
+                chunk.CopyTo(new Span<byte>(buffer + length, chunk.Length));
+                length = requiredLength;
+            }
+
+            if(length == 0) return Secret<byte>.Empty;
+
+            Secret<byte> result = new(buffer, length);
+            buffer = null; // The result now owns the allocation.
+            return result;
+        }
+        finally {
+            if(buffer is not null) {
+                CryptographicOperations.ZeroMemory(new Span<byte>(buffer, length));
+                NativeMemory.Free(buffer);
+            }
+
+            CryptographicOperations.ZeroMemory(readBuffer);
+            ArrayPool<byte>.Shared.Return(readBuffer);
+        }
     }
 
     /// <summary>
