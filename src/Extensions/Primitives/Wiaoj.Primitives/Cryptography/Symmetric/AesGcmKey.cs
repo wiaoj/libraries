@@ -597,14 +597,16 @@ public sealed class AesGcmKey : IDisposable {
     /// making this safe for logging, exceptions, and debug watches.
     /// </summary>
     public override string ToString() {
-        return $"[AES_GCM_KEY {this.KeySizeInBits}-bit]";
+        return this._disposeState.IsDisposingOrDisposed
+            ? "[DISPOSED AES_GCM_KEY]"
+            : $"[AES_GCM_KEY {this._key.Length * 8}-bit]";
     }
 
     // ── Disposal ──────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Securely erases the key material from unmanaged memory and marks this instance as disposed.
-    /// After disposal, all operations will throw <see cref="ObjectDisposedException"/>.
+    /// After disposal, operations that access the key will throw <see cref="ObjectDisposedException"/>.
     /// </summary>
     public void Dispose() {
         if(this._disposeState.TryBeginDispose()) {

@@ -16,14 +16,14 @@ namespace Wiaoj.Primitives.Cryptography;
 /// <b>Log Safety:</b> Overrides <see cref="ToString"/> to return a safe sentinel (<c>[CIPHERTEXT (N bytes)]</c>), preventing ciphertext dumps from polluting application logs.
 /// </para>
 /// <para>
-/// <b>Memory Pooling:</b> Supports wrapping standard managed byte arrays or renting buffers from <see cref="ArrayPool{Byte}"/> via <see cref="Rent"/> to eliminate heap allocations in high-throughput pipelines.
+/// <b>Memory Pooling:</b> Supports wrapping standard managed byte arrays or renting buffers from <see cref="ArrayPool{Byte}"/> via <see cref="Rent"/> to reuse byte arrays in high-throughput pipelines.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{ToString(),nq}")]
 public readonly struct Ciphertext : IDisposable, IEquatable<Ciphertext> {
     private readonly byte[]? _bytes;
     private readonly int _length;
-    private readonly bool _isRented;
+    private readonly DisposeState? _rentalState;
 
     /// <summary>Gets the length of the ciphertext in bytes.</summary>
     public int Length => this._length;
@@ -34,10 +34,10 @@ public readonly struct Ciphertext : IDisposable, IEquatable<Ciphertext> {
     /// <summary>Gets an instance representing an empty <see cref="Ciphertext"/>.</summary>
     public static Ciphertext Empty => default;
 
-    private Ciphertext(byte[]? bytes, int length, bool isRented) {
+    private Ciphertext(byte[] bytes, int length, DisposeState? rentalState = null) {
         this._bytes = bytes;
         this._length = length;
-        this._isRented = isRented;
+        this._rentalState = rentalState;
     }
 
     // ── Factories ─────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ public readonly struct Ciphertext : IDisposable, IEquatable<Ciphertext> {
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="bytes"/> is null.</exception>
     public static Ciphertext From(byte[] bytes) {
         Preca.ThrowIfNull(bytes);
-        return new Ciphertext(bytes, bytes.Length, isRented: false);
+        return new Ciphertext(bytes, bytes.Length);
     }
 
     /// <summary>
@@ -60,7 +60,7 @@ public readonly struct Ciphertext : IDisposable, IEquatable<Ciphertext> {
     /// <returns>A new <see cref="Ciphertext"/> instance, or <see cref="Empty"/> if the span is empty.</returns>
     public static Ciphertext From(ReadOnlySpan<byte> bytes) {
         if(bytes.IsEmpty) return default;
-        return new Ciphertext(bytes.ToArray(), bytes.Length, isRented: false);
+        return new Ciphertext(bytes.ToArray(), bytes.Length);
     }
 
     /// <summary>
@@ -71,12 +71,16 @@ public readonly struct Ciphertext : IDisposable, IEquatable<Ciphertext> {
     /// <param name="destination">When this method returns, contains the writable span inside the rented buffer.</param>
     /// <returns>A pooled <see cref="Ciphertext"/> instance.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="length"/> is negative or zero.</exception>
+    /// <remarks>
+    /// Disposing any copy invalidates all copies and their spans. Synchronize disposal with any access to the rented bytes.
+    /// </remarks>
     public static Ciphertext Rent(int length, out Span<byte> destination) {
         Preca.ThrowIfNegativeOrZero(length);
 
+        DisposeState rentalState = new();
         byte[] rented = ArrayPool<byte>.Shared.Rent(length);
         destination = rented.AsSpan(0, length);
-        return new Ciphertext(rented, length, isRented: true);
+        return new Ciphertext(rented, length, rentalState);
     }
 
     // ── Data Access & Conversions ─────────────────────────────────────────────
@@ -85,9 +89,10 @@ public readonly struct Ciphertext : IDisposable, IEquatable<Ciphertext> {
     /// Returns a <see cref="ReadOnlySpan{Byte}"/> view over the ciphertext bytes without heap allocations.
     /// </summary>
     /// <returns>A read-only span representing the ciphertext.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the rented buffer has been disposed or is being disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ReadOnlySpan<byte> AsSpan() {
-        if(this._bytes is null || this._length == 0) return [];
+        this._rentalState?.ThrowIfDisposingOrDisposed(nameof(Ciphertext));
         return this._bytes.AsSpan(0, this._length);
     }
 
@@ -166,7 +171,12 @@ public readonly struct Ciphertext : IDisposable, IEquatable<Ciphertext> {
 
     /// <inheritdoc/>
     public override int GetHashCode() {
-        return this.IsEmpty ? 0 : this._length;
+        ReadOnlySpan<byte> bytes = AsSpan();
+        if(bytes.IsEmpty) return 0;
+
+        HashCode hash = new();
+        hash.AddBytes(bytes);
+        return hash.ToHashCode();
     }
 
     /// <summary>Determines whether two <see cref="Ciphertext"/> instances are equal.</summary>
@@ -201,12 +211,19 @@ public readonly struct Ciphertext : IDisposable, IEquatable<Ciphertext> {
 
     /// <summary>
     /// Securely clears and returns the rented buffer to the shared <see cref="ArrayPool{Byte}"/> if applicable.
-    /// Safe to call multiple times.
+    /// Safe to call multiple times, including from copies of the same rental.
     /// </summary>
     public void Dispose() {
-        if(this._isRented && this._bytes is not null) {
-            CryptographicOperations.ZeroMemory(this._bytes.AsSpan(0, this._length));
-            ArrayPool<byte>.Shared.Return(this._bytes);
+        if(this._rentalState is not { } rentalState || this._bytes is not { } bytes || !rentalState.TryBeginDispose()) {
+            return;
+        }
+
+        try {
+            CryptographicOperations.ZeroMemory(bytes.AsSpan(0, this._length));
+            ArrayPool<byte>.Shared.Return(bytes);
+        }
+        finally {
+            rentalState.SetDisposed();
         }
     }
 }

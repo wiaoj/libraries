@@ -119,6 +119,16 @@ public class AesGcmKeyComprehensiveTests : IDisposable {
     }
 
     [Fact]
+    public void ToString_DisposedKey_ReturnsDisposedSentinel() {
+        using AesGcmKey key = AesGcmKey.Generate192();
+        Assert.Equal("[AES_GCM_KEY 192-bit]", key.ToString());
+
+        key.Dispose();
+
+        Assert.Equal("[DISPOSED AES_GCM_KEY]", key.ToString());
+    }
+
+    [Fact]
     public void KeyExposure_NeverLeaksOutSideAction() {
         bool accessed = false;
         this._defaultKey.Expose(span => {
