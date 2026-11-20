@@ -147,6 +147,6 @@ public static class SecurityMeter {
     /// Centralised here so all callers use the same tag key/value.
     /// </summary>
     public static KeyValuePair<string, object?> ContextTag<TContext>() where TContext : ISecretContext {
-        return new("context", typeof(TContext).Name);
+        return new("context", SecretContextName<TContext>.Value);
     }
 }

@@ -56,7 +56,7 @@ public static class SecurityBuilderHealthCheckExtensions {
         HealthStatus failureStatus = HealthStatus.Unhealthy,
         IEnumerable<string>? tags = null)
         where TContext : ISecretContext {
-        string checkName = name ?? $"security_{typeof(TContext).Name}";
+        string checkName = name ?? $"security_{SecretContextName<TContext>.Value}";
 
         builder.Services
             .AddHealthChecks()

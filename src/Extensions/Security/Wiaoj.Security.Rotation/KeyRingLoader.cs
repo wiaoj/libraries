@@ -27,7 +27,7 @@ internal sealed class KeyRingLoader<TContext>(
     where TContext : ISecretContext {
 
     private readonly KeyRotationOptions _options = options.Value;
-    private readonly string _contextName = typeof(TContext).Name;
+    private readonly string _contextName = SecretContextName<TContext>.Value;
 
     /// <summary>
     /// Loads all active and retired key records from the store, unwraps them, and builds an immutable <see cref="KeyRing{TContext}"/>.
@@ -110,7 +110,7 @@ internal sealed class KeyRingLoader<TContext>(
             .Where(r => !r.IsRetired)
             .MaxBy(r => r.Version)
             ?? throw new InvalidOperationException(
-                $"All keys for context '{typeof(TContext).Name}' are retired. " +
+                $"All keys for context '{SecretContextName<TContext>.Value}' are retired. " +
                 "There must be at least one active key to build a valid key ring.");
 
         KeyRingBuilder<TContext> builder = new();

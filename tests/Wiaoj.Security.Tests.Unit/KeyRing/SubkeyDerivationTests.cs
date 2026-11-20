@@ -35,6 +35,34 @@ public class SubkeyDerivationTests {
     }
 
     [Fact]
+    public void DeriveSubkey_ManagedAllocationsShouldNotGrowWithKeyOrOutputSize() {
+        long Overhead(int keyLength, int outputLength) {
+            byte[] material = RandomNumberGenerator.GetBytes(keyLength);
+            using EncryptionKey key = Key(material);
+            Span<byte> output = stackalloc byte[outputLength];
+            byte[] info = [.. "wiaoj.security.subkey:"u8, .. Purpose];
+
+            // Discount HKDF's own platform-specific allocations. Both calls have
+            // identical inputs, and setup and first-use costs are outside the measurement.
+            HKDF.DeriveKey(HashAlgorithmName.SHA256, material, output, default, info);
+            key.DeriveSubkey(Purpose, output);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for(int i = 0; i < 16; i++)
+                HKDF.DeriveKey(HashAlgorithmName.SHA256, material, output, default, info);
+            long baseline = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            before = GC.GetAllocatedBytesForCurrentThread();
+            for(int i = 0; i < 16; i++)
+                key.DeriveSubkey(Purpose, output);
+            return GC.GetAllocatedBytesForCurrentThread() - before - baseline;
+        }
+
+        long overhead = Overhead(16, 32);
+        Assert.Equal(overhead, Overhead(32, 32));   // A key.ToArray() grows with the AES key.
+        Assert.Equal(overhead, Overhead(16, 1024)); // A temporary subkey grows with the output.
+    }
+
+    [Fact]
     public void DeriveSubkey_ShouldBeDeterministic() {
         byte[] material = RandomNumberGenerator.GetBytes(32);
         using EncryptionKey first = Key(material);

@@ -42,7 +42,7 @@ public sealed class MasterKeyRewrapService<TContext> where TContext : ISecretCon
     private readonly IPreviousMasterKeyProvider? _previousMaster;
     private readonly ManagedSecretProtector<TContext> _protector;
     private readonly ILogger<MasterKeyRewrapService<TContext>> _logger;
-    private readonly string _ctx = typeof(TContext).Name;
+    private readonly string _ctx = SecretContextName<TContext>.Value;
 
     private static readonly KeyValuePair<string, object?> _ctxTag = SecurityMeter.ContextTag<TContext>();
 

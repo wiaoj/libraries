@@ -512,6 +512,12 @@ public sealed class AesGcmKey : IDisposable {
 
     // ── Key exposure ──────────────────────────────────────────────────────────
 
+    /// <summary>Provides scoped access to the key together with caller-supplied state.</summary>
+    public void Expose<TState>(TState state, Action<TState, ReadOnlySpan<byte>> action) where TState : allows ref struct {
+        this._disposeState.ThrowIfDisposingOrDisposed(nameof(AesGcmKey));
+        this._key.Expose(state, action);
+    }
+
     /// <summary>
     /// Provides scoped, read-only access to the raw key bytes.
     /// Key material never leaves the callback scope.

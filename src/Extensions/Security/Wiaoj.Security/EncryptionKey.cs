@@ -75,16 +75,8 @@ public sealed class EncryptionKey : IDisposable {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(destination.Length, MaxSubkeyLength, nameof(destination));
 
         byte[] info = [.. SubkeyInfoPrefix, .. purpose];
-        int length = destination.Length;
-
-        // AesGcmKey only lends its bytes to a callback, which cannot capture spans: derive into an array, copy, then wipe.
-        byte[] subkey = this._key.Expose(key => HKDF.DeriveKey(HashAlgorithmName.SHA256, key.ToArray(), length, salt: null, info));
-        try {
-            subkey.CopyTo(destination);
-        }
-        finally {
-            CryptographicOperations.ZeroMemory(subkey);
-        }
+        this._key.Expose(destination, (output, key) =>
+            HKDF.DeriveKey(HashAlgorithmName.SHA256, key, output, salt: default, info));
     }
 
     /// <summary>Securely erases the key material. After disposal this instance must not be used.</summary>

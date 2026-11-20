@@ -52,7 +52,7 @@ public sealed class KeyRing<TContext> : IDisposable
         if(!_keys.TryGetValue(version, out EncryptionKey? key))
             throw new KeyNotFoundException(
                 $"Key {version} is not registered in the key ring for " +
-                $"context '{typeof(TContext).Name}'. " +
+                $"context '{SecretContextName<TContext>.Value}'. " +
                 "Add it as a retired key to continue decrypting old data.");
 
         return key;

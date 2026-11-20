@@ -6,6 +6,31 @@ namespace Wiaoj.Security.Tests.Unit.KeyWrapping;
 [Trait("Feature", "KeyWrapping")]
 public class EnvironmentMasterKeyProviderTests {
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PreviousAndFileProviders_ReadTheSameKey(bool urlSafe) {
+        byte[] key = new byte[32];
+        key.AsSpan().Fill(0xFF);
+        string encoded = urlSafe ? Base64UrlString.FromBytes(key).Value : Convert.ToBase64String(key);
+        string variable = $"TEST_PREVIOUS_{Guid.NewGuid():N}";
+        string path = Path.GetTempFileName();
+        try {
+            Environment.SetEnvironmentVariable(variable, encoded);
+            var ct = TestContext.Current.CancellationToken;
+            await File.WriteAllTextAsync(path, encoded + Environment.NewLine, ct);
+            using MasterKey fileKey = await new MasterKeyProviders.FileMasterKeyProvider(path).GetMasterKeyAsync(ct);
+            using MasterKey previous = await new MasterKeyProviders.EnvironmentPreviousMasterKeyProvider(variable)
+                .GetPreviousMasterKeyAsync(ct) ?? throw new InvalidOperationException("Previous key missing.");
+            using Secret<byte> plaintext = previous.Unwrap(fileKey.Wrap("payload"u8));
+            Assert.True(plaintext.Equals("payload"u8));
+        }
+        finally {
+            File.Delete(path);
+            Environment.SetEnvironmentVariable(variable, null);
+        }
+    }
+
     private const string EnvVarName = "TEST_APP_MASTER_KEY_UNIT";
 
     [Fact]

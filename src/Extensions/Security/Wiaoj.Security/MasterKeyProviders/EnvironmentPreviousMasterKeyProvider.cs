@@ -28,17 +28,14 @@ public sealed class EnvironmentPreviousMasterKeyProvider : IPreviousMasterKeyPro
 
         byte[]? keyBytes = null;
         try {
-            keyBytes = Base64UrlString.Parse(value).ToBytes();
+            if(!MasterKeyEncoding.TryDecode(value, out keyBytes))
+                throw new InvalidOperationException($"Environment variable '{this._variableName}' is neither valid Base64 nor Base64Url.");
             if(keyBytes.Length is not (16 or 24 or 32))
                 throw new InvalidOperationException(
                     $"Previous master key must be 16, 24, or 32 bytes (128/192/256-bit AES). " +
                     $"Got {keyBytes.Length} bytes from '{this._variableName}'.");
 
             return ValueTask.FromResult<MasterKey?>(new MasterKey(Secret.From(keyBytes)));
-        }
-        catch(FormatException ex) {
-            throw new InvalidOperationException(
-                $"Environment variable '{this._variableName}' is not valid Base64.", ex);
         }
         finally {
             if(keyBytes is not null)

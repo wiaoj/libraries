@@ -28,7 +28,7 @@ public sealed class SecurityHealthCheck<TContext>(
     TimeProvider timeProvider) : IHealthCheck
     where TContext : ISecretContext {
     private readonly KeyRotationOptions _options = options.Value;
-    private readonly string _ctx = typeof(TContext).Name;
+    private readonly string _ctx = SecretContextName<TContext>.Value;
 
     /// <inheritdoc/>
     public async Task<HealthCheckResult> CheckHealthAsync(

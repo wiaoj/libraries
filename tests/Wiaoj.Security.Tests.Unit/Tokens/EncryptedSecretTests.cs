@@ -53,6 +53,32 @@ public class EncryptedSecretTests {
     }
 
     [Fact]
+    public void TryParse_Span_ShouldOnlyAllocateTheStoredBlobString() {
+        string token = "v1." + Base64UrlString.FromBytes(new byte[128]).Value;
+        ReadOnlySpan<char> blob = token.AsSpan(3);
+        Assert.True(EncryptedSecret<WebhookTestContext>.TryParse(token.AsSpan(), out _));
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        string expected = blob.ToString();
+        long stringBytes = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        before = GC.GetAllocatedBytesForCurrentThread();
+        bool parsed = EncryptedSecret<WebhookTestContext>.TryParse(token.AsSpan(), out var secret);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(parsed);
+        Assert.Equal(expected, secret.Blob.ToStorageString());
+        Assert.Equal(stringBytes, allocated);
+    }
+
+    [Theory]
+    [InlineData("v1.AA")]
+    [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!")]
+    public void TryParse_Span_ShouldRejectInvalidBlob(string token) {
+        Assert.False(EncryptedSecret<WebhookTestContext>.TryParse(token.AsSpan(), out var secret));
+        Assert.Equal(default, secret);
+    }
+
+    [Fact]
     public void TryParse_WithValidToken_ShouldReturnTrueAndPopulateResult() {
         // Arrange
         byte[] packet = new byte[32];

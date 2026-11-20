@@ -27,7 +27,7 @@ internal sealed class SecurityInitializationService<TContext> : IHostedService
 
     private readonly ManagedSecretProtector<TContext> _protector;
     private readonly ILogger<SecurityInitializationService<TContext>> _logger;
-    private readonly string _ctx = typeof(TContext).Name;
+    private readonly string _ctx = SecretContextName<TContext>.Value;
 
     public SecurityInitializationService(
         ManagedSecretProtector<TContext> protector,

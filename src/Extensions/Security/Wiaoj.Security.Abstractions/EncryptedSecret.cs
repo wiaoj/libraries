@@ -98,7 +98,7 @@ public readonly record struct EncryptedSecret<TContext> where TContext : ISecret
     public static EncryptedSecret<TContext> Parse(ReadOnlySpan<char> compactString) {
         if(!TryParse(compactString, out EncryptedSecret<TContext> result)) {
             throw new FormatException(
-                $"Invalid EncryptedSecret token format for context '{typeof(TContext).Name}'. Expected format: 'v{{version}}.{{base64url_blob}}'.");
+                $"Invalid EncryptedSecret token format for context '{SecretContextName<TContext>.Value}'. Expected format: 'v{{version}}.{{base64url_blob}}'.");
         }
         return result;
     }
@@ -118,7 +118,7 @@ public readonly record struct EncryptedSecret<TContext> where TContext : ISecret
     }
 
     /// <summary>
-    /// Attempts to parse a compact character span into an <see cref="EncryptedSecret{TContext}"/> without heap allocations.
+    /// Attempts to parse a compact character span into an <see cref="EncryptedSecret{TContext}"/>.
     /// </summary>
     /// <param name="compactString">The character span containing the compact string.</param>
     /// <param name="result">When this method returns, contains the parsed secret if successful; otherwise, default.</param>
@@ -136,19 +136,11 @@ public readonly record struct EncryptedSecret<TContext> where TContext : ISecret
         if(!int.TryParse(versionPart[1..], out int version) || version < 0) return false;
 
         ReadOnlySpan<char> blobPart = compactString[(dotIndex + 1)..];
-        if(blobPart.IsEmpty) return false;
-
-        try {
-            Base64UrlString base64Url = Base64UrlString.Parse(blobPart.ToString());
-            CipherBlob blob = CipherBlob.From(base64Url);
-
-            result = new EncryptedSecret<TContext>(blob, KeyVersion.Of(version));
-            return true;
-        }
-        catch {
-            result = default;
+        if(blobPart.Length < CipherBlob.MinBase64UrlLength || !Base64UrlString.TryParse(blobPart, out Base64UrlString base64Url))
             return false;
-        }
+
+        result = new EncryptedSecret<TContext>(CipherBlob.From(base64Url), KeyVersion.Of(version));
+        return true;
     }
 
     // ── Deconstruction & Display ──────────────────────────────────────────────
@@ -168,6 +160,6 @@ public readonly record struct EncryptedSecret<TContext> where TContext : ISecret
     /// </summary>
     /// <returns><c>"[ENCRYPTED_SECRET&lt;ContextName&gt; vN]"</c></returns>
     public override string ToString() {
-        return $"[ENCRYPTED_SECRET<{typeof(TContext).Name}> {this.KeyVersion}]";
+        return $"[ENCRYPTED_SECRET<{SecretContextName<TContext>.Value}> {this.KeyVersion}]";
     }
 }

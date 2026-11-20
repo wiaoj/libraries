@@ -1,4 +1,5 @@
 ﻿using System.Security.Cryptography;
+using Wiaoj.Security.Testing;
 
 namespace Wiaoj.Security.Tests.Unit.Protection;
 
@@ -19,6 +20,50 @@ public class SecretProtectorTests {
             .Build();
 
         return (new SecretProtector<TContext>(ring), masterKey);
+    }
+
+    [SecretContext(nameof(WebhookTestContext))]
+    private sealed class RenamedWebhookContext : ISecretContext;
+
+    private static class Billing {
+        [SecretContext("billing-api")]
+        public sealed class ApiContext : ISecretContext;
+    }
+
+    private static class Auth {
+        [SecretContext("auth-api")]
+        public sealed class ApiContext : ISecretContext;
+    }
+
+    [Fact]
+    public void SameNamedContexts_WithDistinctIdentifiers_RejectEachOthersCiphertext() {
+        using MasterKey master = new(Secret.Generate(32));
+        string wrappedKey = master.Wrap(RandomNumberGenerator.GetBytes(32));
+        SecretProtector<T> WithSameKey<T>() where T : ISecretContext => new(
+            new KeyRingBuilder<T>().WithCurrentKey(master.UnwrapToKey(wrappedKey, KeyVersion.Of(1), false)).Build());
+        using var billing = WithSameKey<Billing.ApiContext>();
+        using var auth = WithSameKey<Auth.ApiContext>();
+        var encrypted = billing.Protect("billing");
+        var persisted = EncryptedSecret<Auth.ApiContext>.FromPersisted(encrypted.Blob, encrypted.KeyVersion);
+
+        Assert.Throws<CryptographicException>(() => auth.Unprotect(persisted));
+    }
+
+    [Fact]
+    public async Task RenamedContext_CanReadLegacyKeyRingAndCiphertext() {
+        InMemoryEncryptionKeyStore store = new();
+        FakeMasterKeyProvider master = new();
+        var options = Microsoft.Extensions.Options.Options.Create(new KeyRotationOptions());
+        KeyRingLoader<T> Loader<T>() where T : ISecretContext => new(store, master, options, TimeProvider.System);
+        var ct = TestContext.Current.CancellationToken;
+
+        using SecretProtector<WebhookTestContext> original = new(await Loader<WebhookTestContext>().LoadAsync(ct));
+        var encrypted = original.Protect("legacy");
+        using SecretProtector<RenamedWebhookContext> renamed = new(await Loader<RenamedWebhookContext>().LoadAsync(ct));
+        var persisted = EncryptedSecret<RenamedWebhookContext>.FromPersisted(encrypted.Blob.ToStorageString(), 1);
+        using Secret<byte> plaintext = renamed.Unprotect(persisted);
+        Assert.True(plaintext.Equals("legacy"u8));
+        Assert.Equal(nameof(WebhookTestContext), SecretContextName<RenamedWebhookContext>.Value);
     }
 
     [Fact]

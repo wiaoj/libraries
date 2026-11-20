@@ -25,7 +25,7 @@ public sealed class RotationBackgroundService<TContext>(IServiceScopeFactory sco
                                                         ILogger<RotationBackgroundService<TContext>> logger)
     : BackgroundService where TContext : ISecretContext {
     private readonly KeyRotationOptions _options = options.Value;
-    private readonly string _ctx = typeof(TContext).Name;
+    private readonly string _ctx = SecretContextName<TContext>.Value;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         logger.LogInformation(

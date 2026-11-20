@@ -22,7 +22,7 @@ public sealed class KeyRotationService<TContext>
     private readonly KeyRotationOptions _options;
     private readonly ILogger<KeyRotationService<TContext>> _logger;
     private readonly TimeProvider _timeProvider;
-    private readonly string _ctx = typeof(TContext).Name;
+    private readonly string _ctx = SecretContextName<TContext>.Value;
 
     private static readonly KeyValuePair<string, object?> _ctxTag = SecurityMeter.ContextTag<TContext>();
     public KeyRotationService(

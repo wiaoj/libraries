@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Buffers.Text;
+using System.Security.Cryptography;
 
 namespace Wiaoj.Security;
 
@@ -31,38 +33,25 @@ public static class MasterKeyEncoding {
     public static bool TryDecode(string value, out byte[] keyBytes) {
         ArgumentNullException.ThrowIfNull(value);
 
-        string trimmed = value.Trim();
-
-        // Base64Url first: it is what this library writes, so it is the more likely of the two here.
-        if (TryDecodeBase64Url(trimmed, out keyBytes)) {
-            return true;
-        }
-
-        return TryDecodeBase64(trimmed, out keyBytes);
+        return TryDecode(value.AsSpan(), out keyBytes);
     }
 
-    private static bool TryDecodeBase64Url(string value, out byte[] keyBytes) {
-        byte[] buffer = new byte[Base64Url.GetMaxDecodedLength(value.Length)];
+    /// <summary>Decodes Base64 or Base64Url key material from a character span.</summary>
+    public static bool TryDecode(ReadOnlySpan<char> value, out byte[] keyBytes) {
+        ReadOnlySpan<char> text = value.Trim();
+        byte[] buffer = new byte[Base64Url.GetMaxDecodedLength(text.Length)];
+        try {
+            if(Base64Url.DecodeFromChars(text, buffer, out _, out int written) != OperationStatus.Done &&
+               !Convert.TryFromBase64Chars(text, buffer, out written)) {
+                keyBytes = [];
+                return false;
+            }
 
-        if (Base64Url.DecodeFromChars(value, buffer, out _, out int written, isFinalBlock: true)
-            is System.Buffers.OperationStatus.Done) {
-            keyBytes = buffer[..written];
+            keyBytes = buffer.AsSpan(0, written).ToArray();
             return true;
         }
-
-        keyBytes = [];
-        return false;
-    }
-
-    private static bool TryDecodeBase64(string value, out byte[] keyBytes) {
-        byte[] buffer = new byte[((value.Length + 3) / 4) * 3];
-
-        if (Convert.TryFromBase64String(value, buffer, out int written)) {
-            keyBytes = buffer[..written];
-            return true;
+        finally {
+            CryptographicOperations.ZeroMemory(buffer);
         }
-
-        keyBytes = [];
-        return false;
     }
 }

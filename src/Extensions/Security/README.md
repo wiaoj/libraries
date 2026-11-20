@@ -590,7 +590,7 @@ The `EncryptionKeyRecord` entity maps to a single table (default name: class nam
 | Column | Type | Description |
 |--------|------|-------------|
 | `Id` | `uuid` | UUIDv7 primary key (time-ordered) |
-| `ContextName` | `varchar(256)` | Name of the `ISecretContext` type, e.g. `"WebhookSigningContext"` |
+| `ContextName` | `varchar(256)` | Persistent context identifier. Defaults to the short type name, e.g. `"WebhookSigningContext"` |
 | `Version` | `int` | Monotonically increasing version number per context |
 | `WrappedKeyMaterial` | `varchar(1024)` | Base64Url(nonce[12] \| auth_tag[16] \| ciphertext[N]) — the DEK encrypted with the master key |
 | `CreatedAt` | `datetimeoffset` | UTC creation timestamp |
@@ -608,7 +608,7 @@ The master key **never** appears in the database.
 ## Security Notes
 
 - **AES-GCM authentication:** Every ciphertext includes a 128-bit authentication tag. Tampered or corrupt blobs throw `CryptographicException` on decryption.
-- **Strict Context Identity:** Since the `TContext` type name is used as Associated Authenticated Data (AAD), renaming a context class (e.g. `WebhookPayloadContext` to `PayloadContext`) will cause decryption to fail for all existing records. Do not rename context classes without a data migration plan.
+- **Persistent context identity.** Key storage and AES-GCM AAD use the same identifier. Give each new domain a unique, stable identifier such as `[SecretContext("webhook-signing")]`. Existing contexts default to their short type name. Before renaming an existing class, pin its original name with a string literal such as `[SecretContext("WebhookPayloadContext")]`. Changing the identifier requires migrating both key records and ciphertext.
 - **Master key storage:** In production, always source the master key from a KMS (Azure Key Vault, AWS KMS, HashiCorp Vault). The environment variable and configuration providers are for development and staging only.
 - **Key material in memory:** DEKs and the master key are held in unmanaged memory (`Secret<T>`) and zeroed on disposal via `CryptographicOperations.ZeroMemory`. Do not copy key bytes into managed arrays without zeroing them immediately after use.
 - **Log safety:** `CipherBlob.ToString()` returns `"[CIPHER_BLOB]"`. `EncryptedSecret<T>.ToString()` returns `"[ENCRYPTED_SECRET<TContext> key_vN]"`. Neither ever includes ciphertext.

@@ -19,7 +19,7 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, ISub
 
     // Cache tag and AAD bytes to avoid allocating on every call.
     private static readonly KeyValuePair<string, object?> _contextTag = SecurityMeter.ContextTag<TContext>();
-    private static readonly byte[] _contextAad = Encoding.UTF8.GetBytes(typeof(TContext).Name);
+    private static readonly byte[] _contextAad = Encoding.UTF8.GetBytes(SecretContextName<TContext>.Value);
 
 
     /// <param name="keyRing">The key ring. This protector takes ownership and disposes it.</param>
@@ -103,7 +103,7 @@ public sealed class SecretProtector<TContext> : ISecretProtector<TContext>, ISub
             }
             catch(CryptographicException ex) when(ex.InnerException is AuthenticationTagMismatchException) { 
                 throw new CryptographicException(
-                    $"Authentication tag mismatch for EncryptedSecret<{typeof(TContext).Name}> " +
+                    $"Authentication tag mismatch for EncryptedSecret<{SecretContextName<TContext>.Value}> " +
                     $"(key {encrypted.KeyVersion}). Data may be corrupt or tampered.", ex);
             }
             finally {

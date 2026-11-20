@@ -21,7 +21,7 @@ public readonly record struct CipherBlob {
     /// Minimum AES-GCM payload size: 12-byte Nonce + 16-byte Auth Tag = 28 bytes.
     /// 28 bytes in Base64Url encoding corresponds to 38 characters.
     /// </summary>
-    private const int MinBase64UrlLength = 38;
+    internal const int MinBase64UrlLength = 38;
 
     private readonly Base64UrlString _base64Url;
 

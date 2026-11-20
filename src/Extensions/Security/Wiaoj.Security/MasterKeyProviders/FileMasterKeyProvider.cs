@@ -17,18 +17,21 @@ public sealed class FileMasterKeyProvider : IMasterKeyProvider {
         if(!File.Exists(this._filePath))
             throw new FileNotFoundException($"Master key file not found at '{this._filePath}'.");
 
-        // Dosya içeriğini string olarak değil, direkt byte olarak okuyup parse etmek daha güvenlidir
         byte[] encodedBytes = await File.ReadAllBytesAsync(this._filePath, cancellationToken);
+        char[]? encodedChars = null;
         byte[]? keyBytes = null;
         try {
-            // Base64 içeriğini byte array'den direkt parse et (string allocation'ı engeller)
-            string base64String = System.Text.Encoding.UTF8.GetString(encodedBytes).Trim();
-            keyBytes = Convert.FromBase64String(base64String);
+            encodedChars = System.Text.Encoding.UTF8.GetChars(encodedBytes);
+            if(!MasterKeyEncoding.TryDecode(encodedChars, out keyBytes))
+                throw new FormatException("Master key file must contain Base64 or Base64Url text.");
+            if(keyBytes.Length is not (16 or 24 or 32))
+                throw new InvalidOperationException("Master key must be 16, 24, or 32 bytes.");
 
             return new MasterKey(Secret<byte>.From(keyBytes));
         }
         finally {
             CryptographicOperations.ZeroMemory(encodedBytes);
+            if(encodedChars is not null) CryptographicOperations.ZeroMemory(System.Runtime.InteropServices.MemoryMarshal.AsBytes(encodedChars.AsSpan()));
             if(keyBytes is not null) CryptographicOperations.ZeroMemory(keyBytes);
         }
     }

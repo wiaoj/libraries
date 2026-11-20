@@ -37,7 +37,7 @@ public sealed class KeyRingBuilder<TContext> where TContext : ISecretContext {
     public KeyRing<TContext> Build() {
         if(!this._currentVersion.HasValue)
             throw new InvalidOperationException(
-                $"Cannot build a KeyRing<{typeof(TContext).Name}> without a current key. " +
+                $"Cannot build a KeyRing<{SecretContextName<TContext>.Value}> without a current key. " +
                 "Call WithCurrentKey() before Build().");
 
         return new KeyRing<TContext>(new Dictionary<int, EncryptionKey>(this._entries), this._currentVersion.Value);
