@@ -33,8 +33,7 @@ public readonly struct SnowflakeId :
 
     #region Static Configuration & Generator
 
-    private static ISnowflakeGenerator _sharedGenerator = SnowflakeGenerator.Default;
-    private static readonly Lock _configLock = new();
+    private static volatile ISnowflakeGenerator _sharedGenerator = SnowflakeGenerator.Default;
 
     /// <summary>
     /// Configures the global shared generator using a complete options object.
@@ -43,9 +42,7 @@ public readonly struct SnowflakeId :
     /// <param name="options">The configuration options.</param>
     public static void Configure(SnowflakeOptions options) {
         Preca.ThrowIfNull(options);
-        _configLock.Enter();
         _sharedGenerator = new SnowflakeGenerator(options);
-        _configLock.Exit();
     }
 
     /// <summary>
@@ -77,7 +74,7 @@ public readonly struct SnowflakeId :
     /// <param name="options">The configuration options.</param>
     /// <param name="stripeCount">The number of concurrent stripes to allocate.</param>
     public static void ConfigureStriped(SnowflakeOptions options, int stripeCount) {
-        ConfigureInternal(new StripedSnowflakeGenerator(options, stripeCount));
+        _sharedGenerator = new StripedSnowflakeGenerator(options, stripeCount);
     }
 
     /// <summary>
@@ -85,14 +82,8 @@ public readonly struct SnowflakeId :
     /// </summary>
     /// <param name="customGenerator">The custom generator.</param>
     public static void Configure(ISnowflakeGenerator customGenerator) {
-        ConfigureInternal(customGenerator);
-    }
-
-    private static void ConfigureInternal(ISnowflakeGenerator generator) {
-        Preca.ThrowIfNull(generator);
-        _configLock.Enter();
-        _sharedGenerator = generator;
-        _configLock.Exit();
+        Preca.ThrowIfNull(customGenerator);
+        _sharedGenerator = customGenerator;
     }
 
     /// <summary>

@@ -10,10 +10,10 @@ public record SnowflakeOptions {
     public DateTimeOffset Epoch { get; set; } = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Gets or sets the unique ID of the node (machine/pod) generating the IDs.
+    /// Gets or sets the unique ID of the node (machine/pod) generating the IDs. Defaults to 0.
     /// Range depends on <see cref="Snowflake.SequenceBits"/>. 
     /// </summary>
-    public ushort NodeId { get; set; } = 1;
+    public ushort NodeId { get; set; }
 
     /// <summary>
     /// Gets or sets the number of bits reserved for the sequence.

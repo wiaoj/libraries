@@ -73,7 +73,7 @@ public class SnowflakeGenerator : ISnowflakeGenerator {
     /// <summary>
     /// The default <see cref="SnowflakeGenerator"/> instance with NodeId = 0.
     /// </summary>
-    public static readonly SnowflakeGenerator Default = new(new SnowflakeOptions { NodeId = 0 });
+    public static readonly SnowflakeGenerator Default = new(new SnowflakeOptions());
 
     /// <summary>
     /// Gets the Node ID assigned to this generator.
